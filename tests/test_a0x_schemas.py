@@ -50,7 +50,7 @@ class A0XSchemasTests(unittest.TestCase):
 
     def test_every_schema_rejects_one_required_invariant_mutation(self) -> None:
         mutations = {
-            "a0x-model-card.schema.json": lambda value: value.__setitem__("model_key", ""),
+            "a0x-model-card.schema.json": lambda value: value["runtime_files"][0].__setitem__("sha256", "short"),
             "a0x-protected-tree.schema.json": lambda value: value.__setitem__("protected_tree_sha256", "short"),
             "a0x-selection-manifest.schema.json": lambda value: value.__setitem__("selection_corpus_sha256", "short"),
             "a0x-protocol.schema.json": lambda value: value.__setitem__("claim_ids", ["claim"]),
