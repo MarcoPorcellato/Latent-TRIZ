@@ -19,6 +19,7 @@ from latent_triz.a0x_preflight import (
     verify_snapshot_files,
     verify_static_preflight,
     verify_card_sources,
+    verify_static_endpoint_availability,
 )
 from tests.a0x_test_support import A0XTempTestCase, pair_binding
 
@@ -103,11 +104,28 @@ class A0XPreflightTests(A0XTempTestCase):
 
     def test_gpt2_requires_fast_runtime_type_and_offsets(self) -> None:
         card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
-        self.assertEqual("GPT2TokenizerFast", card.tokenizer_class)
+        self.assertIsNone(card.tokenizer_metadata_class)
+        self.assertEqual("GPT2TokenizerFast", card.expected_runtime_tokenizer_class)
         self.assertTrue(card.fast_offsets_required)
         self.assertEqual("gpt2", card.model_type)
         self.assertEqual(12, card.num_hidden_layers)
         self.assertEqual(768, card.hidden_size)
+
+    def test_every_card_separates_pinned_metadata_from_required_fast_runtime(self) -> None:
+        expected = {
+            "smollm2_360m": ("GPT2Tokenizer", "GPT2TokenizerFast"),
+            "qwen3_0_6b_base": ("Qwen2Tokenizer", "Qwen2TokenizerFast"),
+            "gpt2": (None, "GPT2TokenizerFast"),
+            "smollm2_135m": ("GPT2Tokenizer", "GPT2TokenizerFast"),
+            "gpt_neo_125m": ("GPT2Tokenizer", "GPT2TokenizerFast"),
+            "qwen2_5_0_5b": ("Qwen2Tokenizer", "Qwen2TokenizerFast"),
+        }
+        for card in load_registry(ROOT / "experiments/a0x-six-model/model-registry.json"):
+            with self.subTest(card=card.model_key):
+                metadata, runtime = expected[card.model_key]
+                self.assertEqual(metadata, card.tokenizer_metadata_class)
+                self.assertEqual(runtime, card.expected_runtime_tokenizer_class)
+                self.assertTrue(card.fast_offsets_required)
 
     def test_all_cards_bind_a_tracked_integrity_receipt_and_allowlist(self) -> None:
         for card in load_registry(ROOT / "experiments/a0x-six-model/model-registry.json"):
@@ -121,6 +139,14 @@ class A0XPreflightTests(A0XTempTestCase):
         for card in load_registry(ROOT / "experiments/a0x-six-model/model-registry.json"):
             with self.subTest(card=card.model_key):
                 verify_card_sources(ROOT, card)
+
+    def test_every_committed_card_is_accepted_by_the_strict_schema(self) -> None:
+        from latent_triz.validator import validate
+
+        schema = json.loads((ROOT / "schemas/a0x-model-card.schema.json").read_text(encoding="utf-8"))
+        for path in sorted((ROOT / "experiments/a0x-six-model/model-cards").glob("*.json")):
+            with self.subTest(card=path.name):
+                self.assertEqual([], validate(json.loads(path.read_text(encoding="utf-8")), schema))
 
     def test_snapshot_verifier_accepts_exact_allowlist_without_model_construction(self) -> None:
         card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
@@ -154,9 +180,33 @@ class A0XPreflightTests(A0XTempTestCase):
             (snapshot / file.path).write_bytes(b"x")
         with self.assertRaisesRegex(A0XPreflightError, "snapshot"):
             verify_snapshot_files(snapshot, card)
-        (snapshot / "unexpected.bin").write_bytes(b"x")
-        with self.assertRaisesRegex(A0XPreflightError, "snapshot"):
-            verify_snapshot_files(snapshot, card)
+
+    def test_snapshot_verifier_rejects_empty_directories_and_config_drift_after_integrity(self) -> None:
+        card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
+        snapshot = self.temp_path / "snapshot"
+        snapshot.mkdir()
+        config = {"model_type": card.model_type, "architectures": [card.architecture], "n_layer": card.num_hidden_layers, "n_embd": card.hidden_size, "vocab_size": card.vocab_size, "n_positions": card.effective_context}
+        for file in card.runtime_files:
+            payload = stable_json_bytes(config) if file.path == "config.json" else (file.path + "\n").encode()
+            (snapshot / file.path).write_bytes(payload)
+        synthetic = card.with_runtime_files(tuple(item.with_integrity(size_bytes=(snapshot / item.path).stat().st_size, sha256=hashlib.sha256((snapshot / item.path).read_bytes()).hexdigest()) for item in card.runtime_files))
+        (snapshot / "empty").mkdir()
+        with self.assertRaisesRegex(A0XPreflightError, "unallowlisted"):
+            verify_snapshot_files(snapshot, synthetic)
+        (snapshot / "empty").rmdir()
+        config["n_layer"] = 13
+        (snapshot / "config.json").write_bytes(stable_json_bytes(config))
+        drifted = synthetic.with_runtime_files(tuple(item.with_integrity(size_bytes=(snapshot / item.path).stat().st_size, sha256=hashlib.sha256((snapshot / item.path).read_bytes()).hexdigest()) for item in synthetic.runtime_files))
+        with self.assertRaisesRegex(A0XPreflightError, "layer"):
+            verify_snapshot_files(snapshot, drifted)
+
+    def test_static_endpoint_availability_rejects_missing_literal_or_final_identity(self) -> None:
+        card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
+        self.assertEqual(12, verify_static_endpoint_availability(card=card, leg=Leg.A0)["final_transformer_block_tuple_index"])
+        with self.assertRaisesRegex(A0XPreflightError, "literal"):
+            verify_static_endpoint_availability(card=card.__class__(**{**card.__dict__, "num_hidden_layers": 4, "final_transformer_block_tuple_index": 4}), leg=Leg.A0)
+        with self.assertRaisesRegex(A0XPreflightError, "identity"):
+            verify_static_endpoint_availability(card=card.__class__(**{**card.__dict__, "final_transformer_block_tuple_index": 11}), leg=Leg.R1)
 
     def test_unknown_or_busy_ccp_fails_closed(self) -> None:
         resource, admission = valid_ccp_raw_observations()
@@ -244,9 +294,9 @@ class A0XPreflightTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XPreflightError, "empty"):
             require_empty_output(directory)
 
-    def test_static_preflight_requires_offline_environment_and_empty_output(self) -> None:
+    def test_static_preflight_material_interface_is_required(self) -> None:
         card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
-        with self.assertRaisesRegex(A0XPreflightError, "offline"):
+        with self.assertRaises(TypeError):
             verify_static_preflight(
                 card=card,
                 expected_origin="188eb65b5e249923baddadeba52659f07fcd1609",
@@ -254,11 +304,55 @@ class A0XPreflightTests(A0XTempTestCase):
                 output_dir=self.temp_path / "result",
                 environment={},
             )
-        receipt = verify_static_preflight(
-            card=card,
-            expected_origin="188eb65b5e249923baddadeba52659f07fcd1609",
-            observed_origin="188eb65b5e249923baddadeba52659f07fcd1609",
-            output_dir=self.temp_path / "result",
-            environment={"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
+
+    def test_static_preflight_rejects_missing_hash_bound_material_inputs(self) -> None:
+        card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
+        snapshot = self.temp_path / "snapshot"
+        snapshot.mkdir()
+        config = {
+            "model_type": card.model_type, "architectures": [card.architecture],
+            "n_layer": card.num_hidden_layers, "n_embd": card.hidden_size,
+            "vocab_size": card.vocab_size, "n_positions": card.effective_context,
+        }
+        for file in card.runtime_files:
+            payload = stable_json_bytes(config) if file.path == "config.json" else (file.path + "\n").encode("utf-8")
+            (snapshot / file.path).write_bytes(payload)
+        synthetic_card = card.with_runtime_files(tuple(
+            item.with_integrity(size_bytes=(snapshot / item.path).stat().st_size, sha256=hashlib.sha256((snapshot / item.path).read_bytes()).hexdigest())
+            for item in card.runtime_files
+        ))
+        binding_data = pair_binding()
+        binding_data.update(model_id=card.model_id, revision=card.revision)
+        binding = PairBinding.from_mapping(binding_data)
+        resource, admission = valid_ccp_raw_observations()
+        observation = parse_ccp_observation(
+            resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
+            binary=valid_ccp_binary_binding(), pair_binding=binding,
+            output_dir=self.temp_path / "ccp",
         )
-        self.assertEqual("passed", receipt["preflight_status"])
+        dossier, authorization = self.temp_path / "dossier.json", self.temp_path / "authorization.json"
+        dossier.write_bytes(b"dossier")
+        authorization.write_bytes(b"authorization")
+        protected = ((self.temp_path / "protected-a", {}), (self.temp_path / "protected-b", {}))
+        for root, _tree in protected:
+            root.mkdir()
+        arguments = {
+            "card": synthetic_card, "snapshot_root": snapshot,
+            "expected_origin": "a" * 40, "observed_origin": "a" * 40,
+            "output_dir": self.temp_path / "result", "environment": {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
+            "pair_binding": binding, "protected_trees": protected,
+            "protected_tree_verifier": lambda *_args, **_kwargs: None,
+            "dossier_path": dossier, "expected_dossier_sha256": hashlib.sha256(dossier.read_bytes()).hexdigest(),
+            "authorization_path": authorization, "expected_authorization_sha256": hashlib.sha256(authorization.read_bytes()).hexdigest(),
+            "ccp_observation": observation,
+        }
+        for missing in ("dossier", "authorization"):
+            changed = dict(arguments)
+            changed[f"{missing}_path"] = None
+            changed[f"expected_{missing}_sha256"] = None
+            with self.subTest(missing=missing), self.assertRaises(A0XPreflightError):
+                verify_static_preflight(**changed)
+        changed = dict(arguments)
+        changed["pair_binding"] = None
+        with self.assertRaises(A0XPreflightError):
+            verify_static_preflight(**changed)

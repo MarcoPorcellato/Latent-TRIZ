@@ -71,7 +71,9 @@ def artifact(name: str) -> dict[str, object]:
             "hidden_size": 768,
             "vocab_size": 50257,
             "effective_context": 1024,
-            "tokenizer_class": "GPT2TokenizerFast",
+            "final_transformer_block_tuple_index": 12,
+            "tokenizer_metadata_class": None,
+            "expected_runtime_tokenizer_class": "GPT2TokenizerFast",
             "fast_offsets_required": True,
             "pad_side": None,
             "trust_remote_code": False,
@@ -79,6 +81,14 @@ def artifact(name: str) -> dict[str, object]:
             "source_receipt_sha256": sha(7),
             "official_audit_path": "docs/EXP001_ADDITIONAL_MODEL_RUNTIME.md",
             "official_audit_sha256": sha(8),
+            "config_fact_provenance": {
+                "source_path": "docs/EXP001_ADDITIONAL_MODEL_RUNTIME.md", "source_sha256": sha(8),
+                "field_pointers": {name: "gpt2" for name in ("model_type", "architecture", "num_hidden_layers", "hidden_size", "vocab_size", "effective_context", "final_transformer_block_tuple_index")},
+            },
+            "tokenizer_fact_provenance": {
+                "source_path": "docs/EXP001_ADDITIONAL_MODEL_RUNTIME.md", "source_sha256": sha(8),
+                "field_pointers": {name: "GPT-2" for name in ("tokenizer_metadata_class", "expected_runtime_tokenizer_class", "fast_offsets_required")},
+            },
             "card_path": "artifacts/a0x/model-cards/gpt2.json",
         }
     if name == "a0x-protected-tree.schema.json":
