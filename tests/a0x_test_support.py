@@ -6,7 +6,14 @@ import unittest
 from dataclasses import asdict
 from pathlib import Path
 
-from latent_triz.a0x_contract import Leg, PairBinding, compute_dense_bound
+from latent_triz.a0x_contract import (
+    APPROVAL_DOSSIER_PROFILE,
+    EXECUTION_AUTHORIZATION_PROFILE,
+    Leg,
+    PairBinding,
+    canonical_commitment,
+    compute_dense_bound,
+)
 
 
 def sha(value: int) -> str:
@@ -26,20 +33,17 @@ def identity(leg: Leg = Leg.A0) -> dict[str, str]:
 def pair_binding(leg: Leg = Leg.A0, model_key: str = "gpt2", hidden_width: int = 1024) -> dict[str, object]:
     dense = asdict(compute_dense_bound(leg, cases=48, hidden_width=hidden_width))
     dense["leg"] = leg.value
-    return asdict(
-        PairBinding(
+    return PairBinding(
+            binding_profile="a0x-pair-scope-v2",
             leg=leg,
             leg_freeze_sha256=sha(3),
             model_key=model_key,
             model_id="openai-community/gpt2",
             revision="b" * 40,
             run_id=f"a0x-{leg.value}-{model_key}-run-1",
-            dossier_sha256=sha(4),
-            authorization_sha256=sha(5),
             output_path=f"results/a0x/{leg.value}/{model_key}/",
-            dense_bound=dense,
-        )
-    )
+        dense_bound=dense,
+    ).as_mapping()
 
 
 def common() -> dict[str, object]:
@@ -52,8 +56,35 @@ def common() -> dict[str, object]:
     }
 
 
+def authorization_documents(pair: dict[str, object]) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    dossier = {
+        **common(),
+        "artifact_class": "a0x-authorization-dossier",
+        "commitment_profile": APPROVAL_DOSSIER_PROFILE,
+        "pair_binding": pair,
+        "dossier_status": "approval_requested",
+    }
+    dossier_commitment = canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE).as_mapping()
+    authorization = {
+        **common(),
+        "artifact_class": "a0x-execution-authorization",
+        "commitment_profile": EXECUTION_AUTHORIZATION_PROFILE,
+        "pair_binding": pair,
+        "authorization_status": "authorized",
+        "approved_dossier_commitment": dossier_commitment,
+    }
+    authorization_commitment = canonical_commitment(
+        authorization, EXECUTION_AUTHORIZATION_PROFILE,
+    ).as_mapping()
+    chain = {
+        "dossier_commitment": dossier_commitment,
+        "authorization_commitment": authorization_commitment,
+    }
+    return dossier, authorization, chain
+
+
 def rich_statistical_result(
-    pair: dict[str, object] | None = None, *, status: str = "positive",
+    pair: dict[str, object] | None = None, *, status: str = "positive", authorization_chain: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """A complete A0X-A0 statistical artifact fixture for strict schemas."""
     binding = pair_binding() if pair is None else pair
@@ -78,10 +109,12 @@ def rich_statistical_result(
             for site in ("sentinel", "final_transformation_token", "mean_transformation_span")
         ],
     ]
+    chain = authorization_documents(binding)[2] if authorization_chain is None else authorization_chain
     return {
         **common(),
         "artifact_class": "a0x-statistical-result",
         "pair_binding": binding,
+        "authorization_chain": chain,
         "status": status,
         "score_quantization_decimals": 12,
         "p_value": 0.01 if status == "positive" else 0.5,
@@ -114,7 +147,7 @@ def rich_statistical_result(
 
 
 def rich_r1_statistical_result(
-    pair: dict[str, object] | None = None, *, status: str = "positive",
+    pair: dict[str, object] | None = None, *, status: str = "positive", authorization_chain: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """A complete frozen R1 result fixture, separate from the A0 grid."""
     binding = pair_binding(Leg.R1) if pair is None else pair
@@ -127,8 +160,9 @@ def rich_r1_statistical_result(
         "per_domain_accuracy": {f"domain-{index}": 0.8 for index in range(6)},
     }
     passed = status == "positive"
+    chain = authorization_documents(binding)[2] if authorization_chain is None else authorization_chain
     return {
-        **common(), "artifact_class": "a0x-statistical-result", "pair_binding": binding,
+        **common(), "artifact_class": "a0x-statistical-result", "pair_binding": binding, "authorization_chain": chain,
         "status": status, "p_value": 0.05 if passed else 0.5, "score_quantization_decimals": 12,
         "primary": {"tuple_index": 6, **metric, "max_statistic_p": 0.05 if passed else 0.5, "permutation_seed": 20260815, "permutation_budget": 999, "null_distribution_sha256": sha(121)},
         "surface_baseline": {"tuple_index": 6, **{**metric, "macro_f1": 0.6}},
@@ -143,6 +177,7 @@ def rich_r1_statistical_result(
 def artifact(name: str) -> dict[str, object]:
     common_fields = common()
     pair = pair_binding()
+    dossier, authorization, chain = authorization_documents(pair)
     if name == "a0x-model-card.schema.json":
         return {
             **common_fields,
@@ -252,8 +287,6 @@ def artifact(name: str) -> dict[str, object]:
             "freeze_status": "frozen",
         }
     pair_artifacts = {
-        "a0x-authorization-dossier.schema.json": ("a0x-authorization-dossier", {"dossier_status": "approval_requested"}),
-        "a0x-execution-authorization.schema.json": ("a0x-execution-authorization", {"authorization_status": "authorized"}),
         "a0x-model-identity-receipt.schema.json": ("a0x-model-identity-receipt", {"identity_status": "verified"}),
         "a0x-ccp-observation.schema.json": ("a0x-ccp-observation", {"read_counter": 0, "admission_status": "not_requested"}),
         "a0x-preflight-receipt.schema.json": ("a0x-preflight-receipt", {"preflight_status": "passed"}),
@@ -273,28 +306,38 @@ def artifact(name: str) -> dict[str, object]:
         "a0x-output-occupancy-receipt.schema.json": ("a0x-output-occupancy-receipt", {"allocated_bytes": 28049408, "total_bytes": 28049408, "cap_bytes": 33554432}),
         "a0x-representation-record.schema.json": ("a0x-representation-record", {"representation_path": "results/a0x/a0/gpt2/representation.json"}),
     }
+    if name == "a0x-authorization-dossier.schema.json":
+        return dossier
+    if name == "a0x-execution-authorization.schema.json":
+        return authorization
     if name in pair_artifacts:
         artifact_class, fields = pair_artifacts[name]
-        return {**common_fields, "artifact_class": artifact_class, "pair_binding": pair, **fields}
+        return {**common_fields, "artifact_class": artifact_class, "pair_binding": pair, "authorization_chain": chain, **fields}
     if name == "a0x-statistical-result.schema.json":
-        return rich_statistical_result(pair)
+        return rich_statistical_result(pair, authorization_chain=chain)
     if name == "a0x-terminal-result.schema.json":
         return {
             **common_fields,
             "artifact_class": "a0x-terminal-result",
             "pair_binding": pair,
+            "authorization_chain": chain,
             "status": "positive",
             "analysis_target_content_reads": 1,
             "target_read_receipt_sha256": sha(24),
-            "statistical_result": rich_statistical_result(pair),
+            "statistical_result": rich_statistical_result(pair, authorization_chain=chain),
         }
     if name == "a0x-publication-manifest.schema.json":
         return {
             **common_fields,
             "artifact_class": "a0x-publication-manifest",
             "pair_binding": pair,
+            "authorization_chain": chain,
             "publication_status": "draft",
             "report_input_path": "results/a0x/a0/gpt2/terminal-result.json",
+            "dossier_source_path": "experiments/a0x-six-model/a0/gpt2/approval-dossier.json",
+            "dossier_raw_sha256": sha(301),
+            "authorization_source_path": "results/a0x/a0/gpt2/execution-authorization.json",
+            "authorization_raw_sha256": sha(302),
         }
     raise KeyError(name)
 

@@ -8,6 +8,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from latent_triz.validator import validate
+
 
 _SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 _REVISION_PATTERN = re.compile(r"^[a-f0-9]{40}$")
@@ -20,6 +22,18 @@ _MODEL_KEYS = frozenset((
     "gpt_neo_125m",
     "qwen2_5_0_5b",
 ))
+PAIR_BINDING_PROFILE = "a0x-pair-scope-v2"
+APPROVAL_DOSSIER_PROFILE = "a0x-approval-dossier-json-v1"
+EXECUTION_AUTHORIZATION_PROFILE = "a0x-execution-authorization-json-v1"
+_COMMITMENT_PREFIXES = {
+    APPROVAL_DOSSIER_PROFILE: b"A0X-APPROVAL-DOSSIER-COMMITMENT-V1\x00",
+    EXECUTION_AUTHORIZATION_PROFILE: b"A0X-EXECUTION-AUTHORIZATION-COMMITMENT-V1\x00",
+}
+_COMMITMENT_SCHEMAS = {
+    APPROVAL_DOSSIER_PROFILE: "a0x-authorization-dossier.schema.json",
+    EXECUTION_AUTHORIZATION_PROFILE: "a0x-execution-authorization.schema.json",
+}
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 class A0XContractError(ValueError):
@@ -125,32 +139,38 @@ class LegFreezeBinding:
 
 @dataclass(frozen=True)
 class PairBinding:
+    binding_profile: str
     leg: Leg
     leg_freeze_sha256: str
     model_key: str
     model_id: str
     revision: str
     run_id: str
-    dossier_sha256: str
-    authorization_sha256: str
     output_path: str
     dense_bound: DenseBound | Mapping[str, Any]
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "PairBinding":
         try:
+            _exact_keys(
+                value,
+                {
+                    "binding_profile", "leg", "leg_freeze_sha256", "model_key", "model_id",
+                    "revision", "run_id", "output_path", "dense_bound",
+                },
+                "pair binding",
+            )
             dense = value["dense_bound"]
             if not isinstance(dense, Mapping):
                 raise TypeError("dense_bound must be an object")
             binding = cls(
+                binding_profile=_profile(value, "binding_profile", PAIR_BINDING_PROFILE),
                 leg=Leg(value["leg"]),
                 leg_freeze_sha256=_sha256(value, "leg_freeze_sha256"),
                 model_key=_model_key(value),
                 model_id=_nonempty_string(value, "model_id"),
                 revision=_revision(value, "revision"),
                 run_id=_nonempty_string(value, "run_id"),
-                dossier_sha256=_sha256(value, "dossier_sha256"),
-                authorization_sha256=_sha256(value, "authorization_sha256"),
                 output_path=_relative_path(value, "output_path"),
                 dense_bound=DenseBound.from_mapping(dense),
             )
@@ -164,17 +184,36 @@ class PairBinding:
         dense = self.dense_bound
         dense_mapping = dense.as_mapping() if isinstance(dense, DenseBound) else dict(dense)
         return {
+            "binding_profile": self.binding_profile,
             "leg": self.leg.value,
             "leg_freeze_sha256": self.leg_freeze_sha256,
             "model_key": self.model_key,
             "model_id": self.model_id,
             "revision": self.revision,
             "run_id": self.run_id,
-            "dossier_sha256": self.dossier_sha256,
-            "authorization_sha256": self.authorization_sha256,
             "output_path": self.output_path,
             "dense_bound": dense_mapping,
         }
+
+
+@dataclass(frozen=True)
+class Commitment:
+    profile: str
+    commitment_sha256: str
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> "Commitment":
+        try:
+            _exact_keys(value, {"profile", "commitment_sha256"}, "commitment")
+            profile = _nonempty_string(value, "profile")
+            if profile not in _COMMITMENT_PREFIXES:
+                raise ValueError("unknown commitment profile")
+            return cls(profile=profile, commitment_sha256=_sha256(value, "commitment_sha256"))
+        except (KeyError, TypeError, ValueError) as error:
+            raise A0XContractError("commitment is incomplete or uses an unsupported profile") from error
+
+    def as_mapping(self) -> dict[str, str]:
+        return {"profile": self.profile, "commitment_sha256": self.commitment_sha256}
 
 
 @dataclass(frozen=True)
@@ -189,6 +228,91 @@ class ModelCard:
 def canonical_json_sha256(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def strict_json_object(raw: bytes) -> dict[str, Any]:
+    """Parse a commitment document without BOM, duplicate keys, or floats."""
+    if not isinstance(raw, bytes) or raw.startswith(b"\xef\xbb\xbf"):
+        raise A0XContractError("strict JSON rejects a BOM or non-bytes input")
+    try:
+        text = raw.decode("utf-8")
+        value = json.loads(
+            text,
+            object_pairs_hook=_strict_json_object_pairs,
+            parse_float=_reject_json_float,
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
+        raise A0XContractError("strict JSON parsing failed") from error
+    _validate_commitment_value(value)
+    if not isinstance(value, dict):
+        raise A0XContractError("strict JSON commitment document must be an object")
+    return value
+
+
+def canonical_commitment(document: Mapping[str, Any], profile: str) -> Commitment:
+    """Return a profile-separated commitment for one complete authorization document."""
+    if profile not in _COMMITMENT_PREFIXES:
+        raise A0XContractError("canonical commitment profile is unsupported")
+    _validate_commitment_value(document)
+    if not isinstance(document, Mapping):
+        raise A0XContractError("canonical commitment document must be an object")
+    _validate_authorization_document(document, _COMMITMENT_SCHEMAS[profile])
+    try:
+        encoded = json.dumps(
+            document,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise A0XContractError("canonical commitment cannot encode document") from error
+    return Commitment(
+        profile=profile,
+        commitment_sha256=hashlib.sha256(_COMMITMENT_PREFIXES[profile] + encoded).hexdigest(),
+    )
+
+
+def assert_authorization_chain(
+    dossier: Mapping[str, Any] | str | Path,
+    authorization: Mapping[str, Any] | str | Path,
+    downstream_artifacts: Iterable[Any],
+) -> None:
+    """Verify the acyclic dossier -> authorization -> downstream commitment chain."""
+    dossier_value = _strict_document(dossier)
+    authorization_value = _strict_document(authorization)
+    _validate_authorization_document(dossier_value, "a0x-authorization-dossier.schema.json")
+    _validate_authorization_document(authorization_value, "a0x-execution-authorization.schema.json")
+    _reject_self_commitment(dossier_value, "dossier")
+    _reject_self_commitment(authorization_value, "authorization")
+    _document_profile(dossier_value, APPROVAL_DOSSIER_PROFILE)
+    _document_profile(authorization_value, EXECUTION_AUTHORIZATION_PROFILE)
+
+    dossier_pair = PairBinding.from_mapping(_mapping(dossier_value, "pair_binding"))
+    authorization_pair = PairBinding.from_mapping(_mapping(authorization_value, "pair_binding"))
+    if authorization_pair.as_mapping() != dossier_pair.as_mapping():
+        raise A0XContractError("pair binding differs across authorization documents")
+
+    expected_dossier = canonical_commitment(dossier_value, APPROVAL_DOSSIER_PROFILE)
+    approved_dossier = Commitment.from_mapping(_mapping(authorization_value, "approved_dossier_commitment"))
+    if approved_dossier != expected_dossier:
+        raise A0XContractError("approved dossier commitment does not match dossier")
+    expected_authorization = canonical_commitment(
+        authorization_value, EXECUTION_AUTHORIZATION_PROFILE,
+    )
+
+    downstream_values = list(downstream_artifacts)
+    if not downstream_values:
+        raise A0XContractError("at least one downstream artifact is required")
+    for downstream in downstream_values:
+        _assert_downstream_authorization(
+            _load_artifact(downstream),
+            expected_pair=dossier_pair.as_mapping(),
+            expected_dossier=expected_dossier,
+            expected_authorization=expected_authorization,
+            is_root=True,
+        )
 
 
 def sha256_file(path: str | Path) -> str:
@@ -310,6 +434,128 @@ def _load_artifact(value: Any) -> Any:
     return _read_json_object(Path(value)) if isinstance(value, (str, Path)) else value
 
 
+def _strict_document(value: Mapping[str, Any] | str | Path) -> dict[str, Any]:
+    if isinstance(value, (str, Path)):
+        try:
+            raw = Path(value).read_bytes()
+        except OSError as error:
+            raise A0XContractError("cannot read strict authorization document") from error
+        return strict_json_object(raw)
+    _validate_commitment_value(value)
+    if not isinstance(value, dict):
+        raise A0XContractError("strict authorization document must be an object")
+    return value
+
+
+def _validate_authorization_document(value: Mapping[str, Any], schema_name: str) -> None:
+    try:
+        schema = json.loads((_REPOSITORY_ROOT / "schemas" / schema_name).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XContractError("authorization document schema is unavailable") from error
+    issues = validate(dict(value), schema)
+    if issues:
+        raise A0XContractError(f"authorization document schema rejected input: {issues[0].message}")
+
+
+def _assert_downstream_authorization(
+    value: Any,
+    *,
+    expected_pair: Mapping[str, Any],
+    expected_dossier: Commitment,
+    expected_authorization: Commitment,
+    is_root: bool,
+) -> None:
+    if isinstance(value, Mapping):
+        has_pair = "pair_binding" in value
+        has_chain = "authorization_chain" in value
+        if is_root and (not has_pair or not has_chain):
+            raise A0XContractError("downstream artifact root must carry pair binding and authorization chain")
+        if has_pair != has_chain:
+            raise A0XContractError("authorization chain is missing for a downstream pair binding")
+        if has_pair:
+            pair = PairBinding.from_mapping(_mapping(value, "pair_binding")).as_mapping()
+            if pair != expected_pair:
+                raise A0XContractError("pair binding differs from the required single leg/model pair")
+            chain = _mapping(value, "authorization_chain")
+            _exact_keys(chain, {"dossier_commitment", "authorization_commitment"}, "authorization chain")
+            dossier_commitment = Commitment.from_mapping(_mapping(chain, "dossier_commitment"))
+            authorization_commitment = Commitment.from_mapping(_mapping(chain, "authorization_commitment"))
+            if dossier_commitment != expected_dossier or authorization_commitment != expected_authorization:
+                raise A0XContractError("authorization chain does not match authorization documents")
+        for child in value.values():
+            _assert_downstream_authorization(
+                child,
+                expected_pair=expected_pair,
+                expected_dossier=expected_dossier,
+                expected_authorization=expected_authorization,
+                is_root=False,
+            )
+        return
+    if isinstance(value, list):
+        for child in value:
+            _assert_downstream_authorization(
+                child,
+                expected_pair=expected_pair,
+                expected_dossier=expected_dossier,
+                expected_authorization=expected_authorization,
+                is_root=False,
+            )
+        return
+    if is_root:
+        raise A0XContractError("downstream artifact root must be an object with authorization chain")
+
+
+def _strict_json_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
+def _reject_json_float(value: str) -> None:
+    raise ValueError(f"floating point number {value!r} is not permitted")
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"JSON constant {value!r} is not permitted")
+
+
+def _validate_commitment_value(value: Any) -> None:
+    if value is None or type(value) in (bool, int, str):
+        return
+    if type(value) is list:
+        for child in value:
+            _validate_commitment_value(child)
+        return
+    if type(value) is dict:
+        for key, child in value.items():
+            if type(key) is not str:
+                raise A0XContractError("canonical commitment rejects a non-string object key")
+            _validate_commitment_value(child)
+        return
+    raise A0XContractError("canonical commitment rejects floats and unsupported types")
+
+
+def _reject_self_commitment(value: Mapping[str, Any], document_kind: str) -> None:
+    forbidden = (
+        {"dossier_commitment", "authorization_commitment", "approved_dossier_commitment", "authorization_chain"}
+        if document_kind == "dossier"
+        else {"dossier_commitment", "authorization_commitment", "authorization_chain"}
+    )
+    if set(value).intersection(forbidden):
+        raise A0XContractError(f"{document_kind} document contains its own commitment")
+
+
+def _document_profile(value: Mapping[str, Any], expected: str) -> None:
+    try:
+        if _nonempty_string(value, "commitment_profile") != expected:
+            raise ValueError("profile mismatch")
+    except (KeyError, TypeError, ValueError) as error:
+        raise A0XContractError("authorization document commitment profile is invalid") from error
+
+
 def _find_pair_bindings(value: Any) -> Iterable[Mapping[str, Any]]:
     if isinstance(value, Mapping):
         pair = value.get("pair_binding")
@@ -385,3 +631,16 @@ def _model_key(value: Mapping[str, Any]) -> str:
     if candidate not in _MODEL_KEYS:
         raise ValueError("model_key is not an approved A0X model")
     return candidate
+
+
+def _profile(value: Mapping[str, Any], key: str, expected: str) -> str:
+    candidate = _nonempty_string(value, key)
+    if candidate != expected:
+        raise ValueError(f"{key} must equal {expected}")
+    return candidate
+
+
+def _exact_keys(value: Mapping[str, Any], expected: set[str], label: str) -> None:
+    actual = set(value)
+    if actual != expected:
+        raise ValueError(f"{label} fields do not match the frozen profile")

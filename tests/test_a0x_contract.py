@@ -1,24 +1,31 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import (
+    APPROVAL_DOSSIER_PROFILE,
+    EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     Leg,
     PairBinding,
+    assert_authorization_chain,
     assert_leg_freeze_binding,
     assert_pair_binding,
     assert_single_pair,
     build_leg_freeze_binding,
+    canonical_commitment,
     canonical_json_sha256,
     compute_dense_bound,
     endpoint_indices,
     sha256_file,
+    strict_json_object,
 )
+from latent_triz.validator import validate
 from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, sha
 
 
@@ -114,14 +121,13 @@ class A0XContractTests(A0XTempTestCase):
         malformed_dense = copy.deepcopy(value["dense_bound"])
         malformed_dense["leg"] = "r1"
         invalid_root = PairBinding(
+            binding_profile="a0x-pair-scope-v2",
             leg=Leg.A0,
             leg_freeze_sha256=value["leg_freeze_sha256"],
             model_key="unknown",
             model_id=value["model_id"],
             revision=value["revision"],
             run_id=value["run_id"],
-            dossier_sha256=value["dossier_sha256"],
-            authorization_sha256=value["authorization_sha256"],
             output_path=value["output_path"],
             dense_bound=malformed_dense,
         )
@@ -140,3 +146,139 @@ class A0XContractTests(A0XTempTestCase):
             misleading[field] = 1
             with self.subTest(field=field), self.assertRaisesRegex(A0XContractError, "occupancy"):
                 assert_pair_binding(root, [misleading])
+
+    def _authorization_documents(self):
+        return (
+            artifact("a0x-authorization-dossier.schema.json"),
+            artifact("a0x-execution-authorization.schema.json"),
+            artifact("a0x-model-identity-receipt.schema.json"),
+        )
+
+    def _schema(self, name: str) -> dict[str, object]:
+        root = Path(__file__).resolve().parents[1]
+        return json.loads((root / "schemas" / name).read_text(encoding="utf-8"))
+
+    def test_commitments_are_canonical_domain_separated_and_semantic(self) -> None:
+        dossier, authorization, _ = self._authorization_documents()
+        self.assertEqual([], validate(dossier, self._schema("a0x-authorization-dossier.schema.json")))
+        self.assertEqual([], validate(authorization, self._schema("a0x-execution-authorization.schema.json")))
+        first = canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE)
+        self.assertEqual(
+            "e0f7053ece6c554e505094faffa847239b5346cfa722f4ac2526da4f85da341c",
+            first.commitment_sha256,
+        )
+        compact_variant = strict_json_object(
+            json.dumps(dossier, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+        )
+        whitespace_variant = strict_json_object(
+            json.dumps({key: dossier[key] for key in reversed(tuple(dossier))}, indent=2, ensure_ascii=False).encode("utf-8"),
+        )
+        self.assertEqual(
+            canonical_commitment(whitespace_variant, APPROVAL_DOSSIER_PROFILE),
+            canonical_commitment(compact_variant, APPROVAL_DOSSIER_PROFILE),
+        )
+        mutated = copy.deepcopy(dossier)
+        mutated["pair_binding"]["output_path"] = "results/a0x/a0/gpt2/semantic-mutation/"
+        self.assertEqual([], validate(mutated, self._schema("a0x-authorization-dossier.schema.json")))
+        self.assertNotEqual(first, canonical_commitment(mutated, APPROVAL_DOSSIER_PROFILE))
+        self.assertNotEqual(
+            canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE), first,
+        )
+        self.assertEqual(
+            "88713dc61edc945f66fe027dc0819d2cdf087a670b427a1047c0eb844d852835",
+            canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256,
+        )
+        for invalid_document, profile in (
+            ({"arbitrary": True}, APPROVAL_DOSSIER_PROFILE),
+            (dossier, EXECUTION_AUTHORIZATION_PROFILE),
+            (authorization, APPROVAL_DOSSIER_PROFILE),
+        ):
+            with self.subTest(profile=profile), self.assertRaisesRegex(A0XContractError, "schema"):
+                canonical_commitment(invalid_document, profile)
+
+    def test_strict_commitment_json_rejects_noncanonical_inputs(self) -> None:
+        valid = b'{"a":1,"b":[true,null]}'
+        self.assertEqual({"a": 1, "b": [True, None]}, strict_json_object(valid))
+        for raw in (
+            b'\xef\xbb\xbf{"a":1}',
+            b'{"a":1,"a":2}',
+            b'{"a":1.0}',
+            b'{"a":NaN}',
+            b'{"a":Infinity}',
+        ):
+            with self.subTest(raw=raw), self.assertRaisesRegex(A0XContractError, "strict JSON"):
+                strict_json_object(raw)
+        for value in ({"a": 1.0}, {"a": float("nan")}, {"a": {1, 2}}):
+            with self.subTest(value=value), self.assertRaisesRegex(A0XContractError, "canonical commitment"):
+                canonical_commitment(value, APPROVAL_DOSSIER_PROFILE)
+
+    def test_authorization_chain_rejects_legacy_profile_pair_and_chain_substitution(self) -> None:
+        dossier, authorization, downstream = self._authorization_documents()
+        assert_authorization_chain(dossier, authorization, [downstream])
+
+        legacy = copy.deepcopy(dossier)
+        legacy["pair_binding"]["dossier_sha256"] = sha(4)
+        with self.assertRaisesRegex(A0XContractError, "schema|pair binding"):
+            assert_authorization_chain(legacy, authorization, [downstream])
+
+        wrong_profile = copy.deepcopy(authorization)
+        wrong_profile["approved_dossier_commitment"]["profile"] = "unexpected"
+        with self.assertRaisesRegex(A0XContractError, "schema|commitment"):
+            assert_authorization_chain(dossier, wrong_profile, [downstream])
+
+        wrong_pair = copy.deepcopy(downstream)
+        wrong_pair["pair_binding"]["model_key"] = "smollm2_135m"
+        with self.assertRaisesRegex(A0XContractError, "pair binding"):
+            assert_authorization_chain(dossier, authorization, [wrong_pair])
+
+        wrong_chain = copy.deepcopy(downstream)
+        wrong_chain["authorization_chain"]["authorization_commitment"]["commitment_sha256"] = sha(99)
+        with self.assertRaisesRegex(A0XContractError, "authorization chain"):
+            assert_authorization_chain(dossier, authorization, [wrong_chain])
+
+        self_committing = copy.deepcopy(authorization)
+        self_committing["authorization_commitment"] = sha(99)
+        with self.assertRaisesRegex(A0XContractError, "schema|own commitment"):
+            assert_authorization_chain(dossier, self_committing, [downstream])
+
+    def test_authorization_chain_rejects_empty_masked_and_schema_invalid_documents(self) -> None:
+        dossier, authorization, downstream = self._authorization_documents()
+        with self.assertRaisesRegex(A0XContractError, "at least one downstream"):
+            assert_authorization_chain(dossier, authorization, [])
+
+        chainless_root = {"nested": downstream}
+        with self.assertRaisesRegex(A0XContractError, "downstream artifact root"):
+            assert_authorization_chain(dossier, authorization, [chainless_root])
+
+        nested_mask = copy.deepcopy(downstream)
+        nested_mask["nested"] = {"pair_binding": copy.deepcopy(downstream["pair_binding"])}
+        with self.assertRaisesRegex(A0XContractError, "authorization chain"):
+            assert_authorization_chain(dossier, authorization, [nested_mask])
+
+        nested_pair_mismatch = copy.deepcopy(downstream)
+        nested_pair_mismatch["nested"] = {
+            "pair_binding": copy.deepcopy(downstream["pair_binding"]),
+            "authorization_chain": copy.deepcopy(downstream["authorization_chain"]),
+        }
+        nested_pair_mismatch["nested"]["pair_binding"]["model_key"] = "smollm2_135m"
+        with self.assertRaisesRegex(A0XContractError, "pair binding"):
+            assert_authorization_chain(dossier, authorization, [nested_pair_mismatch])
+
+        nested_chain_mismatch = copy.deepcopy(downstream)
+        nested_chain_mismatch["nested"] = {
+            "pair_binding": copy.deepcopy(downstream["pair_binding"]),
+            "authorization_chain": copy.deepcopy(downstream["authorization_chain"]),
+        }
+        nested_chain_mismatch["nested"]["authorization_chain"]["dossier_commitment"]["commitment_sha256"] = sha(99)
+        with self.assertRaisesRegex(A0XContractError, "authorization chain"):
+            assert_authorization_chain(dossier, authorization, [nested_chain_mismatch])
+
+        invalid_dossier = copy.deepcopy(dossier)
+        invalid_dossier["evidence_eligible"] = True
+        with self.assertRaisesRegex(A0XContractError, "schema"):
+            assert_authorization_chain(invalid_dossier, authorization, [downstream])
+
+        invalid_authorization = copy.deepcopy(authorization)
+        invalid_authorization["claim_ids"] = ["forbidden"]
+        with self.assertRaisesRegex(A0XContractError, "schema"):
+            assert_authorization_chain(dossier, invalid_authorization, [downstream])

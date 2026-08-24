@@ -240,22 +240,37 @@ inside the freeze, the freshly computed freeze SHA-256, protected-tree hash,
 selection/corpus hash, and source-base commit. No shared artifact embeds this
 derived binding, so there is no self-hash or fixed-point contract.
 
-Define a per-run `PairBinding` with `leg`, `leg_freeze_sha256`, `model_key`,
-`model_id`, `revision`, `run_id`, `dossier_sha256`, `authorization_sha256`,
-`output_path`, and the complete serialized `DenseBound`. Every dossier,
-authorization, identity receipt, CCP observation, activation receipt, target
-read receipt, occupancy receipt, statistical result, terminal result, report
-input, and publication manifest must contain that binding.
+Define a per-run `PairBinding` under profile `a0x-pair-scope-v2` with `leg`,
+`leg_freeze_sha256`, `model_key`, `model_id`, `revision`, `run_id`,
+`output_path`, and the complete serialized `DenseBound`. It contains no
+dossier or authorization self-hash. Every dossier, authorization, identity
+receipt, CCP observation, activation receipt, target-read receipt, occupancy
+receipt, statistical result, terminal result, report input, and publication
+manifest must contain that stable binding.
+
+Define a directional approval chain outside `PairBinding`. Canonically commit
+the complete validated dossier with profile `a0x-approval-dossier-json-v1`
+and a dossier-specific domain separator. The authorization contains that
+dossier commitment but never its own commitment. Canonically commit the
+complete validated authorization with profile
+`a0x-execution-authorization-json-v1` and a distinct domain separator. Every
+post-authorization artifact carries both commitments in an identical strict
+`authorization_chain`; the publication manifest also binds the two source
+files' raw byte hashes. Canonical parsing rejects BOMs, duplicate object keys,
+floats, NaN/Infinity, and unsupported scalar types. The repository-defined
+sorted-key encoding is versioned and must not be described as RFC 8785.
 `assert_leg_freeze_binding` reconstructs the derived binding and proves that
 every dossier names the correct shared leg and exact freeze hash.
 `assert_pair_binding(root, referenced_artifacts)`
 then walks every per-pair referenced JSON artifact and rejects any unequal
 field; structural equality, not keyword scanning, is the primary no-pooling
-enforcement.
+enforcement. `assert_authorization_chain` independently recomputes the dossier
+and authorization commitments, verifies the directional link, and recursively
+rejects any downstream chain mismatch before interpretation.
 
 - [ ] **Step 4: Add valid fixtures and one mutation rejection per schema**
 
-Use helper builders in `tests/test_a0x_schemas.py`; for every schema, validate one complete artifact and then mutate one required invariant (`claim_ids`, hash length, read counter, leg, model key, revision, run ID, dossier hash, authorization hash, output path, cap allocation, status/result compatibility, or absolute path) and assert at least one validator error. Add a recursive fixture where a valid publication manifest references a receipt with one altered model key and prove `assert_pair_binding` rejects it even though both individual documents pass their schemas. Serialize protocol and implementation, hash both, write the freeze manifest containing those two hashes, hash the freeze externally, reconstruct `LegFreezeBinding`, and reverify all three without any fixed-point exception. Add six valid dossiers that share the derived A0 binding, then mutate one dossier to reference the R1 leg or a different freeze hash and prove `assert_leg_freeze_binding` rejects it.
+Use helper builders in `tests/test_a0x_schemas.py`; for every schema, validate one complete artifact and then mutate one required invariant (`claim_ids`, hash length, read counter, leg, model key, revision, run ID, commitment profile/hash, authorization-chain link, output path, cap allocation, status/result compatibility, or absolute path) and assert at least one validator error. Pin exact dossier and authorization commitment vectors; prove whitespace/key-order equivalence, semantic-mutation drift, and rejection of duplicate keys, BOMs, floats, legacy self-hash fields, and cross-pair substitutions. Add a recursive fixture where a valid publication manifest references a receipt with one altered model key or authorization commitment and prove the corresponding binding verifier rejects it even though both individual documents pass their schemas. Serialize protocol and implementation, hash both, write the freeze manifest containing those two hashes, hash the freeze externally, reconstruct `LegFreezeBinding`, and reverify all three without any fixed-point exception. Add six valid dossiers that share the derived A0 binding, then mutate one dossier to reference the R1 leg or a different freeze hash and prove `assert_leg_freeze_binding` rejects it.
 
 - [ ] **Step 5: Run focused tests and all existing schema tests**
 

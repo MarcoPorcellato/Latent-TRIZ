@@ -168,11 +168,27 @@ is a new cross-model extension rather than a byte-identical rerun of A0.
 
 ## Execution, access, and resource boundary
 
-Every material pair has a unique immutable dossier, authorization text hash,
-CCP receipt, run ID, output directory, and publication manifest. A single
+Every material pair has a unique immutable dossier, domain-separated
+authorization commitment chain, CCP receipt, run ID, output directory, and
+publication manifest. A single
 authorization grants exactly one selected A0X leg and one exact model revision;
 it expires if any bound hash, card fact, resource observation, output-destination
 emptiness check, or source anchor drifts.
+
+`PairBinding` contains only the stable one-run scope under the exact profile
+`a0x-pair-scope-v2`: leg and freeze, model identity and revision, run ID,
+output path, and complete dense bound. It never contains a dossier or
+authorization self-hash. Approval lineage is instead an acyclic chain. The
+complete validated dossier is canonically committed as `D` with the profile
+`a0x-approval-dossier-json-v1`; the authorization contains `D`, and the
+complete validated authorization is canonically committed as `A` with the
+profile `a0x-execution-authorization-json-v1`. Every post-authorization
+artifact carries the identical pair binding and `(D, A)` authorization chain.
+The two commitments use strict UTF-8 JSON with duplicate-key and floating-point
+rejection, repository-defined sorted-key serialization, and distinct
+domain-separation prefixes. Neither source document embeds its own commitment.
+The publication manifest additionally binds their raw byte hashes so a
+semantically equivalent byte rewrite is still detected.
 
 The only permitted material runtime is offline CPU `float32` with
 `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `local_files_only=True`,
@@ -230,7 +246,8 @@ needs a new, separately reviewed explicit approval.
 
 The first terminal package is always published: `positive`, `null`,
 `non_interpretable`, `incompatible`, or `failed`. A package includes its
-authorization binding, access counters, identity/integrity/environment/CCP
+pair binding, authorization commitment chain, access counters,
+identity/integrity/environment/CCP
 receipts, resource measurements, activation/index/dense hashes when created,
 statistical result only when valid, report, limitations, and manifest. A
 failure before activation publishes no fabricated activation or score asset;

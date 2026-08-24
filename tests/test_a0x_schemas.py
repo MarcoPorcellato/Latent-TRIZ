@@ -66,7 +66,7 @@ class A0XSchemasTests(unittest.TestCase):
             "a0x-target-read-receipt.schema.json": lambda value: value.__setitem__("content_reads", 2),
             "a0x-output-occupancy-receipt.schema.json": lambda value: value["pair_binding"]["dense_bound"].__setitem__("cap_bytes", 0),
             "a0x-representation-record.schema.json": lambda value: value.__setitem__("representation_path", "/absolute"),
-            "a0x-statistical-result.schema.json": lambda value: value["pair_binding"].__setitem__("dossier_sha256", "short"),
+            "a0x-statistical-result.schema.json": lambda value: value["pair_binding"].__setitem__("binding_profile", "legacy"),
             "a0x-terminal-result.schema.json": lambda value: value.__setitem__("statistical_result", None),
             "a0x-publication-manifest.schema.json": lambda value: value.__setitem__("report_input_path", "/absolute"),
         }
@@ -194,3 +194,52 @@ class A0XSchemasTests(unittest.TestCase):
         self.assertEqual([], validate(receipt, self.schemas["a0x-model-identity-receipt.schema.json"]))
         with self.assertRaisesRegex(A0XContractError, "pair binding"):
             assert_pair_binding(publication["pair_binding"], [publication, receipt])
+
+    def test_authorization_schemas_reject_legacy_pair_fields_and_incomplete_chain(self) -> None:
+        dossier_schema = self.schemas["a0x-authorization-dossier.schema.json"]
+        dossier = artifact("a0x-authorization-dossier.schema.json")
+        self.assertEqual([], validate(dossier, dossier_schema))
+        legacy = copy.deepcopy(dossier)
+        legacy["pair_binding"]["dossier_sha256"] = "a" * 64
+        self.assertTrue(validate(legacy, dossier_schema))
+
+        authorization_schema = self.schemas["a0x-execution-authorization.schema.json"]
+        authorization = artifact("a0x-execution-authorization.schema.json")
+        self.assertEqual([], validate(authorization, authorization_schema))
+        wrong_profile = copy.deepcopy(authorization)
+        wrong_profile["approved_dossier_commitment"]["profile"] = "a0x-execution-authorization-json-v1"
+        self.assertTrue(validate(wrong_profile, authorization_schema))
+
+        downstream_schema = self.schemas["a0x-model-identity-receipt.schema.json"]
+        downstream = artifact("a0x-model-identity-receipt.schema.json")
+        self.assertEqual([], validate(downstream, downstream_schema))
+        missing_chain = copy.deepcopy(downstream)
+        missing_chain.pop("authorization_chain")
+        self.assertTrue(validate(missing_chain, downstream_schema))
+        incomplete_chain = copy.deepcopy(downstream)
+        incomplete_chain["authorization_chain"].pop("authorization_commitment")
+        self.assertTrue(validate(incomplete_chain, downstream_schema))
+
+    def test_publication_manifest_requires_unambiguous_raw_document_links(self) -> None:
+        schema = self.schemas["a0x-publication-manifest.schema.json"]
+        manifest = artifact("a0x-publication-manifest.schema.json")
+        for field in (
+            "dossier_source_path",
+            "dossier_raw_sha256",
+            "authorization_source_path",
+            "authorization_raw_sha256",
+        ):
+            missing = copy.deepcopy(manifest)
+            missing.pop(field, None)
+            with self.subTest(field=field):
+                self.assertTrue(validate(missing, schema))
+        for field, invalid in (
+            ("dossier_source_path", "/absolute/dossier.json"),
+            ("authorization_source_path", "../authorization.json"),
+            ("dossier_raw_sha256", "short"),
+            ("authorization_raw_sha256", "short"),
+        ):
+            mutated = copy.deepcopy(manifest)
+            mutated[field] = invalid
+            with self.subTest(field=field):
+                self.assertTrue(validate(mutated, schema))
