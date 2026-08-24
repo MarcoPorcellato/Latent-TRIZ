@@ -259,7 +259,7 @@ def _bytes_sha(value: bytes)->str: return hashlib.sha256(value).hexdigest()
 def _parse_registered_receipt(payload: bytes, schema_name: str, *, require_trailing_newline: bool) -> Mapping[str, Any]:
     """Parse the exact persisted UTF-8 JSON receipt bytes, never a rebuilt object."""
     if not isinstance(payload, bytes) or (require_trailing_newline and not payload.endswith(b"\n")):
-        raise A0XA0AnalysisError("persisted receipt bytes must use canonical UTF-8 JSON plus newline encoding")
+        raise A0XA0AnalysisError("persisted receipt bytes must be UTF-8 JSON ending in one LF")
     try:
         value = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:

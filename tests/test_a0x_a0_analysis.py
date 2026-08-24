@@ -288,7 +288,7 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         payload = inputs["activation_receipt_bytes"]
         assert isinstance(payload, bytes)
         inputs["activation_receipt_bytes"] = payload.rstrip(b"\n")
-        with self.assertRaisesRegex(A0XA0AnalysisError, "canonical UTF-8 JSON plus newline"):
+        with self.assertRaisesRegex(A0XA0AnalysisError, "UTF-8 JSON ending in one LF"):
             analyze_a0x_a0(**inputs)
 
     def test_task5_to_task6_to_task7_exact_receipt_bytes_integrate(self) -> None:
