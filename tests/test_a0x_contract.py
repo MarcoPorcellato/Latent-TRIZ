@@ -109,6 +109,28 @@ class A0XContractTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XContractError, "pair binding"):
             assert_pair_binding(root, [publication, {"nested": [receipt]}])
 
+    def test_direct_pair_binding_root_is_revalidated(self) -> None:
+        value = pair_binding()
+        malformed_dense = copy.deepcopy(value["dense_bound"])
+        malformed_dense["leg"] = "r1"
+        invalid_root = PairBinding(
+            leg=Leg.A0,
+            leg_freeze_sha256=value["leg_freeze_sha256"],
+            model_key="unknown",
+            model_id=value["model_id"],
+            revision=value["revision"],
+            run_id=value["run_id"],
+            dossier_sha256=value["dossier_sha256"],
+            authorization_sha256=value["authorization_sha256"],
+            output_path=value["output_path"],
+            dense_bound=malformed_dense,
+        )
+        with self.assertRaisesRegex(A0XContractError, "pair binding|dense bound"):
+            assert_pair_binding(invalid_root, [])
+
+        valid_root = PairBinding.from_mapping(pair_binding())
+        assert_pair_binding(valid_root, [])
+
     def test_pair_binding_rejects_misleading_occupancy_totals(self) -> None:
         root = pair_binding()
         occupancy = artifact("a0x-output-occupancy-receipt.schema.json")

@@ -259,7 +259,8 @@ def assert_leg_freeze_binding(binding: LegFreezeBinding, dossiers: Iterable[Mapp
 
 
 def assert_pair_binding(root: PairBinding | Mapping[str, Any], referenced_artifacts: Iterable[Any]) -> None:
-    expected = root.as_mapping() if isinstance(root, PairBinding) else PairBinding.from_mapping(root).as_mapping()
+    root_mapping = root.as_mapping() if isinstance(root, PairBinding) else root
+    expected = PairBinding.from_mapping(root_mapping).as_mapping()
     for artifact in referenced_artifacts:
         loaded = _load_artifact(artifact)
         for found in _find_pair_bindings(loaded):
