@@ -10,7 +10,7 @@ from pathlib import Path
 
 from latent_triz.a0_analysis import _family_successes as historical_family_successes
 from latent_triz.a0_analysis import _score_operator as historical_score_operator
-from latent_triz.a0x_contract import Leg
+from latent_triz.a0x_contract import Leg, LegFreezeBinding, sha256_file
 from latent_triz.validator import validate
 from tests.a0x_test_support import A0XTempTestCase, pair_binding, sha
 
@@ -68,10 +68,13 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
                     })
     dense_asset_bytes = _serialize_safetensors(dense_vectors, width=2)
     index_bytes = b"".join(json.dumps(row, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in index_rows)
+    common = {"empirical": True, "scientific_status": "exploratory", "evidence_eligible": False, "expert_validated": False, "claim_ids": []}
     receipt = {
         "artifact_class": "a0x-activation-receipt",
+        **common,
         "pair_binding": pair,
         "leg": "a0",
+        "created_at": "2026-08-24T00:00:00Z",
         "activation_status": "completed",
         "activation_target_content_reads": 0,
         "literal_tuple_indices": list(_LITERAL),
@@ -80,41 +83,61 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
         "dense": {"path": "activations.safetensors", "sha256": hashlib.sha256(dense_asset_bytes).hexdigest(), "bytes": len(dense_asset_bytes), "format": "safetensors"},
         "index": {"path": "representations-index.jsonl", "sha256": hashlib.sha256(index_bytes).hexdigest(), "bytes": len(index_bytes)},
         "planned_dense_bound": pair["dense_bound"],
+        "activation_stage_occupancy": {"artifact_class": "a0x-output-occupancy-receipt", **common, "leg": "a0", "occupancy_scope": "activation_stage", "included_paths": ["activations.safetensors", "representations-index.jsonl"], "actual_total_bytes": len(dense_asset_bytes) + len(index_bytes), "cap_bytes": 33554432},
+        "activation_stage_occupancy_sha256": sha(31),
+        "occupancy_checkpoints": [],
     }
-    receipt_sha = hashlib.sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    activation_receipt_bytes = _canonical_receipt_bytes(receipt)
+    target_receipt = {
+        "artifact_class": "a0x-target-read-receipt", **common, "pair_binding": pair,
+        "selection_corpus_sha256": sha(30),
+        "content_reads": 1, "status": "pass", "observed_sha256": sha(32),
+        "activation_receipt_sha256": hashlib.sha256(activation_receipt_bytes).hexdigest(),
+        "dense_sha256": receipt["dense"]["sha256"], "index_sha256": receipt["index"]["sha256"],
+    }
     return {
         "pair_binding": pair,
         "target_rows": target_rows,
-        "target_read_receipt": {
-            "pair_binding": pair,
-            "content_reads": 1,
-            "status": "pass",
-            "activation_receipt_sha256": receipt_sha,
-            "dense_sha256": receipt["dense"]["sha256"],
-            "index_sha256": receipt["index"]["sha256"],
-        },
-        "activation_receipt": receipt,
+        "target_read_receipt_bytes": _canonical_receipt_bytes(target_receipt),
+        "activation_receipt_bytes": activation_receipt_bytes,
         "index_bytes": index_bytes,
         "dense_asset_bytes": dense_asset_bytes,
         "shortcut_result": {"status": "pass"},
-    }
+}
+
+
+def _canonical_receipt_bytes(value: dict[str, object]) -> bytes:
+    """Task 5/6 receipt encoding: canonical UTF-8 JSON followed by one LF."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8") + b"\n"
 
 
 def rebind_asset_receipts(inputs: dict[str, object]) -> None:
     """Rebind a synthetic receipt after an intentional immutable-byte mutation."""
-    activation = inputs["activation_receipt"]
+    activation_bytes = inputs["activation_receipt_bytes"]
     dense = inputs["dense_asset_bytes"]
     index = inputs["index_bytes"]
-    target = inputs["target_read_receipt"]
-    assert isinstance(activation, dict) and isinstance(target, dict)
+    target_bytes = inputs["target_read_receipt_bytes"]
+    assert isinstance(activation_bytes, bytes) and isinstance(target_bytes, bytes)
+    activation = json.loads(activation_bytes)
+    target = json.loads(target_bytes)
     assert isinstance(dense, bytes) and isinstance(index, bytes)
     activation["dense"]["sha256"] = hashlib.sha256(dense).hexdigest()
     activation["dense"]["bytes"] = len(dense)
     activation["index"]["sha256"] = hashlib.sha256(index).hexdigest()
     activation["index"]["bytes"] = len(index)
-    target["activation_receipt_sha256"] = hashlib.sha256(json.dumps(activation, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    inputs["activation_receipt_bytes"] = _canonical_receipt_bytes(activation)
+    target["activation_receipt_sha256"] = hashlib.sha256(inputs["activation_receipt_bytes"]).hexdigest()
     target["dense_sha256"] = activation["dense"]["sha256"]
     target["index_sha256"] = activation["index"]["sha256"]
+    inputs["target_read_receipt_bytes"] = _canonical_receipt_bytes(target)
+
+
+def receipt_object(inputs: dict[str, object], key: str) -> dict[str, object]:
+    value = inputs[key]
+    assert isinstance(value, bytes)
+    parsed = json.loads(value)
+    assert isinstance(parsed, dict)
+    return parsed
 
 
 class A0XA0AnalysisTests(A0XTempTestCase):
@@ -183,10 +206,10 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0
 
         inputs = synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0)
-        receipt = dict(inputs["target_read_receipt"])
+        receipt = receipt_object(inputs, "target_read_receipt_bytes")
         mismatched = pair_binding(Leg.A0, model_key="smollm2_135m")
         receipt["pair_binding"] = mismatched
-        inputs["target_read_receipt"] = receipt
+        inputs["target_read_receipt_bytes"] = _canonical_receipt_bytes(receipt)
         with self.assertRaisesRegex(A0XA0AnalysisError, "pair binding"):
             analyze_a0x_a0(**inputs)
 
@@ -194,9 +217,9 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0
 
         inputs = synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0)
-        activation = inputs["activation_receipt"]
-        assert isinstance(activation, dict)
+        activation = receipt_object(inputs, "activation_receipt_bytes")
         activation["pair_binding"] = pair_binding(Leg.A0, model_key="smollm2_135m", hidden_width=2)
+        inputs["activation_receipt_bytes"] = _canonical_receipt_bytes(activation)
         rebind_asset_receipts(inputs)
         with self.assertRaisesRegex(A0XA0AnalysisError, "activation receipt pair binding"):
             analyze_a0x_a0(**inputs)
@@ -207,7 +230,7 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         for label, mutate in (
             ("dense", lambda value: value.__setitem__("dense_asset_bytes", value["dense_asset_bytes"] + b"x")),
             ("index", lambda value: value.__setitem__("index_bytes", value["index_bytes"] + b"\n")),
-            ("target-link", lambda value: value["target_read_receipt"].__setitem__("activation_receipt_sha256", "0" * 64)),
+            ("target-link", lambda value: value.__setitem__("target_read_receipt_bytes", _canonical_receipt_bytes({**receipt_object(value, "target_read_receipt_bytes"), "activation_receipt_sha256": "0" * 64}))),
         ):
             with self.subTest(label=label):
                 inputs = copy.deepcopy(synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0))
@@ -240,6 +263,71 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         rebind_asset_receipts(inputs)
         with self.assertRaisesRegex(A0XA0AnalysisError, "2400-vector"):
             analyze_a0x_a0(**inputs)
+
+    def test_registered_receipt_schemas_reject_missing_envelope_and_completed_fields(self) -> None:
+        from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0
+
+        mutations = (
+            ("activation-artifact", "activation_receipt_bytes", "artifact_class"),
+            ("activation-checkpoints", "activation_receipt_bytes", "occupancy_checkpoints"),
+            ("target-selection", "target_read_receipt_bytes", "selection_corpus_sha256"),
+        )
+        for label, key, field in mutations:
+            with self.subTest(label=label):
+                inputs = synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0)
+                receipt = receipt_object(inputs, key)
+                del receipt[field]
+                inputs[key] = _canonical_receipt_bytes(receipt)
+                with self.assertRaisesRegex(A0XA0AnalysisError, "strict registered schema"):
+                    analyze_a0x_a0(**inputs)
+
+    def test_activation_receipt_requires_the_exact_persisted_trailing_newline(self) -> None:
+        from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0
+
+        inputs = synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0)
+        payload = inputs["activation_receipt_bytes"]
+        assert isinstance(payload, bytes)
+        inputs["activation_receipt_bytes"] = payload.rstrip(b"\n")
+        with self.assertRaisesRegex(A0XA0AnalysisError, "canonical UTF-8 JSON plus newline"):
+            analyze_a0x_a0(**inputs)
+
+    def test_task5_to_task6_to_task7_exact_receipt_bytes_integrate(self) -> None:
+        from latent_triz.a0x_a0_analysis import analyze_a0x_a0
+        from latent_triz.a0x_a0_activations import extract_a0x_a0
+        from latent_triz.a0x_execution import OneShotTargetReader, _selection_capability
+        from tests.test_a0x_activations import public_cases, selection_manifest, synthetic_hidden_adapter
+
+        pair = pair_binding(Leg.A0, hidden_width=8)
+        artifacts = extract_a0x_a0(
+            adapter=synthetic_hidden_adapter(layers=13, width=8), cases=public_cases(),
+            selection=selection_manifest(), pair_binding=pair, output_dir=self.temp_path / "activation",
+            created_at="2026-08-24T00:00:00Z",
+        )
+        activation_bytes = artifacts.receipt_path.read_bytes()
+        self.assertTrue(activation_bytes.endswith(b"\n"))
+        freeze = LegFreezeBinding(Leg.A0, "a0x-a0-replication-v1", sha(70), sha(71), sha(3), sha(72), sha(90), "a" * 40)
+        selection = _selection_capability(
+            leg_freeze=freeze, source_path=Path("experiments/a0x-six-model/a0-selection-manifest.json"),
+            source_sha256=sha(90), case_ids=tuple(f"case-{index:02d}" for index in range(48)), require_file_exact=False,
+        )
+        target_rows = [{"case_id": f"case-{index:02d}", "problem_family_id": f"family-{index // 2:02d}", "domain": f"domain-{index // 8}", "operator_proxy_family": "segmentation_like" if index % 2 else "inversion_like"} for index in range(48)]
+        target_path = self.temp_path / "synthetic-targets.jsonl"
+        target_path.write_bytes(b"".join(json.dumps(row, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in target_rows))
+        target_receipt_path = self.temp_path / "target-receipt.json"
+        reader = OneShotTargetReader(
+            path=target_path, expected_sha256=sha256_file(target_path), receipt_path=target_receipt_path,
+            pair_binding=pair, selection=selection,
+            activation_receipt_sha256=hashlib.sha256(activation_bytes).hexdigest(),
+            dense_sha256=sha256_file(artifacts.dense_path), index_sha256=sha256_file(artifacts.index_path),
+        )
+        selected_rows, _receipt = reader.read_jsonl_once()
+        result = analyze_a0x_a0(
+            pair_binding=pair, target_rows=selected_rows,
+            activation_receipt_bytes=activation_bytes, target_read_receipt_bytes=target_receipt_path.read_bytes(),
+            dense_asset_bytes=artifacts.dense_path.read_bytes(), index_bytes=artifacts.index_path.read_bytes(),
+            shortcut_result={"status": "pass"},
+        )
+        self.assertIn(result["status"], {"positive", "null"})
 
 
 if __name__ == "__main__":

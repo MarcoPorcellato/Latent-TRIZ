@@ -252,7 +252,7 @@ class OneShotTargetReader:
         try:
             self._receipt_reservation.write(json.dumps(
                 receipt.as_mapping(), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-            ).encode("utf-8"))
+            ).encode("utf-8") + b"\n")
             self._receipt_reservation.flush()
             self._receipt_reservation.close()
         except OSError as error:

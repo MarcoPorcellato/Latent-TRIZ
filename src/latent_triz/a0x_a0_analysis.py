@@ -25,7 +25,7 @@ _VIEWS = {"problem_only": ("sentinel",), "transformation_only": _SITES, "problem
 
 def analyze_a0x_a0(
     *, pair_binding: Mapping[str, Any], target_rows: Sequence[Mapping[str, Any]],
-    target_read_receipt: Mapping[str, Any], activation_receipt: Mapping[str, Any],
+    target_read_receipt_bytes: bytes, activation_receipt_bytes: bytes,
     dense_asset_bytes: bytes, index_bytes: bytes,
     shortcut_result: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -40,8 +40,16 @@ def analyze_a0x_a0(
         raise A0XA0AnalysisError("A0X A0 analysis requires leg a0")
     if shortcut_result.get("status") != "pass":
         return {"status": "non_interpretable", "reason": "shortcut gate is not pass"}
+    activation_receipt = _parse_registered_receipt(
+        activation_receipt_bytes, "a0x-activation-receipt.schema.json", require_trailing_newline=True,
+    )
+    target_read_receipt = _parse_registered_receipt(
+        target_read_receipt_bytes, "a0x-target-read-receipt.schema.json", require_trailing_newline=True,
+    )
     _validate_activation_receipt(activation_receipt, pair)
-    _validate_target_receipt(target_read_receipt, pair, activation_receipt, dense_asset_bytes, index_bytes)
+    _validate_target_receipt(
+        target_read_receipt, pair, activation_receipt_bytes, dense_asset_bytes, index_bytes,
+    )
     case_ids, labels, families, domains = _target_metadata(target_rows)
     combos, final_index = _materialize_combos(index_bytes, dense_asset_bytes, case_ids, pair, activation_receipt)
     primary_combos = [("problem_plus_transformation", index, site) for index in _LITERAL for site in _SITES]
@@ -80,12 +88,12 @@ def _pair(value: Mapping[str, Any]) -> PairBinding:
         raise A0XA0AnalysisError("analysis pair binding is invalid") from error
 
 
-def _validate_target_receipt(receipt: Mapping[str, Any], pair: PairBinding, activation: Mapping[str, Any], dense: bytes, index: bytes) -> None:
+def _validate_target_receipt(receipt: Mapping[str, Any], pair: PairBinding, activation_bytes: bytes, dense: bytes, index: bytes) -> None:
     if receipt.get("content_reads") != 1 or receipt.get("status") != "pass":
         raise A0XA0AnalysisError("analysis requires one passing target read")
     if _pair(_mapping(receipt, "pair_binding")).as_mapping() != pair.as_mapping():
         raise A0XA0AnalysisError("target receipt pair binding differs from analysis pair binding")
-    expected = {"activation_receipt_sha256": _canonical_sha(activation), "dense_sha256": _bytes_sha(dense), "index_sha256": _bytes_sha(index)}
+    expected = {"activation_receipt_sha256": _bytes_sha(activation_bytes), "dense_sha256": _bytes_sha(dense), "index_sha256": _bytes_sha(index)}
     if any(receipt.get(key) != value for key, value in expected.items()):
         raise A0XA0AnalysisError("target receipt activation asset links differ from analysis inputs")
 
@@ -247,8 +255,23 @@ def _mapping(value: Mapping[str,Any], key:str)->Mapping[str,Any]:
     return nested
 def _combo_name(index:int,site:str)->str: return f"tuple-{index}::{site}"
 def _sha(value: Any)->str: return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode("utf-8")).hexdigest()
-def _canonical_sha(value: Mapping[str, Any])->str: return _sha(value)
 def _bytes_sha(value: bytes)->str: return hashlib.sha256(value).hexdigest()
+def _parse_registered_receipt(payload: bytes, schema_name: str, *, require_trailing_newline: bool) -> Mapping[str, Any]:
+    """Parse the exact persisted UTF-8 JSON receipt bytes, never a rebuilt object."""
+    if not isinstance(payload, bytes) or (require_trailing_newline and not payload.endswith(b"\n")):
+        raise A0XA0AnalysisError("persisted receipt bytes must use canonical UTF-8 JSON plus newline encoding")
+    try:
+        value = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise A0XA0AnalysisError("persisted receipt bytes are not valid UTF-8 JSON") from error
+    if not isinstance(value, Mapping):
+        raise A0XA0AnalysisError("persisted receipt must be a JSON object")
+    from .a0x_execution import _validate_artifact
+    try:
+        _validate_artifact(schema_name, value)
+    except Exception as error:
+        raise A0XA0AnalysisError("persisted receipt fails its strict registered schema") from error
+    return value
 def _parse_index(payload: bytes)->list[Mapping[str, Any]]:
     try: rows=[json.loads(line) for line in payload.decode("utf-8").splitlines() if line]
     except (UnicodeDecodeError,json.JSONDecodeError) as error: raise A0XA0AnalysisError("representation index bytes are invalid") from error
