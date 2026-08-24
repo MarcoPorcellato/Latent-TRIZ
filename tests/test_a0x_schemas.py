@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import A0XContractError, assert_pair_binding
 from latent_triz.validator import validate
-from tests.a0x_test_support import artifact
+from tests.a0x_test_support import artifact, rich_statistical_result
 
 
 SCHEMA_FILES = (
@@ -85,7 +85,7 @@ class A0XSchemasTests(unittest.TestCase):
         self.assertEqual([], validate(failed, terminal_schema))
 
         contradictory = copy.deepcopy(failed)
-        contradictory["statistical_result"] = {"p_value": 0.5, "result_status": "completed"}
+        contradictory["statistical_result"] = rich_statistical_result()
         self.assertTrue(validate(contradictory, terminal_schema))
 
         positive = artifact("a0x-terminal-result.schema.json")

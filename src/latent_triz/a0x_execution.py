@@ -340,6 +340,9 @@ def seal_terminal_attempt(
     elif status in {"positive", "null"}:
         if statistical_result is None:
             raise A0XExecutionError("positive or null terminal outcome requires a statistical result")
+        _validate_statistical_result(
+            statistical_result, status=status, pair_binding=required_pair,
+        )
         statistic = dict(statistical_result)
     else:
         if statistical_result is not None:
@@ -614,6 +617,22 @@ def _validate_artifact(schema_name: str, artifact: Mapping[str, Any]) -> None:
     issues = validate(dict(artifact), schema)
     if issues:
         raise A0XExecutionError(f"strict schema {schema_name} rejected produced artifact: {issues[0].message}")
+
+
+def _validate_statistical_result(
+    value: Mapping[str, Any], *, status: str, pair_binding: Mapping[str, Any],
+) -> None:
+    if not isinstance(value, Mapping):
+        raise A0XExecutionError("statistical result is invalid")
+    if value.get("status") != status:
+        raise A0XExecutionError("terminal status differs from statistical result status")
+    try:
+        statistic_pair = PairBinding.from_mapping(_mapping(value, "pair_binding")).as_mapping()
+    except Exception as error:
+        raise A0XExecutionError("statistical result pair binding is invalid") from error
+    if statistic_pair != pair_binding:
+        raise A0XExecutionError("terminal pair binding differs from statistical result pair binding")
+    _validate_artifact("a0x-statistical-result.schema.json", value)
 
 
 def _persist_exclusive(destination: Path, artifact: Mapping[str, Any], *, label: str) -> None:

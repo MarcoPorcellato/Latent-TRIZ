@@ -11,7 +11,7 @@ from unittest.mock import patch
 from latent_triz.a0x_contract import Leg, LegFreezeBinding, sha256_file
 from latent_triz.a0x_execution import A0XExecutionError
 from latent_triz.validator import validate
-from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, sha
+from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, rich_statistical_result, sha
 
 
 CASE_IDS = tuple(f"case-{index:02d}" for index in range(48))
@@ -386,11 +386,26 @@ class A0XExecutionTests(A0XTempTestCase):
                 terminal = seal_terminal_attempt(
                     state=AttemptState.ANALYSIS, status=status, target_receipt_path=receipt_path,
                     terminal_path=terminal_path, pair_binding=pair,
-                    statistical_result={"p_value": 0.5, "result_status": "completed"},
+                    statistical_result=rich_statistical_result(pair, status=status),
                 )
                 self.assertEqual(1, terminal["analysis_target_content_reads"])
                 self.assertEqual(pair, terminal["pair_binding"])
                 self._assert_schema("a0x-terminal-result.schema.json", terminal)
+
+        mismatched_status = self.temp_path / "mismatched-status.json"
+        with self.assertRaisesRegex(A0XExecutionError, "status"):
+            seal_terminal_attempt(
+                state=AttemptState.ANALYSIS, status="positive", target_receipt_path=receipt_path,
+                terminal_path=mismatched_status, pair_binding=pair,
+                statistical_result=rich_statistical_result(pair, status="null"),
+            )
+        mismatched_pair = self.temp_path / "mismatched-pair.json"
+        with self.assertRaisesRegex(A0XExecutionError, "pair binding"):
+            seal_terminal_attempt(
+                state=AttemptState.ANALYSIS, status="positive", target_receipt_path=receipt_path,
+                terminal_path=mismatched_pair, pair_binding=pair,
+                statistical_result=rich_statistical_result(pair_binding(model_key="smollm2_135m"), status="positive"),
+            )
 
         path = self.temp_path / "non-interpretable.json"
         terminal = seal_terminal_attempt(

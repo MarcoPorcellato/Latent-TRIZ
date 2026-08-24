@@ -52,6 +52,66 @@ def common() -> dict[str, object]:
     }
 
 
+def rich_statistical_result(
+    pair: dict[str, object] | None = None, *, status: str = "positive",
+) -> dict[str, object]:
+    """A complete A0X-A0 statistical artifact fixture for strict schemas."""
+    binding = pair_binding() if pair is None else pair
+    metric = {
+        "family_successes": 20,
+        "family_success_rate": 20 / 24,
+        "family_success_wilson_95": [0.6, 0.95],
+        "macro_f1": 0.8,
+        "accuracy": 0.8,
+        "per_domain_accuracy": {"domain-0": 0.8},
+    }
+    primary_names = [
+        f"tuple-{tuple_index}::{site}"
+        for tuple_index in (0, 2, 4, 6)
+        for site in ("sentinel", "final_transformation_token", "mean_transformation_span")
+    ]
+    final_names = [
+        "problem_only::sentinel",
+        *[
+            f"{view}::{site}"
+            for view in ("transformation_only", "problem_plus_transformation", "problem_plus_solution")
+            for site in ("sentinel", "final_transformation_token", "mean_transformation_span")
+        ],
+    ]
+    return {
+        **common(),
+        "artifact_class": "a0x-statistical-result",
+        "pair_binding": binding,
+        "status": status,
+        "p_value": 0.01 if status == "positive" else 0.5,
+        "primary": {
+            "multiplicity": 12,
+            "combinations": {name: dict(metric) for name in primary_names},
+            "observed_max_family_successes": 20,
+            "max_statistic_p": 0.01 if status == "positive" else 0.5,
+            "maximum_macro_f1": 0.8,
+            "null_maxima_sha256": sha(110),
+        },
+        "surface_baseline": {
+            "multiplicity": 4,
+            "combinations": {f"tuple-{tuple_index}::sentinel": dict(metric) for tuple_index in (0, 2, 4, 6)},
+            "maximum_macro_f1": 0.6,
+        },
+        "macro_f1_margin_over_surface": 0.2,
+        "descriptive_final_block": {
+            "rescues_primary": False,
+            "tuple_index": 12,
+            "combinations": {name: dict(metric) for name in final_names},
+        },
+        "outcome_rule": {
+            "max_statistic_p_at_most": 0.05,
+            "macro_f1_margin_at_least": 0.10,
+            "family_successes_at_least": 19,
+            "passed": status == "positive",
+        },
+    }
+
+
 def artifact(name: str) -> dict[str, object]:
     common_fields = common()
     pair = pair_binding()
@@ -184,11 +244,12 @@ def artifact(name: str) -> dict[str, object]:
         ),
         "a0x-output-occupancy-receipt.schema.json": ("a0x-output-occupancy-receipt", {"allocated_bytes": 28049408, "total_bytes": 28049408, "cap_bytes": 33554432}),
         "a0x-representation-record.schema.json": ("a0x-representation-record", {"representation_path": "results/a0x/a0/gpt2/representation.json"}),
-        "a0x-statistical-result.schema.json": ("a0x-statistical-result", {"result_status": "completed", "p_value": 0.5}),
     }
     if name in pair_artifacts:
         artifact_class, fields = pair_artifacts[name]
         return {**common_fields, "artifact_class": artifact_class, "pair_binding": pair, **fields}
+    if name == "a0x-statistical-result.schema.json":
+        return rich_statistical_result(pair)
     if name == "a0x-terminal-result.schema.json":
         return {
             **common_fields,
@@ -197,7 +258,7 @@ def artifact(name: str) -> dict[str, object]:
             "status": "positive",
             "analysis_target_content_reads": 1,
             "target_read_receipt_sha256": sha(24),
-            "statistical_result": {"p_value": 0.5, "result_status": "completed"},
+            "statistical_result": rich_statistical_result(pair),
         }
     if name == "a0x-publication-manifest.schema.json":
         return {
