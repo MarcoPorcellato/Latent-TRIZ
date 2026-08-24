@@ -2,10 +2,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
+
+
+_SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
+_REVISION_PATTERN = re.compile(r"^[a-f0-9]{40}$")
+_SAFE_PATH_PATTERN = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$")
+_MODEL_KEYS = frozenset((
+    "smollm2_360m",
+    "qwen3_0_6b_base",
+    "gpt2",
+    "smollm2_135m",
+    "gpt_neo_125m",
+    "qwen2_5_0_5b",
+))
 
 
 class A0XContractError(ValueError):
@@ -69,25 +83,29 @@ class DenseBound:
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "DenseBound":
         try:
-            return cls(
+            bound = cls(
                 leg=Leg(value["leg"]),
-                cases=int(value["cases"]),
-                view_site_count=int(value["view_site_count"]),
-                endpoint_count=int(value["endpoint_count"]),
-                hidden_width=int(value["hidden_width"]),
-                scalar_bytes=int(value["scalar_bytes"]),
-                vector_count=int(value["vector_count"]),
-                dense_bytes=int(value["dense_bytes"]),
-                dense_copy_count=int(value["dense_copy_count"]),
-                atomic_dense_bytes=int(value["atomic_dense_bytes"]),
-                index_copy_count=int(value["index_copy_count"]),
-                index_reservation_bytes=int(value["index_reservation_bytes"]),
-                payload_allowance_bytes=int(value["payload_allowance_bytes"]),
-                total_bytes=int(value["total_bytes"]),
-                cap_bytes=int(value["cap_bytes"]),
+                cases=_integer(value, "cases"),
+                view_site_count=_integer(value, "view_site_count"),
+                endpoint_count=_integer(value, "endpoint_count"),
+                hidden_width=_integer(value, "hidden_width"),
+                scalar_bytes=_integer(value, "scalar_bytes"),
+                vector_count=_integer(value, "vector_count"),
+                dense_bytes=_integer(value, "dense_bytes"),
+                dense_copy_count=_integer(value, "dense_copy_count"),
+                atomic_dense_bytes=_integer(value, "atomic_dense_bytes"),
+                index_copy_count=_integer(value, "index_copy_count"),
+                index_reservation_bytes=_integer(value, "index_reservation_bytes"),
+                payload_allowance_bytes=_integer(value, "payload_allowance_bytes"),
+                total_bytes=_integer(value, "total_bytes"),
+                cap_bytes=_integer(value, "cap_bytes"),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise A0XContractError("dense bound is incomplete") from error
+        expected = compute_dense_bound(bound.leg, cases=bound.cases, hidden_width=bound.hidden_width)
+        if bound != expected:
+            raise A0XContractError("dense bound violates frozen reservation contract")
+        return bound
 
     def as_mapping(self) -> dict[str, Any]:
         return {**asdict(self), "leg": self.leg.value}
@@ -122,20 +140,25 @@ class PairBinding:
     def from_mapping(cls, value: Mapping[str, Any]) -> "PairBinding":
         try:
             dense = value["dense_bound"]
-            return cls(
+            if not isinstance(dense, Mapping):
+                raise TypeError("dense_bound must be an object")
+            binding = cls(
                 leg=Leg(value["leg"]),
-                leg_freeze_sha256=str(value["leg_freeze_sha256"]),
-                model_key=str(value["model_key"]),
-                model_id=str(value["model_id"]),
-                revision=str(value["revision"]),
-                run_id=str(value["run_id"]),
-                dossier_sha256=str(value["dossier_sha256"]),
-                authorization_sha256=str(value["authorization_sha256"]),
-                output_path=str(value["output_path"]),
-                dense_bound=DenseBound.from_mapping(dense) if isinstance(dense, Mapping) else dense,
+                leg_freeze_sha256=_sha256(value, "leg_freeze_sha256"),
+                model_key=_model_key(value),
+                model_id=_nonempty_string(value, "model_id"),
+                revision=_revision(value, "revision"),
+                run_id=_nonempty_string(value, "run_id"),
+                dossier_sha256=_sha256(value, "dossier_sha256"),
+                authorization_sha256=_sha256(value, "authorization_sha256"),
+                output_path=_relative_path(value, "output_path"),
+                dense_bound=DenseBound.from_mapping(dense),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise A0XContractError("pair binding is incomplete") from error
+        if binding.dense_bound.leg is not binding.leg:
+            raise A0XContractError("pair binding dense bound leg mismatch")
+        return binding
 
     def as_mapping(self) -> dict[str, Any]:
         dense = self.dense_bound
@@ -238,14 +261,28 @@ def assert_leg_freeze_binding(binding: LegFreezeBinding, dossiers: Iterable[Mapp
 def assert_pair_binding(root: PairBinding | Mapping[str, Any], referenced_artifacts: Iterable[Any]) -> None:
     expected = root.as_mapping() if isinstance(root, PairBinding) else PairBinding.from_mapping(root).as_mapping()
     for artifact in referenced_artifacts:
-        for found in _find_pair_bindings(_load_artifact(artifact)):
+        loaded = _load_artifact(artifact)
+        for found in _find_pair_bindings(loaded):
             actual = PairBinding.from_mapping(found).as_mapping()
             if actual != expected:
                 raise A0XContractError("pair binding differs from the required single leg/model pair")
+        for occupancy in _find_occupancy_receipts(loaded):
+            _assert_occupancy(expected, occupancy)
 
 
 def assert_single_pair(rows: Sequence[Mapping[str, Any]]) -> tuple[str, str]:
-    pairs = {(str(row.get("leg")), str(row.get("model_key"))) for row in rows}
+    pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise A0XContractError("exactly one leg/model pair is required")
+        try:
+            leg = Leg(row["leg"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise A0XContractError("exactly one leg/model pair is required") from error
+        model_key = row.get("model_key")
+        if not isinstance(model_key, str) or model_key not in _MODEL_KEYS:
+            raise A0XContractError("exactly one leg/model pair is required")
+        pairs.add((leg.value, model_key))
     if len(pairs) != 1:
         raise A0XContractError("exactly one leg/model pair is required")
     return next(iter(pairs))
@@ -282,3 +319,68 @@ def _find_pair_bindings(value: Any) -> Iterable[Mapping[str, Any]]:
     elif isinstance(value, list):
         for child in value:
             yield from _find_pair_bindings(child)
+
+
+def _find_occupancy_receipts(value: Any) -> Iterable[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        if value.get("artifact_class") == "a0x-output-occupancy-receipt":
+            yield value
+        for child in value.values():
+            yield from _find_occupancy_receipts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _find_occupancy_receipts(child)
+
+
+def _assert_occupancy(binding: Mapping[str, Any], occupancy: Mapping[str, Any]) -> None:
+    dense = binding["dense_bound"]
+    expected_total = dense["total_bytes"]
+    expected_cap = dense["cap_bytes"]
+    if expected_total > expected_cap:
+        raise A0XContractError("occupancy reservation exceeds cap")
+    if occupancy.get("allocated_bytes") != expected_total or occupancy.get("total_bytes") != expected_total:
+        raise A0XContractError("occupancy receipt total does not match dense reservation")
+    if occupancy.get("cap_bytes") != expected_cap:
+        raise A0XContractError("occupancy receipt cap does not match dense reservation")
+
+
+def _integer(value: Mapping[str, Any], key: str) -> int:
+    candidate = value[key]
+    if not isinstance(candidate, int) or isinstance(candidate, bool):
+        raise TypeError(f"{key} must be an integer")
+    return candidate
+
+
+def _nonempty_string(value: Mapping[str, Any], key: str) -> str:
+    candidate = value[key]
+    if not isinstance(candidate, str) or not candidate:
+        raise TypeError(f"{key} must be a non-empty string")
+    return candidate
+
+
+def _sha256(value: Mapping[str, Any], key: str) -> str:
+    candidate = _nonempty_string(value, key)
+    if not _SHA256_PATTERN.fullmatch(candidate):
+        raise ValueError(f"{key} must be a SHA-256")
+    return candidate
+
+
+def _revision(value: Mapping[str, Any], key: str) -> str:
+    candidate = _nonempty_string(value, key)
+    if not _REVISION_PATTERN.fullmatch(candidate):
+        raise ValueError(f"{key} must be a revision")
+    return candidate
+
+
+def _relative_path(value: Mapping[str, Any], key: str) -> str:
+    candidate = _nonempty_string(value, key)
+    if not _SAFE_PATH_PATTERN.fullmatch(candidate):
+        raise ValueError(f"{key} must be a repository-relative path")
+    return candidate
+
+
+def _model_key(value: Mapping[str, Any]) -> str:
+    candidate = _nonempty_string(value, "model_key")
+    if candidate not in _MODEL_KEYS:
+        raise ValueError("model_key is not an approved A0X model")
+    return candidate

@@ -90,6 +90,29 @@ class A0XSchemasTests(unittest.TestCase):
         passed["statistical_result"] = None
         self.assertTrue(validate(passed, terminal_schema))
 
+    def test_protocol_binds_leg_to_exact_frozen_endpoints(self) -> None:
+        protocol_schema = self.schemas["a0x-protocol.schema.json"]
+        arbitrary = artifact("a0x-protocol.schema.json")
+        arbitrary["endpoint_indices"] = [7]
+        self.assertTrue(validate(arbitrary, protocol_schema))
+
+        mismatch = artifact("a0x-protocol.schema.json")
+        mismatch["identity"]["leg"] = "r1"
+        self.assertTrue(validate(mismatch, protocol_schema))
+
+        r1 = artifact("a0x-protocol.schema.json")
+        r1["identity"]["leg"] = "r1"
+        r1["endpoint_indices"] = [6]
+        self.assertEqual([], validate(r1, protocol_schema))
+
+    def test_output_occupancy_binds_fixture_reservation_totals(self) -> None:
+        occupancy_schema = self.schemas["a0x-output-occupancy-receipt.schema.json"]
+        for field in ("allocated_bytes", "total_bytes"):
+            value = artifact("a0x-output-occupancy-receipt.schema.json")
+            value[field] = 1
+            with self.subTest(field=field):
+                self.assertTrue(validate(value, occupancy_schema))
+
     def test_pair_binding_detects_mismatch_even_when_documents_validate(self) -> None:
         publication = artifact("a0x-publication-manifest.schema.json")
         receipt = artifact("a0x-model-identity-receipt.schema.json")

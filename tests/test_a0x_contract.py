@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from latent_triz.a0x_contract import (
     A0XContractError,
     Leg,
+    PairBinding,
     assert_leg_freeze_binding,
     assert_pair_binding,
     assert_single_pair,
@@ -46,6 +47,24 @@ class A0XContractTests(A0XTempTestCase):
         ]
         with self.assertRaisesRegex(A0XContractError, "exactly one leg/model pair"):
             assert_single_pair(rows)
+
+    def test_single_pair_rejects_missing_invalid_and_unknown_identity(self) -> None:
+        for rows in ([{}], [{"leg": "other", "model_key": "gpt2"}], [{"leg": "a0", "model_key": ""}], [{"leg": "a0", "model_key": "unknown"}]):
+            with self.subTest(rows=rows), self.assertRaisesRegex(A0XContractError, "exactly one leg/model pair"):
+                assert_single_pair(rows)
+
+    def test_pair_binding_rejects_invalid_identity_and_malformed_dense_bound(self) -> None:
+        for mutate in (
+            lambda value: value.__setitem__("leg", "other"),
+            lambda value: value.__setitem__("model_key", "unknown"),
+            lambda value: value["dense_bound"].__setitem__("leg", "r1"),
+            lambda value: value["dense_bound"].__setitem__("total_bytes", 1),
+            lambda value: value["dense_bound"].__setitem__("scalar_bytes", 8),
+        ):
+            value = pair_binding()
+            mutate(value)
+            with self.subTest(value=value), self.assertRaisesRegex(A0XContractError, "pair binding|dense bound"):
+                PairBinding.from_mapping(value)
 
     def test_dense_bound_rejects_wrong_case_count_and_cap_overflow(self) -> None:
         with self.assertRaisesRegex(A0XContractError, "dense output reservation exceeds frozen contract"):
@@ -89,3 +108,13 @@ class A0XContractTests(A0XTempTestCase):
         receipt["pair_binding"]["model_key"] = "smollm2_135m"
         with self.assertRaisesRegex(A0XContractError, "pair binding"):
             assert_pair_binding(root, [publication, {"nested": [receipt]}])
+
+    def test_pair_binding_rejects_misleading_occupancy_totals(self) -> None:
+        root = pair_binding()
+        occupancy = artifact("a0x-output-occupancy-receipt.schema.json")
+        occupancy["pair_binding"] = copy.deepcopy(root)
+        for field in ("allocated_bytes", "total_bytes"):
+            misleading = copy.deepcopy(occupancy)
+            misleading[field] = 1
+            with self.subTest(field=field), self.assertRaisesRegex(A0XContractError, "occupancy"):
+                assert_pair_binding(root, [misleading])

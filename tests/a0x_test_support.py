@@ -119,7 +119,7 @@ def artifact(name: str) -> dict[str, object]:
         "a0x-preflight-receipt.schema.json": ("a0x-preflight-receipt", {"preflight_status": "passed"}),
         "a0x-activation-receipt.schema.json": ("a0x-activation-receipt", {"activation_status": "not_started"}),
         "a0x-target-read-receipt.schema.json": ("a0x-target-read-receipt", {"target_read_count": 0, "target_read_status": "not_read"}),
-        "a0x-output-occupancy-receipt.schema.json": ("a0x-output-occupancy-receipt", {"allocated_bytes": 28049408}),
+        "a0x-output-occupancy-receipt.schema.json": ("a0x-output-occupancy-receipt", {"allocated_bytes": 28049408, "total_bytes": 28049408, "cap_bytes": 33554432}),
         "a0x-representation-record.schema.json": ("a0x-representation-record", {"representation_path": "results/a0x/a0/gpt2/representation.json"}),
         "a0x-statistical-result.schema.json": ("a0x-statistical-result", {"result_status": "completed", "p_value": 0.5}),
     }
