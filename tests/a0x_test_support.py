@@ -83,6 +83,7 @@ def rich_statistical_result(
         "artifact_class": "a0x-statistical-result",
         "pair_binding": binding,
         "status": status,
+        "score_quantization_decimals": 12,
         "p_value": 0.01 if status == "positive" else 0.5,
         "primary": {
             "multiplicity": 12,
@@ -109,6 +110,33 @@ def rich_statistical_result(
             "family_successes_at_least": 19,
             "passed": status == "positive",
         },
+    }
+
+
+def rich_r1_statistical_result(
+    pair: dict[str, object] | None = None, *, status: str = "positive",
+) -> dict[str, object]:
+    """A complete frozen R1 result fixture, separate from the A0 grid."""
+    binding = pair_binding(Leg.R1) if pair is None else pair
+    metric = {
+        "family_successes": 17,
+        "family_success_rate": 17 / 24,
+        "family_success_wilson_95": [0.5, 0.85],
+        "macro_f1": 0.8,
+        "accuracy": 0.8,
+        "per_domain_accuracy": {f"domain-{index}": 0.8 for index in range(6)},
+    }
+    passed = status == "positive"
+    return {
+        **common(), "artifact_class": "a0x-statistical-result", "pair_binding": binding,
+        "status": status, "p_value": 0.05 if passed else 0.5, "score_quantization_decimals": 12,
+        "primary": {"tuple_index": 6, **metric, "max_statistic_p": 0.05 if passed else 0.5, "permutation_seed": 20260815, "permutation_budget": 999, "null_distribution_sha256": sha(121)},
+        "surface_baseline": {"tuple_index": 6, **{**metric, "macro_f1": 0.6}},
+        "macro_f1_margin_over_surface": 0.2,
+        "domain_direction_successes": {f"domain-{index}": 1.0 for index in range(6)},
+        "domain_direction_success_count": 6,
+        "descriptive_final_block": {"rescues_primary": False, "tuple_index": 12, "primary_analogue": dict(metric), "surface_baseline_analogue": dict(metric)},
+        "outcome_rule": {"permutation_p_at_most": 0.05, "macro_f1_margin_at_least": 0.10, "family_successes_at_least": 17, "positive_direction_domains_at_least": 4, "passed": passed},
     }
 
 

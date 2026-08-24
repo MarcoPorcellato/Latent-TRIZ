@@ -11,7 +11,7 @@ from unittest.mock import patch
 from latent_triz.a0x_contract import Leg, LegFreezeBinding, sha256_file
 from latent_triz.a0x_execution import A0XExecutionError
 from latent_triz.validator import validate
-from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, rich_statistical_result, sha
+from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, rich_r1_statistical_result, rich_statistical_result, sha
 
 
 CASE_IDS = tuple(f"case-{index:02d}" for index in range(48))
@@ -466,6 +466,29 @@ class A0XExecutionTests(A0XTempTestCase):
         fabricated["primary"]["max_statistic_p"] = 0.05
         with self.assertRaisesRegex(A0XExecutionError, "p_value"):
             _validate_statistical_result(fabricated, status="positive", pair_binding=pair)
+
+    def test_r1_terminal_validation_recomputes_all_four_frozen_conditions(self) -> None:
+        from latent_triz.a0x_execution import _validate_statistical_result
+
+        pair = pair_binding(Leg.R1)
+        result = rich_r1_statistical_result(pair)
+        _validate_statistical_result(result, status="positive", pair_binding=pair)
+        for field, value in (("p_value", 0.050001), ("macro_f1_margin_over_surface", 0.099999), ("family_successes", 16), ("domain_direction_success_count", 3)):
+            with self.subTest(field=field):
+                mutated = rich_r1_statistical_result(pair)
+                if field == "p_value":
+                    mutated["p_value"] = value
+                    mutated["primary"]["max_statistic_p"] = value
+                elif field == "family_successes":
+                    mutated["primary"]["family_successes"] = value
+                else:
+                    mutated[field] = value
+                    if field == "domain_direction_success_count":
+                        for domain in tuple(mutated["domain_direction_successes"])[3:]:
+                            mutated["domain_direction_successes"][domain] = 0.0
+                mutated["outcome_rule"]["passed"] = False
+                mutated["status"] = "null"
+                _validate_statistical_result(mutated, status="null", pair_binding=pair)
 
     def test_terminal_refuses_statistic_for_read_error_and_requires_passing_read_for_result(self) -> None:
         from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt

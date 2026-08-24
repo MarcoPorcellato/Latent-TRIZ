@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import A0XContractError, assert_pair_binding
 from latent_triz.validator import validate
-from tests.a0x_test_support import artifact, pair_binding, rich_statistical_result
+from tests.a0x_test_support import artifact, pair_binding, rich_r1_statistical_result, rich_statistical_result
 from latent_triz.a0x_contract import Leg
 
 
@@ -120,6 +120,24 @@ class A0XSchemasTests(unittest.TestCase):
                 invalid_terminal["statistical_result"] = invalid_result
                 self.assertTrue(validate(invalid_result, canonical))
                 self.assertTrue(validate(invalid_terminal, terminal_schema))
+
+    def test_terminal_nested_r1_result_is_strict_and_preserves_all_four_conditions(self) -> None:
+        terminal_schema = self.schemas["a0x-terminal-result.schema.json"]
+        pair = pair_binding(Leg.R1)
+        terminal = {
+            **artifact("a0x-terminal-result.schema.json"),
+            "pair_binding": pair, "status": "positive", "analysis_target_content_reads": 1,
+            "statistical_result": rich_r1_statistical_result(pair),
+        }
+        self.assertEqual([], validate(terminal, terminal_schema))
+        for mutate in (
+            lambda value: value["statistical_result"]["primary"].__setitem__("tuple_index", 7),
+            lambda value: value["statistical_result"]["descriptive_final_block"].__setitem__("rescues_primary", True),
+            lambda value: value["statistical_result"]["outcome_rule"].__setitem__("positive_direction_domains_at_least", 3),
+        ):
+            invalid = copy.deepcopy(terminal)
+            mutate(invalid)
+            self.assertTrue(validate(invalid, terminal_schema))
 
     def test_target_read_schema_represents_preopen_and_postopen_terminal_states(self) -> None:
         schema = self.schemas["a0x-target-read-receipt.schema.json"]

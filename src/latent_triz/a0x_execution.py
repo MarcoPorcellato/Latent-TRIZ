@@ -636,15 +636,29 @@ def _validate_statistical_result(
     primary = _mapping(value, "primary")
     outcome = _mapping(value, "outcome_rule")
     try:
+        terminal_pair = PairBinding.from_mapping(pair_binding)
         reported_p_value = float(value["p_value"])
         p_value = float(primary["max_statistic_p"])
         margin = float(value["macro_f1_margin_over_surface"])
-        successes = int(primary["observed_max_family_successes"])
+        successes = int(primary["observed_max_family_successes"] if terminal_pair.leg is Leg.A0 else primary["family_successes"])
     except (KeyError, TypeError, ValueError) as error:
         raise A0XExecutionError("statistical result predicate fields are invalid") from error
     if reported_p_value != p_value:
         raise A0XExecutionError("statistical result p_value differs from primary max-statistic p_value")
-    positive = p_value <= 0.05 and margin >= 0.10 and successes >= 19
+    if terminal_pair.leg is Leg.A0:
+        positive = p_value <= 0.05 and margin >= 0.10 and successes >= 19
+    else:
+        directions = value.get("domain_direction_successes")
+        if not isinstance(directions, Mapping):
+            raise A0XExecutionError("R1 domain direction fields are invalid")
+        try:
+            direction_count = int(value["domain_direction_success_count"])
+            recomputed_count = sum(float(item) > 0.0 for item in directions.values())
+        except (KeyError, TypeError, ValueError) as error:
+            raise A0XExecutionError("R1 domain direction fields are invalid") from error
+        if direction_count != recomputed_count:
+            raise A0XExecutionError("R1 domain direction count differs from direction evidence")
+        positive = p_value <= 0.05 and margin >= 0.10 and successes >= 17 and direction_count >= 4
     if (status == "positive") != positive or outcome.get("passed") != positive:
         raise A0XExecutionError("statistical result status violates the frozen positive predicate")
 

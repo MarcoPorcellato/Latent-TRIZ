@@ -21,6 +21,7 @@ _COMMON = {"empirical": True, "scientific_status": "exploratory", "evidence_elig
 _LITERAL = (0, 2, 4, 6)
 _SITES = ("sentinel", "final_transformation_token", "mean_transformation_span")
 _VIEWS = {"problem_only": ("sentinel",), "transformation_only": _SITES, "problem_plus_transformation": _SITES, "problem_plus_solution": _SITES}
+SCORE_QUANTIZATION_DECIMALS = 12
 
 
 def analyze_a0x_a0(
@@ -73,6 +74,7 @@ def analyze_a0x_a0(
     return {
         "artifact_class": "a0x-statistical-result", **_COMMON, "pair_binding": pair.as_mapping(),
         "status": "positive" if positive else "null", "p_value": p_value,
+        "score_quantization_decimals": SCORE_QUANTIZATION_DECIMALS,
         "primary": {"multiplicity": 12, "combinations": primary_metrics, "observed_max_family_successes": observed, "max_statistic_p": p_value, "maximum_macro_f1": primary_f1, "null_maxima_sha256": _sha(null_maxima)},
         "surface_baseline": {"multiplicity": 4, "combinations": surface_metrics, "maximum_macro_f1": surface_f1},
         "macro_f1_margin_over_surface": margin,
@@ -217,8 +219,9 @@ def _inverse(matrix: Sequence[Sequence[float]]) -> list[list[float]]:
 
 def _dot(left: Sequence[float], right: Sequence[float]) -> float: return math.fsum(a * b for a, b in zip(left, right, strict=True))
 def _apply(operator: Any, labels: Sequence[int]) -> list[float]:
+    """Freeze discrete score decisions across equivalent numeric backends."""
     signed = [1.0 if value == 1 else -1.0 for value in labels]
-    return [float(math.fsum(float(value) * signed[index] for index, value in enumerate(row))) for row in operator]
+    return [round(float(math.fsum(float(value) * signed[index] for index, value in enumerate(row))), SCORE_QUANTIZATION_DECIMALS) for row in operator]
 def _macro_f1(labels: Sequence[int], predictions: Sequence[int]) -> float:
     values=[]
     for label in (0, 1):

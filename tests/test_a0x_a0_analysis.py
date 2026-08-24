@@ -10,7 +10,7 @@ from pathlib import Path
 
 from latent_triz.a0_analysis import _family_successes as historical_family_successes
 from latent_triz.a0_analysis import _score_operator as historical_score_operator
-from latent_triz.a0x_contract import Leg, LegFreezeBinding, sha256_file
+from latent_triz.a0x_contract import Leg, LegFreezeBinding, PairBinding, sha256_file
 from latent_triz.validator import validate
 from tests.a0x_test_support import A0XTempTestCase, pair_binding, sha
 
@@ -162,11 +162,32 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         self.assertEqual(12, result["primary"]["multiplicity"])
         self.assertEqual(12, len(result["primary"]["combinations"]))
         self.assertEqual("positive", result["status"])
+        self.assertEqual(12, result["score_quantization_decimals"])
         self.assertEqual(
-            "9af1622cda37821018baccfb7de0d83a6b5da5a1c3887fa47892e506f989a1af",
+            "1f50742b974a580c45e1fe39341a73d9a384698d5aaa1fcd745948e892d2a5ce",
             result["primary"]["null_maxima_sha256"],
         )
         self.assertEqual([], validate(result, self._schema()))
+
+    def test_quantized_null_schedule_matches_numpy_and_pure_lodo_backends(self) -> None:
+        try:
+            import numpy  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("numpy unavailable for backend-parity comparison")
+        from latent_triz.a0x_a0_analysis import _SITES, _materialize_combos, _null_maxima, _score_operator, _score_operator_pure, _target_metadata
+
+        inputs = synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0)
+        receipt = json.loads(inputs["activation_receipt_bytes"])
+        pair = pair_binding(Leg.A0, hidden_width=2)
+        cases, labels, families, domains = _target_metadata(inputs["target_rows"])
+        combos, _ = _materialize_combos(inputs["index_bytes"], inputs["dense_asset_bytes"], cases, PairBinding.from_mapping(pair), receipt)
+        primary = [("problem_plus_transformation", index, site) for index in _LITERAL for site in _SITES]
+        numpy_operators = {combo: _score_operator(combos[combo], domains, alpha=1.0) for combo in primary}
+        pure_operators = {combo: _score_operator_pure(combos[combo], domains, alpha=1.0) for combo in primary}
+        self.assertEqual(
+            _null_maxima(numpy_operators, primary, labels, families, seed=20260814, budget=199),
+            _null_maxima(pure_operators, primary, labels, families, seed=20260814, budget=199),
+        )
 
     def test_shortcut_refusal_is_non_statistical_non_interpretable(self) -> None:
         from latent_triz.a0x_a0_analysis import analyze_a0x_a0
