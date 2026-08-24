@@ -15,11 +15,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Mapping
 
-from .a0x_contract import Leg, PairBinding
+from .a0x_contract import Leg, LegFreezeBinding, PairBinding
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _SELECTION_DOMAIN = "a0x-public-selection-capability-v1"
+_A0_SELECTION_PATH = Path("experiments/a0x-six-model/a0-selection-manifest.json")
+_R1_MANIFEST_PATH = Path("data/a0r1/manifest.json")
+_R1_CASES_PATH = Path("data/a0r1/cases.jsonl")
 _COMMON = {
     "empirical": True,
     "scientific_status": "exploratory",
@@ -50,21 +53,27 @@ class FrozenSelectionCapability:
     """
 
     leg: Leg
+    leg_freeze_sha256: str
+    source_path: str
     source_sha256: str
-    selection_identity_sha256: str
+    ordered_case_ids_sha256: str
     expected_case_ids: tuple[str, ...]
     require_file_exact: bool
     _attestation_sha256: str
 
 
-def load_a0_public_selection(path: str | Path) -> FrozenSelectionCapability:
-    """Load the Task 2 public A0 selection manifest before target access."""
-    return _load_public_selection(path, leg=Leg.A0, require_file_exact=False, a0_schema=True)
+def load_a0_public_selection(
+    *, repository_root: str | Path, leg_freeze: LegFreezeBinding,
+) -> FrozenSelectionCapability:
+    """Load the sole canonical A0 selection manifest before target access."""
+    return _load_a0_public_selection(Path(repository_root), leg_freeze)
 
 
-def load_r1_public_selection(path: str | Path) -> FrozenSelectionCapability:
-    """Load the frozen public R1 48-case selection source before target access."""
-    return _load_public_selection(path, leg=Leg.R1, require_file_exact=True, a0_schema=False)
+def load_r1_public_selection(
+    *, repository_root: str | Path, leg_freeze: LegFreezeBinding,
+) -> FrozenSelectionCapability:
+    """Load the canonical frozen R1 public corpus before target access."""
+    return _load_r1_public_selection(Path(repository_root), leg_freeze)
 
 
 @dataclass(frozen=True)
@@ -149,7 +158,7 @@ class OneShotTargetReader:
             parsed_pair = PairBinding.from_mapping(pair_binding)
         except Exception as error:
             raise A0XExecutionError("sealed target pair binding is invalid") from error
-        _validate_selection_capability(selection, pair_leg=parsed_pair.leg)
+        _validate_selection_capability(selection, pair_binding=parsed_pair)
         self._expected_case_ids = selection.expected_case_ids
         self._require_file_exact = selection.require_file_exact
         self._activation_receipt_sha256 = _required_sha(activation_receipt_sha256, "sealed activation")
@@ -391,50 +400,132 @@ def _required_sha(value: object, label: str) -> str:
     return value
 
 
-def _load_public_selection(
-    path: str | Path, *, leg: Leg, require_file_exact: bool, a0_schema: bool,
+def _load_a0_public_selection(
+    repository_root: Path, leg_freeze: LegFreezeBinding,
 ) -> FrozenSelectionCapability:
-    source = Path(path)
-    try:
-        payload = source.read_bytes()
-        value = json.loads(payload)
-    except (OSError, json.JSONDecodeError) as error:
-        raise A0XExecutionError("public selection source is unavailable") from error
-    if not isinstance(value, Mapping):
-        raise A0XExecutionError("public selection source must be an object")
-    if a0_schema:
-        _validate_artifact("a0x-selection-manifest.schema.json", value)
-        if value.get("artifact_class") != "a0x-selection-manifest" or value.get("target_content_reads") != 0:
-            raise A0XExecutionError("public A0 selection source is not target-free")
-    else:
-        _validate_r1_selection_source(value)
-    ids = _selection_case_ids(value)
+    _validate_leg_freeze(leg_freeze, expected_leg=Leg.A0)
+    source = repository_root / _A0_SELECTION_PATH
+    payload, value = _read_public_json(source, label="public A0 selection source")
     source_sha256 = hashlib.sha256(payload).hexdigest()
-    identity_sha256 = _selection_identity_sha256(leg, ids)
-    return FrozenSelectionCapability(
-        leg=leg,
+    _require_freeze_source_hash(leg_freeze, source_sha256)
+    _validate_artifact("a0x-selection-manifest.schema.json", value)
+    if value.get("artifact_class") != "a0x-selection-manifest" or value.get("target_content_reads") != 0:
+        raise A0XExecutionError("public A0 selection source is not target-free")
+    return _selection_capability(
+        leg_freeze=leg_freeze,
+        source_path=_A0_SELECTION_PATH,
         source_sha256=source_sha256,
-        selection_identity_sha256=identity_sha256,
-        expected_case_ids=ids,
-        require_file_exact=require_file_exact,
-        _attestation_sha256=_selection_attestation(leg, source_sha256, identity_sha256, require_file_exact),
+        case_ids=_selection_case_ids(value),
+        require_file_exact=False,
     )
 
 
-def _validate_r1_selection_source(value: Mapping[str, Any]) -> None:
-    required = {"artifact_class", "leg", "selected_case_count", "target_content_reads", "cases"}
-    if set(value) != required:
-        raise A0XExecutionError("public R1 selection source has an invalid frozen format")
-    if (
-        value.get("artifact_class") != "a0x-r1-public-selection"
-        or value.get("leg") != Leg.R1.value
-        or value.get("selected_case_count") != 48
-        or value.get("target_content_reads") != 0
-        or not isinstance(value.get("cases"), list)
+def _load_r1_public_selection(
+    repository_root: Path, leg_freeze: LegFreezeBinding,
+) -> FrozenSelectionCapability:
+    _validate_leg_freeze(leg_freeze, expected_leg=Leg.R1)
+    manifest_path = repository_root / _R1_MANIFEST_PATH
+    manifest_payload, manifest = _read_public_json(manifest_path, label="public R1 corpus manifest")
+    manifest_sha256 = hashlib.sha256(manifest_payload).hexdigest()
+    _require_freeze_source_hash(leg_freeze, manifest_sha256)
+    _validate_r1_manifest(manifest)
+
+    cases_path = repository_root / _R1_CASES_PATH
+    try:
+        cases_payload = cases_path.read_bytes()
+    except OSError as error:
+        raise A0XExecutionError("public R1 cases source is unavailable") from error
+    actual_cases_sha256 = hashlib.sha256(cases_payload).hexdigest()
+    if actual_cases_sha256 != manifest["cases_sha256"]:
+        raise A0XExecutionError("public R1 cases hash differs from frozen manifest")
+    case_ids = _public_r1_case_ids(cases_payload)
+    manifest_ids = _case_ids(tuple(manifest["case_ids"]))
+    if case_ids != manifest_ids:
+        raise A0XExecutionError("public R1 cases differ from frozen manifest order")
+    return _selection_capability(
+        leg_freeze=leg_freeze,
+        source_path=_R1_MANIFEST_PATH,
+        source_sha256=manifest_sha256,
+        case_ids=case_ids,
+        require_file_exact=True,
+    )
+
+
+def _read_public_json(path: Path, *, label: str) -> tuple[bytes, Mapping[str, Any]]:
+    try:
+        payload = path.read_bytes()
+        value = json.loads(payload)
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XExecutionError(f"{label} is unavailable") from error
+    if not isinstance(value, Mapping):
+        raise A0XExecutionError(f"{label} must be an object")
+    return payload, value
+
+
+def _validate_leg_freeze(leg_freeze: object, *, expected_leg: Leg) -> None:
+    if not isinstance(leg_freeze, LegFreezeBinding):
+        raise A0XExecutionError("validated leg freeze binding is required")
+    if leg_freeze.leg is not expected_leg:
+        raise A0XExecutionError("leg freeze binding has the wrong leg")
+    if not isinstance(leg_freeze.protocol_id, str) or not leg_freeze.protocol_id:
+        raise A0XExecutionError("leg freeze binding protocol is invalid")
+    for value, label in (
+        (leg_freeze.protocol_sha256, "leg freeze protocol"),
+        (leg_freeze.implementation_sha256, "leg freeze implementation"),
+        (leg_freeze.leg_freeze_sha256, "leg freeze"),
+        (leg_freeze.protected_tree_sha256, "leg freeze protected tree"),
+        (leg_freeze.selection_corpus_sha256, "leg freeze selection"),
     ):
-        raise A0XExecutionError("public R1 selection source has an invalid frozen format")
-    if any(not isinstance(row, Mapping) or set(row) != {"case_id"} for row in value["cases"]):
-        raise A0XExecutionError("public R1 selection source has an invalid frozen format")
+        _required_sha(value, label)
+
+
+def _require_freeze_source_hash(leg_freeze: LegFreezeBinding, actual_sha256: str) -> None:
+    if actual_sha256 != leg_freeze.selection_corpus_sha256:
+        raise A0XExecutionError("public selection source hash differs from leg freeze")
+
+
+def _validate_r1_manifest(value: Mapping[str, Any]) -> None:
+    required = {"artifact_class", "cases_path", "cases_sha256", "case_count", "case_ids"}
+    if set(value) != required:
+        raise A0XExecutionError("public R1 corpus manifest has an invalid frozen format")
+    if (
+        value.get("artifact_class") != "a0r1-public-corpus-manifest"
+        or value.get("cases_path") != _R1_CASES_PATH.as_posix()
+        or not isinstance(value.get("cases_sha256"), str)
+        or not _SHA256.fullmatch(value["cases_sha256"])
+        or value.get("case_count") != 48
+        or not isinstance(value.get("case_ids"), list)
+    ):
+        raise A0XExecutionError("public R1 corpus manifest has an invalid frozen format")
+    _case_ids(tuple(value["case_ids"]))
+
+
+def _public_r1_case_ids(payload: bytes) -> tuple[str, ...]:
+    try:
+        rows = _parse_jsonl(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise A0XExecutionError("public R1 cases source is invalid") from error
+    return _case_ids(tuple(_case_id(row) for row in rows))
+
+
+def _selection_capability(
+    *, leg_freeze: LegFreezeBinding, source_path: Path, source_sha256: str,
+    case_ids: tuple[str, ...], require_file_exact: bool,
+) -> FrozenSelectionCapability:
+    ordered_case_ids_sha256 = _selection_identity_sha256(leg_freeze.leg, case_ids)
+    return FrozenSelectionCapability(
+        leg=leg_freeze.leg,
+        leg_freeze_sha256=leg_freeze.leg_freeze_sha256,
+        source_path=source_path.as_posix(),
+        source_sha256=source_sha256,
+        ordered_case_ids_sha256=ordered_case_ids_sha256,
+        expected_case_ids=case_ids,
+        require_file_exact=require_file_exact,
+        _attestation_sha256=_selection_attestation(
+            leg_freeze.leg, leg_freeze.leg_freeze_sha256, source_path.as_posix(),
+            source_sha256, ordered_case_ids_sha256, require_file_exact,
+        ),
+    )
 
 
 def _selection_case_ids(value: Mapping[str, Any]) -> tuple[str, ...]:
@@ -448,19 +539,27 @@ def _selection_case_ids(value: Mapping[str, Any]) -> tuple[str, ...]:
     return _case_ids(ids)
 
 
-def _validate_selection_capability(selection: object, *, pair_leg: Leg) -> None:
+def _validate_selection_capability(selection: object, *, pair_binding: PairBinding) -> None:
     if not isinstance(selection, FrozenSelectionCapability):
         raise A0XExecutionError("validated public selection capability is required")
     ids = _case_ids(selection.expected_case_ids)
-    if selection.leg is not pair_leg:
+    if selection.leg is not pair_binding.leg:
         raise A0XExecutionError("public selection leg differs from target pair")
+    if selection.leg_freeze_sha256 != pair_binding.leg_freeze_sha256:
+        raise A0XExecutionError("public selection leg freeze differs from target pair")
     if selection.require_file_exact is not (selection.leg is Leg.R1):
         raise A0XExecutionError("public selection exact-file mode differs from leg")
+    expected_path = _A0_SELECTION_PATH if selection.leg is Leg.A0 else _R1_MANIFEST_PATH
+    if selection.source_path != expected_path.as_posix():
+        raise A0XExecutionError("public selection source path is not canonical")
+    freeze = _required_sha(selection.leg_freeze_sha256, "public selection leg freeze")
     source = _required_sha(selection.source_sha256, "public selection source")
-    identity = _required_sha(selection.selection_identity_sha256, "public selection identity")
+    identity = _required_sha(selection.ordered_case_ids_sha256, "public selection identity")
     if identity != _selection_identity_sha256(selection.leg, ids):
         raise A0XExecutionError("public selection case identity is not immutable")
-    expected_attestation = _selection_attestation(selection.leg, source, identity, selection.require_file_exact)
+    expected_attestation = _selection_attestation(
+        selection.leg, freeze, selection.source_path, source, identity, selection.require_file_exact,
+    )
     if selection._attestation_sha256 != expected_attestation:
         raise A0XExecutionError("public selection capability is not validated")
 
@@ -470,8 +569,14 @@ def _selection_identity_sha256(leg: Leg, ids: tuple[str, ...]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _selection_attestation(leg: Leg, source_sha256: str, identity_sha256: str, require_file_exact: bool) -> str:
-    encoded = f"{_SELECTION_DOMAIN}|{leg.value}|{source_sha256}|{identity_sha256}|{require_file_exact}".encode("ascii")
+def _selection_attestation(
+    leg: Leg, leg_freeze_sha256: str, source_path: str, source_sha256: str,
+    identity_sha256: str, require_file_exact: bool,
+) -> str:
+    encoded = (
+        f"{_SELECTION_DOMAIN}|{leg.value}|{leg_freeze_sha256}|{source_path}|"
+        f"{source_sha256}|{identity_sha256}|{require_file_exact}"
+    ).encode("ascii")
     return hashlib.sha256(encoded).hexdigest()
 
 

@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from latent_triz.a0x_contract import Leg, sha256_file
+from latent_triz.a0x_contract import Leg, LegFreezeBinding, sha256_file
 from latent_triz.a0x_execution import A0XExecutionError
 from latent_triz.validator import validate
 from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, sha
@@ -61,20 +61,44 @@ class A0XExecutionTests(A0XTempTestCase):
     def _selection(self, leg: Leg = Leg.A0, case_ids: tuple[str, ...] = CASE_IDS):
         from latent_triz.a0x_execution import load_a0_public_selection, load_r1_public_selection
 
-        source = self.temp_path / f"public-{leg.value}-{hash(case_ids)}.json"
+        root = self.temp_path / f"synthetic-repository-{leg.value}-{hash(case_ids)}"
         if leg is Leg.A0:
             manifest = artifact("a0x-selection-manifest.schema.json")
             template = manifest["cases"][0]
             manifest["cases"] = [{**template, "case_id": case_id} for case_id in case_ids]
             manifest["selected_case_count"] = len(case_ids)
+            source = root / "experiments/a0x-six-model/a0-selection-manifest.json"
+            source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
-            return load_a0_public_selection(source)
-        source.write_text(json.dumps({
-            "artifact_class": "a0x-r1-public-selection", "leg": "r1",
-            "selected_case_count": len(case_ids), "target_content_reads": 0,
-            "cases": [{"case_id": case_id} for case_id in case_ids],
+            return load_a0_public_selection(
+                repository_root=root, leg_freeze=self._freeze(leg, sha256_file(source)),
+            )
+        cases = root / "data/a0r1/cases.jsonl"
+        cases.parent.mkdir(parents=True, exist_ok=True)
+        cases.write_bytes(_jsonl(_rows(case_ids)))
+        manifest = root / "data/a0r1/manifest.json"
+        manifest.write_text(json.dumps({
+            "artifact_class": "a0r1-public-corpus-manifest",
+            "cases_path": "data/a0r1/cases.jsonl",
+            "cases_sha256": sha256_file(cases),
+            "case_count": len(case_ids),
+            "case_ids": list(case_ids),
         }, sort_keys=True), encoding="utf-8")
-        return load_r1_public_selection(source)
+        return load_r1_public_selection(
+            repository_root=root, leg_freeze=self._freeze(leg, sha256_file(manifest)),
+        )
+
+    def _freeze(self, leg: Leg, selection_corpus_sha256: str) -> LegFreezeBinding:
+        return LegFreezeBinding(
+            leg=leg,
+            protocol_id=f"a0x-{leg.value}-replication-v1",
+            protocol_sha256=sha(70),
+            implementation_sha256=sha(71),
+            leg_freeze_sha256=sha(3),
+            protected_tree_sha256=sha(72),
+            selection_corpus_sha256=selection_corpus_sha256,
+            source_base_commit="a" * 40,
+        )
 
     def _successful_receipt(self, *, name: str = "success") -> Path:
         path = self.temp_path / f"{name}.jsonl"
@@ -192,8 +216,10 @@ class A0XExecutionTests(A0XTempTestCase):
         expected_sha256 = sha256_file(path)
         selection = self._selection()
         substitutions = (
+            replace(selection, source_path="experiments/a0x-six-model/alternate.json"),
             replace(selection, expected_case_ids=tuple(reversed(CASE_IDS))),
             replace(selection, source_sha256=sha(99)),
+            replace(selection, leg_freeze_sha256=sha(98)),
             replace(selection, expected_case_ids=CASE_IDS[:-1]),
             replace(selection, expected_case_ids=CASE_IDS + ("case-48",)),
             replace(selection, expected_case_ids=CASE_IDS[:-1] + (CASE_IDS[-2],)),
@@ -217,6 +243,55 @@ class A0XExecutionTests(A0XTempTestCase):
                             receipt_path=self.temp_path / f"mutated-{index}.json",
                         )
         self.assertEqual(0, target_opens)
+
+    def test_canonical_loaders_reject_mutated_freeze_and_r1_corpus_before_reader(self) -> None:
+        from latent_triz.a0x_execution import load_a0_public_selection, load_r1_public_selection
+
+        root = self.temp_path / "canonical-loader-root"
+        a0_path = root / "experiments/a0x-six-model/a0-selection-manifest.json"
+        a0_path.parent.mkdir(parents=True)
+        a0_path.write_text(json.dumps(artifact("a0x-selection-manifest.schema.json")), encoding="utf-8")
+        target = self.temp_path / "unopened-target.jsonl"
+        target.write_bytes(_jsonl(_rows(CASE_IDS)))
+        receipt = self.temp_path / "unreserved-receipt.json"
+
+        with self.assertRaisesRegex(A0XExecutionError, "hash differs"):
+            load_a0_public_selection(repository_root=root, leg_freeze=self._freeze(Leg.A0, sha(90)))
+        with self.assertRaisesRegex(A0XExecutionError, "wrong leg"):
+            load_a0_public_selection(
+                repository_root=root, leg_freeze=self._freeze(Leg.R1, sha256_file(a0_path)),
+            )
+        self.assertFalse(receipt.exists())
+
+        cases = root / "data/a0r1/cases.jsonl"
+        cases.parent.mkdir(parents=True)
+        cases.write_bytes(_jsonl(_rows(CASE_IDS)))
+        manifest = root / "data/a0r1/manifest.json"
+        manifest.write_text(json.dumps({
+            "artifact_class": "a0r1-public-corpus-manifest",
+            "cases_path": "alternate/cases.jsonl",
+            "cases_sha256": sha256_file(cases),
+            "case_count": 48,
+            "case_ids": list(CASE_IDS),
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(A0XExecutionError, "invalid frozen format"):
+            load_r1_public_selection(
+                repository_root=root, leg_freeze=self._freeze(Leg.R1, sha256_file(manifest)),
+            )
+
+        manifest.write_text(json.dumps({
+            "artifact_class": "a0r1-public-corpus-manifest",
+            "cases_path": "data/a0r1/cases.jsonl",
+            "cases_sha256": sha256_file(cases),
+            "case_count": 48,
+            "case_ids": list(CASE_IDS),
+        }), encoding="utf-8")
+        cases.write_bytes(_jsonl(_rows(tuple(reversed(CASE_IDS)))))
+        with self.assertRaisesRegex(A0XExecutionError, "cases hash differs"):
+            load_r1_public_selection(
+                repository_root=root, leg_freeze=self._freeze(Leg.R1, sha256_file(manifest)),
+            )
+        self.assertFalse(receipt.exists())
 
     def test_preexisting_receipt_destination_is_refused_before_target_open(self) -> None:
         path = self.temp_path / "synthetic-targets.jsonl"
