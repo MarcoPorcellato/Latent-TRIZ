@@ -5,7 +5,9 @@ import hashlib
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -101,6 +103,22 @@ class A0XPreflightTests(A0XTempTestCase):
                 "qwen2_5_0_5b",
             ),
         )
+
+    def test_registry_rejects_card_identity_drift_with_unchanged_model_key(self) -> None:
+        registry = ROOT / "experiments/a0x-six-model/model-registry.json"
+        cards = load_registry(registry)
+        mutations = (
+            {"model_id": "HuggingFaceTB/SmolLM2-360M-drift"},
+            {"revision": "0" * 40},
+            {"runtime_root": "artifacts/models/drift"},
+        )
+        for mutation in mutations:
+            drifted = replace(cards[0], **mutation)
+            with self.subTest(mutation=mutation), patch(
+                "latent_triz.a0x_preflight.load_model_card",
+                side_effect=(drifted, *cards[1:]),
+            ), self.assertRaisesRegex(A0XPreflightError, "identity"):
+                load_registry(registry)
 
     def test_gpt2_requires_fast_runtime_type_and_offsets(self) -> None:
         card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")

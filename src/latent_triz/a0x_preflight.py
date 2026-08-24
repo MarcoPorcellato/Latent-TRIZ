@@ -123,6 +123,9 @@ def load_registry(path: str | Path) -> tuple[A0XModelCard, ...]:
     cards = tuple(load_model_card(registry_path.parent / value) for value in payload["cards"] if isinstance(value, str))
     if len(cards) != len(_MODEL_KEYS) or tuple(card.model_key for card in cards) != _MODEL_KEYS:
         raise A0XPreflightError("model registry must contain the frozen six-card order")
+    card_entries = tuple((card.model_id, card.revision, card.runtime_root) for card in cards)
+    if card_entries != expected_entries:
+        raise A0XPreflightError("model registry card identity does not match frozen source order")
     return cards
 
 
