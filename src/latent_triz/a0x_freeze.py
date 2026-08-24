@@ -218,6 +218,7 @@ def _sorted_files(repository: Path, source: Path, declared_targets: Mapping[str,
         relative = _safe_relative(path.relative_to(repository).as_posix(), "protected path")
         if relative in declared_targets:
             continue
+        _reject_symlink_components(repository, relative)
         if path.is_symlink():
             raise A0XFreezeError(f"protected tree rejects symlink: {relative}")
         if path.is_file():
@@ -357,11 +358,20 @@ def _provenance_sha(repository: Path, provenance_manifest: str) -> str:
 def _resolve_non_target(repository: Path, relative: str, declared_targets: Mapping[str, Mapping[str, Any]]) -> Path:
     if relative in declared_targets:
         raise A0XFreezeError("sealed target cannot be treated as a non-target file")
+    _reject_symlink_components(repository, relative)
     path = repository / relative
     resolved = path.resolve()
     if not resolved.is_relative_to(repository):
         raise A0XFreezeError(f"path escapes protected root: {relative}")
     return path
+
+
+def _reject_symlink_components(repository: Path, relative: str) -> None:
+    candidate = repository
+    for component in Path(relative).parts:
+        candidate = candidate / component
+        if candidate.is_symlink():
+            raise A0XFreezeError(f"protected tree rejects symlink component: {relative}")
 
 
 def _safe_relative(value: str, label: str) -> str:

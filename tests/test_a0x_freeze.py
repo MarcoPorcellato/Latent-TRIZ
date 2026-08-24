@@ -103,6 +103,29 @@ class A0XFreezeTests(unittest.TestCase):
         with self.assertRaisesRegex(A0XFreezeError, "symlink"):
             build_protected_tree(self.root, roots=(Path("historical"),), external_assets=())
 
+    def test_protected_tree_rejects_a_symlinked_directory_ancestor_during_construction(self) -> None:
+        backing = self.root / "backing"
+        (backing / "nested").mkdir(parents=True)
+        (backing / "nested" / "input.json").write_text("input", encoding="utf-8")
+        (self.root / "linked").symlink_to(backing, target_is_directory=True)
+        with self.assertRaisesRegex(A0XFreezeError, "symlink"):
+            build_protected_tree(self.root, roots=(Path("linked/nested"),), external_assets=())
+
+    def test_protected_tree_rejects_a_symlinked_directory_ancestor_during_verification(self) -> None:
+        alias = self.root / "alias"
+        (alias / "nested").mkdir(parents=True)
+        (alias / "nested" / "input.json").write_text("input", encoding="utf-8")
+        tree = build_protected_tree(self.root, roots=(Path("alias/nested"),), external_assets=())
+        backing = self.root / "backing"
+        (backing / "nested").mkdir(parents=True)
+        (backing / "nested" / "input.json").write_text("input", encoding="utf-8")
+        (alias / "nested" / "input.json").unlink()
+        (alias / "nested").rmdir()
+        alias.rmdir()
+        alias.symlink_to(backing, target_is_directory=True)
+        with self.assertRaisesRegex(A0XFreezeError, "symlink"):
+            verify_protected_tree(self.root, tree, phase="preflight")
+
     def test_protected_tree_never_opens_declared_target(self) -> None:
         target = self.root / "data/a0/sealed-targets/targets.jsonl"
         target.parent.mkdir(parents=True)
