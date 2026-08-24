@@ -924,6 +924,16 @@ Expected: FAIL on missing modules.
 
 Write into a sibling staging directory, validate every JSON artifact, hash report/receipts/index/dense locator, use hard-link or exclusive-create semantics for first terminal publication, then atomically rename. Never overwrite an existing terminal directory. A pre-analysis terminal package omits `statistical-result.json`; a valid analysis package requires it and requires one target read.
 
+Use the frozen two-level integrity DAG. Raw artifact bytes are listed in
+`publication-manifest.json`; the manifest has no self-hash. The complete-attempt
+`output-occupancy-receipt.json` hashes the exact manifest bytes and acts as the
+package root, but has no self-hash or stored self-dependent complete total.
+Verification adds the exact serialized root-receipt byte length to
+`final_bytes_excluding_this_receipt`. Local verification requires an external
+`expected_root_receipt_sha256`; public fresh-clone verification instead binds
+the root through an exact Git commit/path. Missing either anchor fails as
+`unanchored`.
+
 - [ ] **Step 4: Implement human-readable reports without claim promotion**
 
 Reports must identify one exact leg/model/revision, state the terminal status, primary endpoint and thresholds, descriptive final-block status, read counters, runtime limits, limitations, and the exact sentence: `This exploratory automated-proxy result is not a general TRIZ, causal, mechanism, emergence, or training-data claim.`
@@ -931,6 +941,12 @@ Reports must identify one exact leg/model/revision, state the terminal status, p
 - [ ] **Step 5: Implement independent verifier and non-pooling guards**
 
 Verify all schemas and hashes, protected historical trees, authorization/dossier binding, exact pair identity, external dense locator, read counters, output caps, status/statistical-result compatibility, and absence of EXP-002/R5 paths. First use `assert_leg_freeze_binding` to prove the dossier's leg and `leg_freeze_sha256` match the immutable shared leg artifacts. Starting from the publication manifest's root `PairBinding`, recursively load every per-pair referenced JSON receipt/result/report-input artifact, require byte/hash agreement, and pass the complete set to `assert_pair_binding`; any leg/freeze/model/revision/run/dossier/authorization/output/cap mismatch fails before interpretation. Also reject forbidden aggregate fields (`aggregate`, `ranking`, `combined_p`) as defence in depth; keyword rejection is never a substitute for structural binding.
+
+Enforce exact package membership and the `sealed_from_state` role matrix.
+Reject undeclared files/directories, duplicate roles or paths, traversal,
+symlinks, hardlinks, devices, FIFOs, manifest/locator disagreement, partial
+dense/index reclassification, residue omission, double-counted physical paths,
+root/manifest mutation, and one-byte cap overflow including the root receipt.
 
 - [ ] **Step 6: Run terminal, mutation, and publication tests**
 

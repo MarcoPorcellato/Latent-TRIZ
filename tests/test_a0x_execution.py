@@ -396,6 +396,7 @@ class A0XExecutionTests(A0XTempTestCase):
                     statistical_result=rich_statistical_result(pair, status=status),
                 )
                 self.assertEqual(1, terminal["analysis_target_content_reads"])
+                self.assertEqual("analysis", terminal["sealed_from_state"])
                 self.assertEqual(pair, terminal["pair_binding"])
                 self._assert_schema("a0x-terminal-result.schema.json", terminal)
 
@@ -438,6 +439,7 @@ class A0XExecutionTests(A0XTempTestCase):
         )
         before = first_path.read_bytes()
         self.assertEqual(0, first["analysis_target_content_reads"])
+        self.assertEqual("preflight", first["sealed_from_state"])
         self._assert_schema("a0x-terminal-result.schema.json", first)
         with self.assertRaisesRegex(A0XExecutionError, "already exists"):
             seal_terminal_attempt(
@@ -571,6 +573,7 @@ class A0XExecutionTests(A0XTempTestCase):
         )
         self.assertEqual(0, terminal["analysis_target_content_reads"])
         self.assertIsInstance(terminal["target_read_receipt_sha256"], str)
+        self.assertEqual("analysis", terminal["sealed_from_state"])
         self._assert_schema("a0x-terminal-result.schema.json", terminal)
 
 

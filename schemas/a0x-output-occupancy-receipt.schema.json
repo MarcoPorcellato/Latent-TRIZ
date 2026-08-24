@@ -3,17 +3,25 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "allocated_bytes",
+    "activation_receipt_raw_sha256",
     "artifact_class",
     "authorization_chain",
     "cap_bytes",
     "claim_ids",
+    "runtime_checkpoints",
+    "component_bytes",
     "empirical",
     "evidence_eligible",
     "expert_validated",
+    "final_bytes_excluding_this_receipt",
+    "manifest_package_relative_path",
+    "manifest_raw_sha256",
+    "occupancy_profile",
+    "occupancy_scope",
     "pair_binding",
+    "peak_bytes_before_this_receipt",
     "scientific_status",
-    "total_bytes"
+    "self_counting_rule"
   ],
   "properties": {
     "artifact_class": {
@@ -38,58 +46,55 @@
     "pair_binding": {
       "$ref": "#/$defs/pair"
     },
-    "allocated_bytes": {
-      "type": "integer",
-      "minimum": 1
-    },
-    "total_bytes": {
-      "type": "integer",
-      "minimum": 1
-    },
+    "occupancy_profile": {"const": "a0x-complete-attempt-root-v2"},
+    "occupancy_scope": {"const": "complete_attempt"},
+    "manifest_package_relative_path": {"$ref": "#/$defs/path"},
+    "manifest_raw_sha256": {"$ref": "#/$defs/sha"},
+    "activation_receipt_raw_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "component_bytes": {"$ref": "#/$defs/component_bytes"},
+    "final_bytes_excluding_this_receipt": {"type": "integer", "minimum": 0},
+    "peak_bytes_before_this_receipt": {"type": "integer", "minimum": 0},
     "cap_bytes": {
       "type": "integer",
-      "minimum": 1
+      "enum": [33554432, 4194304]
     },
+    "runtime_checkpoints": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/checkpoint"},
+      "allOf": [
+        {"contains": {"properties": {"phase": {"const": "pre_manifest_write"}}, "required": ["phase"]}},
+        {"contains": {"properties": {"phase": {"const": "pre_root_receipt_write"}}, "required": ["phase"]}}
+      ]
+    },
+    "self_counting_rule": {"const": "final_bytes_excluding_this_receipt + serialized_root_receipt_bytes <= cap_bytes"},
     "authorization_chain": {
       "$ref": "#/$defs/authorization_chain"
     }
   },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "pair_binding": {
-            "properties": {
-              "dense_bound": {
-                "properties": {
-                  "total_bytes": {
-                    "const": 28049408
-                  },
-                  "cap_bytes": {
-                    "const": 33554432
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "allocated_bytes": {
-            "const": 28049408
-          },
-          "total_bytes": {
-            "const": 28049408
-          },
-          "cap_bytes": {
-            "const": 33554432
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
+    "component_bytes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "package_artifacts", "external_outputs", "source_inputs", "retained_residue"],
+      "properties": {
+        "manifest": {"type": "integer", "minimum": 0},
+        "package_artifacts": {"type": "integer", "minimum": 0},
+        "external_outputs": {"type": "integer", "minimum": 0},
+        "source_inputs": {"type": "integer", "minimum": 0},
+        "retained_residue": {"type": "integer", "minimum": 0}
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "bytes"],
+      "properties": {
+        "phase": {"enum": ["pre_manifest_write", "pre_root_receipt_write"]},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    },
     "sha": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"

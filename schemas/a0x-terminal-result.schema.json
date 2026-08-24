@@ -12,6 +12,7 @@
     "expert_validated",
     "pair_binding",
     "scientific_status",
+    "sealed_from_state",
     "statistical_result",
     "status",
     "target_read_receipt_sha256"
@@ -47,6 +48,9 @@
         "incompatible",
         "failed"
       ]
+    },
+    "sealed_from_state": {
+      "enum": ["preflight", "activation", "analysis"]
     },
     "analysis_target_content_reads": {
       "enum": [
@@ -88,6 +92,48 @@
           "target_read_receipt_sha256": {
             "$ref": "#/$defs/sha"
           }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {"enum": ["positive", "null", "non_interpretable"]}
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "sealed_from_state": {"const": "analysis"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sealed_from_state": {"enum": ["preflight", "activation"]}
+        },
+        "required": ["sealed_from_state"]
+      },
+      "then": {
+        "properties": {
+          "status": {"enum": ["incompatible", "failed"]},
+          "analysis_target_content_reads": {"const": 0},
+          "target_read_receipt_sha256": {"const": null},
+          "statistical_result": {"const": null}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sealed_from_state": {"const": "analysis"}
+        },
+        "required": ["sealed_from_state"]
+      },
+      "then": {
+        "properties": {
+          "target_read_receipt_sha256": {"$ref": "#/$defs/sha"}
         }
       }
     },

@@ -394,6 +394,7 @@ def seal_terminal_attempt(
         "artifact_class": "a0x-terminal-result",
         **_COMMON,
         "status": status,
+        "sealed_from_state": current.value,
         "analysis_target_content_reads": reads,
         "target_read_receipt_sha256": target_receipt_sha256,
         "statistical_result": statistic,

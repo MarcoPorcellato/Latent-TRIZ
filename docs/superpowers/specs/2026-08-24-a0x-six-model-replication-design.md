@@ -254,6 +254,80 @@ failure before activation publishes no fabricated activation or score asset;
 a failure after possible access remains terminal and is not recoverable under
 the same approval.
 
+Each terminal package uses the acyclic integrity profile
+`a0x-terminal-package-v1`. Exact artifact, external-output, source-input, and
+retained-residue bytes flow into `publication-manifest.json`; that manifest
+never hashes itself. The complete-attempt root receipt
+`output-occupancy-receipt.json` binds the manifest's exact raw bytes under
+`a0x-complete-attempt-root-v2`, records complete occupancy and peak checkpoint
+arithmetic, and excludes only its own not-yet-known byte length. The verifier
+adds the exact serialized root-receipt length when enforcing the cap. The root
+receipt contains no self-hash and no self-dependent total.
+
+Before remote publication, verification requires the expected raw SHA-256 of
+that root receipt as an external local anchor. After publication, the exact Git
+tree and commit bind the root bytes; the exact-head CCP receipt and merged
+commit become the durable public anchor. Internal agreement alone is never
+sufficient: an unanchored package fails closed. Every regular package file must
+be declared, every external dense/index/source/residue file must be raw-hashed,
+and symlinks, hardlinks, path escapes, devices, FIFOs, duplicate roles/paths,
+unknown members, and empty undeclared directories are rejected.
+
+The terminal result records `sealed_from_state` (`preflight`, `activation`, or
+`analysis`) so the verifier can enforce the five-status artifact matrix without
+inferring lifecycle from missing files. Completed dense and index outputs appear
+together through a strict external-assets locator; partial outputs are residue,
+never evidence. The package manifest declares the root-receipt path and profile
+but does not ledger its bytes, preventing a manifest/root hash cycle.
+
+Path namespaces are exact. `package_artifacts[*].path` is normalized POSIX and
+relative to the terminal package root. `external_outputs`, `source_inputs`, and
+`retained_residue` use normalized repository-root-relative paths. The
+`authorization_record` package role is an exact byte-for-byte copy of the
+execution authorization and validates against
+`a0x-execution-authorization.schema.json`; its ledger digest must equal the
+`execution_authorization` source-input digest. The root field
+`activation_receipt_raw_sha256` means the exact raw hash of
+`activation-receipt.json`, never the nested activation-stage occupancy object.
+
+The semantic verifier, not schema omission inference, enforces this literal
+role matrix (`R` required, `F` forbidden, `O` optional, `C` conditional as one
+inseparable completed-activation set):
+
+| manifest/output role | preflight `failed|incompatible` | activation `failed|incompatible` | analysis `positive|null` | analysis `non_interpretable` | analysis `failed|incompatible` |
+| --- | --- | --- | --- | --- | --- |
+| `authorization_record` | R | R | R | R | R |
+| `model_identity_receipt` | F | R | R | R | R |
+| `ccp_observation` | O | R | R | R | R |
+| `preflight_receipt` | F | R | R | R | R |
+| `activation_receipt` | F | C | R | R | R |
+| `target_read_receipt` | F | F | R | R | R |
+| `statistical_result` | F | F | R | F | F |
+| `terminal_result` | R | R | R | R | R |
+| `external_assets_locator` | F | C | R | R | R |
+| `report` | R | R | R | R | R |
+| external `activation_dense` + `representation_index` | F | C | R | R | R |
+| `retained_residue` | O | O | F | F | O |
+
+For the activation frontier, the three `C` entries are either all present or
+all absent. An activation receipt always means completed activation; partial
+activation produces residue only and never an incomplete activation receipt.
+Every manifest has exactly the two required source inputs: approval dossier and
+execution authorization. Manifest and root receipt are always present outside
+the ordinary package ledger.
+
+Complete-attempt arithmetic excludes pre-existing `source_inputs` and counts
+each physical output/residue path once. `component_bytes.package_artifacts` is
+the package ledger sum, `component_bytes.manifest` is the exact manifest length,
+`external_outputs` is the dense/index sum, and `retained_residue` is its ledger
+sum. Their sum equals `final_bytes_excluding_this_receipt`.
+`cap_bytes` equals `PairBinding.dense_bound.cap_bytes`;
+`peak_bytes_before_this_receipt` is the maximum runtime checkpoint total and is
+at least the final value. The final verifier computes
+`final_bytes_excluding_this_receipt + len(exact root receipt bytes)` and rejects
+when that value or the recorded peak exceeds the cap. Runtime checkpoints must
+include unique `pre_manifest_write` and `pre_root_receipt_write` phases.
+
 `Incompatible` is an A0X pre-statistical terminal class for a card, tokenizer,
 architecture, context, or resource contract that cannot execute the frozen
 leg. It is neither a scientific `null` nor permission to substitute a model.

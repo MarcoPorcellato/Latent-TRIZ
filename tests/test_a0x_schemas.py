@@ -33,6 +33,7 @@ SCHEMA_FILES = (
     "a0x-representation-record.schema.json",
     "a0x-statistical-result.schema.json",
     "a0x-terminal-result.schema.json",
+    "a0x-external-assets-locator.schema.json",
     "a0x-publication-manifest.schema.json",
 )
 
@@ -66,11 +67,12 @@ class A0XSchemasTests(unittest.TestCase):
             "a0x-activation-stage-occupancy-receipt.schema.json": lambda value: value["included_paths"].append("activations.safetensors"),
             "a0x-activation-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("output_path", "/absolute"),
             "a0x-target-read-receipt.schema.json": lambda value: value.__setitem__("content_reads", 2),
-            "a0x-output-occupancy-receipt.schema.json": lambda value: value["pair_binding"]["dense_bound"].__setitem__("cap_bytes", 0),
+            "a0x-output-occupancy-receipt.schema.json": lambda value: value.__setitem__("occupancy_profile", "legacy"),
             "a0x-representation-record.schema.json": lambda value: value.__setitem__("representation_path", "/absolute"),
             "a0x-statistical-result.schema.json": lambda value: value["pair_binding"].__setitem__("binding_profile", "legacy"),
             "a0x-terminal-result.schema.json": lambda value: value.__setitem__("statistical_result", None),
-            "a0x-publication-manifest.schema.json": lambda value: value.__setitem__("report_input_path", "/absolute"),
+            "a0x-external-assets-locator.schema.json": lambda value: value["assets"][0].__setitem__("raw_sha256", "short"),
+            "a0x-publication-manifest.schema.json": lambda value: value.__setitem__("manifest_profile", "legacy"),
         }
         for name, mutate in mutations.items():
             with self.subTest(schema=name):
@@ -82,6 +84,7 @@ class A0XSchemasTests(unittest.TestCase):
         terminal_schema = self.schemas["a0x-terminal-result.schema.json"]
         failed = artifact("a0x-terminal-result.schema.json")
         failed["status"] = "failed"
+        failed["sealed_from_state"] = "preflight"
         failed["analysis_target_content_reads"] = 0
         failed["target_read_receipt_sha256"] = None
         failed["statistical_result"] = None
@@ -171,13 +174,31 @@ class A0XSchemasTests(unittest.TestCase):
         r1["endpoint_indices"] = [6]
         self.assertEqual([], validate(r1, protocol_schema))
 
-    def test_output_occupancy_binds_fixture_reservation_totals(self) -> None:
+    def test_complete_attempt_root_receipt_requires_acyclic_commitment_fields(self) -> None:
         occupancy_schema = self.schemas["a0x-output-occupancy-receipt.schema.json"]
-        for field in ("allocated_bytes", "total_bytes"):
+        for field in ("manifest_package_relative_path", "manifest_raw_sha256", "final_bytes_excluding_this_receipt", "self_counting_rule", "activation_receipt_raw_sha256", "runtime_checkpoints"):
             value = artifact("a0x-output-occupancy-receipt.schema.json")
-            value[field] = 1
+            value.pop(field)
             with self.subTest(field=field):
                 self.assertTrue(validate(value, occupancy_schema))
+
+        self_counted = artifact("a0x-output-occupancy-receipt.schema.json")
+        self_counted["root_receipt_raw_sha256"] = "a" * 64
+        self.assertTrue(validate(self_counted, occupancy_schema))
+
+        for field, invalid in (("occupancy_profile", "legacy"), ("manifest_raw_sha256", "short"), ("manifest_package_relative_path", "../manifest.json")):
+            mutated = artifact("a0x-output-occupancy-receipt.schema.json")
+            mutated[field] = invalid
+            with self.subTest(field=field):
+                self.assertTrue(validate(mutated, occupancy_schema))
+
+        legacy = artifact("a0x-output-occupancy-receipt.schema.json")
+        legacy["activation_stage_receipt_sha256"] = legacy.pop("activation_receipt_raw_sha256")
+        self.assertTrue(validate(legacy, occupancy_schema))
+
+        short_checkpoints = artifact("a0x-output-occupancy-receipt.schema.json")
+        short_checkpoints["runtime_checkpoints"].pop()
+        self.assertTrue(validate(short_checkpoints, occupancy_schema))
 
     def test_task_two_schemas_reject_nested_boundary_mutations(self) -> None:
         protected_tree = artifact("a0x-protected-tree.schema.json")
@@ -222,26 +243,94 @@ class A0XSchemasTests(unittest.TestCase):
         incomplete_chain["authorization_chain"].pop("authorization_commitment")
         self.assertTrue(validate(incomplete_chain, downstream_schema))
 
-    def test_publication_manifest_requires_unambiguous_raw_document_links(self) -> None:
+    def test_terminal_package_ledger_is_closed_and_has_no_manifest_self_hash(self) -> None:
         schema = self.schemas["a0x-publication-manifest.schema.json"]
         manifest = artifact("a0x-publication-manifest.schema.json")
-        for field in (
-            "dossier_source_path",
-            "dossier_raw_sha256",
-            "authorization_source_path",
-            "authorization_raw_sha256",
-        ):
+        for field in ("manifest_profile", "root_receipt_profile", "root_receipt_package_relative_path", "terminal_status", "package_status", "package_artifacts", "external_outputs", "source_inputs", "retained_residue"):
             missing = copy.deepcopy(manifest)
             missing.pop(field, None)
             with self.subTest(field=field):
                 self.assertTrue(validate(missing, schema))
-        for field, invalid in (
-            ("dossier_source_path", "/absolute/dossier.json"),
-            ("authorization_source_path", "../authorization.json"),
-            ("dossier_raw_sha256", "short"),
-            ("authorization_raw_sha256", "short"),
-        ):
+        for field, invalid in (("root_receipt_package_relative_path", "/absolute/root.json"), ("root_receipt_package_relative_path", "../root.json")):
             mutated = copy.deepcopy(manifest)
             mutated[field] = invalid
             with self.subTest(field=field):
                 self.assertTrue(validate(mutated, schema))
+        self_hashed = copy.deepcopy(manifest)
+        self_hashed["manifest_raw_sha256"] = "a" * 64
+        self.assertTrue(validate(self_hashed, schema))
+
+        bad_role = copy.deepcopy(manifest)
+        bad_role["package_artifacts"][0]["role"] = "undeclared"
+        self.assertTrue(validate(bad_role, schema))
+
+        wrong_namespace = copy.deepcopy(manifest)
+        wrong_namespace["external_outputs"][0]["path"] = wrong_namespace["external_outputs"][0].pop("repository_relative_path")
+        self.assertTrue(validate(wrong_namespace, schema))
+
+    def test_authorization_record_role_is_reserved_for_a_schema_valid_execution_authorization_copy(self) -> None:
+        """The later builder copies these exact bytes and validates this schema."""
+        manifest = artifact("a0x-publication-manifest.schema.json")
+        authorization = artifact("a0x-execution-authorization.schema.json")
+        schema = self.schemas["a0x-execution-authorization.schema.json"]
+        self.assertEqual([], validate(authorization, schema))
+        roles = [entry["role"] for entry in manifest["package_artifacts"]]
+        self.assertEqual(1, roles.count("authorization_record"))
+
+    def test_root_cap_and_runtime_checkpoint_phases_are_structurally_frozen(self) -> None:
+        schema = self.schemas["a0x-output-occupancy-receipt.schema.json"]
+        invalid_cap = artifact("a0x-output-occupancy-receipt.schema.json")
+        invalid_cap["cap_bytes"] = 1
+        self.assertTrue(validate(invalid_cap, schema))
+
+        legacy_checkpoints = artifact("a0x-output-occupancy-receipt.schema.json")
+        legacy_checkpoints["checkpoints"] = legacy_checkpoints.pop("runtime_checkpoints")
+        self.assertTrue(validate(legacy_checkpoints, schema))
+
+    def test_root_fixture_excludes_source_inputs_from_complete_attempt_occupancy(self) -> None:
+        root = artifact("a0x-output-occupancy-receipt.schema.json")
+        components = root["component_bytes"]
+        self.assertEqual(1024, components["source_inputs"])
+        self.assertEqual(3840, root["final_bytes_excluding_this_receipt"])
+        self.assertEqual(3840, root["peak_bytes_before_this_receipt"])
+        self.assertEqual(
+            3840,
+            components["manifest"] + components["package_artifacts"]
+            + components["external_outputs"] + components["retained_residue"],
+        )
+        self.assertEqual(
+            ["pre_manifest_write", "pre_root_receipt_write"],
+            [checkpoint["phase"] for checkpoint in root["runtime_checkpoints"]],
+        )
+        self.assertEqual([3584, 3840], [checkpoint["bytes"] for checkpoint in root["runtime_checkpoints"]])
+
+    def test_positive_terminal_requires_analysis_frontier(self) -> None:
+        schema = self.schemas["a0x-terminal-result.schema.json"]
+        terminal = artifact("a0x-terminal-result.schema.json")
+        terminal["sealed_from_state"] = "activation"
+        self.assertTrue(validate(terminal, schema))
+
+    def test_analysis_frontier_always_requires_a_target_receipt_hash(self) -> None:
+        schema = self.schemas["a0x-terminal-result.schema.json"]
+        terminal = artifact("a0x-terminal-result.schema.json")
+        terminal["status"] = "failed"
+        terminal["statistical_result"] = None
+        terminal["analysis_target_content_reads"] = 0
+        terminal["target_read_receipt_sha256"] = None
+        self.assertTrue(validate(terminal, schema))
+
+    def test_external_locator_requires_equal_shape_dense_and_index_assets(self) -> None:
+        schema = self.schemas["a0x-external-assets-locator.schema.json"]
+        locator = artifact("a0x-external-assets-locator.schema.json")
+        self.assertEqual([], validate(locator, schema))
+        for mutation in (
+            lambda value: value["assets"].pop(),
+            lambda value: value["assets"][0].__setitem__("role", "other"),
+            lambda value: value["assets"][1].__setitem__("repository_relative_path", "/absolute/index.jsonl"),
+            lambda value: value.__setitem__("locator_profile", "legacy"),
+            lambda value: value["assets"][0].__setitem__("unexpected", "field"),
+            lambda value: value["assets"][0].__setitem__("path", value["assets"][0].pop("repository_relative_path")),
+        ):
+            mutated = copy.deepcopy(locator)
+            mutation(mutated)
+            self.assertTrue(validate(mutated, schema))

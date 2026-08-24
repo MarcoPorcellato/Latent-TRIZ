@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_class",
+    "assets",
+    "authorization_chain",
+    "claim_ids",
+    "empirical",
+    "evidence_eligible",
+    "expert_validated",
+    "locator_profile",
+    "pair_binding",
+    "scientific_status"
+  ],
+  "properties": {
+    "artifact_class": {"const": "a0x-external-assets-locator"},
+    "locator_profile": {"const": "a0x-external-assets-locator-v1"},
+    "empirical": {"const": true},
+    "scientific_status": {"const": "exploratory"},
+    "evidence_eligible": {"const": false},
+    "expert_validated": {"const": false},
+    "claim_ids": {"type": "array", "maxItems": 0},
+    "pair_binding": {"$ref": "#/$defs/pair"},
+    "authorization_chain": {"$ref": "#/$defs/authorization_chain"},
+    "assets": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/asset"},
+      "allOf": [
+        {"contains": {"properties": {"role": {"const": "dense"}}, "required": ["role"]}},
+        {"contains": {"properties": {"role": {"const": "index"}}, "required": ["role"]}}
+      ]
+    }
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "rev": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "path": {"type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"},
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "repository_relative_path", "bytes", "raw_sha256"],
+      "properties": {
+        "role": {"enum": ["dense", "index"]},
+        "repository_relative_path": {"$ref": "#/$defs/path"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "raw_sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
+    "dense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["leg", "cases", "view_site_count", "endpoint_count", "hidden_width", "scalar_bytes", "vector_count", "dense_bytes", "dense_copy_count", "atomic_dense_bytes", "index_copy_count", "index_reservation_bytes", "payload_allowance_bytes", "total_bytes", "cap_bytes"],
+      "properties": {
+        "leg": {"enum": ["a0", "r1"]},
+        "cases": {"const": 48},
+        "view_site_count": {"type": "integer", "minimum": 1},
+        "endpoint_count": {"type": "integer", "minimum": 1},
+        "hidden_width": {"type": "integer", "minimum": 1},
+        "scalar_bytes": {"const": 4},
+        "vector_count": {"type": "integer", "minimum": 1},
+        "dense_bytes": {"type": "integer", "minimum": 1},
+        "dense_copy_count": {"const": 2},
+        "atomic_dense_bytes": {"type": "integer", "minimum": 1},
+        "index_copy_count": {"const": 2},
+        "index_reservation_bytes": {"type": "integer", "minimum": 1},
+        "payload_allowance_bytes": {"type": "integer", "minimum": 1},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "cap_bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding_profile", "dense_bound", "leg", "leg_freeze_sha256", "model_id", "model_key", "output_path", "revision", "run_id"],
+      "properties": {
+        "binding_profile": {"const": "a0x-pair-scope-v2"},
+        "dense_bound": {"$ref": "#/$defs/dense"},
+        "leg": {"enum": ["a0", "r1"]},
+        "leg_freeze_sha256": {"$ref": "#/$defs/sha"},
+        "model_id": {"type": "string", "minLength": 1},
+        "model_key": {"type": "string", "minLength": 1},
+        "output_path": {"$ref": "#/$defs/path"},
+        "revision": {"$ref": "#/$defs/rev"},
+        "run_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "commitment_sha256"],
+      "properties": {
+        "profile": {"enum": ["a0x-approval-dossier-json-v1", "a0x-execution-authorization-json-v1"]},
+        "commitment_sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
+    "authorization_chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dossier_commitment", "authorization_commitment"],
+      "properties": {
+        "dossier_commitment": {"$ref": "#/$defs/commitment"},
+        "authorization_commitment": {"$ref": "#/$defs/commitment"}
+      },
+      "allOf": [
+        {"if": {"properties": {"dossier_commitment": {"required": ["profile"], "properties": {"profile": {"const": "a0x-approval-dossier-json-v1"}}}}}, "then": true, "else": false},
+        {"if": {"properties": {"authorization_commitment": {"required": ["profile"], "properties": {"profile": {"const": "a0x-execution-authorization-json-v1"}}}}}, "then": true, "else": false}
+      ]
+    }
+  }
+}

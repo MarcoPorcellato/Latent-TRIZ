@@ -5,18 +5,21 @@
   "required": [
     "artifact_class",
     "authorization_chain",
-    "authorization_raw_sha256",
-    "authorization_source_path",
     "claim_ids",
-    "dossier_raw_sha256",
-    "dossier_source_path",
     "empirical",
     "evidence_eligible",
     "expert_validated",
+    "external_outputs",
+    "manifest_profile",
+    "package_artifacts",
+    "package_status",
     "pair_binding",
-    "publication_status",
-    "report_input_path",
-    "scientific_status"
+    "retained_residue",
+    "root_receipt_package_relative_path",
+    "root_receipt_profile",
+    "scientific_status",
+    "source_inputs",
+    "terminal_status"
   ],
   "properties": {
     "artifact_class": {
@@ -41,29 +44,93 @@
     "pair_binding": {
       "$ref": "#/$defs/pair"
     },
-    "publication_status": {
-      "const": "draft"
+    "manifest_profile": {
+      "const": "a0x-terminal-package-v1"
     },
-    "report_input_path": {
+    "root_receipt_profile": {
+      "const": "a0x-complete-attempt-root-v2"
+    },
+    "root_receipt_package_relative_path": {
       "$ref": "#/$defs/path"
+    },
+    "terminal_status": {
+      "enum": ["positive", "null", "non_interpretable", "incompatible", "failed"]
+    },
+    "package_status": {
+      "const": "complete"
     },
     "authorization_chain": {
       "$ref": "#/$defs/authorization_chain"
     },
-    "dossier_source_path": {
-      "$ref": "#/$defs/path"
+    "package_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/package_artifact"}
     },
-    "dossier_raw_sha256": {
-      "$ref": "#/$defs/sha"
+    "external_outputs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/external_output"}
     },
-    "authorization_source_path": {
-      "$ref": "#/$defs/path"
+    "source_inputs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/source_input"},
+      "allOf": [
+        {"contains": {"properties": {"role": {"const": "dossier"}}, "required": ["role"]}},
+        {"contains": {"properties": {"role": {"const": "authorization"}}, "required": ["role"]}}
+      ]
     },
-    "authorization_raw_sha256": {
-      "$ref": "#/$defs/sha"
+    "retained_residue": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/residue"}
     }
   },
   "$defs": {
+    "package_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "bytes", "raw_sha256"],
+      "properties": {
+        "role": {"enum": ["authorization_record", "model_identity_receipt", "ccp_observation", "preflight_receipt", "activation_receipt", "target_read_receipt", "statistical_result", "terminal_result", "external_assets_locator", "report"]},
+        "path": {"$ref": "#/$defs/path"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "raw_sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
+    "external_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "repository_relative_path", "bytes", "raw_sha256"],
+      "properties": {
+        "role": {"enum": ["dense", "index"]},
+        "repository_relative_path": {"$ref": "#/$defs/path"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "raw_sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
+    "source_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "repository_relative_path", "bytes", "raw_sha256"],
+      "properties": {
+        "role": {"enum": ["dossier", "authorization"]},
+        "repository_relative_path": {"$ref": "#/$defs/path"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "raw_sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
+    "residue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "repository_relative_path", "bytes", "raw_sha256"],
+      "properties": {
+        "role": {"enum": ["activation_stage_residue", "package_stage_residue", "failure_residue"]},
+        "repository_relative_path": {"$ref": "#/$defs/path"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "raw_sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
     "sha": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"

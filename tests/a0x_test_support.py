@@ -303,7 +303,6 @@ def artifact(name: str) -> dict[str, object]:
                 "observed_sha256": None,
             },
         ),
-        "a0x-output-occupancy-receipt.schema.json": ("a0x-output-occupancy-receipt", {"allocated_bytes": 28049408, "total_bytes": 28049408, "cap_bytes": 33554432}),
         "a0x-representation-record.schema.json": ("a0x-representation-record", {"representation_path": "results/a0x/a0/gpt2/representation.json"}),
     }
     if name == "a0x-authorization-dossier.schema.json":
@@ -325,6 +324,45 @@ def artifact(name: str) -> dict[str, object]:
     if name in pair_artifacts:
         artifact_class, fields = pair_artifacts[name]
         return {**common_fields, "artifact_class": artifact_class, "pair_binding": pair, "authorization_chain": chain, **fields}
+    if name == "a0x-external-assets-locator.schema.json":
+        return {
+            **common_fields,
+            "artifact_class": "a0x-external-assets-locator",
+            "locator_profile": "a0x-external-assets-locator-v1",
+            "pair_binding": pair,
+            "authorization_chain": chain,
+            "assets": [
+                {"role": "dense", "repository_relative_path": "external/a0/gpt2/activations.safetensors", "bytes": 1024, "raw_sha256": sha(401)},
+                {"role": "index", "repository_relative_path": "external/a0/gpt2/representations-index.jsonl", "bytes": 512, "raw_sha256": sha(402)},
+            ],
+        }
+    if name == "a0x-output-occupancy-receipt.schema.json":
+        return {
+            **common_fields,
+            "artifact_class": "a0x-output-occupancy-receipt",
+            "occupancy_profile": "a0x-complete-attempt-root-v2",
+            "occupancy_scope": "complete_attempt",
+            "pair_binding": pair,
+            "authorization_chain": chain,
+            "manifest_package_relative_path": "publication-manifest.json",
+            "manifest_raw_sha256": sha(403),
+            "activation_receipt_raw_sha256": sha(404),
+            "component_bytes": {
+                "manifest": 256,
+                "package_artifacts": 2048,
+                "external_outputs": 1536,
+                "source_inputs": 1024,
+                "retained_residue": 0,
+            },
+            "final_bytes_excluding_this_receipt": 3840,
+            "peak_bytes_before_this_receipt": 3840,
+            "cap_bytes": 33554432,
+            "runtime_checkpoints": [
+                {"phase": "pre_manifest_write", "bytes": 3584},
+                {"phase": "pre_root_receipt_write", "bytes": 3840},
+            ],
+            "self_counting_rule": "final_bytes_excluding_this_receipt + serialized_root_receipt_bytes <= cap_bytes",
+        }
     if name == "a0x-statistical-result.schema.json":
         return rich_statistical_result(pair, authorization_chain=chain)
     if name == "a0x-terminal-result.schema.json":
@@ -334,6 +372,7 @@ def artifact(name: str) -> dict[str, object]:
             "pair_binding": pair,
             "authorization_chain": chain,
             "status": "positive",
+            "sealed_from_state": "analysis",
             "analysis_target_content_reads": 1,
             "target_read_receipt_sha256": sha(24),
             "statistical_result": rich_statistical_result(pair, authorization_chain=chain),
@@ -344,12 +383,32 @@ def artifact(name: str) -> dict[str, object]:
             "artifact_class": "a0x-publication-manifest",
             "pair_binding": pair,
             "authorization_chain": chain,
-            "publication_status": "draft",
-            "report_input_path": "results/a0x/a0/gpt2/terminal-result.json",
-            "dossier_source_path": "experiments/a0x-six-model/a0/gpt2/approval-dossier.json",
-            "dossier_raw_sha256": sha(301),
-            "authorization_source_path": "results/a0x/a0/gpt2/execution-authorization.json",
-            "authorization_raw_sha256": sha(302),
+            "manifest_profile": "a0x-terminal-package-v1",
+            "root_receipt_profile": "a0x-complete-attempt-root-v2",
+            "root_receipt_package_relative_path": "output-occupancy-receipt.json",
+            "terminal_status": "positive",
+            "package_status": "complete",
+            "package_artifacts": [
+                {"role": "authorization_record", "path": "execution-authorization.json", "bytes": 256, "raw_sha256": sha(301)},
+                {"role": "model_identity_receipt", "path": "model-identity-receipt.json", "bytes": 256, "raw_sha256": sha(302)},
+                {"role": "ccp_observation", "path": "ccp-observation.json", "bytes": 256, "raw_sha256": sha(303)},
+                {"role": "preflight_receipt", "path": "preflight-receipt.json", "bytes": 256, "raw_sha256": sha(304)},
+                {"role": "activation_receipt", "path": "activation-receipt.json", "bytes": 256, "raw_sha256": sha(305)},
+                {"role": "target_read_receipt", "path": "target-read-receipt.json", "bytes": 256, "raw_sha256": sha(306)},
+                {"role": "statistical_result", "path": "statistical-result.json", "bytes": 256, "raw_sha256": sha(307)},
+                {"role": "terminal_result", "path": "terminal-result.json", "bytes": 256, "raw_sha256": sha(308)},
+                {"role": "external_assets_locator", "path": "external-assets-locator.json", "bytes": 256, "raw_sha256": sha(309)},
+                {"role": "report", "path": "report.md", "bytes": 256, "raw_sha256": sha(310)},
+            ],
+            "external_outputs": [
+                {"role": "dense", "repository_relative_path": "external/a0/gpt2/activations.safetensors", "bytes": 1024, "raw_sha256": sha(401)},
+                {"role": "index", "repository_relative_path": "external/a0/gpt2/representations-index.jsonl", "bytes": 512, "raw_sha256": sha(402)},
+            ],
+            "source_inputs": [
+                {"role": "dossier", "repository_relative_path": "experiments/a0x-six-model/a0/gpt2/approval-dossier.json", "bytes": 256, "raw_sha256": sha(311)},
+                {"role": "authorization", "repository_relative_path": "results/a0x/a0/gpt2/execution-authorization.json", "bytes": 256, "raw_sha256": sha(312)},
+            ],
+            "retained_residue": [],
         }
     raise KeyError(name)
 
