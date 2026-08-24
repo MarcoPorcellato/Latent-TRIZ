@@ -19,6 +19,7 @@ from .a0x_contract import Leg, PairBinding
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
+_SELECTION_DOMAIN = "a0x-public-selection-capability-v1"
 _COMMON = {
     "empirical": True,
     "scientific_status": "exploratory",
@@ -37,6 +38,33 @@ class AttemptState(StrEnum):
     ACTIVATION = "activation"
     ANALYSIS = "analysis"
     SEALED = "sealed"
+
+
+@dataclass(frozen=True)
+class FrozenSelectionCapability:
+    """Validated public selection identity, with no sealed-target capability.
+
+    The loader opens only a public selection source, computes its byte hash,
+    and derives the immutable ordered 48-case identity.  A reader revalidates
+    the attestation before it reserves a receipt or can open a target.
+    """
+
+    leg: Leg
+    source_sha256: str
+    selection_identity_sha256: str
+    expected_case_ids: tuple[str, ...]
+    require_file_exact: bool
+    _attestation_sha256: str
+
+
+def load_a0_public_selection(path: str | Path) -> FrozenSelectionCapability:
+    """Load the Task 2 public A0 selection manifest before target access."""
+    return _load_public_selection(path, leg=Leg.A0, require_file_exact=False, a0_schema=True)
+
+
+def load_r1_public_selection(path: str | Path) -> FrozenSelectionCapability:
+    """Load the frozen public R1 48-case selection source before target access."""
+    return _load_public_selection(path, leg=Leg.R1, require_file_exact=True, a0_schema=False)
 
 
 @dataclass(frozen=True)
@@ -95,40 +123,47 @@ class TargetReadReceipt:
 
 
 class OneShotTargetReader:
-    """The sole capability allowed to open the sealed target exactly once."""
+    """The sole capability allowed to open the sealed target exactly once.
+
+    Construction atomically reserves the receipt name before any target open.
+    A process crash after reservation can therefore leave an empty/incomplete
+    receipt file; that file is fail-closed recovery evidence and must never be
+    overwritten or treated as a completed read receipt.
+    """
 
     def __init__(
         self,
         *,
         path: str | Path,
         expected_sha256: str,
-        expected_case_ids: tuple[str, ...],
-        require_file_exact: bool,
         receipt_path: str | Path,
         pair_binding: Mapping[str, Any],
-        selection_corpus_sha256: str,
+        selection: FrozenSelectionCapability,
         activation_receipt_sha256: str,
         dense_sha256: str,
         index_sha256: str,
     ) -> None:
         self._path = Path(path)
         self._expected_sha256 = _required_sha(expected_sha256, "expected sealed target")
-        self._expected_case_ids = _case_ids(expected_case_ids)
-        self._require_file_exact = bool(require_file_exact)
-        self._receipt_path = Path(receipt_path)
-        if self._receipt_path.exists():
-            raise A0XExecutionError("target-read receipt already exists")
         try:
             parsed_pair = PairBinding.from_mapping(pair_binding)
         except Exception as error:
             raise A0XExecutionError("sealed target pair binding is invalid") from error
-        if parsed_pair.leg is Leg.R1 and not self._require_file_exact:
-            raise A0XExecutionError("R1 target selection must require the exact frozen file")
-        self._pair_binding = parsed_pair.as_mapping()
-        self._selection_corpus_sha256 = _required_sha(selection_corpus_sha256, "sealed selection")
+        _validate_selection_capability(selection, pair_leg=parsed_pair.leg)
+        self._expected_case_ids = selection.expected_case_ids
+        self._require_file_exact = selection.require_file_exact
         self._activation_receipt_sha256 = _required_sha(activation_receipt_sha256, "sealed activation")
         self._dense_sha256 = _required_sha(dense_sha256, "sealed activation")
         self._index_sha256 = _required_sha(index_sha256, "sealed activation")
+        self._receipt_path = Path(receipt_path)
+        try:
+            self._receipt_reservation = self._receipt_path.open("xb")
+        except FileExistsError as error:
+            raise A0XExecutionError("target-read receipt already exists; incomplete reservation is fail-closed") from error
+        except OSError as error:
+            raise A0XExecutionError("target-read receipt reservation could not be acquired") from error
+        self._pair_binding = parsed_pair.as_mapping()
+        self._selection_corpus_sha256 = selection.source_sha256
         self._consumed = False
 
     def read_jsonl_once(self) -> tuple[list[dict[str, object]], TargetReadReceipt]:
@@ -204,15 +239,13 @@ class OneShotTargetReader:
             status=status,
             observed_sha256=observed_sha256,
         )
-        encoded = json.dumps(
-            receipt.as_mapping(), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-        ).encode("utf-8")
         _validate_artifact("a0x-target-read-receipt.schema.json", receipt.as_mapping())
         try:
-            with self._receipt_path.open("xb") as stream:
-                stream.write(encoded)
-        except FileExistsError as error:
-            raise A0XExecutionError("target-read receipt already exists") from error
+            self._receipt_reservation.write(json.dumps(
+                receipt.as_mapping(), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            ).encode("utf-8"))
+            self._receipt_reservation.flush()
+            self._receipt_reservation.close()
         except OSError as error:
             raise A0XExecutionError("target-read receipt could not be persisted") from error
         return receipt
@@ -358,6 +391,90 @@ def _required_sha(value: object, label: str) -> str:
     return value
 
 
+def _load_public_selection(
+    path: str | Path, *, leg: Leg, require_file_exact: bool, a0_schema: bool,
+) -> FrozenSelectionCapability:
+    source = Path(path)
+    try:
+        payload = source.read_bytes()
+        value = json.loads(payload)
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XExecutionError("public selection source is unavailable") from error
+    if not isinstance(value, Mapping):
+        raise A0XExecutionError("public selection source must be an object")
+    if a0_schema:
+        _validate_artifact("a0x-selection-manifest.schema.json", value)
+        if value.get("artifact_class") != "a0x-selection-manifest" or value.get("target_content_reads") != 0:
+            raise A0XExecutionError("public A0 selection source is not target-free")
+    else:
+        _validate_r1_selection_source(value)
+    ids = _selection_case_ids(value)
+    source_sha256 = hashlib.sha256(payload).hexdigest()
+    identity_sha256 = _selection_identity_sha256(leg, ids)
+    return FrozenSelectionCapability(
+        leg=leg,
+        source_sha256=source_sha256,
+        selection_identity_sha256=identity_sha256,
+        expected_case_ids=ids,
+        require_file_exact=require_file_exact,
+        _attestation_sha256=_selection_attestation(leg, source_sha256, identity_sha256, require_file_exact),
+    )
+
+
+def _validate_r1_selection_source(value: Mapping[str, Any]) -> None:
+    required = {"artifact_class", "leg", "selected_case_count", "target_content_reads", "cases"}
+    if set(value) != required:
+        raise A0XExecutionError("public R1 selection source has an invalid frozen format")
+    if (
+        value.get("artifact_class") != "a0x-r1-public-selection"
+        or value.get("leg") != Leg.R1.value
+        or value.get("selected_case_count") != 48
+        or value.get("target_content_reads") != 0
+        or not isinstance(value.get("cases"), list)
+    ):
+        raise A0XExecutionError("public R1 selection source has an invalid frozen format")
+    if any(not isinstance(row, Mapping) or set(row) != {"case_id"} for row in value["cases"]):
+        raise A0XExecutionError("public R1 selection source has an invalid frozen format")
+
+
+def _selection_case_ids(value: Mapping[str, Any]) -> tuple[str, ...]:
+    rows = value.get("cases")
+    if not isinstance(rows, list):
+        raise A0XExecutionError("public selection source is missing cases")
+    try:
+        ids = tuple(row["case_id"] for row in rows if isinstance(row, Mapping))
+    except (KeyError, TypeError) as error:
+        raise A0XExecutionError("public selection source is missing case IDs") from error
+    return _case_ids(ids)
+
+
+def _validate_selection_capability(selection: object, *, pair_leg: Leg) -> None:
+    if not isinstance(selection, FrozenSelectionCapability):
+        raise A0XExecutionError("validated public selection capability is required")
+    ids = _case_ids(selection.expected_case_ids)
+    if selection.leg is not pair_leg:
+        raise A0XExecutionError("public selection leg differs from target pair")
+    if selection.require_file_exact is not (selection.leg is Leg.R1):
+        raise A0XExecutionError("public selection exact-file mode differs from leg")
+    source = _required_sha(selection.source_sha256, "public selection source")
+    identity = _required_sha(selection.selection_identity_sha256, "public selection identity")
+    if identity != _selection_identity_sha256(selection.leg, ids):
+        raise A0XExecutionError("public selection case identity is not immutable")
+    expected_attestation = _selection_attestation(selection.leg, source, identity, selection.require_file_exact)
+    if selection._attestation_sha256 != expected_attestation:
+        raise A0XExecutionError("public selection capability is not validated")
+
+
+def _selection_identity_sha256(leg: Leg, ids: tuple[str, ...]) -> str:
+    encoded = json.dumps({"leg": leg.value, "case_ids": ids}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _selection_attestation(leg: Leg, source_sha256: str, identity_sha256: str, require_file_exact: bool) -> str:
+    encoded = f"{_SELECTION_DOMAIN}|{leg.value}|{source_sha256}|{identity_sha256}|{require_file_exact}".encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _case_ids(values: tuple[str, ...]) -> tuple[str, ...]:
     if not isinstance(values, tuple) or len(values) != 48 or any(not isinstance(value, str) or not value for value in values):
         raise A0XExecutionError("sealed target selection must contain exactly 48 unique case IDs")
@@ -408,8 +525,11 @@ def _persist_exclusive(destination: Path, artifact: Mapping[str, Any], *, label:
 __all__ = [
     "A0XExecutionError",
     "AttemptState",
+    "FrozenSelectionCapability",
     "OneShotTargetReader",
     "TargetReadReceipt",
     "advance_attempt",
+    "load_a0_public_selection",
+    "load_r1_public_selection",
     "seal_terminal_attempt",
 ]

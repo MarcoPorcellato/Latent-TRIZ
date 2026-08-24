@@ -4,13 +4,14 @@ import hashlib
 import inspect
 import json
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 from latent_triz.a0x_contract import Leg, sha256_file
 from latent_triz.a0x_execution import A0XExecutionError
 from latent_triz.validator import validate
-from tests.a0x_test_support import A0XTempTestCase, pair_binding, sha
+from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, sha
 
 
 CASE_IDS = tuple(f"case-{index:02d}" for index in range(48))
@@ -39,9 +40,8 @@ class A0XExecutionTests(A0XTempTestCase):
         self,
         *,
         path: Path,
-        expected_case_ids: tuple[str, ...] = CASE_IDS,
         leg: Leg = Leg.A0,
-        require_file_exact: bool = False,
+        selection=None,
         expected_sha256: str | None = None,
         receipt_path: Path | None = None,
     ):
@@ -50,15 +50,31 @@ class A0XExecutionTests(A0XTempTestCase):
         return OneShotTargetReader(
             path=path,
             expected_sha256=expected_sha256 or sha256_file(path),
-            expected_case_ids=expected_case_ids,
-            require_file_exact=require_file_exact,
             receipt_path=receipt_path or self.temp_path / "target-read-receipt.json",
             pair_binding=pair_binding(leg),
-            selection_corpus_sha256=sha(60),
+            selection=selection or self._selection(leg),
             activation_receipt_sha256=sha(61),
             dense_sha256=sha(62),
             index_sha256=sha(63),
         )
+
+    def _selection(self, leg: Leg = Leg.A0, case_ids: tuple[str, ...] = CASE_IDS):
+        from latent_triz.a0x_execution import load_a0_public_selection, load_r1_public_selection
+
+        source = self.temp_path / f"public-{leg.value}-{hash(case_ids)}.json"
+        if leg is Leg.A0:
+            manifest = artifact("a0x-selection-manifest.schema.json")
+            template = manifest["cases"][0]
+            manifest["cases"] = [{**template, "case_id": case_id} for case_id in case_ids]
+            manifest["selected_case_count"] = len(case_ids)
+            source.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+            return load_a0_public_selection(source)
+        source.write_text(json.dumps({
+            "artifact_class": "a0x-r1-public-selection", "leg": "r1",
+            "selected_case_count": len(case_ids), "target_content_reads": 0,
+            "cases": [{"case_id": case_id} for case_id in case_ids],
+        }, sort_keys=True), encoding="utf-8")
+        return load_r1_public_selection(source)
 
     def _successful_receipt(self, *, name: str = "success") -> Path:
         path = self.temp_path / f"{name}.jsonl"
@@ -117,14 +133,14 @@ class A0XExecutionTests(A0XTempTestCase):
         path.write_bytes(_jsonl(_rows(CASE_IDS)))
         for expected in (CASE_IDS[:1], CASE_IDS[:-1], CASE_IDS + ("case-48",), CASE_IDS[:-1] + (CASE_IDS[-2],)):
             with self.subTest(count=len(expected)):
-                with self.assertRaisesRegex(A0XExecutionError, "exactly 48"):
-                    self._reader(path=path, expected_case_ids=expected)
+                with self.assertRaisesRegex(A0XExecutionError, "48"):
+                    self._selection(Leg.A0, expected)
 
     def test_a0_returns_the_exact_ordered_selected_48_subset(self) -> None:
         expected = tuple(reversed(CASE_IDS))
         path = self.temp_path / "synthetic-a0.jsonl"
         path.write_bytes(_jsonl(_rows(CASE_IDS + ("unselected",))))
-        rows, _ = self._reader(path=path, expected_case_ids=expected).read_jsonl_once()
+        rows, _ = self._reader(path=path, selection=self._selection(Leg.A0, expected)).read_jsonl_once()
         self.assertEqual(expected, tuple(row["case_id"] for row in rows))
 
         for name, source_ids in (("missing", CASE_IDS[:-1]), ("duplicate", CASE_IDS + (CASE_IDS[-1],))):
@@ -143,13 +159,14 @@ class A0XExecutionTests(A0XTempTestCase):
                 path.write_bytes(_jsonl(_rows(source_ids)))
                 receipt_path = self.temp_path / f"synthetic-r1-{name}-receipt.json"
                 with self.assertRaisesRegex(A0XExecutionError, "selection"):
-                    self._reader(path=path, leg=Leg.R1, require_file_exact=True, receipt_path=receipt_path).read_jsonl_once()
+                    self._reader(path=path, leg=Leg.R1, receipt_path=receipt_path).read_jsonl_once()
                 self._assert_schema("a0x-target-read-receipt.schema.json", json.loads(receipt_path.read_text(encoding="utf-8")))
 
         valid = self.temp_path / "synthetic-r1-valid.jsonl"
         valid.write_bytes(_jsonl(_rows(CASE_IDS)))
-        with self.assertRaisesRegex(A0XExecutionError, "R1 target selection"):
-            self._reader(path=valid, leg=Leg.R1, require_file_exact=False)
+        selection = self._selection(Leg.R1)
+        with self.assertRaisesRegex(A0XExecutionError, "exact-file mode"):
+            self._reader(path=valid, leg=Leg.R1, selection=replace(selection, require_file_exact=False))
 
     def test_reader_requires_sealed_activation_dense_index_and_selection_bindings(self) -> None:
         path = self.temp_path / "synthetic-targets.jsonl"
@@ -157,17 +174,49 @@ class A0XExecutionTests(A0XTempTestCase):
         from latent_triz.a0x_execution import OneShotTargetReader
 
         kwargs = {
-            "path": path, "expected_sha256": sha256_file(path), "expected_case_ids": CASE_IDS,
-            "require_file_exact": True, "receipt_path": self.temp_path / "receipt.json",
-            "pair_binding": pair_binding(), "selection_corpus_sha256": sha(60),
+            "path": path, "expected_sha256": sha256_file(path),
+            "receipt_path": self.temp_path / "receipt.json",
+            "pair_binding": pair_binding(), "selection": self._selection(),
             "activation_receipt_sha256": sha(61), "dense_sha256": sha(62), "index_sha256": sha(63),
         }
-        for field in ("selection_corpus_sha256", "activation_receipt_sha256", "dense_sha256", "index_sha256"):
+        for field in ("activation_receipt_sha256", "dense_sha256", "index_sha256"):
             with self.subTest(field=field):
                 invalid = dict(kwargs)
                 invalid[field] = "not-a-hash"
                 with self.assertRaisesRegex(A0XExecutionError, "sealed"):
                     OneShotTargetReader(**invalid)
+
+    def test_mutated_selection_capability_is_refused_before_target_open(self) -> None:
+        path = self.temp_path / "synthetic-targets.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
+        expected_sha256 = sha256_file(path)
+        selection = self._selection()
+        substitutions = (
+            replace(selection, expected_case_ids=tuple(reversed(CASE_IDS))),
+            replace(selection, source_sha256=sha(99)),
+            replace(selection, expected_case_ids=CASE_IDS[:-1]),
+            replace(selection, expected_case_ids=CASE_IDS + ("case-48",)),
+            replace(selection, expected_case_ids=CASE_IDS[:-1] + (CASE_IDS[-2],)),
+            replace(selection, leg=Leg.R1),
+        )
+        original_open = Path.open
+        target_opens = 0
+
+        def guarded_open(candidate: Path, mode: str = "r", *args, **kwargs):
+            nonlocal target_opens
+            if candidate == path and mode == "rb":
+                target_opens += 1
+            return original_open(candidate, mode, *args, **kwargs)
+
+        with patch.object(Path, "open", new=guarded_open):
+            for index, mutated in enumerate(substitutions):
+                with self.subTest(index=index):
+                    with self.assertRaisesRegex(A0XExecutionError, "selection"):
+                        self._reader(
+                            path=path, expected_sha256=expected_sha256, selection=mutated,
+                            receipt_path=self.temp_path / f"mutated-{index}.json",
+                        )
+        self.assertEqual(0, target_opens)
 
     def test_preexisting_receipt_destination_is_refused_before_target_open(self) -> None:
         path = self.temp_path / "synthetic-targets.jsonl"
@@ -189,6 +238,28 @@ class A0XExecutionTests(A0XTempTestCase):
                 self._reader(path=path, expected_sha256=expected_sha256, receipt_path=receipt_path)
         self.assertEqual(0, target_opens)
         self.assertEqual("first receipt bytes", receipt_path.read_text(encoding="utf-8"))
+
+    def test_receipt_reservation_race_refuses_before_target_open(self) -> None:
+        path = self.temp_path / "synthetic-targets.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
+        receipt_path = self.temp_path / "race-receipt.json"
+        expected_sha256 = sha256_file(path)
+        original_open = Path.open
+        target_opens = 0
+
+        def racing_open(candidate: Path, mode: str = "r", *args, **kwargs):
+            nonlocal target_opens
+            if candidate == receipt_path and mode == "xb":
+                raise FileExistsError("synthetic concurrent reservation")
+            if candidate == path and mode == "rb":
+                target_opens += 1
+            return original_open(candidate, mode, *args, **kwargs)
+
+        with patch.object(Path, "open", new=racing_open):
+            with self.assertRaisesRegex(A0XExecutionError, "already exists"):
+                self._reader(path=path, expected_sha256=expected_sha256, receipt_path=receipt_path)
+        self.assertEqual(0, target_opens)
+        self.assertFalse(receipt_path.exists())
 
     def test_read_failure_after_open_persists_one_read_receipt(self) -> None:
         path = self.temp_path / "synthetic-read-failure.jsonl"
@@ -290,6 +361,24 @@ class A0XExecutionTests(A0XTempTestCase):
                 terminal_path=self.temp_path / "positive-failure.json", pair_binding=pair_binding(),
                 statistical_result={"p_value": 0.5, "result_status": "completed"},
             )
+
+    def test_missing_target_analysis_failure_keeps_zero_read_receipt_hash(self) -> None:
+        from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
+
+        missing = self.temp_path / "missing.jsonl"
+        receipt_path = self.temp_path / "missing-receipt.json"
+        with self.assertRaisesRegex(A0XExecutionError, "read failed"):
+            self._reader(path=missing, expected_sha256=sha(77), receipt_path=receipt_path).read_jsonl_once()
+        terminal = seal_terminal_attempt(
+            state=AttemptState.ANALYSIS,
+            status="failed",
+            target_receipt_path=receipt_path,
+            terminal_path=self.temp_path / "missing-terminal.json",
+            pair_binding=pair_binding(),
+        )
+        self.assertEqual(0, terminal["analysis_target_content_reads"])
+        self.assertIsInstance(terminal["target_read_receipt_sha256"], str)
+        self._assert_schema("a0x-terminal-result.schema.json", terminal)
 
 
 if __name__ == "__main__":
