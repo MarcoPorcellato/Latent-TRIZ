@@ -12,7 +12,6 @@ import hashlib
 import json
 import math
 import os
-import shutil
 import struct
 import tempfile
 from dataclasses import dataclass
@@ -85,8 +84,17 @@ class ActivationArtifacts:
     occupancy: OutputOccupancyReceipt
 
 
-def measure_output_occupancy(root: str | Path, *, leg: Leg) -> OutputOccupancyReceipt:
-    """Count all regular files recursively, including stale stage/crash residue."""
+def measure_output_occupancy(
+    root: str | Path, *, leg: Leg, enforce_cap: bool = True,
+) -> OutputOccupancyReceipt:
+    """Count activation files and residue, excluding only this receipt itself.
+
+    ``activation-receipt.json`` is excluded at the root because it contains the
+    occupancy receipt and including it would make its own byte count recursive.
+    Every other regular file, including dense/index staging and crash residue,
+    is included.  ``enforce_cap=False`` exists only to preserve a measured
+    failure-stage receipt after a cap violation.
+    """
     output_root = Path(root)
     if not output_root.exists() or not output_root.is_dir() or output_root.is_symlink():
         raise A0XActivationError("activation output root is unavailable")
@@ -99,7 +107,10 @@ def measure_output_occupancy(root: str | Path, *, leg: Leg) -> OutputOccupancyRe
             continue
         if not path.is_file():
             raise A0XActivationError("activation output contains a non-regular entry")
-        included.append(path.relative_to(output_root).as_posix())
+        relative = path.relative_to(output_root).as_posix()
+        if relative == "activation-receipt.json":
+            continue
+        included.append(relative)
         total += path.stat().st_size
     receipt = OutputOccupancyReceipt(
         leg=leg,
@@ -108,7 +119,7 @@ def measure_output_occupancy(root: str | Path, *, leg: Leg) -> OutputOccupancyRe
         actual_total_bytes=total,
         cap_bytes=_cap(leg),
     )
-    if total > receipt.cap_bytes:
+    if enforce_cap and total > receipt.cap_bytes:
         raise A0XActivationError("dense output cap exceeded by activation-stage occupancy")
     return receipt
 
@@ -196,14 +207,31 @@ def _extract(
     if len(index_rows) != expected_records:
         raise A0XActivationError("activation vector count differs from frozen dense bound")
 
+    dense_payload = _serialize_safetensors(vectors, width=width)
+    index_payload = b"".join(_stable_json_bytes(row) for row in index_rows)
     destination.parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".a0x-activation-stage-", dir=destination.parent))
+    checkpoints: list[dict[str, Any]] = []
     try:
         dense_path = stage / "activations.safetensors"
-        _write_safetensors(dense_path, vectors, width=width)
+        checkpoints.append(_checkpoint(
+            stage, phase="pre_dense_write", planned=planned,
+            additions={"activations.safetensors": dense_payload}, leg=leg,
+        ))
+        _verify_checkpoint(checkpoints[-1])
+        _write_safetensors(dense_path, vectors, width=width, payload=dense_payload)
         index_path = stage / "representations-index.jsonl"
-        index_path.write_bytes(b"".join(_stable_json_bytes(row) for row in index_rows))
-        occupancy = _measure_activation_stage_occupancy(stage, leg=leg)
+        checkpoints.append(_checkpoint(
+            stage, phase="pre_index_write", planned=planned,
+            additions={"representations-index.jsonl": index_payload}, leg=leg,
+        ))
+        _verify_checkpoint(checkpoints[-1])
+        index_path.write_bytes(index_payload)
+        checkpoints.append(_checkpoint(
+            stage, phase="pre_final_rename", planned=planned, additions={}, leg=leg,
+        ))
+        _verify_checkpoint(checkpoints[-1])
+        occupancy = measure_output_occupancy(stage, leg=leg)
         verify_output_occupancy(planned, occupancy)
         receipt = {
             "artifact_class": "a0x-activation-receipt",
@@ -223,16 +251,27 @@ def _extract(
             "planned_dense_bound": planned.as_mapping(),
             "activation_stage_occupancy": occupancy.as_mapping(),
             "activation_stage_occupancy_sha256": occupancy.sha256,
+            "occupancy_checkpoints": checkpoints,
         }
         receipt_path = stage / "activation-receipt.json"
         receipt_path.write_bytes(_stable_json_bytes(receipt))
         # The receipt describes only the dense/index activation stage.  It is
         # intentionally outside this occupancy scope, preventing a self-hash
         # cycle and avoiding any claim about later package files.
+        final_occupancy = measure_output_occupancy(stage, leg=leg)
+        if final_occupancy != occupancy:
+            raise A0XActivationError("activation receipt self-exclusion remeasurement drift")
         os.replace(stage, destination)
-    except Exception:
-        shutil.rmtree(stage, ignore_errors=True)
-        raise
+    except Exception as error:
+        failure = A0XActivationError("activation stage failed; staging residue retained")
+        failure.stage_path = stage
+        failure.occupancy_checkpoints = tuple(checkpoints)
+        try:
+            failure.activation_stage_occupancy = measure_output_occupancy(stage, leg=leg, enforce_cap=False)
+        except Exception as measure_error:  # pragma: no cover - only malformed local filesystem entries
+            failure.activation_stage_occupancy = None
+            failure.occupancy_measurement_error = str(measure_error)
+        raise failure from error
     return ActivationArtifacts(destination / "activations.safetensors", destination / "representations-index.jsonl", destination / "activation-receipt.json", receipt, occupancy)
 
 
@@ -313,7 +352,13 @@ def _average(matrix: Sequence[Sequence[float]], positions: Sequence[int], *, wid
     return [value / len(positions) for value in total]
 
 
-def _write_safetensors(path: Path, vectors: Mapping[str, bytes], *, width: int) -> None:
+def _write_safetensors(
+    path: Path, vectors: Mapping[str, bytes], *, width: int, payload: bytes | None = None,
+) -> None:
+    path.write_bytes(payload if payload is not None else _serialize_safetensors(vectors, width=width))
+
+
+def _serialize_safetensors(vectors: Mapping[str, bytes], *, width: int) -> bytes:
     offset = 0
     header: dict[str, Any] = {}
     payloads: list[bytes] = []
@@ -324,7 +369,7 @@ def _write_safetensors(path: Path, vectors: Mapping[str, bytes], *, width: int) 
         offset += len(raw)
         payloads.append(raw)
     encoded_header = json.dumps(header, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    path.write_bytes(len(encoded_header).to_bytes(8, "little") + encoded_header + b"".join(payloads))
+    return len(encoded_header).to_bytes(8, "little") + encoded_header + b"".join(payloads)
 
 
 def _timestamp(value: str) -> str:
@@ -348,26 +393,32 @@ def _cap(leg: Leg) -> int:
     return 33_554_432 if leg is Leg.A0 else 4_194_304
 
 
-def _measure_activation_stage_occupancy(root: Path, *, leg: Leg) -> OutputOccupancyReceipt:
-    """Count activation data and staging residue, never the receipt itself."""
-    included: list[str] = []
-    total = 0
-    for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
-        if path.is_symlink():
-            raise A0XActivationError("activation output must not contain symlinks")
-        if path.is_dir():
-            continue
-        if not path.is_file():
-            raise A0XActivationError("activation output contains a non-regular entry")
-        relative = path.relative_to(root).as_posix()
-        if relative == "activation-receipt.json":
-            continue
-        included.append(relative)
-        total += path.stat().st_size
-    receipt = OutputOccupancyReceipt(leg, "activation_stage", tuple(included), total, _cap(leg))
-    if receipt.actual_total_bytes > receipt.cap_bytes:
-        raise A0XActivationError("dense output cap exceeded by activation-stage occupancy")
-    return receipt
+def _checkpoint(
+    root: Path, *, phase: str, planned: DenseBound, additions: Mapping[str, bytes], leg: Leg,
+) -> dict[str, Any]:
+    current = measure_output_occupancy(root, leg=leg, enforce_cap=False)
+    projected_paths = list(current.included_paths)
+    projected_total = current.actual_total_bytes
+    for relative, payload in sorted(additions.items()):
+        if relative in projected_paths:
+            raise A0XActivationError("occupancy projection would overwrite an existing file")
+        projected_paths.append(relative)
+        projected_total += len(payload)
+    checkpoint = {
+        "phase": phase,
+        "planned_dense_bound": planned.as_mapping(),
+        "current_occupancy": current.as_mapping(),
+        "projected_included_paths": projected_paths,
+        "projected_total_bytes": projected_total,
+        "cap_bytes": planned.cap_bytes,
+    }
+    return checkpoint
+
+
+def _verify_checkpoint(checkpoint: Mapping[str, Any]) -> None:
+    current = checkpoint["current_occupancy"]
+    if current["cap_bytes"] != checkpoint["cap_bytes"] or checkpoint["projected_total_bytes"] > checkpoint["cap_bytes"]:
+        raise A0XActivationError("dense output cap exceeded by activation-stage checkpoint")
 
 
 def _stable_json_bytes(value: Any) -> bytes:
