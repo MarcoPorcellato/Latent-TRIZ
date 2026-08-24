@@ -280,6 +280,14 @@ def _instances(path: Path) -> Iterable[tuple[int, Any]]:
 
 def main() -> int:
     errors: list[str] = []
+
+    # A0X dossiers are intentionally absent until Task 11.  Validate every
+    # tracked A0X schema itself here, rather than inventing a material instance.
+    for schema_path in sorted((ROOT / "schemas").glob("a0x-*.schema.json")):
+        try:
+            Draft202012Validator.check_schema(json.loads(schema_path.read_text(encoding="utf-8")))
+        except Exception as error:
+            errors.append(f"A0X schema {schema_path.name}: {error}")
     for schema_path in sorted((ROOT / "schemas").glob("*.json")):
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         try:

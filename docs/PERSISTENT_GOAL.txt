@@ -1,3 +1,13 @@
+Reboot checkpoint (2026-08-24): A0X six-model replication preparatory work is
+active on branch `agent/a0x-six-model-design`. Task 9 is committed and
+independently approved at `34bbb38728c841c86128a2967ae18df9aea177cc`.
+Task 10 is locally implemented but paused and unqualified; resume only through
+`docs/A0X_RESTART_HANDOFF.md`, the canonical A0X design, implementation plan,
+and SDD ledger. Complete Tasks 10-11 synthetically and stop before material
+Task 12 with twelve exact dossier hashes. No model, tokenizer, historical or
+sealed target, CCP, material Make target, network, GitHub, retry, tuning,
+pooling, or claim promotion is authorized by this checkpoint.
+
 EXP-002 checkpoint (2026-08-20): branch `exp002-qwen3-followup` is the active
 implementation branch at implementation checkpoint `e47937c` (followed by
 documentation-only checkpoint commits). The no-model protocol,

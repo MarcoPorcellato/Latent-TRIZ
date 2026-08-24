@@ -387,6 +387,19 @@ publication, and merge remain with the operator and primary reviewer.
 
 ## Milestones and release checklist
 
+### Current implementation checkpoint — 2026-08-24
+
+- Tasks 1-9 are locally committed through
+  `34bbb38728c841c86128a2967ae18df9aea177cc`; Task 9 has fresh 21-test package
+  verification, 57-test compatibility verification with three expected NumPy
+  skips, and an independent Sol approval.
+- Task 10 has a saved but unqualified local implementation checkpoint. Resume
+  from `docs/A0X_RESTART_HANDOFF.md`; run the configured schema and synthetic
+  gates, then obtain independent review before integration.
+- Task 11 and all twelve approval dossiers remain pending.
+- Task 12 remains outside the current authorization. This checkpoint grants no
+  model, tokenizer, target, CCP, material-run, network, or publication access.
+
 1. **Freeze:** add A0X schemas and per-leg/model manifests; prove all six
    literal cards and the protected A0/A0-R1 hashes; pass no-model verifier.
 2. **Synthetic qualification:** add failing-first tests and minimal namespaced

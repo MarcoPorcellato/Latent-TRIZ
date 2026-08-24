@@ -26,6 +26,7 @@ from .a0r1_preoutput import A0R1PreoutputError, run_a0r1_preoutput_audits
 from .a0r1_verify import A0R1VerifyError, verify_a0r1_foundation
 from .a0r1_freeze import A0R1FreezeError, run_a0r1_freeze
 from .a0r1_execution import A0R1ExecutionError, verify_a0r1_execution_contract
+from .a0x_runner import A0XRunnerError, verify_a0x_implementation
 from .validator import ValidationIssue, validate
 
 
@@ -187,6 +188,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     a0r1_verify_parser.add_argument("--root", default=".")
 
+    a0x_verify_parser = subparsers.add_parser(
+        "a0x-synthetic-verify",
+        help="Verify the no-model A0X implementation surface",
+    )
+    a0x_verify_parser.add_argument("--root", default=".")
+
     a0r1_freeze_parser = subparsers.add_parser(
         "a0r1-freeze",
         help="Prepare the A0-R1 power receipt and frozen protocol package",
@@ -280,6 +287,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     if args.command == "a0r1-verify":
         return _run_a0r1_verify(args.root)
+    if args.command == "a0x-synthetic-verify":
+        return _run_a0x_synthetic_verify(args.root)
     if args.command == "a0r1-freeze":
         return _run_a0r1_freeze(
             args.protocol,
@@ -810,6 +819,15 @@ def _run_a0r1_verify(root: str) -> int:
         summary = verify_a0r1_foundation(root)
     except (A0R1VerifyError, OSError, ValueError) as exc:
         _print_error(f"a0r1-verify: {exc}")
+        return 1
+
+
+def _run_a0x_synthetic_verify(root: str) -> int:
+    try:
+        print(json.dumps(verify_a0x_implementation(root), sort_keys=True))
+        return 0
+    except A0XRunnerError as exc:
+        _print_error(str(exc))
         return 1
     print(stable_json_dumps(summary))
     return 0
