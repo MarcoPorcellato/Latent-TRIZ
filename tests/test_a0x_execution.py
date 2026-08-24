@@ -11,10 +11,14 @@ from unittest.mock import patch
 from latent_triz.a0x_contract import Leg, LegFreezeBinding, sha256_file
 from latent_triz.a0x_execution import A0XExecutionError
 from latent_triz.validator import validate
-from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, rich_r1_statistical_result, rich_statistical_result, sha
+from tests.a0x_test_support import A0XTempTestCase, artifact, authorization_documents, pair_binding, rich_r1_statistical_result, rich_statistical_result, sha
 
 
 CASE_IDS = tuple(f"case-{index:02d}" for index in range(48))
+
+
+def authorization_chain_for(pair: dict[str, object]) -> dict[str, object]:
+    return authorization_documents(pair)[2]
 
 
 def _rows(case_ids: tuple[str, ...]) -> list[dict[str, object]]:
@@ -47,15 +51,17 @@ class A0XExecutionTests(A0XTempTestCase):
     ):
         from latent_triz.a0x_execution import OneShotTargetReader
 
+        binding = pair_binding(leg)
         return OneShotTargetReader(
             path=path,
             expected_sha256=expected_sha256 or sha256_file(path),
             receipt_path=receipt_path or self.temp_path / "target-read-receipt.json",
-            pair_binding=pair_binding(leg),
+            pair_binding=binding,
             selection=selection or self._selection(leg),
             activation_receipt_sha256=sha(61),
             dense_sha256=sha(62),
             index_sha256=sha(63),
+            authorization_chain=authorization_documents(binding)[2],
         )
 
     def _selection(self, leg: Leg = Leg.A0, case_ids: tuple[str, ...] = CASE_IDS):
@@ -202,6 +208,7 @@ class A0XExecutionTests(A0XTempTestCase):
             "receipt_path": self.temp_path / "receipt.json",
             "pair_binding": pair_binding(), "selection": self._selection(),
             "activation_receipt_sha256": sha(61), "dense_sha256": sha(62), "index_sha256": sha(63),
+            "authorization_chain": authorization_documents(pair_binding())[2],
         }
         for field in ("activation_receipt_sha256", "dense_sha256", "index_sha256"):
             with self.subTest(field=field):
@@ -385,7 +392,7 @@ class A0XExecutionTests(A0XTempTestCase):
                 terminal_path = self.temp_path / f"{status}.json"
                 terminal = seal_terminal_attempt(
                     state=AttemptState.ANALYSIS, status=status, target_receipt_path=receipt_path,
-                    terminal_path=terminal_path, pair_binding=pair,
+                    terminal_path=terminal_path, pair_binding=pair, authorization_chain=authorization_chain_for(pair),
                     statistical_result=rich_statistical_result(pair, status=status),
                 )
                 self.assertEqual(1, terminal["analysis_target_content_reads"])
@@ -396,14 +403,14 @@ class A0XExecutionTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XExecutionError, "status"):
             seal_terminal_attempt(
                 state=AttemptState.ANALYSIS, status="positive", target_receipt_path=receipt_path,
-                terminal_path=mismatched_status, pair_binding=pair,
+                terminal_path=mismatched_status, pair_binding=pair, authorization_chain=authorization_chain_for(pair),
                 statistical_result=rich_statistical_result(pair, status="null"),
             )
         mismatched_pair = self.temp_path / "mismatched-pair.json"
         with self.assertRaisesRegex(A0XExecutionError, "pair binding"):
             seal_terminal_attempt(
                 state=AttemptState.ANALYSIS, status="positive", target_receipt_path=receipt_path,
-                terminal_path=mismatched_pair, pair_binding=pair,
+                terminal_path=mismatched_pair, pair_binding=pair, authorization_chain=authorization_chain_for(pair),
                 statistical_result=rich_statistical_result(pair_binding(model_key="smollm2_135m"), status="positive"),
             )
         fabricated = rich_statistical_result(pair, status="positive")
@@ -412,14 +419,14 @@ class A0XExecutionTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XExecutionError, "predicate"):
             seal_terminal_attempt(
                 state=AttemptState.ANALYSIS, status="positive", target_receipt_path=receipt_path,
-                terminal_path=self.temp_path / "fabricated-positive.json", pair_binding=pair,
+                terminal_path=self.temp_path / "fabricated-positive.json", pair_binding=pair, authorization_chain=authorization_chain_for(pair),
                 statistical_result=fabricated,
             )
 
         path = self.temp_path / "non-interpretable.json"
         terminal = seal_terminal_attempt(
             state=AttemptState.ANALYSIS, status="non_interpretable", target_receipt_path=receipt_path,
-            terminal_path=path, pair_binding=pair,
+            terminal_path=path, pair_binding=pair, authorization_chain=authorization_chain_for(pair),
         )
         self.assertIsNone(terminal["statistical_result"])
         self._assert_schema("a0x-terminal-result.schema.json", terminal)
@@ -427,6 +434,7 @@ class A0XExecutionTests(A0XTempTestCase):
         first_path = self.temp_path / "first-terminal.json"
         first = seal_terminal_attempt(
             state=AttemptState.PREFLIGHT, status="incompatible", terminal_path=first_path, pair_binding=pair,
+            authorization_chain=authorization_chain_for(pair),
         )
         before = first_path.read_bytes()
         self.assertEqual(0, first["analysis_target_content_reads"])
@@ -434,11 +442,36 @@ class A0XExecutionTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XExecutionError, "already exists"):
             seal_terminal_attempt(
                 state=AttemptState.PREFLIGHT, status="failed", terminal_path=first_path, pair_binding=pair,
+                authorization_chain=authorization_chain_for(pair),
             )
         self.assertEqual(before, first_path.read_bytes())
         with self.assertRaisesRegex(A0XExecutionError, "pair binding"):
             seal_terminal_attempt(
                 state=AttemptState.PREFLIGHT, status="failed", terminal_path=self.temp_path / "missing-pair.json",
+            )
+
+    def test_reader_and_terminal_require_one_exact_authorization_chain(self) -> None:
+        from latent_triz.a0x_execution import AttemptState, OneShotTargetReader, seal_terminal_attempt
+
+        pair = pair_binding()
+        chain = authorization_documents(pair)[2]
+        target = self.temp_path / "chain-target.jsonl"
+        target.write_bytes(_jsonl(_rows(CASE_IDS)))
+        receipt_path = self.temp_path / "chain-target-receipt.json"
+        reader = OneShotTargetReader(
+            path=target, expected_sha256=sha256_file(target), receipt_path=receipt_path,
+            pair_binding=pair, selection=self._selection(), activation_receipt_sha256=sha(61),
+            dense_sha256=sha(62), index_sha256=sha(63), authorization_chain=chain,
+        )
+        _, receipt = reader.read_jsonl_once()
+        self.assertEqual(chain, receipt.as_mapping()["authorization_chain"])
+
+        swapped = authorization_documents(pair_binding(model_key="smollm2_135m"))[2]
+        with self.assertRaisesRegex(A0XExecutionError, "authorization chain"):
+            seal_terminal_attempt(
+                state=AttemptState.ANALYSIS, status="non_interpretable", target_receipt_path=receipt_path,
+                terminal_path=self.temp_path / "chain-swapped-terminal.json", pair_binding=pair,
+                authorization_chain=swapped,
             )
 
     def test_frozen_positive_predicate_has_exact_inclusive_boundaries(self) -> None:
@@ -459,20 +492,22 @@ class A0XExecutionTests(A0XTempTestCase):
                 result["macro_f1_margin_over_surface"] = margin
                 result["primary"]["observed_max_family_successes"] = successes
                 result["outcome_rule"]["passed"] = passed
-                _validate_statistical_result(result, status=status, pair_binding=pair)
+                _validate_statistical_result(
+                    result, status=status, pair_binding=pair, authorization_chain=authorization_chain_for(pair),
+                )
 
         fabricated = rich_statistical_result(pair, status="positive")
         fabricated["p_value"] = 0.049
         fabricated["primary"]["max_statistic_p"] = 0.05
         with self.assertRaisesRegex(A0XExecutionError, "p_value"):
-            _validate_statistical_result(fabricated, status="positive", pair_binding=pair)
+            _validate_statistical_result(fabricated, status="positive", pair_binding=pair, authorization_chain=authorization_chain_for(pair))
 
     def test_r1_terminal_validation_recomputes_all_four_frozen_conditions(self) -> None:
         from latent_triz.a0x_execution import _validate_statistical_result
 
         pair = pair_binding(Leg.R1)
         result = rich_r1_statistical_result(pair)
-        _validate_statistical_result(result, status="positive", pair_binding=pair)
+        _validate_statistical_result(result, status="positive", pair_binding=pair, authorization_chain=authorization_chain_for(pair))
         for field, value in (("p_value", 0.050001), ("macro_f1_margin_over_surface", 0.099999), ("family_successes", 16), ("domain_direction_success_count", 3)):
             with self.subTest(field=field):
                 mutated = rich_r1_statistical_result(pair)
@@ -488,7 +523,7 @@ class A0XExecutionTests(A0XTempTestCase):
                             mutated["domain_direction_successes"][domain] = 0.0
                 mutated["outcome_rule"]["passed"] = False
                 mutated["status"] = "null"
-                _validate_statistical_result(mutated, status="null", pair_binding=pair)
+                _validate_statistical_result(mutated, status="null", pair_binding=pair, authorization_chain=authorization_chain_for(pair))
 
     def test_r1_terminal_validation_refuses_a_seventh_domain_even_if_nonpositive(self) -> None:
         from latent_triz.a0x_execution import _validate_statistical_result
@@ -498,7 +533,7 @@ class A0XExecutionTests(A0XTempTestCase):
         result["domain_direction_successes"]["unexpected-domain"] = -1.0
 
         with self.assertRaisesRegex(A0XExecutionError, "exactly six"):
-            _validate_statistical_result(result, status="positive", pair_binding=pair)
+            _validate_statistical_result(result, status="positive", pair_binding=pair, authorization_chain=authorization_chain_for(pair))
 
     def test_terminal_refuses_statistic_for_read_error_and_requires_passing_read_for_result(self) -> None:
         from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
@@ -510,13 +545,13 @@ class A0XExecutionTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XExecutionError, "statistical result"):
             seal_terminal_attempt(
                 state=AttemptState.ANALYSIS, status="failed", target_receipt_path=failure_receipt,
-                terminal_path=self.temp_path / "failed-result.json", pair_binding=pair_binding(),
+                terminal_path=self.temp_path / "failed-result.json", pair_binding=pair_binding(), authorization_chain=authorization_chain_for(pair_binding()),
                 statistical_result={"p_value": 0.5, "result_status": "completed"},
             )
         with self.assertRaisesRegex(A0XExecutionError, "passing target read"):
             seal_terminal_attempt(
                 state=AttemptState.ANALYSIS, status="positive", target_receipt_path=failure_receipt,
-                terminal_path=self.temp_path / "positive-failure.json", pair_binding=pair_binding(),
+                terminal_path=self.temp_path / "positive-failure.json", pair_binding=pair_binding(), authorization_chain=authorization_chain_for(pair_binding()),
                 statistical_result={"p_value": 0.5, "result_status": "completed"},
             )
 
@@ -532,7 +567,7 @@ class A0XExecutionTests(A0XTempTestCase):
             status="failed",
             target_receipt_path=receipt_path,
             terminal_path=self.temp_path / "missing-terminal.json",
-            pair_binding=pair_binding(),
+            pair_binding=pair_binding(), authorization_chain=authorization_chain_for(pair_binding()),
         )
         self.assertEqual(0, terminal["analysis_target_content_reads"])
         self.assertIsInstance(terminal["target_read_receipt_sha256"], str)

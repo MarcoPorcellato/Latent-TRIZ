@@ -7,6 +7,7 @@ import os
 import sys
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -23,7 +24,7 @@ from latent_triz.a0x_preflight import (
     verify_card_sources,
     verify_static_endpoint_availability,
 )
-from tests.a0x_test_support import A0XTempTestCase, pair_binding
+from tests.a0x_test_support import A0XTempTestCase, authorization_documents, pair_binding
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,6 +91,82 @@ def valid_ccp_binary_binding() -> dict[str, str]:
 
 
 class A0XPreflightTests(A0XTempTestCase):
+    def _authorization_bound_preflight_arguments(self) -> tuple[dict[str, object], dict[str, object]]:
+        binding = PairBinding.from_mapping(pair_binding())
+        dossier, authorization, chain = authorization_documents(binding.as_mapping())
+        dossier_path = self.temp_path / "dossier.json"
+        authorization_path = self.temp_path / "authorization.json"
+        dossier_path.write_bytes(stable_json_bytes(dossier))
+        authorization_path.write_bytes(stable_json_bytes(authorization))
+        arguments: dict[str, object] = {
+            "card": SimpleNamespace(
+                model_key=binding.model_key, model_id=binding.model_id,
+                revision=binding.revision,
+            ),
+            "snapshot_root": self.temp_path / "snapshot",
+            "expected_origin": "a" * 40,
+            "observed_origin": "a" * 40,
+            "output_dir": self.temp_path / "preflight",
+            "environment": {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
+            "pair_binding": binding,
+            "protected_trees": ((self.temp_path / "protected-a", {}), (self.temp_path / "protected-b", {})),
+            "protected_tree_verifier": lambda *_args, **_kwargs: None,
+            "dossier_path": dossier_path,
+            "expected_dossier_raw_sha256": hashlib.sha256(dossier_path.read_bytes()).hexdigest(),
+            "authorization_path": authorization_path,
+            "expected_authorization_raw_sha256": hashlib.sha256(authorization_path.read_bytes()).hexdigest(),
+            "ccp_observation": {
+                "pair_binding": binding.as_mapping(), "authorization_chain": chain,
+            },
+            "authorization_chain": chain,
+        }
+        return arguments, {"dossier": dossier, "authorization": authorization, "chain": chain}
+
+    def test_static_preflight_binds_exact_source_bytes_to_chain_and_ccp_observation(self) -> None:
+        arguments, _documents = self._authorization_bound_preflight_arguments()
+        with (
+            patch("latent_triz.a0x_preflight.verify_snapshot_files"),
+            patch("latent_triz.a0x_preflight.verify_static_endpoint_availability", return_value={}),
+            patch("latent_triz.a0x_preflight._verify_ccp_observation"),
+        ):
+            receipt = verify_static_preflight(**arguments)
+        self.assertEqual(arguments["authorization_chain"], receipt["authorization_chain"])
+
+    def test_static_preflight_rejects_swapped_or_unrelated_valid_authorization_chain(self) -> None:
+        arguments, _documents = self._authorization_bound_preflight_arguments()
+        alternate_pair_data = pair_binding()
+        alternate_pair_data["run_id"] = "a0x-a0-gpt2-run-2"
+        alternate_pair_data["output_path"] = "results/a0x/a0/gpt2/alternate/"
+        alternate_pair = PairBinding.from_mapping(alternate_pair_data)
+        alternate_dossier, alternate_authorization, alternate_chain = authorization_documents(alternate_pair.as_mapping())
+        alternate_authorization_path = self.temp_path / "alternate-authorization.json"
+        alternate_authorization_path.write_bytes(stable_json_bytes(alternate_authorization))
+
+        unrelated_chain = dict(arguments)
+        unrelated_chain["authorization_chain"] = alternate_chain
+        unrelated_chain["ccp_observation"] = {
+            **arguments["ccp_observation"], "authorization_chain": alternate_chain,
+        }
+        swapped_source = dict(arguments)
+        swapped_source["authorization_path"] = alternate_authorization_path
+        swapped_source["expected_authorization_raw_sha256"] = hashlib.sha256(
+            alternate_authorization_path.read_bytes(),
+        ).hexdigest()
+        swapped_source["authorization_chain"] = alternate_chain
+        swapped_source["ccp_observation"] = {
+            **arguments["ccp_observation"], "authorization_chain": alternate_chain,
+        }
+        del alternate_dossier
+
+        for label, candidate in (("unrelated-chain", unrelated_chain), ("swapped-source", swapped_source)):
+            with self.subTest(label=label), self.assertRaisesRegex(A0XPreflightError, "authorization"):
+                with (
+                    patch("latent_triz.a0x_preflight.verify_snapshot_files"),
+                    patch("latent_triz.a0x_preflight.verify_static_endpoint_availability", return_value={}),
+                    patch("latent_triz.a0x_preflight._verify_ccp_observation"),
+                ):
+                    verify_static_preflight(**candidate)
+
     def test_registry_contains_only_six_non_pythia_cards(self) -> None:
         cards = load_registry(ROOT / "experiments/a0x-six-model/model-registry.json")
         self.assertEqual(
@@ -242,6 +319,7 @@ class A0XPreflightTests(A0XTempTestCase):
                     admission_raw=stable_json_bytes(changed_admission),
                     binary=valid_ccp_binary_binding(),
                     pair_binding=PairBinding.from_mapping(pair_binding()),
+                    authorization_chain=authorization_documents(pair_binding())[2],
                     output_dir=self.temp_path / f"ccp-{len(str(mutator))}",
                 )
 
@@ -264,6 +342,7 @@ class A0XPreflightTests(A0XTempTestCase):
                     admission_raw=stable_json_bytes(changed_admission),
                     binary=changed_binary,
                     pair_binding=PairBinding.from_mapping(pair_binding()),
+                    authorization_chain=authorization_documents(pair_binding())[2],
                     output_dir=self.temp_path / f"invalid-{index}",
                 )
 
@@ -275,6 +354,7 @@ class A0XPreflightTests(A0XTempTestCase):
             admission_raw=stable_json_bytes(admission),
             binary=valid_ccp_binary_binding(),
             pair_binding=PairBinding.from_mapping(pair_binding()),
+            authorization_chain=authorization_documents(pair_binding())[2],
             output_dir=out,
         )
         self.assertEqual("a0x-ccp-observation", observed["artifact_class"])
@@ -286,7 +366,28 @@ class A0XPreflightTests(A0XTempTestCase):
                 admission_raw=stable_json_bytes(admission),
                 binary=valid_ccp_binary_binding(),
                 pair_binding=PairBinding.from_mapping(pair_binding()),
+                authorization_chain=authorization_documents(pair_binding())[2],
                 output_dir=out,
+            )
+
+    def test_ccp_observation_requires_and_copies_the_exact_caller_authorization_chain(self) -> None:
+        resource, admission = valid_ccp_raw_observations()
+        pair = pair_binding()
+        chain = authorization_documents(pair)[2]
+
+        observed = parse_ccp_observation(
+            resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
+            binary=valid_ccp_binary_binding(), pair_binding=PairBinding.from_mapping(pair),
+            authorization_chain=chain, output_dir=self.temp_path / "chain-observation",
+        )
+
+        self.assertEqual(chain, observed["authorization_chain"])
+        malformed = {**chain, "unexpected": True}
+        with self.assertRaisesRegex(A0XPreflightError, "authorization chain"):
+            parse_ccp_observation(
+                resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
+                binary=valid_ccp_binary_binding(), pair_binding=PairBinding.from_mapping(pair),
+                authorization_chain=malformed, output_dir=self.temp_path / "malformed-chain-observation",
             )
 
     def test_ccp_accepts_a_precreated_empty_destination_but_not_reuse(self) -> None:
@@ -295,7 +396,8 @@ class A0XPreflightTests(A0XTempTestCase):
         out.mkdir()
         parse_ccp_observation(
             resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
-            binary=valid_ccp_binary_binding(), pair_binding=PairBinding.from_mapping(pair_binding()), output_dir=out,
+            binary=valid_ccp_binary_binding(), pair_binding=PairBinding.from_mapping(pair_binding()),
+            authorization_chain=authorization_documents(pair_binding())[2], output_dir=out,
         )
         self.assertTrue((out / "a0x-ccp-observation.json").is_file())
 
@@ -346,6 +448,7 @@ class A0XPreflightTests(A0XTempTestCase):
         observation = parse_ccp_observation(
             resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
             binary=valid_ccp_binary_binding(), pair_binding=binding,
+            authorization_chain=authorization_documents(binding.as_mapping())[2],
             output_dir=self.temp_path / "ccp",
         )
         dossier, authorization = self.temp_path / "dossier.json", self.temp_path / "authorization.json"
@@ -360,14 +463,15 @@ class A0XPreflightTests(A0XTempTestCase):
             "output_dir": self.temp_path / "result", "environment": {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
             "pair_binding": binding, "protected_trees": protected,
             "protected_tree_verifier": lambda *_args, **_kwargs: None,
-            "dossier_path": dossier, "expected_dossier_sha256": hashlib.sha256(dossier.read_bytes()).hexdigest(),
-            "authorization_path": authorization, "expected_authorization_sha256": hashlib.sha256(authorization.read_bytes()).hexdigest(),
+            "dossier_path": dossier, "expected_dossier_raw_sha256": hashlib.sha256(dossier.read_bytes()).hexdigest(),
+            "authorization_path": authorization, "expected_authorization_raw_sha256": hashlib.sha256(authorization.read_bytes()).hexdigest(),
             "ccp_observation": observation,
+            "authorization_chain": authorization_documents(binding.as_mapping())[2],
         }
         for missing in ("dossier", "authorization"):
             changed = dict(arguments)
             changed[f"{missing}_path"] = None
-            changed[f"expected_{missing}_sha256"] = None
+            changed[f"expected_{missing}_raw_sha256"] = None
             with self.subTest(missing=missing), self.assertRaises(A0XPreflightError):
                 verify_static_preflight(**changed)
         changed = dict(arguments)

@@ -78,7 +78,7 @@
       "$ref": "#/$defs/dense"
     },
     "activation_stage_occupancy": {
-      "type": "object"
+      "$ref": "#/$defs/activation_stage_occupancy"
     },
     "activation_stage_occupancy_sha256": {
       "$ref": "#/$defs/sha"
@@ -121,6 +121,51 @@
     }
   ],
   "$defs": {
+    "activation_stage_occupancy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actual_total_bytes",
+        "artifact_class",
+        "authorization_chain",
+        "cap_bytes",
+        "claim_ids",
+        "empirical",
+        "evidence_eligible",
+        "expert_validated",
+        "included_paths",
+        "leg",
+        "occupancy_scope",
+        "pair_binding",
+        "scientific_status"
+      ],
+      "properties": {
+        "actual_total_bytes": {"type": "integer", "minimum": 0},
+        "artifact_class": {"const": "a0x-activation-stage-occupancy-receipt"},
+        "authorization_chain": {"$ref": "#/$defs/authorization_chain"},
+        "cap_bytes": {"type": "integer", "minimum": 1},
+        "claim_ids": {"type": "array", "maxItems": 0},
+        "empirical": {"const": true},
+        "evidence_eligible": {"const": false},
+        "expert_validated": {"const": false},
+        "included_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/path"}
+        },
+        "leg": {"enum": ["a0", "r1"]},
+        "occupancy_scope": {"const": "activation_stage"},
+        "pair_binding": {"$ref": "#/$defs/pair"},
+        "scientific_status": {"const": "exploratory"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"pair_binding": {"properties": {"leg": {"const": "a0"}}}}, "required": ["pair_binding"]},
+          "then": {"properties": {"leg": {"const": "a0"}}},
+          "else": {"properties": {"leg": {"const": "r1"}}}
+        }
+      ]
+    },
     "sha": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"

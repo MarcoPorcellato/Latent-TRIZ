@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .a0x_contract import Leg, PairBinding
+from .a0x_execution import validate_authorization_chain
 
 
 class A0XA0AnalysisError(RuntimeError):
@@ -28,7 +29,7 @@ def analyze_a0x_a0(
     *, pair_binding: Mapping[str, Any], target_rows: Sequence[Mapping[str, Any]],
     target_read_receipt_bytes: bytes, activation_receipt_bytes: bytes,
     dense_asset_bytes: bytes, index_bytes: bytes,
-    shortcut_result: Mapping[str, Any],
+    shortcut_result: Mapping[str, Any], authorization_chain: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Analyze already-read one-shot rows and already-verified in-memory assets.
 
@@ -37,6 +38,10 @@ def analyze_a0x_a0(
     by Task 6 before this function receives their parsed rows.
     """
     pair = _pair(pair_binding)
+    try:
+        chain = validate_authorization_chain(authorization_chain)
+    except Exception as error:
+        raise A0XA0AnalysisError("analysis authorization chain is invalid") from error
     if pair.leg is not Leg.A0:
         raise A0XA0AnalysisError("A0X A0 analysis requires leg a0")
     if shortcut_result.get("status") != "pass":
@@ -47,9 +52,9 @@ def analyze_a0x_a0(
     target_read_receipt = _parse_registered_receipt(
         target_read_receipt_bytes, "a0x-target-read-receipt.schema.json", require_trailing_newline=True,
     )
-    _validate_activation_receipt(activation_receipt, pair)
+    _validate_activation_receipt(activation_receipt, pair, chain)
     _validate_target_receipt(
-        target_read_receipt, pair, activation_receipt_bytes, dense_asset_bytes, index_bytes,
+        target_read_receipt, pair, chain, activation_receipt_bytes, dense_asset_bytes, index_bytes,
     )
     case_ids, labels, families, domains = _target_metadata(target_rows)
     combos, final_index = _materialize_combos(index_bytes, dense_asset_bytes, case_ids, pair, activation_receipt)
@@ -73,6 +78,7 @@ def analyze_a0x_a0(
     positive = p_value <= 0.05 and margin >= 0.10 and observed >= 19
     return {
         "artifact_class": "a0x-statistical-result", **_COMMON, "pair_binding": pair.as_mapping(),
+        "authorization_chain": chain,
         "status": "positive" if positive else "null", "p_value": p_value,
         "score_quantization_decimals": SCORE_QUANTIZATION_DECIMALS,
         "primary": {"multiplicity": 12, "combinations": primary_metrics, "observed_max_family_successes": observed, "max_statistic_p": p_value, "maximum_macro_f1": primary_f1, "null_maxima_sha256": _sha(null_maxima)},
@@ -90,21 +96,38 @@ def _pair(value: Mapping[str, Any]) -> PairBinding:
         raise A0XA0AnalysisError("analysis pair binding is invalid") from error
 
 
-def _validate_target_receipt(receipt: Mapping[str, Any], pair: PairBinding, activation_bytes: bytes, dense: bytes, index: bytes) -> None:
+def _validate_target_receipt(
+    receipt: Mapping[str, Any], pair: PairBinding, authorization_chain: Mapping[str, Any],
+    activation_bytes: bytes, dense: bytes, index: bytes,
+) -> None:
     if receipt.get("content_reads") != 1 or receipt.get("status") != "pass":
         raise A0XA0AnalysisError("analysis requires one passing target read")
     if _pair(_mapping(receipt, "pair_binding")).as_mapping() != pair.as_mapping():
         raise A0XA0AnalysisError("target receipt pair binding differs from analysis pair binding")
+    try:
+        observed_chain = validate_authorization_chain(_mapping(receipt, "authorization_chain"))
+    except Exception as error:
+        raise A0XA0AnalysisError("target receipt authorization chain is invalid") from error
+    if observed_chain != authorization_chain:
+        raise A0XA0AnalysisError("target receipt authorization chain differs from analysis authorization chain")
     expected = {"activation_receipt_sha256": _bytes_sha(activation_bytes), "dense_sha256": _bytes_sha(dense), "index_sha256": _bytes_sha(index)}
     if any(receipt.get(key) != value for key, value in expected.items()):
         raise A0XA0AnalysisError("target receipt activation asset links differ from analysis inputs")
 
 
-def _validate_activation_receipt(receipt: Mapping[str, Any], pair: PairBinding) -> None:
+def _validate_activation_receipt(
+    receipt: Mapping[str, Any], pair: PairBinding, authorization_chain: Mapping[str, Any],
+) -> None:
     if receipt.get("leg") != "a0" or receipt.get("activation_status") != "completed" or receipt.get("activation_target_content_reads") != 0:
         raise A0XA0AnalysisError("activation receipt is not a target-free completed A0 receipt")
     if _pair(_mapping(receipt, "pair_binding")).as_mapping() != pair.as_mapping():
         raise A0XA0AnalysisError("activation receipt pair binding differs from analysis pair binding")
+    try:
+        observed_chain = validate_authorization_chain(_mapping(receipt, "authorization_chain"))
+    except Exception as error:
+        raise A0XA0AnalysisError("activation receipt authorization chain is invalid") from error
+    if observed_chain != authorization_chain:
+        raise A0XA0AnalysisError("activation receipt authorization chain differs from analysis authorization chain")
     if _mapping(receipt, "planned_dense_bound") != pair.dense_bound.as_mapping():
         raise A0XA0AnalysisError("activation planned dense bound differs from analysis pair binding")
     if tuple(receipt.get("literal_tuple_indices", ())) != _LITERAL:

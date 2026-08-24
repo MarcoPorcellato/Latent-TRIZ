@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from latent_triz.a0x_contract import Leg, compute_dense_bound
 from latent_triz.a0x_model_adapter import HiddenPayload
-from tests.a0x_test_support import pair_binding
+from tests.a0x_test_support import authorization_documents, pair_binding
 
 
 def public_cases() -> list[dict[str, object]]:
@@ -84,6 +84,10 @@ def synthetic_occupied_tree(root: Path, *, total_bytes: int) -> Path:
     return root
 
 
+def authorization_chain_for(pair: dict[str, object]) -> dict[str, object]:
+    return authorization_documents(pair)[2]
+
+
 class A0XActivationTests(unittest.TestCase):
     def setUp(self) -> None:
         import tempfile
@@ -101,6 +105,7 @@ class A0XActivationTests(unittest.TestCase):
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
             pair_binding=pair_binding(Leg.A0, hidden_width=8),
+            authorization_chain=authorization_chain_for(pair_binding(Leg.A0, hidden_width=8)),
             output_dir=self.tmp_path / "a0", created_at="2026-08-24T00:00:00Z",
         )
 
@@ -121,11 +126,42 @@ class A0XActivationTests(unittest.TestCase):
         artifacts = extract_a0x_a0(
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(), pair_binding=pair,
+            authorization_chain=authorization_chain_for(pair),
             output_dir=self.tmp_path / "schema-valid", created_at="2026-08-24T00:00:00Z",
         )
         schema = json.loads((Path(__file__).resolve().parents[1] / "schemas/a0x-activation-receipt.schema.json").read_text(encoding="utf-8"))
         self.assertEqual([], validate(artifacts.receipt, schema))
         self.assertEqual(pair, artifacts.receipt["pair_binding"])
+
+    def test_activation_and_occupancy_copy_the_exact_caller_authorization_chain(self) -> None:
+        from latent_triz.a0x_a0_activations import extract_a0x_a0
+
+        pair = pair_binding(Leg.A0, hidden_width=8)
+        chain = authorization_documents(pair)[2]
+        artifacts = extract_a0x_a0(
+            adapter=synthetic_hidden_adapter(layers=13, width=8),
+            cases=public_cases(), selection=selection_manifest(), pair_binding=pair,
+            authorization_chain=chain, output_dir=self.tmp_path / "chain", created_at="2026-08-24T00:00:00Z",
+        )
+
+        self.assertEqual(chain, artifacts.receipt["authorization_chain"])
+        self.assertEqual(pair, artifacts.receipt["activation_stage_occupancy"]["pair_binding"])
+        self.assertEqual(chain, artifacts.receipt["activation_stage_occupancy"]["authorization_chain"])
+
+    def test_activation_receipt_rejects_nested_stage_pair_or_chain_drift(self) -> None:
+        from latent_triz.a0x_a0_activations import A0XActivationError, _validate_activation_artifact, extract_a0x_a0
+
+        pair = pair_binding(Leg.A0, hidden_width=8)
+        artifacts = extract_a0x_a0(
+            adapter=synthetic_hidden_adapter(layers=13, width=8), cases=public_cases(),
+            selection=selection_manifest(), pair_binding=pair,
+            authorization_chain=authorization_chain_for(pair), output_dir=self.tmp_path / "nested-drift",
+            created_at="2026-08-24T00:00:00Z",
+        )
+        drifted = json.loads(json.dumps(artifacts.receipt))
+        drifted["activation_stage_occupancy"]["pair_binding"]["run_id"] = "different-run"
+        with self.assertRaisesRegex(A0XActivationError, "occupancy pair binding"):
+            _validate_activation_artifact(drifted)
 
     def test_completed_receipt_schema_rejection_is_fail_closed_before_persisting(self) -> None:
         from latent_triz.a0x_a0_activations import A0XActivationError, extract_a0x_a0
@@ -138,6 +174,7 @@ class A0XActivationTests(unittest.TestCase):
                 extract_a0x_a0(
                     adapter=synthetic_hidden_adapter(layers=13, width=8),
                     cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.A0, hidden_width=8),
+                    authorization_chain=authorization_chain_for(pair_binding(Leg.A0, hidden_width=8)),
                     output_dir=self.tmp_path / "schema-reject", created_at="2026-08-24T00:00:00Z",
                 )
         self.assertFalse((self.tmp_path / "schema-reject").exists())
@@ -149,10 +186,15 @@ class A0XActivationTests(unittest.TestCase):
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
             pair_binding=pair_binding(Leg.A0, hidden_width=8),
+            authorization_chain=authorization_chain_for(pair_binding(Leg.A0, hidden_width=8)),
             output_dir=self.tmp_path / "remeasure", created_at="2026-08-24T00:00:00Z",
         )
         persisted = artifacts.receipt["activation_stage_occupancy"]
-        remeasured = measure_output_occupancy(artifacts.dense_path.parent, leg=Leg.A0)
+        remeasured = measure_output_occupancy(
+            artifacts.dense_path.parent, leg=Leg.A0,
+            pair_binding=artifacts.receipt["pair_binding"],
+            authorization_chain=artifacts.receipt["authorization_chain"],
+        )
 
         self.assertEqual(persisted, remeasured.as_mapping())
         self.assertEqual(artifacts.receipt["activation_stage_occupancy_sha256"], remeasured.sha256)
@@ -165,6 +207,7 @@ class A0XActivationTests(unittest.TestCase):
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
             pair_binding=pair_binding(Leg.A0, hidden_width=8),
+            authorization_chain=authorization_chain_for(pair_binding(Leg.A0, hidden_width=8)),
             output_dir=self.tmp_path / "checkpoints", created_at="2026-08-24T00:00:00Z",
         )
 
@@ -190,6 +233,7 @@ class A0XActivationTests(unittest.TestCase):
                     adapter=synthetic_hidden_adapter(layers=13, width=8),
                     cases=public_cases(), selection=selection_manifest(),
                     pair_binding=pair_binding(Leg.A0, hidden_width=8),
+                    authorization_chain=authorization_chain_for(pair_binding(Leg.A0, hidden_width=8)),
                     output_dir=self.tmp_path / "failed", created_at="2026-08-24T00:00:00Z",
                 )
 
@@ -209,6 +253,7 @@ class A0XActivationTests(unittest.TestCase):
                     adapter=synthetic_hidden_adapter(layers=13, width=8),
                     cases=public_cases(), selection=selection_manifest(),
                     pair_binding=pair_binding(Leg.A0, hidden_width=8),
+                    authorization_chain=authorization_chain_for(pair_binding(Leg.A0, hidden_width=8)),
                     output_dir=self.tmp_path / "cap-failed", created_at="2026-08-24T00:00:00Z",
                 )
 
@@ -225,6 +270,7 @@ class A0XActivationTests(unittest.TestCase):
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
             pair_binding=pair_binding(Leg.A0, hidden_width=8),
+            authorization_chain=authorization_chain_for(pair_binding(Leg.A0, hidden_width=8)),
             output_dir=self.tmp_path / "readback", created_at="2026-08-24T00:00:00Z",
         )
         encoded = artifacts.dense_path.read_bytes()
@@ -246,7 +292,8 @@ class A0XActivationTests(unittest.TestCase):
 
         artifacts = extract_a0x_r1(
             adapter=synthetic_hidden_adapter(layers=13, width=8),
-            cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.R1, hidden_width=8), output_dir=self.tmp_path / "r1",
+            cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.R1, hidden_width=8),
+            authorization_chain=authorization_chain_for(pair_binding(Leg.R1, hidden_width=8)), output_dir=self.tmp_path / "r1",
         )
 
         rows = [json.loads(line) for line in artifacts.index_path.read_text(encoding="utf-8").splitlines()]
@@ -263,7 +310,7 @@ class A0XActivationTests(unittest.TestCase):
 
         adapter = oversized_adapter()
         with self.assertRaisesRegex(A0XActivationError, "dense output cap"):
-            extract_a0x_r1(adapter=adapter, cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.R1, hidden_width=8), output_dir=self.tmp_path / "r1")
+            extract_a0x_r1(adapter=adapter, cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.R1, hidden_width=8), authorization_chain=authorization_chain_for(pair_binding(Leg.R1, hidden_width=8)), output_dir=self.tmp_path / "r1")
         self.assertEqual(0, adapter.forwards)
         self.assertFalse((self.tmp_path / "r1").exists())
 
@@ -271,12 +318,19 @@ class A0XActivationTests(unittest.TestCase):
         from latent_triz.a0x_a0_activations import A0XActivationError, measure_output_occupancy
 
         exact = synthetic_occupied_tree(self.tmp_path / "exact", total_bytes=4_194_304)
-        receipt = measure_output_occupancy(exact, leg=Leg.R1)
+        pair = pair_binding(Leg.R1, hidden_width=8)
+        receipt = measure_output_occupancy(
+            exact, leg=Leg.R1, pair_binding=pair,
+            authorization_chain=authorization_chain_for(pair),
+        )
         self.assertEqual(4_194_304, receipt.actual_total_bytes)
         self.assertEqual("activation_stage", receipt.occupancy_scope)
         one_over = synthetic_occupied_tree(self.tmp_path / "over", total_bytes=4_194_305)
         with self.assertRaisesRegex(A0XActivationError, "dense output cap"):
-            measure_output_occupancy(one_over, leg=Leg.R1)
+            measure_output_occupancy(
+                one_over, leg=Leg.R1, pair_binding=pair,
+                authorization_chain=authorization_chain_for(pair),
+            )
 
     def test_recursive_occupancy_counts_staging_and_crash_residue(self) -> None:
         from latent_triz.a0x_a0_activations import measure_output_occupancy
@@ -289,17 +343,37 @@ class A0XActivationTests(unittest.TestCase):
         (root / ".index-crash").mkdir()
         (root / ".index-crash" / "residue").write_bytes(b"c" * 13)
 
-        receipt = measure_output_occupancy(root, leg=Leg.A0)
+        pair = pair_binding(Leg.A0, hidden_width=8)
+        receipt = measure_output_occupancy(
+            root, leg=Leg.A0, pair_binding=pair,
+            authorization_chain=authorization_chain_for(pair),
+        )
 
         self.assertEqual(31, receipt.actual_total_bytes)
         self.assertIn(".dense-stage/copy", receipt.included_paths)
         self.assertIn(".index-crash/residue", receipt.included_paths)
 
+    def test_occupancy_requires_an_explicit_valid_authorization_chain(self) -> None:
+        from latent_triz.a0x_a0_activations import A0XActivationError, measure_output_occupancy
+
+        root = synthetic_occupied_tree(self.tmp_path / "chain-required", total_bytes=1)
+        pair = pair_binding(Leg.A0, hidden_width=8)
+        with self.assertRaises(TypeError):
+            measure_output_occupancy(root, leg=Leg.A0, pair_binding=pair)
+        with self.assertRaisesRegex(A0XActivationError, "authorization chain"):
+            measure_output_occupancy(
+                root, leg=Leg.A0, pair_binding=pair, authorization_chain={},
+            )
+
     def test_verify_occupancy_rejects_leg_mismatch(self) -> None:
         from latent_triz.a0x_a0_activations import A0XActivationError, measure_output_occupancy, verify_output_occupancy
 
         root = synthetic_occupied_tree(self.tmp_path / "mismatch", total_bytes=1)
-        actual = measure_output_occupancy(root, leg=Leg.R1)
+        pair = pair_binding(Leg.R1, hidden_width=8)
+        actual = measure_output_occupancy(
+            root, leg=Leg.R1, pair_binding=pair,
+            authorization_chain=authorization_chain_for(pair),
+        )
         with self.assertRaisesRegex(A0XActivationError, "leg"):
             verify_output_occupancy(compute_dense_bound(Leg.A0, cases=48, hidden_width=8), actual)
 

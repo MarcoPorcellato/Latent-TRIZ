@@ -15,7 +15,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Mapping
 
-from .a0x_contract import Leg, LegFreezeBinding, PairBinding
+from .a0x_contract import (
+    APPROVAL_DOSSIER_PROFILE,
+    EXECUTION_AUTHORIZATION_PROFILE,
+    Commitment,
+    Leg,
+    LegFreezeBinding,
+    PairBinding,
+)
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -34,6 +41,27 @@ _COMMON = {
 
 class A0XExecutionError(RuntimeError):
     """Raised when the one-shot analysis boundary cannot stay fail-closed."""
+
+
+def validate_authorization_chain(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize one exact, caller-supplied approval commitment chain."""
+    try:
+        if not isinstance(value, Mapping) or set(value) != {
+            "dossier_commitment", "authorization_commitment",
+        }:
+            raise ValueError("authorization chain fields are not exact")
+        dossier = Commitment.from_mapping(_mapping(value, "dossier_commitment"))
+        authorization = Commitment.from_mapping(_mapping(value, "authorization_commitment"))
+        if dossier.profile != APPROVAL_DOSSIER_PROFILE:
+            raise ValueError("dossier commitment profile is invalid")
+        if authorization.profile != EXECUTION_AUTHORIZATION_PROFILE:
+            raise ValueError("authorization commitment profile is invalid")
+    except (TypeError, ValueError) as error:
+        raise A0XExecutionError("authorization chain is invalid") from error
+    return {
+        "dossier_commitment": dossier.as_mapping(),
+        "authorization_commitment": authorization.as_mapping(),
+    }
 
 
 class AttemptState(StrEnum):
@@ -81,6 +109,7 @@ class TargetReadReceipt:
     """Immutable evidence of exactly one attempted target-content open."""
 
     pair_binding: Mapping[str, Any]
+    authorization_chain: Mapping[str, Any]
     selection_corpus_sha256: str
     activation_receipt_sha256: str
     dense_sha256: str
@@ -94,6 +123,7 @@ class TargetReadReceipt:
             "artifact_class": "a0x-target-read-receipt",
             **_COMMON,
             "pair_binding": dict(self.pair_binding),
+            "authorization_chain": dict(self.authorization_chain),
             "selection_corpus_sha256": self.selection_corpus_sha256,
             "activation_receipt_sha256": self.activation_receipt_sha256,
             "dense_sha256": self.dense_sha256,
@@ -109,6 +139,7 @@ class TargetReadReceipt:
             if value.get("artifact_class") != "a0x-target-read-receipt":
                 raise ValueError("wrong artifact class")
             pair = PairBinding.from_mapping(_mapping(value, "pair_binding")).as_mapping()
+            chain = validate_authorization_chain(_mapping(value, "authorization_chain"))
             selection = _sha(value, "selection_corpus_sha256")
             activation = _sha(value, "activation_receipt_sha256")
             dense = _sha(value, "dense_sha256")
@@ -126,7 +157,7 @@ class TargetReadReceipt:
                 raise ValueError("zero reads must record a failed open")
             if reads == 1 and status != "read_failed" and observed is None:
                 raise ValueError("successful hash/parse must record observed hash")
-            return cls(pair, selection, activation, dense, index, reads, status, observed)
+            return cls(pair, chain, selection, activation, dense, index, reads, status, observed)
         except (KeyError, TypeError, ValueError) as error:
             raise A0XExecutionError("persisted target-read receipt is invalid") from error
 
@@ -151,6 +182,7 @@ class OneShotTargetReader:
         activation_receipt_sha256: str,
         dense_sha256: str,
         index_sha256: str,
+        authorization_chain: Mapping[str, Any],
     ) -> None:
         self._path = Path(path)
         self._expected_sha256 = _required_sha(expected_sha256, "expected sealed target")
@@ -164,6 +196,7 @@ class OneShotTargetReader:
         self._activation_receipt_sha256 = _required_sha(activation_receipt_sha256, "sealed activation")
         self._dense_sha256 = _required_sha(dense_sha256, "sealed activation")
         self._index_sha256 = _required_sha(index_sha256, "sealed activation")
+        self._authorization_chain = validate_authorization_chain(authorization_chain)
         self._receipt_path = Path(receipt_path)
         try:
             self._receipt_reservation = self._receipt_path.open("xb")
@@ -240,6 +273,7 @@ class OneShotTargetReader:
     ) -> TargetReadReceipt:
         receipt = TargetReadReceipt(
             pair_binding=self._pair_binding,
+            authorization_chain=self._authorization_chain,
             selection_corpus_sha256=self._selection_corpus_sha256,
             activation_receipt_sha256=self._activation_receipt_sha256,
             dense_sha256=self._dense_sha256,
@@ -284,6 +318,7 @@ def seal_terminal_attempt(
     target_receipt_path: str | Path | None = None,
     statistical_result: Mapping[str, Any] | None = None,
     pair_binding: Mapping[str, Any] | None = None,
+    authorization_chain: Mapping[str, Any] | None = None,
     terminal_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build the first terminal envelope from a persisted read receipt.
@@ -307,6 +342,10 @@ def seal_terminal_attempt(
         required_pair = PairBinding.from_mapping(pair_binding).as_mapping()
     except Exception as error:
         raise A0XExecutionError("terminal pair binding is invalid") from error
+    try:
+        required_chain = validate_authorization_chain(authorization_chain)
+    except Exception as error:
+        raise A0XExecutionError("terminal authorization chain is required and invalid") from error
     if terminal_path is None:
         raise A0XExecutionError("terminal path is required")
     destination = Path(terminal_path)
@@ -327,6 +366,8 @@ def seal_terminal_attempt(
         reads = receipt.content_reads
         if required_pair != receipt.pair_binding:
             raise A0XExecutionError("terminal pair binding differs from target-read receipt")
+        if required_chain != receipt.authorization_chain:
+            raise A0XExecutionError("terminal authorization chain differs from target-read receipt")
         target_receipt_sha256 = _sha256_file(Path(target_receipt_path))
         if status in {"positive", "null", "non_interpretable"} and (receipt.status != "pass" or reads != 1):
             raise A0XExecutionError("result terminal outcome requires one passing target read")
@@ -341,7 +382,7 @@ def seal_terminal_attempt(
         if statistical_result is None:
             raise A0XExecutionError("positive or null terminal outcome requires a statistical result")
         _validate_statistical_result(
-            statistical_result, status=status, pair_binding=required_pair,
+            statistical_result, status=status, pair_binding=required_pair, authorization_chain=required_chain,
         )
         statistic = dict(statistical_result)
     else:
@@ -357,6 +398,7 @@ def seal_terminal_attempt(
         "target_read_receipt_sha256": target_receipt_sha256,
         "statistical_result": statistic,
         "pair_binding": required_pair,
+        "authorization_chain": required_chain,
     }
     _validate_artifact("a0x-terminal-result.schema.json", terminal)
     _persist_exclusive(destination, terminal, label="terminal artifact")
@@ -621,6 +663,7 @@ def _validate_artifact(schema_name: str, artifact: Mapping[str, Any]) -> None:
 
 def _validate_statistical_result(
     value: Mapping[str, Any], *, status: str, pair_binding: Mapping[str, Any],
+    authorization_chain: Mapping[str, Any],
 ) -> None:
     if not isinstance(value, Mapping):
         raise A0XExecutionError("statistical result is invalid")
@@ -632,6 +675,8 @@ def _validate_statistical_result(
         raise A0XExecutionError("statistical result pair binding is invalid") from error
     if statistic_pair != pair_binding:
         raise A0XExecutionError("terminal pair binding differs from statistical result pair binding")
+    if validate_authorization_chain(_mapping(value, "authorization_chain")) != authorization_chain:
+        raise A0XExecutionError("terminal authorization chain differs from statistical result authorization chain")
     _validate_artifact("a0x-statistical-result.schema.json", value)
     primary = _mapping(value, "primary")
     outcome = _mapping(value, "outcome_rule")
@@ -684,4 +729,5 @@ __all__ = [
     "load_a0_public_selection",
     "load_r1_public_selection",
     "seal_terminal_attempt",
+    "validate_authorization_chain",
 ]

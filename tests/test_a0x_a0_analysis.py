@@ -12,7 +12,7 @@ from latent_triz.a0_analysis import _family_successes as historical_family_succe
 from latent_triz.a0_analysis import _score_operator as historical_score_operator
 from latent_triz.a0x_contract import Leg, LegFreezeBinding, PairBinding, sha256_file
 from latent_triz.validator import validate
-from tests.a0x_test_support import A0XTempTestCase, pair_binding, sha
+from tests.a0x_test_support import A0XTempTestCase, authorization_documents, pair_binding, sha
 
 
 _LITERAL = (0, 2, 4, 6)
@@ -27,6 +27,7 @@ _VIEWS = {
 def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[str, object]:
     from latent_triz.a0x_a0_activations import _serialize_safetensors
     pair = pair_binding(Leg.A0, hidden_width=2)
+    chain = authorization_documents(pair)[2]
     target_rows: list[dict[str, object]] = []
     index_rows: list[dict[str, object]] = []
     dense_vectors: dict[str, bytes] = {}
@@ -73,6 +74,7 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
         "artifact_class": "a0x-activation-receipt",
         **common,
         "pair_binding": pair,
+        "authorization_chain": chain,
         "leg": "a0",
         "created_at": "2026-08-24T00:00:00Z",
         "activation_status": "completed",
@@ -83,13 +85,14 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
         "dense": {"path": "activations.safetensors", "sha256": hashlib.sha256(dense_asset_bytes).hexdigest(), "bytes": len(dense_asset_bytes), "format": "safetensors"},
         "index": {"path": "representations-index.jsonl", "sha256": hashlib.sha256(index_bytes).hexdigest(), "bytes": len(index_bytes)},
         "planned_dense_bound": pair["dense_bound"],
-        "activation_stage_occupancy": {"artifact_class": "a0x-output-occupancy-receipt", **common, "leg": "a0", "occupancy_scope": "activation_stage", "included_paths": ["activations.safetensors", "representations-index.jsonl"], "actual_total_bytes": len(dense_asset_bytes) + len(index_bytes), "cap_bytes": 33554432},
+        "activation_stage_occupancy": {"artifact_class": "a0x-activation-stage-occupancy-receipt", **common, "pair_binding": pair, "authorization_chain": chain, "leg": "a0", "occupancy_scope": "activation_stage", "included_paths": ["activations.safetensors", "representations-index.jsonl"], "actual_total_bytes": len(dense_asset_bytes) + len(index_bytes), "cap_bytes": 33554432},
         "activation_stage_occupancy_sha256": sha(31),
         "occupancy_checkpoints": [],
     }
     activation_receipt_bytes = _canonical_receipt_bytes(receipt)
     target_receipt = {
         "artifact_class": "a0x-target-read-receipt", **common, "pair_binding": pair,
+        "authorization_chain": chain,
         "selection_corpus_sha256": sha(30),
         "content_reads": 1, "status": "pass", "observed_sha256": sha(32),
         "activation_receipt_sha256": hashlib.sha256(activation_receipt_bytes).hexdigest(),
@@ -97,6 +100,7 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
     }
     return {
         "pair_binding": pair,
+        "authorization_chain": chain,
         "target_rows": target_rows,
         "target_read_receipt_bytes": _canonical_receipt_bytes(target_receipt),
         "activation_receipt_bytes": activation_receipt_bytes,
@@ -168,6 +172,21 @@ class A0XA0AnalysisTests(A0XTempTestCase):
             result["primary"]["null_maxima_sha256"],
         )
         self.assertEqual([], validate(result, self._schema()))
+
+    def test_analysis_requires_one_exact_authorization_chain_across_both_receipts(self) -> None:
+        from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0
+
+        inputs = synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0)
+        result = analyze_a0x_a0(**inputs)
+        self.assertEqual(inputs["authorization_chain"], result["authorization_chain"])
+
+        target = receipt_object(inputs, "target_read_receipt_bytes")
+        target["authorization_chain"] = authorization_documents(
+            pair_binding(Leg.A0, model_key="smollm2_135m", hidden_width=2)
+        )[2]
+        inputs["target_read_receipt_bytes"] = _canonical_receipt_bytes(target)
+        with self.assertRaisesRegex(A0XA0AnalysisError, "authorization chain"):
+            analyze_a0x_a0(**inputs)
 
     def test_quantized_null_schedule_matches_numpy_and_pure_lodo_backends(self) -> None:
         try:
@@ -319,10 +338,11 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         from tests.test_a0x_activations import public_cases, selection_manifest, synthetic_hidden_adapter
 
         pair = pair_binding(Leg.A0, hidden_width=8)
+        chain = authorization_documents(pair)[2]
         artifacts = extract_a0x_a0(
             adapter=synthetic_hidden_adapter(layers=13, width=8), cases=public_cases(),
             selection=selection_manifest(), pair_binding=pair, output_dir=self.temp_path / "activation",
-            created_at="2026-08-24T00:00:00Z",
+            authorization_chain=chain, created_at="2026-08-24T00:00:00Z",
         )
         activation_bytes = artifacts.receipt_path.read_bytes()
         self.assertTrue(activation_bytes.endswith(b"\n"))
@@ -340,13 +360,14 @@ class A0XA0AnalysisTests(A0XTempTestCase):
             pair_binding=pair, selection=selection,
             activation_receipt_sha256=hashlib.sha256(activation_bytes).hexdigest(),
             dense_sha256=sha256_file(artifacts.dense_path), index_sha256=sha256_file(artifacts.index_path),
+            authorization_chain=chain,
         )
         selected_rows, _receipt = reader.read_jsonl_once()
         result = analyze_a0x_a0(
             pair_binding=pair, target_rows=selected_rows,
             activation_receipt_bytes=activation_bytes, target_read_receipt_bytes=target_receipt_path.read_bytes(),
             dense_asset_bytes=artifacts.dense_path.read_bytes(), index_bytes=artifacts.index_path.read_bytes(),
-            shortcut_result={"status": "pass"},
+            shortcut_result={"status": "pass"}, authorization_chain=chain,
         )
         self.assertIn(result["status"], {"positive", "null"})
 

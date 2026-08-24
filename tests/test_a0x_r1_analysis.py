@@ -9,7 +9,7 @@ import struct
 import unittest
 from pathlib import Path
 
-from tests.a0x_test_support import A0XTempTestCase, pair_binding, sha
+from tests.a0x_test_support import A0XTempTestCase, authorization_documents, pair_binding, sha
 from latent_triz.a0x_contract import Leg
 from latent_triz.validator import validate
 
@@ -29,6 +29,7 @@ def synthetic_r1_inputs(*, primary_signal: float, final_signal: float) -> dict[s
     from latent_triz.a0x_a0_activations import _serialize_safetensors
 
     pair = pair_binding(Leg.R1, hidden_width=2)
+    chain = authorization_documents(pair)[2]
     rows: list[dict[str, object]] = []
     index_rows: list[dict[str, object]] = []
     tensors: dict[str, bytes] = {}
@@ -64,24 +65,26 @@ def synthetic_r1_inputs(*, primary_signal: float, final_signal: float) -> dict[s
     common = {"empirical": True, "scientific_status": "exploratory", "evidence_eligible": False, "expert_validated": False, "claim_ids": []}
     activation = {
         "artifact_class": "a0x-activation-receipt", **common, "pair_binding": pair,
+        "authorization_chain": chain,
         "leg": "r1", "created_at": "2026-08-24T00:00:00Z", "activation_status": "completed",
         "activation_target_content_reads": 0, "literal_tuple_indices": [6], "final_block_tuple_index": 12,
         "record_count": len(index_rows),
         "dense": {"path": "activations.safetensors", "sha256": hashlib.sha256(dense).hexdigest(), "bytes": len(dense), "format": "safetensors"},
         "index": {"path": "representations-index.jsonl", "sha256": hashlib.sha256(index).hexdigest(), "bytes": len(index)},
         "planned_dense_bound": pair["dense_bound"],
-        "activation_stage_occupancy": {"artifact_class": "a0x-output-occupancy-receipt", **common, "leg": "r1", "occupancy_scope": "activation_stage", "included_paths": ["activations.safetensors", "representations-index.jsonl"], "actual_total_bytes": len(dense) + len(index), "cap_bytes": 4194304},
+        "activation_stage_occupancy": {"artifact_class": "a0x-activation-stage-occupancy-receipt", **common, "pair_binding": pair, "authorization_chain": chain, "leg": "r1", "occupancy_scope": "activation_stage", "included_paths": ["activations.safetensors", "representations-index.jsonl"], "actual_total_bytes": len(dense) + len(index), "cap_bytes": 4194304},
         "activation_stage_occupancy_sha256": sha(81), "occupancy_checkpoints": [],
     }
     activation_bytes = _receipt_bytes(activation)
     target_receipt = {
         "artifact_class": "a0x-target-read-receipt", **common, "pair_binding": pair,
+        "authorization_chain": chain,
         "selection_corpus_sha256": sha(82), "content_reads": 1, "status": "pass", "observed_sha256": sha(83),
         "activation_receipt_sha256": hashlib.sha256(activation_bytes).hexdigest(),
         "dense_sha256": activation["dense"]["sha256"], "index_sha256": activation["index"]["sha256"],
     }
     return {
-        "pair_binding": pair, "target_rows": rows,
+        "pair_binding": pair, "authorization_chain": chain, "target_rows": rows,
         "target_read_receipt_bytes": _receipt_bytes(target_receipt),
         "activation_receipt_bytes": activation_bytes, "dense_asset_bytes": dense,
         "index_bytes": index, "shortcut_result": {"status": "pass"},
@@ -117,6 +120,21 @@ class A0XR1AnalysisTests(A0XTempTestCase):
         self.assertEqual(12, result["score_quantization_decimals"])
         self.assertEqual("9f6e1e1722f9cde622c3c4cc65c2293ab8dc7f0f4622c8becd6182872cd3145b", result["primary"]["null_distribution_sha256"])
         self.assertEqual([], validate(result, self._schema()))
+
+    def test_analysis_rejects_a_cross_chain_swap_before_interpretation(self) -> None:
+        from latent_triz.a0x_r1_analysis import A0XR1AnalysisError, analyze_a0x_r1
+
+        inputs = synthetic_r1_inputs(primary_signal=1.0, final_signal=0.0)
+        result = analyze_a0x_r1(**inputs)
+        self.assertEqual(inputs["authorization_chain"], result["authorization_chain"])
+
+        activation = json.loads(inputs["activation_receipt_bytes"])
+        activation["authorization_chain"] = authorization_documents(
+            pair_binding(Leg.R1, model_key="smollm2_135m", hidden_width=2)
+        )[2]
+        inputs["activation_receipt_bytes"] = _receipt_bytes(activation)
+        with self.assertRaisesRegex(A0XR1AnalysisError, "authorization chain"):
+            analyze_a0x_r1(**inputs)
 
     def test_positive_predicate_requires_each_frozen_condition(self) -> None:
         from latent_triz.a0x_r1_analysis import frozen_positive

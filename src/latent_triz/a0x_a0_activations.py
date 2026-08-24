@@ -21,6 +21,7 @@ from typing import Any, Mapping, Sequence
 
 from .a0_activation_sites import build_view_texts, select_token_indices
 from .a0x_contract import DenseBound, Leg, PairBinding, compute_dense_bound
+from .a0x_execution import validate_authorization_chain
 
 
 class A0XActivationError(RuntimeError):
@@ -58,10 +59,12 @@ class OutputOccupancyReceipt:
     included_paths: tuple[str, ...]
     actual_total_bytes: int
     cap_bytes: int
+    pair_binding: Mapping[str, Any]
+    authorization_chain: Mapping[str, Any]
 
     def as_mapping(self) -> dict[str, Any]:
-        return {
-            "artifact_class": "a0x-output-occupancy-receipt",
+        receipt = {
+            "artifact_class": "a0x-activation-stage-occupancy-receipt",
             **_COMMON,
             "leg": self.leg.value,
             "occupancy_scope": self.occupancy_scope,
@@ -69,6 +72,9 @@ class OutputOccupancyReceipt:
             "actual_total_bytes": self.actual_total_bytes,
             "cap_bytes": self.cap_bytes,
         }
+        receipt["pair_binding"] = dict(self.pair_binding)
+        receipt["authorization_chain"] = dict(self.authorization_chain)
+        return receipt
 
     @property
     def sha256(self) -> str:
@@ -86,6 +92,7 @@ class ActivationArtifacts:
 
 def measure_output_occupancy(
     root: str | Path, *, leg: Leg, enforce_cap: bool = True,
+    pair_binding: Mapping[str, Any], authorization_chain: Mapping[str, Any],
 ) -> OutputOccupancyReceipt:
     """Count activation files and residue, excluding only this receipt itself.
 
@@ -95,6 +102,11 @@ def measure_output_occupancy(
     is included.  ``enforce_cap=False`` exists only to preserve a measured
     failure-stage receipt after a cap violation.
     """
+    try:
+        normalized_pair = PairBinding.from_mapping(pair_binding).as_mapping()
+        normalized_chain = validate_authorization_chain(authorization_chain)
+    except Exception as error:
+        raise A0XActivationError("occupancy authorization chain is invalid") from error
     output_root = Path(root)
     if not output_root.exists() or not output_root.is_dir() or output_root.is_symlink():
         raise A0XActivationError("activation output root is unavailable")
@@ -118,7 +130,10 @@ def measure_output_occupancy(
         included_paths=tuple(included),
         actual_total_bytes=total,
         cap_bytes=_cap(leg),
+        pair_binding=normalized_pair,
+        authorization_chain=normalized_chain,
     )
+    _validate_activation_stage_occupancy(receipt.as_mapping())
     if enforce_cap and total > receipt.cap_bytes:
         raise A0XActivationError("dense output cap exceeded by activation-stage occupancy")
     return receipt
@@ -136,11 +151,13 @@ def verify_output_occupancy(planned: DenseBound, actual: OutputOccupancyReceipt)
 
 def extract_a0x_a0(
     *, adapter: Any, cases: Sequence[Mapping[str, Any]], selection: Mapping[str, Any],
-    pair_binding: Mapping[str, Any], output_dir: str | Path, created_at: str,
+    pair_binding: Mapping[str, Any], authorization_chain: Mapping[str, Any],
+    output_dir: str | Path, created_at: str,
 ) -> ActivationArtifacts:
     """Extract the frozen A0 views without any sealed-target capability."""
     return _extract(
         leg=Leg.A0, adapter=adapter, cases=cases, selection=selection, pair_binding=pair_binding,
+        authorization_chain=authorization_chain,
         output_dir=output_dir, created_at=created_at,
         literal_indices=(0, 2, 4, 6), combinations=_A0_SITES,
     )
@@ -148,7 +165,7 @@ def extract_a0x_a0(
 
 def _extract(
     *, leg: Leg, adapter: Any, cases: Sequence[Mapping[str, Any]], selection: Mapping[str, Any], pair_binding: Mapping[str, Any],
-    output_dir: str | Path, created_at: str, literal_indices: tuple[int, ...],
+    authorization_chain: Mapping[str, Any], output_dir: str | Path, created_at: str, literal_indices: tuple[int, ...],
     combinations: Mapping[str, tuple[str, ...]],
 ) -> ActivationArtifacts:
     created_at = _timestamp(created_at)
@@ -158,6 +175,8 @@ def _extract(
         raise A0XActivationError("refusing to overwrite activation output")
     try: pair = PairBinding.from_mapping(pair_binding)
     except Exception as error: raise A0XActivationError("validated pair binding is required") from error
+    try: chain = validate_authorization_chain(authorization_chain)
+    except Exception as error: raise A0XActivationError("activation authorization chain is invalid") from error
     if pair.leg is not leg: raise A0XActivationError("activation pair binding leg mismatch")
     width = _adapter_width(adapter)
     try:
@@ -222,6 +241,7 @@ def _extract(
         checkpoints.append(_checkpoint(
             stage, phase="pre_dense_write", planned=planned,
             additions={"activations.safetensors": dense_payload}, leg=leg,
+            pair_binding=pair.as_mapping(), authorization_chain=chain,
         ))
         _verify_checkpoint(checkpoints[-1])
         _write_safetensors(dense_path, vectors, width=width, payload=dense_payload)
@@ -229,19 +249,24 @@ def _extract(
         checkpoints.append(_checkpoint(
             stage, phase="pre_index_write", planned=planned,
             additions={"representations-index.jsonl": index_payload}, leg=leg,
+            pair_binding=pair.as_mapping(), authorization_chain=chain,
         ))
         _verify_checkpoint(checkpoints[-1])
         index_path.write_bytes(index_payload)
         checkpoints.append(_checkpoint(
             stage, phase="pre_final_rename", planned=planned, additions={}, leg=leg,
+            pair_binding=pair.as_mapping(), authorization_chain=chain,
         ))
         _verify_checkpoint(checkpoints[-1])
-        occupancy = measure_output_occupancy(stage, leg=leg)
+        occupancy = measure_output_occupancy(
+            stage, leg=leg, pair_binding=pair.as_mapping(), authorization_chain=chain,
+        )
         verify_output_occupancy(planned, occupancy)
         receipt = {
             "artifact_class": "a0x-activation-receipt",
             **_COMMON,
             "pair_binding": pair.as_mapping(),
+            "authorization_chain": chain,
             "leg": leg.value,
             "created_at": created_at,
             "activation_status": "completed",
@@ -265,7 +290,9 @@ def _extract(
         # The receipt describes only the dense/index activation stage.  It is
         # intentionally outside this occupancy scope, preventing a self-hash
         # cycle and avoiding any claim about later package files.
-        final_occupancy = measure_output_occupancy(stage, leg=leg)
+        final_occupancy = measure_output_occupancy(
+            stage, leg=leg, pair_binding=pair.as_mapping(), authorization_chain=chain,
+        )
         if final_occupancy != occupancy:
             raise A0XActivationError("activation receipt self-exclusion remeasurement drift")
         os.replace(stage, destination)
@@ -274,7 +301,9 @@ def _extract(
         failure.stage_path = stage
         failure.occupancy_checkpoints = tuple(checkpoints)
         try:
-            failure.activation_stage_occupancy = measure_output_occupancy(stage, leg=leg, enforce_cap=False)
+            failure.activation_stage_occupancy = measure_output_occupancy(
+                stage, leg=leg, enforce_cap=False, pair_binding=pair.as_mapping(), authorization_chain=chain,
+            )
         except Exception as measure_error:  # pragma: no cover - only malformed local filesystem entries
             failure.activation_stage_occupancy = None
             failure.occupancy_measurement_error = str(measure_error)
@@ -402,8 +431,12 @@ def _cap(leg: Leg) -> int:
 
 def _checkpoint(
     root: Path, *, phase: str, planned: DenseBound, additions: Mapping[str, bytes], leg: Leg,
+    pair_binding: Mapping[str, Any], authorization_chain: Mapping[str, Any],
 ) -> dict[str, Any]:
-    current = measure_output_occupancy(root, leg=leg, enforce_cap=False)
+    current = measure_output_occupancy(
+        root, leg=leg, enforce_cap=False,
+        pair_binding=pair_binding, authorization_chain=authorization_chain,
+    )
     projected_paths = list(current.included_paths)
     projected_total = current.actual_total_bytes
     for relative, payload in sorted(additions.items()):
@@ -456,6 +489,34 @@ def _validate_activation_artifact(receipt: Mapping[str, Any]) -> None:
     issues = validate(dict(receipt), schema)
     if issues:
         raise A0XActivationError(f"activation receipt schema rejected completed receipt: {issues[0].message}")
+    if receipt.get("activation_status") != "completed":
+        return
+    occupancy = receipt.get("activation_stage_occupancy")
+    if not isinstance(occupancy, Mapping):
+        raise A0XActivationError("activation stage occupancy is unavailable")
+    _validate_activation_stage_occupancy(occupancy)
+    if occupancy.get("pair_binding") != receipt.get("pair_binding"):
+        raise A0XActivationError("activation occupancy pair binding differs from activation receipt")
+    if occupancy.get("authorization_chain") != receipt.get("authorization_chain"):
+        raise A0XActivationError("activation occupancy authorization chain differs from activation receipt")
+    if occupancy.get("leg") != receipt.get("leg"):
+        raise A0XActivationError("activation occupancy leg differs from activation receipt")
+
+
+def _validate_activation_stage_occupancy(receipt: Mapping[str, Any]) -> None:
+    """Reject every stage-only occupancy receipt unless its dedicated schema holds."""
+    from .validator import validate
+
+    schema_path = Path(__file__).resolve().parents[2] / "schemas/a0x-activation-stage-occupancy-receipt.schema.json"
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XActivationError("activation-stage occupancy schema is unavailable") from error
+    issues = validate(dict(receipt), schema)
+    if issues:
+        raise A0XActivationError(
+            f"activation-stage occupancy schema rejected receipt: {issues[0].message}",
+        )
 
 
 __all__ = [

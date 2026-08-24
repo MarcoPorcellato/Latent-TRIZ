@@ -15,7 +15,15 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .a0x_contract import Leg, PairBinding, endpoint_indices, sha256_file
+from .a0x_contract import (
+    Leg,
+    PairBinding,
+    assert_authorization_chain,
+    endpoint_indices,
+    sha256_file,
+    strict_json_object,
+)
+from .a0x_execution import validate_authorization_chain
 
 
 class A0XPreflightError(ValueError):
@@ -249,10 +257,14 @@ def require_empty_output(path: Path) -> None:
 
 def parse_ccp_observation(
     *, resource_raw: bytes, admission_raw: bytes, binary: Mapping[str, str],
-    pair_binding: PairBinding, output_dir: Path,
+    pair_binding: PairBinding, authorization_chain: Mapping[str, Any], output_dir: Path,
 ) -> dict[str, object]:
     """Persist and validate one exact privacy-minimized CCP observation."""
     _validate_binary_binding(binary)
+    try:
+        chain = validate_authorization_chain(authorization_chain)
+    except Exception as error:
+        raise A0XPreflightError("CCP observation authorization chain is invalid") from error
     resource = _parse_raw_object(resource_raw, "resource status")
     admission = _parse_raw_object(admission_raw, "admission status")
     _validate_resource(resource)
@@ -272,6 +284,7 @@ def parse_ccp_observation(
         "expert_validated": False,
         "claim_ids": [],
         "pair_binding": pair_binding.as_mapping(),
+        "authorization_chain": chain,
         "read_counter": 0,
         "admission_status": "not_requested",
         "binary": {name: binary[name] for name in ("path", "source_commit", "sha256", "version_output")},
@@ -292,12 +305,17 @@ def verify_static_preflight(
     *, card: A0XModelCard, snapshot_root: str | Path, expected_origin: str, observed_origin: str,
     output_dir: Path, environment: Mapping[str, str], pair_binding: PairBinding,
     protected_trees: Sequence[tuple[str | Path, Mapping[str, Any]]], protected_tree_verifier: Any,
-    dossier_path: str | Path, expected_dossier_sha256: str, authorization_path: str | Path,
-    expected_authorization_sha256: str, ccp_observation: Mapping[str, Any],
+    dossier_path: str | Path, expected_dossier_raw_sha256: str, authorization_path: str | Path,
+    expected_authorization_raw_sha256: str, ccp_observation: Mapping[str, Any],
+    authorization_chain: Mapping[str, Any],
 ) -> dict[str, object]:
     """Validate every material no-load prerequisite and otherwise fail closed."""
     if expected_origin != observed_origin or not _REVISION.fullmatch(expected_origin):
         raise A0XPreflightError("origin anchor mismatch")
+    try:
+        chain = validate_authorization_chain(authorization_chain)
+    except Exception as error:
+        raise A0XPreflightError("preflight authorization chain is invalid") from error
     values = dict(environment)
     if values.get("HF_HUB_OFFLINE") != "1" or values.get("TRANSFORMERS_OFFLINE") != "1":
         raise A0XPreflightError("offline environment is not enforced")
@@ -314,9 +332,27 @@ def verify_static_preflight(
         protected_tree_verifier(root, tree, phase="preflight")
     verify_snapshot_files(snapshot_root, card)
     endpoint = verify_static_endpoint_availability(card=card, leg=pair_binding.leg)
-    _verify_hash_bound_file(dossier_path, expected_dossier_sha256, "dossier")
-    _verify_hash_bound_file(authorization_path, expected_authorization_sha256, "authorization")
-    _verify_ccp_observation(ccp_observation, pair_binding)
+    dossier = _read_hash_bound_authorization_document(
+        dossier_path, expected_dossier_raw_sha256, "dossier",
+    )
+    authorization = _read_hash_bound_authorization_document(
+        authorization_path, expected_authorization_raw_sha256, "authorization",
+    )
+    try:
+        assert_authorization_chain(
+            dossier,
+            authorization,
+            (
+                ccp_observation,
+                {
+                    "pair_binding": pair_binding.as_mapping(),
+                    "authorization_chain": chain,
+                },
+            ),
+        )
+    except Exception as error:
+        raise A0XPreflightError("authorization source chain does not bind preflight inputs") from error
+    _verify_ccp_observation(ccp_observation, pair_binding, chain)
     return {
         "artifact_class": "a0x-preflight-receipt",
         "empirical": True,
@@ -325,6 +361,7 @@ def verify_static_preflight(
         "expert_validated": False,
         "claim_ids": [],
         "pair_binding": pair_binding.as_mapping(),
+        "authorization_chain": chain,
         "preflight_status": "passed",
         "model_key": card.model_key,
         "origin": observed_origin,
@@ -425,10 +462,12 @@ def _verify_fact_provenance(root: Path, provenance: Mapping[str, Any], label: st
         raise A0XPreflightError(f"model card {label} fact provenance pointer mismatch")
 
 
-def _verify_ccp_observation(observation: Mapping[str, Any], pair_binding: PairBinding) -> None:
+def _verify_ccp_observation(
+    observation: Mapping[str, Any], pair_binding: PairBinding, authorization_chain: Mapping[str, Any],
+) -> None:
     fields = {
         "artifact_class", "empirical", "scientific_status", "evidence_eligible", "expert_validated", "claim_ids",
-        "pair_binding", "read_counter", "admission_status", "binary", "resource", "admission",
+        "pair_binding", "authorization_chain", "read_counter", "admission_status", "binary", "resource", "admission",
         "resource_raw_path", "resource_raw_sha256", "resource_raw_bytes", "admission_raw_path",
         "admission_raw_sha256", "admission_raw_bytes",
     }
@@ -436,6 +475,12 @@ def _verify_ccp_observation(observation: Mapping[str, Any], pair_binding: PairBi
         raise A0XPreflightError("CCP observation is invalid")
     if observation.get("pair_binding") != pair_binding.as_mapping():
         raise A0XPreflightError("CCP observation pair binding mismatch")
+    try:
+        observed_chain = validate_authorization_chain(observation["authorization_chain"])
+    except Exception as error:
+        raise A0XPreflightError("CCP observation authorization chain is invalid") from error
+    if observed_chain != authorization_chain:
+        raise A0XPreflightError("CCP observation authorization chain mismatch")
     if observation.get("read_counter") != 0 or observation.get("admission_status") != "not_requested":
         raise A0XPreflightError("CCP observation state is invalid")
     binary = observation.get("binary")
@@ -492,9 +537,22 @@ def _validate_lock(value: Any, kind: str) -> None:
         raise A0XPreflightError("CCP admission lock is not free")
 
 
-def _verify_hash_bound_file(path: str | Path | None, expected_sha256: str | None, label: str) -> None:
-    if path is None or expected_sha256 is None or not _sha(expected_sha256) or not Path(path).is_file() or sha256_file(path) != expected_sha256:
-        raise A0XPreflightError(f"{label} hash binding mismatch")
+def _read_hash_bound_authorization_document(
+    path: str | Path | None, expected_raw_sha256: str | None, label: str,
+) -> dict[str, Any]:
+    """Read one authorization source once, bind its raw bytes, then strict-parse them."""
+    if path is None or expected_raw_sha256 is None or not _sha(expected_raw_sha256):
+        raise A0XPreflightError(f"{label} raw hash binding mismatch")
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as error:
+        raise A0XPreflightError(f"{label} raw hash binding mismatch") from error
+    if hashlib.sha256(raw).hexdigest() != expected_raw_sha256:
+        raise A0XPreflightError(f"{label} raw hash binding mismatch")
+    try:
+        return strict_json_object(raw)
+    except Exception as error:
+        raise A0XPreflightError(f"{label} authorization source is not strict JSON") from error
 
 
 def _load_json_object(path: Path, label: str) -> dict[str, Any]:

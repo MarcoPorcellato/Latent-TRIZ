@@ -310,6 +310,18 @@ def artifact(name: str) -> dict[str, object]:
         return dossier
     if name == "a0x-execution-authorization.schema.json":
         return authorization
+    if name == "a0x-activation-stage-occupancy-receipt.schema.json":
+        return {
+            **common_fields,
+            "artifact_class": "a0x-activation-stage-occupancy-receipt",
+            "pair_binding": pair,
+            "authorization_chain": chain,
+            "leg": "a0",
+            "occupancy_scope": "activation_stage",
+            "included_paths": ["activations.safetensors", "representations-index.jsonl"],
+            "actual_total_bytes": 1,
+            "cap_bytes": 33554432,
+        }
     if name in pair_artifacts:
         artifact_class, fields = pair_artifacts[name]
         return {**common_fields, "artifact_class": artifact_class, "pair_binding": pair, "authorization_chain": chain, **fields}
