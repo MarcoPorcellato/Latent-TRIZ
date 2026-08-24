@@ -1,0 +1,9 @@
+{
+  "artifact_class": "a0-corpus-manifest",
+  "neutral_domains": ["agriculture", "energy", "manufacturing", "medicine", "software", "transport"],
+  "files": {
+    "cases_jsonl": {
+      "path": "public-cases-mini.jsonl"
+    }
+  }
+}

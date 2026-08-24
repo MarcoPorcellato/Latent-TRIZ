@@ -113,6 +113,15 @@ class A0XSchemasTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertTrue(validate(value, occupancy_schema))
 
+    def test_task_two_schemas_reject_nested_boundary_mutations(self) -> None:
+        protected_tree = artifact("a0x-protected-tree.schema.json")
+        protected_tree["entries"][0]["verification_phase"] = "declaration_only"
+        self.assertTrue(validate(protected_tree, self.schemas["a0x-protected-tree.schema.json"]))
+
+        selection = artifact("a0x-selection-manifest.schema.json")
+        selection["cases"][0]["target_label"] = "forbidden"
+        self.assertTrue(validate(selection, self.schemas["a0x-selection-manifest.schema.json"]))
+
     def test_pair_binding_detects_mismatch_even_when_documents_validate(self) -> None:
         publication = artifact("a0x-publication-manifest.schema.json")
         receipt = artifact("a0x-model-identity-receipt.schema.json")

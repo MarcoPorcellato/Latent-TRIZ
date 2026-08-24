@@ -1,1 +1,42 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["artifact_class","empirical","scientific_status","evidence_eligible","expert_validated","claim_ids","protected_tree_sha256","source_base_commit","protected_paths"],"properties":{"artifact_class":{"const":"a0x-protected-tree"},"empirical":{"const":true},"scientific_status":{"const":"exploratory"},"evidence_eligible":{"const":false},"expert_validated":{"const":false},"claim_ids":{"type":"array","maxItems":0},"protected_tree_sha256":{"$ref":"#/$defs/sha"},"source_base_commit":{"$ref":"#/$defs/revision"},"protected_paths":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/path"}}},"$defs":{"sha":{"type":"string","pattern":"^[a-f0-9]{64}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{40}$"},"path":{"type":"string","pattern":"^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"}}}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "empirical", "scientific_status", "evidence_eligible", "expert_validated", "claim_ids", "protected_tree_sha256", "source_base_commit", "protected_paths", "entries"],
+  "properties": {
+    "artifact_class": {"const": "a0x-protected-tree"},
+    "empirical": {"const": true},
+    "scientific_status": {"const": "exploratory"},
+    "evidence_eligible": {"const": false},
+    "expert_validated": {"const": false},
+    "claim_ids": {"type": "array", "maxItems": 0},
+    "protected_tree_sha256": {"$ref": "#/$defs/sha"},
+    "source_base_commit": {"$ref": "#/$defs/revision"},
+    "protected_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/path"}},
+    "entries": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/entry"}}
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"},
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_kind", "path", "bytes", "sha256", "provenance_manifest", "provenance_manifest_sha256", "verification_phase"],
+      "properties": {
+        "entry_kind": {"enum": ["file", "sealed_target", "external_asset"]},
+        "path": {"$ref": "#/$defs/path"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha"},
+        "provenance_manifest": {"$ref": "#/$defs/path"},
+        "provenance_manifest_sha256": {"$ref": "#/$defs/sha"},
+        "verification_phase": {"enum": ["preflight_postflight", "declaration_only", "external_declaration"]}
+      },
+      "allOf": [
+        {"if": {"properties": {"entry_kind": {"const": "file"}}, "required": ["entry_kind"]}, "then": {"properties": {"verification_phase": {"const": "preflight_postflight"}}}},
+        {"if": {"properties": {"entry_kind": {"const": "sealed_target"}}, "required": ["entry_kind"]}, "then": {"properties": {"verification_phase": {"const": "declaration_only"}}}},
+        {"if": {"properties": {"entry_kind": {"const": "external_asset"}}, "required": ["entry_kind"]}, "then": {"properties": {"verification_phase": {"const": "external_declaration"}}}}
+      ]
+    }
+  }
+}

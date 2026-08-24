@@ -73,14 +73,41 @@ def artifact(name: str) -> dict[str, object]:
             "protected_tree_sha256": sha(1),
             "source_base_commit": "a" * 40,
             "protected_paths": ["src/latent_triz/a0x_contract.py"],
+            "entries": [{
+                "entry_kind": "file",
+                "path": "src/latent_triz/a0x_contract.py",
+                "bytes": 1,
+                "sha256": sha(2),
+                "provenance_manifest": "src/latent_triz/a0x_contract.py",
+                "provenance_manifest_sha256": sha(3),
+                "verification_phase": "preflight_postflight",
+            }],
         }
     if name == "a0x-selection-manifest.schema.json":
         return {
             **common_fields,
             "artifact_class": "a0x-selection-manifest",
             "selection_corpus_sha256": sha(2),
-            "selection_path": "artifacts/a0x/selection.json",
+            "selection_path": "experiments/a0x-six-model/a0-selection-manifest.json",
             "selected_case_count": 48,
+            "source_cases_path": "data/a0/cases.jsonl",
+            "source_corpus_manifest_path": "data/a0/manifest.json",
+            "source_cases_sha256": sha(3),
+            "source_corpus_manifest_sha256": sha(4),
+            "selection_rule": {
+                "cases_per_family": 2,
+                "families_per_domain": 4,
+                "family_order": "lexicographic",
+                "domain_order": "frozen",
+            },
+            "cases": [{
+                "case_id": f"case-{index}",
+                "case_content_sha256": sha(index + 10),
+                "domain": ("agriculture", "energy", "manufacturing", "medicine", "software", "transport")[index % 6],
+                "problem_family_id": f"family-{index // 2}",
+                "split": "sealed",
+            } for index in range(48)],
+            "target_content_reads": 0,
         }
     if name == "a0x-protocol.schema.json":
         return {
