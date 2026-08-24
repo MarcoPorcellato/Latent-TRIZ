@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .a0_activation_sites import build_view_texts, select_token_indices
-from .a0x_contract import DenseBound, Leg, compute_dense_bound
+from .a0x_contract import DenseBound, Leg, PairBinding, compute_dense_bound
 
 
 class A0XActivationError(RuntimeError):
@@ -136,18 +136,18 @@ def verify_output_occupancy(planned: DenseBound, actual: OutputOccupancyReceipt)
 
 def extract_a0x_a0(
     *, adapter: Any, cases: Sequence[Mapping[str, Any]], selection: Mapping[str, Any],
-    output_dir: str | Path, created_at: str,
+    pair_binding: Mapping[str, Any], output_dir: str | Path, created_at: str,
 ) -> ActivationArtifacts:
     """Extract the frozen A0 views without any sealed-target capability."""
     return _extract(
-        leg=Leg.A0, adapter=adapter, cases=cases, selection=selection,
+        leg=Leg.A0, adapter=adapter, cases=cases, selection=selection, pair_binding=pair_binding,
         output_dir=output_dir, created_at=created_at,
         literal_indices=(0, 2, 4, 6), combinations=_A0_SITES,
     )
 
 
 def _extract(
-    *, leg: Leg, adapter: Any, cases: Sequence[Mapping[str, Any]], selection: Mapping[str, Any],
+    *, leg: Leg, adapter: Any, cases: Sequence[Mapping[str, Any]], selection: Mapping[str, Any], pair_binding: Mapping[str, Any],
     output_dir: str | Path, created_at: str, literal_indices: tuple[int, ...],
     combinations: Mapping[str, tuple[str, ...]],
 ) -> ActivationArtifacts:
@@ -156,6 +156,9 @@ def _extract(
     destination = Path(output_dir)
     if destination.exists():
         raise A0XActivationError("refusing to overwrite activation output")
+    try: pair = PairBinding.from_mapping(pair_binding)
+    except Exception as error: raise A0XActivationError("validated pair binding is required") from error
+    if pair.leg is not leg: raise A0XActivationError("activation pair binding leg mismatch")
     width = _adapter_width(adapter)
     try:
         planned = compute_dense_bound(leg, cases=48, hidden_width=width)
@@ -163,6 +166,8 @@ def _extract(
         raise A0XActivationError("dense output cap exceeds frozen reservation") from error
     if planned.total_bytes > planned.cap_bytes:
         raise A0XActivationError("dense output cap exceeds frozen reservation")
+    if pair.dense_bound != planned:
+        raise A0XActivationError("activation pair dense bound differs from computed extraction")
 
     vectors: dict[str, bytes] = {}
     index_rows: list[dict[str, Any]] = []
@@ -236,6 +241,7 @@ def _extract(
         receipt = {
             "artifact_class": "a0x-activation-receipt",
             **_COMMON,
+            "pair_binding": pair.as_mapping(),
             "leg": leg.value,
             "created_at": created_at,
             "activation_status": "completed",
@@ -253,6 +259,7 @@ def _extract(
             "activation_stage_occupancy_sha256": occupancy.sha256,
             "occupancy_checkpoints": checkpoints,
         }
+        _validate_activation_artifact(receipt)
         receipt_path = stage / "activation-receipt.json"
         receipt_path.write_bytes(_stable_json_bytes(receipt))
         # The receipt describes only the dense/index activation stage.  It is
@@ -435,6 +442,20 @@ def _sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _validate_activation_artifact(receipt: Mapping[str, Any]) -> None:
+    """Reject a completed receipt unless it satisfies the public strict schema."""
+    from .validator import validate
+
+    schema_path = Path(__file__).resolve().parents[2] / "schemas/a0x-activation-receipt.schema.json"
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XActivationError("activation receipt schema is unavailable") from error
+    issues = validate(dict(receipt), schema)
+    if issues:
+        raise A0XActivationError(f"activation receipt schema rejected completed receipt: {issues[0].message}")
 
 
 __all__ = [

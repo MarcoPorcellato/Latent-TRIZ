@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import random
+import struct
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -25,7 +26,7 @@ _VIEWS = {"problem_only": ("sentinel",), "transformation_only": _SITES, "problem
 def analyze_a0x_a0(
     *, pair_binding: Mapping[str, Any], target_rows: Sequence[Mapping[str, Any]],
     target_read_receipt: Mapping[str, Any], activation_receipt: Mapping[str, Any],
-    index_rows: Sequence[Mapping[str, Any]], dense_vectors: Mapping[str, Sequence[float]],
+    dense_asset_bytes: bytes, index_bytes: bytes,
     shortcut_result: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Analyze already-read one-shot rows and already-verified in-memory assets.
@@ -39,10 +40,10 @@ def analyze_a0x_a0(
         raise A0XA0AnalysisError("A0X A0 analysis requires leg a0")
     if shortcut_result.get("status") != "pass":
         return {"status": "non_interpretable", "reason": "shortcut gate is not pass"}
-    _validate_target_receipt(target_read_receipt, pair)
     _validate_activation_receipt(activation_receipt, pair)
+    _validate_target_receipt(target_read_receipt, pair, activation_receipt, dense_asset_bytes, index_bytes)
     case_ids, labels, families, domains = _target_metadata(target_rows)
-    combos, final_index = _materialize_combos(index_rows, dense_vectors, case_ids, activation_receipt)
+    combos, final_index = _materialize_combos(index_bytes, dense_asset_bytes, case_ids, pair, activation_receipt)
     primary_combos = [("problem_plus_transformation", index, site) for index in _LITERAL for site in _SITES]
     surface_combos = [("problem_only", index, "sentinel") for index in _LITERAL]
     if set(primary_combos) - set(combos) or set(surface_combos) - set(combos):
@@ -79,16 +80,23 @@ def _pair(value: Mapping[str, Any]) -> PairBinding:
         raise A0XA0AnalysisError("analysis pair binding is invalid") from error
 
 
-def _validate_target_receipt(receipt: Mapping[str, Any], pair: PairBinding) -> None:
+def _validate_target_receipt(receipt: Mapping[str, Any], pair: PairBinding, activation: Mapping[str, Any], dense: bytes, index: bytes) -> None:
     if receipt.get("content_reads") != 1 or receipt.get("status") != "pass":
         raise A0XA0AnalysisError("analysis requires one passing target read")
     if _pair(_mapping(receipt, "pair_binding")).as_mapping() != pair.as_mapping():
         raise A0XA0AnalysisError("target receipt pair binding differs from analysis pair binding")
+    expected = {"activation_receipt_sha256": _canonical_sha(activation), "dense_sha256": _bytes_sha(dense), "index_sha256": _bytes_sha(index)}
+    if any(receipt.get(key) != value for key, value in expected.items()):
+        raise A0XA0AnalysisError("target receipt activation asset links differ from analysis inputs")
 
 
 def _validate_activation_receipt(receipt: Mapping[str, Any], pair: PairBinding) -> None:
     if receipt.get("leg") != "a0" or receipt.get("activation_status") != "completed" or receipt.get("activation_target_content_reads") != 0:
         raise A0XA0AnalysisError("activation receipt is not a target-free completed A0 receipt")
+    if _pair(_mapping(receipt, "pair_binding")).as_mapping() != pair.as_mapping():
+        raise A0XA0AnalysisError("activation receipt pair binding differs from analysis pair binding")
+    if _mapping(receipt, "planned_dense_bound") != pair.dense_bound.as_mapping():
+        raise A0XA0AnalysisError("activation planned dense bound differs from analysis pair binding")
     if tuple(receipt.get("literal_tuple_indices", ())) != _LITERAL:
         raise A0XA0AnalysisError("activation literal tuple indices drift")
     final = receipt.get("final_block_tuple_index")
@@ -116,7 +124,13 @@ def _target_metadata(rows: Sequence[Mapping[str, Any]]) -> tuple[list[str], list
     return ids, labels, families, domains
 
 
-def _materialize_combos(rows: Sequence[Mapping[str, Any]], vectors: Mapping[str, Sequence[float]], case_ids: Sequence[str], receipt: Mapping[str, Any]) -> tuple[dict[tuple[str, int, str], list[list[float]]], int]:
+def _materialize_combos(index_bytes: bytes, dense_bytes: bytes, case_ids: Sequence[str], pair: PairBinding, receipt: Mapping[str, Any]) -> tuple[dict[tuple[str, int, str], list[list[float]]], int]:
+    if not isinstance(index_bytes, bytes) or not isinstance(dense_bytes, bytes):
+        raise A0XA0AnalysisError("analysis assets must be immutable bytes")
+    if receipt.get("dense", {}).get("sha256") != _bytes_sha(dense_bytes) or receipt.get("index", {}).get("sha256") != _bytes_sha(index_bytes):
+        raise A0XA0AnalysisError("activation receipt asset hash differs from analysis bytes")
+    rows = _parse_index(index_bytes)
+    vectors = _parse_safetensors(dense_bytes, pair.dense_bound.hidden_width)
     if len(rows) != 2400 or len(vectors) != 2400:
         raise A0XA0AnalysisError("A0 dense/index assets differ from the frozen 2400-vector bound")
     final = int(receipt["final_block_tuple_index"])
@@ -130,10 +144,11 @@ def _materialize_combos(rows: Sequence[Mapping[str, Any]], vectors: Mapping[str,
         if view not in _VIEWS or site not in _VIEWS[view] or index not in (*_LITERAL, final) or row.get("endpoint_role") != expected_role:
             raise A0XA0AnalysisError("representation index endpoint contract drift")
         raw = vectors.get(key)
-        if case_id in by_combo[(view, index, site)] or not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+        if case_id in by_combo[(view, index, site)] or raw is None:
             raise A0XA0AnalysisError("representation index is duplicate or vector is unavailable")
-        try: vector = [float(value) for value in raw]
-        except (TypeError, ValueError) as error: raise A0XA0AnalysisError("representation vector is non-numeric") from error
+        if row.get("vector_dim") != pair.dense_bound.hidden_width or row.get("dtype") != "float32" or row.get("vector_sha256") != _bytes_sha(raw):
+            raise A0XA0AnalysisError("representation vector identity differs from frozen index")
+        vector = list(struct.unpack(f"<{pair.dense_bound.hidden_width}f", raw))
         if not vector or not all(math.isfinite(value) for value in vector):
             raise A0XA0AnalysisError("representation vector is invalid")
         by_combo[(view, index, site)][case_id] = vector
@@ -231,7 +246,28 @@ def _mapping(value: Mapping[str,Any], key:str)->Mapping[str,Any]:
     if not isinstance(nested,Mapping): raise A0XA0AnalysisError(f"{key} is missing")
     return nested
 def _combo_name(index:int,site:str)->str: return f"tuple-{index}::{site}"
-def _sha(value: Any)->str: return hashlib.sha256(json.dumps(value,separators=(",",":"),ensure_ascii=False).encode("utf-8")).hexdigest()
+def _sha(value: Any)->str: return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode("utf-8")).hexdigest()
+def _canonical_sha(value: Mapping[str, Any])->str: return _sha(value)
+def _bytes_sha(value: bytes)->str: return hashlib.sha256(value).hexdigest()
+def _parse_index(payload: bytes)->list[Mapping[str, Any]]:
+    try: rows=[json.loads(line) for line in payload.decode("utf-8").splitlines() if line]
+    except (UnicodeDecodeError,json.JSONDecodeError) as error: raise A0XA0AnalysisError("representation index bytes are invalid") from error
+    if any(not isinstance(row,Mapping) for row in rows): raise A0XA0AnalysisError("representation index rows are invalid")
+    return rows
+def _parse_safetensors(payload: bytes, width: int)->dict[str, bytes]:
+    if len(payload)<8: raise A0XA0AnalysisError("dense asset is not a safetensors payload")
+    header_size=int.from_bytes(payload[:8],"little")
+    try: header=json.loads(payload[8:8+header_size]); data=payload[8+header_size:]
+    except (UnicodeDecodeError,json.JSONDecodeError) as error: raise A0XA0AnalysisError("dense safetensors header is invalid") from error
+    if not isinstance(header,Mapping): raise A0XA0AnalysisError("dense safetensors header is invalid")
+    vectors={}; expected=0
+    for key, value in sorted(header.items()):
+        if not isinstance(key,str) or not isinstance(value,Mapping) or value.get("dtype")!="F32" or value.get("shape")!=[width]: raise A0XA0AnalysisError("dense safetensors tensor contract drift")
+        offsets=value.get("data_offsets")
+        if not isinstance(offsets,list) or len(offsets)!=2 or offsets[0]!=expected or offsets[1]-offsets[0]!=width*4: raise A0XA0AnalysisError("dense safetensors offsets are invalid")
+        start,end=offsets; vectors[key]=data[start:end]; expected=end
+    if expected!=len(data): raise A0XA0AnalysisError("dense safetensors data has an extra or missing byte")
+    return vectors
 
 
 __all__ = ["A0XA0AnalysisError", "analyze_a0x_a0"]

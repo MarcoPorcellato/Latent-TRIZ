@@ -633,6 +633,20 @@ def _validate_statistical_result(
     if statistic_pair != pair_binding:
         raise A0XExecutionError("terminal pair binding differs from statistical result pair binding")
     _validate_artifact("a0x-statistical-result.schema.json", value)
+    primary = _mapping(value, "primary")
+    outcome = _mapping(value, "outcome_rule")
+    try:
+        reported_p_value = float(value["p_value"])
+        p_value = float(primary["max_statistic_p"])
+        margin = float(value["macro_f1_margin_over_surface"])
+        successes = int(primary["observed_max_family_successes"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise A0XExecutionError("statistical result predicate fields are invalid") from error
+    if reported_p_value != p_value:
+        raise A0XExecutionError("statistical result p_value differs from primary max-statistic p_value")
+    positive = p_value <= 0.05 and margin >= 0.10 and successes >= 19
+    if (status == "positive") != positive or outcome.get("passed") != positive:
+        raise A0XExecutionError("statistical result status violates the frozen positive predicate")
 
 
 def _persist_exclusive(destination: Path, artifact: Mapping[str, Any], *, label: str) -> None:

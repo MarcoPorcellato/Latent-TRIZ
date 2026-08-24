@@ -10,7 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import A0XContractError, assert_pair_binding
 from latent_triz.validator import validate
-from tests.a0x_test_support import artifact, rich_statistical_result
+from tests.a0x_test_support import artifact, pair_binding, rich_statistical_result
+from latent_triz.a0x_contract import Leg
 
 
 SCHEMA_FILES = (
@@ -96,6 +97,29 @@ class A0XSchemasTests(unittest.TestCase):
         non_interpretable["status"] = "non_interpretable"
         non_interpretable["statistical_result"] = None
         self.assertEqual([], validate(non_interpretable, terminal_schema))
+
+    def test_terminal_nested_a0_result_matches_canonical_a0_schema(self) -> None:
+        canonical = self.schemas["a0x-statistical-result.schema.json"]
+        terminal_schema = self.schemas["a0x-terminal-result.schema.json"]
+        result = rich_statistical_result(pair_binding(Leg.A0))
+        terminal = artifact("a0x-terminal-result.schema.json")
+        terminal["statistical_result"] = result
+        self.assertEqual([], validate(result, canonical))
+        self.assertEqual([], validate(terminal, terminal_schema))
+
+        mutations = (
+            ("status-passed", lambda value: value["outcome_rule"].__setitem__("passed", False)),
+            ("literal-final-index", lambda value: value["descriptive_final_block"].__setitem__("tuple_index", 6)),
+            ("r1-dense", lambda value: value["pair_binding"].__setitem__("dense_bound", pair_binding(Leg.R1)["dense_bound"])),
+        )
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                invalid_result = copy.deepcopy(result)
+                mutate(invalid_result)
+                invalid_terminal = copy.deepcopy(terminal)
+                invalid_terminal["statistical_result"] = invalid_result
+                self.assertTrue(validate(invalid_result, canonical))
+                self.assertTrue(validate(invalid_terminal, terminal_schema))
 
     def test_target_read_schema_represents_preopen_and_postopen_terminal_states(self) -> None:
         schema = self.schemas["a0x-target-read-receipt.schema.json"]

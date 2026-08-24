@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from latent_triz.a0x_contract import Leg, compute_dense_bound
 from latent_triz.a0x_model_adapter import HiddenPayload
+from tests.a0x_test_support import pair_binding
 
 
 def public_cases() -> list[dict[str, object]]:
@@ -99,6 +100,7 @@ class A0XActivationTests(unittest.TestCase):
         artifacts = extract_a0x_a0(
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
+            pair_binding=pair_binding(Leg.A0, hidden_width=8),
             output_dir=self.tmp_path / "a0", created_at="2026-08-24T00:00:00Z",
         )
 
@@ -111,12 +113,42 @@ class A0XActivationTests(unittest.TestCase):
         self.assertEqual({"primary", "descriptive"}, {row["endpoint_role"] for row in rows})
         self.assertEqual(64, len(rows[0]["vector_sha256"]))
 
+    def test_completed_receipt_is_schema_valid_and_carries_the_validated_pair(self) -> None:
+        from latent_triz.a0x_a0_activations import extract_a0x_a0
+        from latent_triz.validator import validate
+
+        pair = pair_binding(Leg.A0, hidden_width=8)
+        artifacts = extract_a0x_a0(
+            adapter=synthetic_hidden_adapter(layers=13, width=8),
+            cases=public_cases(), selection=selection_manifest(), pair_binding=pair,
+            output_dir=self.tmp_path / "schema-valid", created_at="2026-08-24T00:00:00Z",
+        )
+        schema = json.loads((Path(__file__).resolve().parents[1] / "schemas/a0x-activation-receipt.schema.json").read_text(encoding="utf-8"))
+        self.assertEqual([], validate(artifacts.receipt, schema))
+        self.assertEqual(pair, artifacts.receipt["pair_binding"])
+
+    def test_completed_receipt_schema_rejection_is_fail_closed_before_persisting(self) -> None:
+        from latent_triz.a0x_a0_activations import A0XActivationError, extract_a0x_a0
+
+        with patch(
+            "latent_triz.a0x_a0_activations._validate_activation_artifact",
+            side_effect=A0XActivationError("synthetic schema rejection"),
+        ):
+            with self.assertRaisesRegex(A0XActivationError, "activation stage failed"):
+                extract_a0x_a0(
+                    adapter=synthetic_hidden_adapter(layers=13, width=8),
+                    cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.A0, hidden_width=8),
+                    output_dir=self.tmp_path / "schema-reject", created_at="2026-08-24T00:00:00Z",
+                )
+        self.assertFalse((self.tmp_path / "schema-reject").exists())
+
     def test_completed_output_remeasures_to_the_persisted_activation_stage_receipt(self) -> None:
         from latent_triz.a0x_a0_activations import extract_a0x_a0, measure_output_occupancy
 
         artifacts = extract_a0x_a0(
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
+            pair_binding=pair_binding(Leg.A0, hidden_width=8),
             output_dir=self.tmp_path / "remeasure", created_at="2026-08-24T00:00:00Z",
         )
         persisted = artifacts.receipt["activation_stage_occupancy"]
@@ -132,6 +164,7 @@ class A0XActivationTests(unittest.TestCase):
         artifacts = extract_a0x_a0(
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
+            pair_binding=pair_binding(Leg.A0, hidden_width=8),
             output_dir=self.tmp_path / "checkpoints", created_at="2026-08-24T00:00:00Z",
         )
 
@@ -156,6 +189,7 @@ class A0XActivationTests(unittest.TestCase):
                 extract_a0x_a0(
                     adapter=synthetic_hidden_adapter(layers=13, width=8),
                     cases=public_cases(), selection=selection_manifest(),
+                    pair_binding=pair_binding(Leg.A0, hidden_width=8),
                     output_dir=self.tmp_path / "failed", created_at="2026-08-24T00:00:00Z",
                 )
 
@@ -174,6 +208,7 @@ class A0XActivationTests(unittest.TestCase):
                 extract_a0x_a0(
                     adapter=synthetic_hidden_adapter(layers=13, width=8),
                     cases=public_cases(), selection=selection_manifest(),
+                    pair_binding=pair_binding(Leg.A0, hidden_width=8),
                     output_dir=self.tmp_path / "cap-failed", created_at="2026-08-24T00:00:00Z",
                 )
 
@@ -189,6 +224,7 @@ class A0XActivationTests(unittest.TestCase):
         artifacts = extract_a0x_a0(
             adapter=synthetic_hidden_adapter(layers=13, width=8),
             cases=public_cases(), selection=selection_manifest(),
+            pair_binding=pair_binding(Leg.A0, hidden_width=8),
             output_dir=self.tmp_path / "readback", created_at="2026-08-24T00:00:00Z",
         )
         encoded = artifacts.dense_path.read_bytes()
@@ -210,7 +246,7 @@ class A0XActivationTests(unittest.TestCase):
 
         artifacts = extract_a0x_r1(
             adapter=synthetic_hidden_adapter(layers=13, width=8),
-            cases=public_cases(), selection=selection_manifest(), output_dir=self.tmp_path / "r1",
+            cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.R1, hidden_width=8), output_dir=self.tmp_path / "r1",
         )
 
         rows = [json.loads(line) for line in artifacts.index_path.read_text(encoding="utf-8").splitlines()]
@@ -227,7 +263,7 @@ class A0XActivationTests(unittest.TestCase):
 
         adapter = oversized_adapter()
         with self.assertRaisesRegex(A0XActivationError, "dense output cap"):
-            extract_a0x_r1(adapter=adapter, cases=public_cases(), selection=selection_manifest(), output_dir=self.tmp_path / "r1")
+            extract_a0x_r1(adapter=adapter, cases=public_cases(), selection=selection_manifest(), pair_binding=pair_binding(Leg.R1, hidden_width=8), output_dir=self.tmp_path / "r1")
         self.assertEqual(0, adapter.forwards)
         self.assertFalse((self.tmp_path / "r1").exists())
 

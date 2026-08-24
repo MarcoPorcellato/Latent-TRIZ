@@ -23,8 +23,8 @@ def identity(leg: Leg = Leg.A0) -> dict[str, str]:
     }
 
 
-def pair_binding(leg: Leg = Leg.A0, model_key: str = "gpt2") -> dict[str, object]:
-    dense = asdict(compute_dense_bound(leg, cases=48, hidden_width=1024))
+def pair_binding(leg: Leg = Leg.A0, model_key: str = "gpt2", hidden_width: int = 1024) -> dict[str, object]:
+    dense = asdict(compute_dense_bound(leg, cases=48, hidden_width=hidden_width))
     dense["leg"] = leg.value
     return asdict(
         PairBinding(

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import inspect
 import json
+import hashlib
+import struct
 import unittest
+import copy
 from pathlib import Path
 
 from latent_triz.a0_analysis import _family_successes as historical_family_successes
@@ -22,10 +25,11 @@ _VIEWS = {
 
 
 def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[str, object]:
-    pair = pair_binding(Leg.A0)
+    from latent_triz.a0x_a0_activations import _serialize_safetensors
+    pair = pair_binding(Leg.A0, hidden_width=2)
     target_rows: list[dict[str, object]] = []
     index_rows: list[dict[str, object]] = []
-    dense_vectors: dict[str, list[float]] = {}
+    dense_vectors: dict[str, bytes] = {}
     for case_number in range(48):
         label = case_number % 2
         family = f"family-{case_number // 2:02d}"
@@ -46,7 +50,8 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
                     elif tuple_index == 12:
                         signal = final_signal
                     record_id = f"{case_id}::{view}::{site}::tuple-{tuple_index}"
-                    dense_vectors[record_id] = [signed * signal, float(case_number % 3)]
+                    raw = struct.pack("<2f", signed * signal, float(case_number % 3))
+                    dense_vectors[record_id] = raw
                     index_rows.append({
                         "record_id": record_id,
                         "case_id": case_id,
@@ -58,9 +63,25 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
                         "endpoint_role": "primary" if tuple_index in _LITERAL else "descriptive",
                         "vector_dim": 2,
                         "dtype": "float32",
-                        "vector_sha256": sha(case_number + tuple_index + 100),
+                        "vector_sha256": hashlib.sha256(raw).hexdigest(),
                         "tensor_key": record_id,
                     })
+    dense_asset_bytes = _serialize_safetensors(dense_vectors, width=2)
+    index_bytes = b"".join(json.dumps(row, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in index_rows)
+    receipt = {
+        "artifact_class": "a0x-activation-receipt",
+        "pair_binding": pair,
+        "leg": "a0",
+        "activation_status": "completed",
+        "activation_target_content_reads": 0,
+        "literal_tuple_indices": list(_LITERAL),
+        "final_block_tuple_index": 12,
+        "record_count": len(index_rows),
+        "dense": {"path": "activations.safetensors", "sha256": hashlib.sha256(dense_asset_bytes).hexdigest(), "bytes": len(dense_asset_bytes), "format": "safetensors"},
+        "index": {"path": "representations-index.jsonl", "sha256": hashlib.sha256(index_bytes).hexdigest(), "bytes": len(index_bytes)},
+        "planned_dense_bound": pair["dense_bound"],
+    }
+    receipt_sha = hashlib.sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     return {
         "pair_binding": pair,
         "target_rows": target_rows,
@@ -68,19 +89,32 @@ def synthetic_a0_inputs(*, primary_signal: float, final_signal: float) -> dict[s
             "pair_binding": pair,
             "content_reads": 1,
             "status": "pass",
+            "activation_receipt_sha256": receipt_sha,
+            "dense_sha256": receipt["dense"]["sha256"],
+            "index_sha256": receipt["index"]["sha256"],
         },
-        "activation_receipt": {
-            "leg": "a0",
-            "activation_status": "completed",
-            "activation_target_content_reads": 0,
-            "literal_tuple_indices": list(_LITERAL),
-            "final_block_tuple_index": 12,
-            "record_count": len(index_rows),
-        },
-        "index_rows": index_rows,
-        "dense_vectors": dense_vectors,
+        "activation_receipt": receipt,
+        "index_bytes": index_bytes,
+        "dense_asset_bytes": dense_asset_bytes,
         "shortcut_result": {"status": "pass"},
     }
+
+
+def rebind_asset_receipts(inputs: dict[str, object]) -> None:
+    """Rebind a synthetic receipt after an intentional immutable-byte mutation."""
+    activation = inputs["activation_receipt"]
+    dense = inputs["dense_asset_bytes"]
+    index = inputs["index_bytes"]
+    target = inputs["target_read_receipt"]
+    assert isinstance(activation, dict) and isinstance(target, dict)
+    assert isinstance(dense, bytes) and isinstance(index, bytes)
+    activation["dense"]["sha256"] = hashlib.sha256(dense).hexdigest()
+    activation["dense"]["bytes"] = len(dense)
+    activation["index"]["sha256"] = hashlib.sha256(index).hexdigest()
+    activation["index"]["bytes"] = len(index)
+    target["activation_receipt_sha256"] = hashlib.sha256(json.dumps(activation, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    target["dense_sha256"] = activation["dense"]["sha256"]
+    target["index_sha256"] = activation["index"]["sha256"]
 
 
 class A0XA0AnalysisTests(A0XTempTestCase):
@@ -105,6 +139,10 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         self.assertEqual(12, result["primary"]["multiplicity"])
         self.assertEqual(12, len(result["primary"]["combinations"]))
         self.assertEqual("positive", result["status"])
+        self.assertEqual(
+            "9af1622cda37821018baccfb7de0d83a6b5da5a1c3887fa47892e506f989a1af",
+            result["primary"]["null_maxima_sha256"],
+        )
         self.assertEqual([], validate(result, self._schema()))
 
     def test_shortcut_refusal_is_non_statistical_non_interpretable(self) -> None:
@@ -150,6 +188,57 @@ class A0XA0AnalysisTests(A0XTempTestCase):
         receipt["pair_binding"] = mismatched
         inputs["target_read_receipt"] = receipt
         with self.assertRaisesRegex(A0XA0AnalysisError, "pair binding"):
+            analyze_a0x_a0(**inputs)
+
+    def test_activation_receipt_pair_must_equal_the_single_result_pair(self) -> None:
+        from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0
+
+        inputs = synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0)
+        activation = inputs["activation_receipt"]
+        assert isinstance(activation, dict)
+        activation["pair_binding"] = pair_binding(Leg.A0, model_key="smollm2_135m", hidden_width=2)
+        rebind_asset_receipts(inputs)
+        with self.assertRaisesRegex(A0XA0AnalysisError, "activation receipt pair binding"):
+            analyze_a0x_a0(**inputs)
+
+    def test_raw_asset_and_target_link_drift_are_rejected(self) -> None:
+        from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0
+
+        for label, mutate in (
+            ("dense", lambda value: value.__setitem__("dense_asset_bytes", value["dense_asset_bytes"] + b"x")),
+            ("index", lambda value: value.__setitem__("index_bytes", value["index_bytes"] + b"\n")),
+            ("target-link", lambda value: value["target_read_receipt"].__setitem__("activation_receipt_sha256", "0" * 64)),
+        ):
+            with self.subTest(label=label):
+                inputs = copy.deepcopy(synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0))
+                mutate(inputs)
+                with self.assertRaises(A0XA0AnalysisError):
+                    analyze_a0x_a0(**inputs)
+
+    def test_index_identity_width_and_tensor_set_mismatches_are_rejected(self) -> None:
+        from latent_triz.a0x_a0_analysis import A0XA0AnalysisError, analyze_a0x_a0, _parse_safetensors
+        from latent_triz.a0x_a0_activations import _serialize_safetensors
+
+        for label, mutate in (
+            ("vector-sha", lambda rows: rows[0].__setitem__("vector_sha256", "0" * 64)),
+            ("wrong-width", lambda rows: rows[0].__setitem__("vector_dim", 3)),
+            ("missing-key", lambda rows: rows[0].__setitem__("tensor_key", "absent-tensor")),
+        ):
+            with self.subTest(label=label):
+                inputs = copy.deepcopy(synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0))
+                rows = [json.loads(line) for line in inputs["index_bytes"].decode("utf-8").splitlines()]
+                mutate(rows)
+                inputs["index_bytes"] = b"".join(json.dumps(row, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n" for row in rows)
+                rebind_asset_receipts(inputs)
+                with self.assertRaises(A0XA0AnalysisError):
+                    analyze_a0x_a0(**inputs)
+
+        inputs = copy.deepcopy(synthetic_a0_inputs(primary_signal=1.0, final_signal=0.0))
+        vectors = _parse_safetensors(inputs["dense_asset_bytes"], 2)
+        vectors["unexpected-tensor"] = struct.pack("<2f", 0.0, 0.0)
+        inputs["dense_asset_bytes"] = _serialize_safetensors(vectors, width=2)
+        rebind_asset_receipts(inputs)
+        with self.assertRaisesRegex(A0XA0AnalysisError, "2400-vector"):
             analyze_a0x_a0(**inputs)
 
 

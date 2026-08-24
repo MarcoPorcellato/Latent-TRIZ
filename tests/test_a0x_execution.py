@@ -406,6 +406,15 @@ class A0XExecutionTests(A0XTempTestCase):
                 terminal_path=mismatched_pair, pair_binding=pair,
                 statistical_result=rich_statistical_result(pair_binding(model_key="smollm2_135m"), status="positive"),
             )
+        fabricated = rich_statistical_result(pair, status="positive")
+        fabricated["p_value"] = 0.0500001
+        fabricated["primary"]["max_statistic_p"] = 0.0500001
+        with self.assertRaisesRegex(A0XExecutionError, "predicate"):
+            seal_terminal_attempt(
+                state=AttemptState.ANALYSIS, status="positive", target_receipt_path=receipt_path,
+                terminal_path=self.temp_path / "fabricated-positive.json", pair_binding=pair,
+                statistical_result=fabricated,
+            )
 
         path = self.temp_path / "non-interpretable.json"
         terminal = seal_terminal_attempt(
@@ -431,6 +440,32 @@ class A0XExecutionTests(A0XTempTestCase):
             seal_terminal_attempt(
                 state=AttemptState.PREFLIGHT, status="failed", terminal_path=self.temp_path / "missing-pair.json",
             )
+
+    def test_frozen_positive_predicate_has_exact_inclusive_boundaries(self) -> None:
+        from latent_triz.a0x_execution import _validate_statistical_result
+
+        pair = pair_binding()
+        cases = (
+            (0.05, 0.10, 19, "positive", True),
+            (0.0500001, 0.10, 19, "null", False),
+            (0.05, 0.0999999, 19, "null", False),
+            (0.05, 0.10, 18, "null", False),
+        )
+        for p_value, margin, successes, status, passed in cases:
+            with self.subTest(p_value=p_value, margin=margin, successes=successes):
+                result = rich_statistical_result(pair, status=status)
+                result["p_value"] = p_value
+                result["primary"]["max_statistic_p"] = p_value
+                result["macro_f1_margin_over_surface"] = margin
+                result["primary"]["observed_max_family_successes"] = successes
+                result["outcome_rule"]["passed"] = passed
+                _validate_statistical_result(result, status=status, pair_binding=pair)
+
+        fabricated = rich_statistical_result(pair, status="positive")
+        fabricated["p_value"] = 0.049
+        fabricated["primary"]["max_statistic_p"] = 0.05
+        with self.assertRaisesRegex(A0XExecutionError, "p_value"):
+            _validate_statistical_result(fabricated, status="positive", pair_binding=pair)
 
     def test_terminal_refuses_statistic_for_read_error_and_requires_passing_read_for_result(self) -> None:
         from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
