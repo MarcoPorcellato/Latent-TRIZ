@@ -230,6 +230,20 @@ class A0XHiddenStateAdapterTests(unittest.TestCase):
                     load_synthetic(card, config=config, tokenizer=tokenizer)
                 self.assertNotIn("model", calls)
 
+    def test_rejects_extra_or_reordered_architectures_before_model_factory(self):
+        card = next(card for card in registry_cards() if card.model_key == "qwen3_0_6b_base")
+        variants = (
+            [card.architecture, "UnexpectedForCausalLM"],
+            ["UnexpectedForCausalLM", card.architecture],
+        )
+        for architectures in variants:
+            with self.subTest(architectures=architectures):
+                calls = []
+                tokenizer = tokenizer_for(card, calls)
+                with self.assertRaisesRegex(A0XModelAdapterError, "unexpected model architecture"):
+                    load_synthetic(card, config=config_for(card, architectures=architectures), tokenizer=tokenizer)
+                self.assertNotIn("model", calls)
+
     def test_rejects_tokenizer_contract_drift_before_model_factory(self):
         card = next(card for card in registry_cards() if card.model_key == "gpt_neo_125m")
         variants = (
@@ -266,6 +280,27 @@ class A0XHiddenStateAdapterTests(unittest.TestCase):
                 model = FakeModel([], layers=card.num_hidden_layers, width=card.hidden_size, hidden_states=hidden_states)
                 adapter, _calls, _tokenizer, _model = load_synthetic(card, model=model)
                 with self.assertRaises(A0XModelAdapterError):
+                    adapter.forward_hidden("Analysis anchor: x")
+
+    def test_rejects_wrong_hidden_width_non_tuple_and_ragged_hidden_states(self):
+        card = next(card for card in registry_cards() if card.model_key == "qwen2_5_0_5b")
+        valid = FakeTensor([[[0.0 for _ in range(card.hidden_size)] for _ in range(3)]])
+        wrong_width = FakeTensor([[[0.0 for _ in range(card.hidden_size - 1)] for _ in range(3)]])
+        ragged = FakeTensor([[
+            [0.0 for _ in range(card.hidden_size)],
+            [0.0 for _ in range(card.hidden_size - 1)],
+            [0.0 for _ in range(card.hidden_size)],
+        ]])
+        variants = (
+            (tuple(wrong_width for _ in range(card.num_hidden_layers + 1)), "shape"),
+            ([valid for _ in range(card.num_hidden_layers + 1)], "must be a tuple"),
+            (tuple(ragged for _ in range(card.num_hidden_layers + 1)), "shape"),
+        )
+        for hidden_states, expected_message in variants:
+            with self.subTest(expected_message=expected_message):
+                model = FakeModel([], layers=card.num_hidden_layers, width=card.hidden_size, hidden_states=hidden_states)
+                adapter, _calls, _tokenizer, _model = load_synthetic(card, model=model)
+                with self.assertRaisesRegex(A0XModelAdapterError, expected_message):
                     adapter.forward_hidden("Analysis anchor: x")
 
 

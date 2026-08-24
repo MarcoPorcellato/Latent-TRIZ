@@ -90,19 +90,19 @@ def _offset_tuple(value: Any) -> tuple[tuple[int, int], ...]:
 
 
 def _shape(value: Any) -> tuple[int, ...]:
-    shape = getattr(value, "shape", None)
-    if shape is not None:
-        try:
-            return tuple(int(part) for part in shape)
-        except (TypeError, ValueError):
-            pass
     plain = _plain(value, "hidden state")
-    dimensions: list[int] = []
-    current = plain
-    while isinstance(current, Sequence) and not isinstance(current, (str, bytes, bytearray)):
-        dimensions.append(len(current))
-        current = current[0] if current else None
-    return tuple(dimensions)
+
+    def nested_shape(current: Any) -> tuple[int, ...]:
+        if not isinstance(current, Sequence) or isinstance(current, (str, bytes, bytearray)):
+            return ()
+        if not current:
+            return (0,)
+        child_shapes = tuple(nested_shape(child) for child in current)
+        if any(shape != child_shapes[0] for shape in child_shapes[1:]):
+            raise A0XModelAdapterError("hidden state must have a rectangular shape")
+        return (len(current), *child_shapes[0])
+
+    return nested_shape(plain)
 
 
 def _finite_hidden_state(value: Any, *, token_count: int, width: int) -> None:
@@ -139,7 +139,7 @@ def _validate_config(config: Any, card: A0XModelCard) -> None:
     if getattr(config, "model_type", None) != card.model_type:
         raise A0XModelAdapterError("unexpected model_type")
     architectures = getattr(config, "architectures", None)
-    if not isinstance(architectures, Sequence) or isinstance(architectures, (str, bytes, bytearray)) or card.architecture not in architectures:
+    if architectures != [card.architecture]:
         raise A0XModelAdapterError("unexpected model architecture")
     _config_integer(
         config, generic="num_hidden_layers", aliases=("n_layer",),
