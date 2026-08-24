@@ -110,6 +110,10 @@ class A0XR1AnalysisTests(A0XTempTestCase):
         self.assertEqual(6, result["primary"]["tuple_index"])
         self.assertGreaterEqual(result["primary"]["family_successes"], 17)
         self.assertGreaterEqual(result["domain_direction_success_count"], 4)
+        self.assertEqual(
+            tuple(f"domain-{index}" for index in range(6)),
+            tuple(result["domain_direction_successes"]),
+        )
         self.assertEqual(12, result["score_quantization_decimals"])
         self.assertEqual("9f6e1e1722f9cde622c3c4cc65c2293ab8dc7f0f4622c8becd6182872cd3145b", result["primary"]["null_distribution_sha256"])
         self.assertEqual([], validate(result, self._schema()))

@@ -490,6 +490,16 @@ class A0XExecutionTests(A0XTempTestCase):
                 mutated["status"] = "null"
                 _validate_statistical_result(mutated, status="null", pair_binding=pair)
 
+    def test_r1_terminal_validation_refuses_a_seventh_domain_even_if_nonpositive(self) -> None:
+        from latent_triz.a0x_execution import _validate_statistical_result
+
+        pair = pair_binding(Leg.R1)
+        result = rich_r1_statistical_result(pair)
+        result["domain_direction_successes"]["unexpected-domain"] = -1.0
+
+        with self.assertRaisesRegex(A0XExecutionError, "exactly six"):
+            _validate_statistical_result(result, status="positive", pair_binding=pair)
+
     def test_terminal_refuses_statistic_for_read_error_and_requires_passing_read_for_result(self) -> None:
         from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
         failure = self.temp_path / "synthetic-failure.jsonl"

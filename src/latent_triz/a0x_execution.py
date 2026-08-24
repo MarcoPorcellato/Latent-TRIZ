@@ -649,8 +649,8 @@ def _validate_statistical_result(
         positive = p_value <= 0.05 and margin >= 0.10 and successes >= 19
     else:
         directions = value.get("domain_direction_successes")
-        if not isinstance(directions, Mapping):
-            raise A0XExecutionError("R1 domain direction fields are invalid")
+        if not isinstance(directions, Mapping) or len(directions) != 6:
+            raise A0XExecutionError("R1 domain direction evidence must contain exactly six canonical domains")
         try:
             direction_count = int(value["domain_direction_success_count"])
             recomputed_count = sum(float(item) > 0.0 for item in directions.values())

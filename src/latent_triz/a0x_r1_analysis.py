@@ -34,6 +34,7 @@ _PRIMARY = ("problem_plus_transformation", 6, "mean_transformation_span")
 _BASELINE = ("problem_only", 6, "sentinel")
 _PERMUTATION_SEED = 20260815
 _PERMUTATION_BUDGET = 999
+_CANONICAL_DOMAIN_COUNT = 6
 
 
 def frozen_positive(*, p_value: float, margin: float, family_successes: int, domain_successes: int) -> bool:
@@ -64,6 +65,9 @@ def analyze_a0x_r1(
     _validate_activation_receipt(activation, pair)
     _validate_target_receipt(target_receipt, pair, activation_receipt_bytes, dense_asset_bytes, index_bytes)
     case_ids, labels, families, domains = _target_metadata(target_rows)
+    canonical_domains = tuple(sorted(set(domains)))
+    if len(canonical_domains) != _CANONICAL_DOMAIN_COUNT:
+        raise A0XR1AnalysisError("target rows violate frozen R1 domain cardinality")
     combos, final_index = _materialize_combos(index_bytes, dense_asset_bytes, case_ids, pair, activation)
     if set(combos) != {_PRIMARY, _BASELINE, (_PRIMARY[0], final_index, _PRIMARY[2]), (_BASELINE[0], final_index, _BASELINE[2])}:
         raise A0XR1AnalysisError("representation index does not cover the frozen R1 grid")
@@ -73,7 +77,9 @@ def analyze_a0x_r1(
     baseline = _combo_metrics(baseline_operator, labels, families, domains)
     primary_scores = _apply(primary_operator, labels)
     directions = _domain_direction_metrics(primary_scores, labels, families, domains)
-    direction_count = sum(value > 0.0 for value in directions.values()) if len(directions) == 6 else 0
+    if tuple(directions) != canonical_domains:
+        raise A0XR1AnalysisError("R1 domain-direction output differs from frozen canonical domains")
+    direction_count = sum(value > 0.0 for value in directions.values())
     null_values = _family_permutation_null(primary_operator, labels, families, seed=_PERMUTATION_SEED, budget=_PERMUTATION_BUDGET)
     p_value = (1 + sum(value >= primary["family_successes"] for value in null_values)) / (_PERMUTATION_BUDGET + 1)
     margin = float(primary["macro_f1"]) - float(baseline["macro_f1"])
