@@ -170,7 +170,18 @@ def artifact(name: str) -> dict[str, object]:
         "a0x-ccp-observation.schema.json": ("a0x-ccp-observation", {"read_counter": 0, "admission_status": "not_requested"}),
         "a0x-preflight-receipt.schema.json": ("a0x-preflight-receipt", {"preflight_status": "passed"}),
         "a0x-activation-receipt.schema.json": ("a0x-activation-receipt", {"activation_status": "not_started"}),
-        "a0x-target-read-receipt.schema.json": ("a0x-target-read-receipt", {"target_read_count": 0, "target_read_status": "not_read"}),
+        "a0x-target-read-receipt.schema.json": (
+            "a0x-target-read-receipt",
+            {
+                "selection_corpus_sha256": sha(20),
+                "activation_receipt_sha256": sha(21),
+                "dense_sha256": sha(22),
+                "index_sha256": sha(23),
+                "content_reads": 0,
+                "status": "read_failed",
+                "observed_sha256": None,
+            },
+        ),
         "a0x-output-occupancy-receipt.schema.json": ("a0x-output-occupancy-receipt", {"allocated_bytes": 28049408, "total_bytes": 28049408, "cap_bytes": 33554432}),
         "a0x-representation-record.schema.json": ("a0x-representation-record", {"representation_path": "results/a0x/a0/gpt2/representation.json"}),
         "a0x-statistical-result.schema.json": ("a0x-statistical-result", {"result_status": "completed", "p_value": 0.5}),
@@ -183,7 +194,9 @@ def artifact(name: str) -> dict[str, object]:
             **common_fields,
             "artifact_class": "a0x-terminal-result",
             "pair_binding": pair,
-            "status": "passed",
+            "status": "positive",
+            "analysis_target_content_reads": 1,
+            "target_read_receipt_sha256": sha(24),
             "statistical_result": {"p_value": 0.5, "result_status": "completed"},
         }
     if name == "a0x-publication-manifest.schema.json":

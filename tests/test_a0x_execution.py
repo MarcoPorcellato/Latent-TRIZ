@@ -9,7 +9,11 @@ from unittest.mock import patch
 
 from latent_triz.a0x_contract import Leg, sha256_file
 from latent_triz.a0x_execution import A0XExecutionError
+from latent_triz.validator import validate
 from tests.a0x_test_support import A0XTempTestCase, pair_binding, sha
+
+
+CASE_IDS = tuple(f"case-{index:02d}" for index in range(48))
 
 
 def _rows(case_ids: tuple[str, ...]) -> list[dict[str, object]]:
@@ -24,11 +28,18 @@ def _jsonl(rows: list[dict[str, object]]) -> bytes:
 
 
 class A0XExecutionTests(A0XTempTestCase):
+    def _schema(self, name: str) -> dict[str, object]:
+        root = Path(__file__).resolve().parents[1]
+        return json.loads((root / "schemas" / name).read_text(encoding="utf-8"))
+
+    def _assert_schema(self, name: str, value: dict[str, object]) -> None:
+        self.assertEqual([], validate(value, self._schema(name)))
+
     def _reader(
         self,
         *,
         path: Path,
-        expected_case_ids: tuple[str, ...],
+        expected_case_ids: tuple[str, ...] = CASE_IDS,
         leg: Leg = Leg.A0,
         require_file_exact: bool = False,
         expected_sha256: str | None = None,
@@ -43,33 +54,38 @@ class A0XExecutionTests(A0XTempTestCase):
             require_file_exact=require_file_exact,
             receipt_path=receipt_path or self.temp_path / "target-read-receipt.json",
             pair_binding=pair_binding(leg),
+            selection_corpus_sha256=sha(60),
             activation_receipt_sha256=sha(61),
             dense_sha256=sha(62),
             index_sha256=sha(63),
         )
 
-    def test_analysis_reader_hashes_parses_and_persists_in_one_open(self) -> None:
-        case_ids = tuple(f"case-{index:02d}" for index in range(48))
-        path = self.temp_path / "synthetic-targets.jsonl"
-        path.write_bytes(_jsonl(_rows(case_ids)))
-        receipt_path = self.temp_path / "target-read-receipt.json"
+    def _successful_receipt(self, *, name: str = "success") -> Path:
+        path = self.temp_path / f"{name}.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
+        receipt = self.temp_path / f"{name}-receipt.json"
+        self._reader(path=path, receipt_path=receipt).read_jsonl_once()
+        return receipt
 
-        reader = self._reader(
-            path=path, expected_case_ids=case_ids, receipt_path=receipt_path,
-        )
+    def test_analysis_reader_hashes_parses_and_persists_exact_48_in_one_open(self) -> None:
+        path = self.temp_path / "synthetic-targets.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
+        receipt_path = self.temp_path / "target-read-receipt.json"
+        reader = self._reader(path=path, receipt_path=receipt_path)
         rows, receipt = reader.read_jsonl_once()
 
-        self.assertEqual(_rows(case_ids), rows)
+        self.assertEqual(_rows(CASE_IDS), rows)
+        self.assertEqual(48, len(rows))
         self.assertEqual(1, receipt.content_reads)
         persisted = json.loads(receipt_path.read_text(encoding="utf-8"))
         self.assertEqual(1, persisted["content_reads"])
         self.assertEqual("pass", persisted["status"])
         self.assertEqual(sha256_file(path), persisted["observed_sha256"])
+        self._assert_schema("a0x-target-read-receipt.schema.json", persisted)
         with self.assertRaisesRegex(A0XExecutionError, "already consumed"):
             reader.read_jsonl_once()
 
-    def test_post_open_hash_or_parse_failure_still_persists_one_read(self) -> None:
-        cases = ("case-00",)
+    def test_every_failure_receipt_validates_with_zero_or_one_reads(self) -> None:
         payloads = (
             (b"bad-json\n", hashlib.sha256(b"bad-json\n").hexdigest(), "parse_failed"),
             (b"\xff\n", hashlib.sha256(b"\xff\n").hexdigest(), "parse_failed"),
@@ -80,158 +96,128 @@ class A0XExecutionTests(A0XTempTestCase):
                 path = self.temp_path / f"synthetic-{index}.jsonl"
                 path.write_bytes(payload)
                 receipt_path = self.temp_path / f"receipt-{index}.json"
-                reader = self._reader(
-                    path=path, expected_case_ids=cases, expected_sha256=expected_hash,
-                    receipt_path=receipt_path,
-                )
                 with self.assertRaisesRegex(A0XExecutionError, "sealed target"):
-                    reader.read_jsonl_once()
+                    self._reader(path=path, expected_sha256=expected_hash, receipt_path=receipt_path).read_jsonl_once()
                 receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
                 self.assertEqual(1, receipt["content_reads"])
                 self.assertEqual(status, receipt["status"])
+                self._assert_schema("a0x-target-read-receipt.schema.json", receipt)
 
-    def test_missing_target_persists_zero_read_receipt(self) -> None:
         missing = self.temp_path / "synthetic-missing.jsonl"
-        receipt_path = self.temp_path / "missing-receipt.json"
-        reader = self._reader(
-            path=missing, expected_case_ids=("case-00",), receipt_path=receipt_path,
-            expected_sha256=sha(44),
-        )
-
+        missing_receipt = self.temp_path / "missing-receipt.json"
         with self.assertRaisesRegex(A0XExecutionError, "sealed target read failed"):
-            reader.read_jsonl_once()
-        persisted = json.loads(receipt_path.read_text(encoding="utf-8"))
-        self.assertEqual(0, persisted["content_reads"])
-        self.assertEqual("read_failed", persisted["status"])
+            self._reader(path=missing, expected_sha256=sha(44), receipt_path=missing_receipt).read_jsonl_once()
+        receipt = json.loads(missing_receipt.read_text(encoding="utf-8"))
+        self.assertEqual(0, receipt["content_reads"])
+        self.assertEqual("read_failed", receipt["status"])
+        self._assert_schema("a0x-target-read-receipt.schema.json", receipt)
 
-    def test_failed_read_after_open_persists_one_read_receipt(self) -> None:
+    def test_reader_requires_exactly_48_unique_expected_ids(self) -> None:
+        path = self.temp_path / "synthetic-targets.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
+        for expected in (CASE_IDS[:1], CASE_IDS[:-1], CASE_IDS + ("case-48",), CASE_IDS[:-1] + (CASE_IDS[-2],)):
+            with self.subTest(count=len(expected)):
+                with self.assertRaisesRegex(A0XExecutionError, "exactly 48"):
+                    self._reader(path=path, expected_case_ids=expected)
+
+    def test_a0_returns_the_exact_ordered_selected_48_subset(self) -> None:
+        expected = tuple(reversed(CASE_IDS))
+        path = self.temp_path / "synthetic-a0.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS + ("unselected",))))
+        rows, _ = self._reader(path=path, expected_case_ids=expected).read_jsonl_once()
+        self.assertEqual(expected, tuple(row["case_id"] for row in rows))
+
+        for name, source_ids in (("missing", CASE_IDS[:-1]), ("duplicate", CASE_IDS + (CASE_IDS[-1],))):
+            with self.subTest(name=name):
+                target = self.temp_path / f"synthetic-a0-{name}.jsonl"
+                target.write_bytes(_jsonl(_rows(source_ids)))
+                receipt_path = self.temp_path / f"synthetic-a0-{name}-receipt.json"
+                with self.assertRaisesRegex(A0XExecutionError, "selection"):
+                    self._reader(path=target, receipt_path=receipt_path).read_jsonl_once()
+                self._assert_schema("a0x-target-read-receipt.schema.json", json.loads(receipt_path.read_text(encoding="utf-8")))
+
+    def test_r1_requires_complete_exact_ordered_48_selection(self) -> None:
+        for name, source_ids in (("extra", CASE_IDS + ("extra",)), ("missing", CASE_IDS[:-1]), ("reordered", tuple(reversed(CASE_IDS)))):
+            with self.subTest(name=name):
+                path = self.temp_path / f"synthetic-r1-{name}.jsonl"
+                path.write_bytes(_jsonl(_rows(source_ids)))
+                receipt_path = self.temp_path / f"synthetic-r1-{name}-receipt.json"
+                with self.assertRaisesRegex(A0XExecutionError, "selection"):
+                    self._reader(path=path, leg=Leg.R1, require_file_exact=True, receipt_path=receipt_path).read_jsonl_once()
+                self._assert_schema("a0x-target-read-receipt.schema.json", json.loads(receipt_path.read_text(encoding="utf-8")))
+
+        valid = self.temp_path / "synthetic-r1-valid.jsonl"
+        valid.write_bytes(_jsonl(_rows(CASE_IDS)))
+        with self.assertRaisesRegex(A0XExecutionError, "R1 target selection"):
+            self._reader(path=valid, leg=Leg.R1, require_file_exact=False)
+
+    def test_reader_requires_sealed_activation_dense_index_and_selection_bindings(self) -> None:
+        path = self.temp_path / "synthetic-targets.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
+        from latent_triz.a0x_execution import OneShotTargetReader
+
+        kwargs = {
+            "path": path, "expected_sha256": sha256_file(path), "expected_case_ids": CASE_IDS,
+            "require_file_exact": True, "receipt_path": self.temp_path / "receipt.json",
+            "pair_binding": pair_binding(), "selection_corpus_sha256": sha(60),
+            "activation_receipt_sha256": sha(61), "dense_sha256": sha(62), "index_sha256": sha(63),
+        }
+        for field in ("selection_corpus_sha256", "activation_receipt_sha256", "dense_sha256", "index_sha256"):
+            with self.subTest(field=field):
+                invalid = dict(kwargs)
+                invalid[field] = "not-a-hash"
+                with self.assertRaisesRegex(A0XExecutionError, "sealed"):
+                    OneShotTargetReader(**invalid)
+
+    def test_preexisting_receipt_destination_is_refused_before_target_open(self) -> None:
+        path = self.temp_path / "synthetic-targets.jsonl"
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
+        expected_sha256 = sha256_file(path)
+        receipt_path = self.temp_path / "existing-receipt.json"
+        receipt_path.write_text("first receipt bytes", encoding="utf-8")
+        original_open = Path.open
+        target_opens = 0
+
+        def guarded_open(candidate: Path, mode: str = "r", *args, **kwargs):
+            nonlocal target_opens
+            if candidate == path and mode == "rb":
+                target_opens += 1
+            return original_open(candidate, mode, *args, **kwargs)
+
+        with patch.object(Path, "open", new=guarded_open):
+            with self.assertRaisesRegex(A0XExecutionError, "already exists"):
+                self._reader(path=path, expected_sha256=expected_sha256, receipt_path=receipt_path)
+        self.assertEqual(0, target_opens)
+        self.assertEqual("first receipt bytes", receipt_path.read_text(encoding="utf-8"))
+
+    def test_read_failure_after_open_persists_one_read_receipt(self) -> None:
         path = self.temp_path / "synthetic-read-failure.jsonl"
-        path.write_bytes(_jsonl(_rows(("case-00",))))
+        path.write_bytes(_jsonl(_rows(CASE_IDS)))
         receipt_path = self.temp_path / "read-failure-receipt.json"
-        reader = self._reader(
-            path=path, expected_case_ids=("case-00",), receipt_path=receipt_path,
-        )
+        reader = self._reader(path=path, receipt_path=receipt_path)
         original_open = Path.open
 
         class BrokenStream:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-            def read(self) -> bytes:
-                raise OSError("synthetic stream failure")
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self) -> bytes: raise OSError("synthetic stream failure")
 
         def open_for_target(candidate: Path, mode: str = "r", *args, **kwargs):
-            if candidate == path and mode == "rb":
-                return BrokenStream()
+            if candidate == path and mode == "rb": return BrokenStream()
             return original_open(candidate, mode, *args, **kwargs)
 
         with patch.object(Path, "open", new=open_for_target):
             with self.assertRaisesRegex(A0XExecutionError, "sealed target read failed"):
                 reader.read_jsonl_once()
-        persisted = json.loads(receipt_path.read_text(encoding="utf-8"))
-        self.assertEqual(1, persisted["content_reads"])
-        self.assertEqual("read_failed", persisted["status"])
-        self.assertIsNone(persisted["observed_sha256"])
-        from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
-
-        terminal = seal_terminal_attempt(
-            state=AttemptState.ANALYSIS, status="failed", target_receipt_path=receipt_path,
-        )
-        self.assertEqual(1, terminal["analysis_target_content_reads"])
-
-    def test_a0_selects_ordered_subset_and_rejects_selected_reorder_missing_or_duplicate(self) -> None:
-        expected = ("case-b", "case-a")
-        path = self.temp_path / "synthetic-a0.jsonl"
-        path.write_bytes(_jsonl(_rows(("case-a", "case-b", "unselected"))))
-        rows, _ = self._reader(path=path, expected_case_ids=expected).read_jsonl_once()
-        self.assertEqual(["case-b", "case-a"], [row["case_id"] for row in rows])
-
-        for name, source_ids in (
-            ("missing", ("case-a",)),
-            ("duplicate", ("case-a", "case-b", "case-b")),
-        ):
-            with self.subTest(name=name):
-                target = self.temp_path / f"synthetic-a0-{name}.jsonl"
-                target.write_bytes(_jsonl(_rows(source_ids)))
-                receipt = self.temp_path / f"synthetic-a0-{name}-receipt.json"
-                with self.assertRaisesRegex(A0XExecutionError, "selection"):
-                    self._reader(
-                        path=target, expected_case_ids=expected, receipt_path=receipt,
-                    ).read_jsonl_once()
-                self.assertEqual(
-                    "selection_mismatch",
-                    json.loads(receipt.read_text(encoding="utf-8"))["status"],
-                )
-
-    def test_r1_requires_complete_exact_ordered_selection(self) -> None:
-        expected = ("case-a", "case-b")
-        for name, source_ids in (
-            ("extra", ("case-a", "case-b", "extra")),
-            ("missing", ("case-a",)),
-            ("reordered", ("case-b", "case-a")),
-        ):
-            with self.subTest(name=name):
-                path = self.temp_path / f"synthetic-r1-{name}.jsonl"
-                path.write_bytes(_jsonl(_rows(source_ids)))
-                receipt = self.temp_path / f"synthetic-r1-{name}-receipt.json"
-                with self.assertRaisesRegex(A0XExecutionError, "selection"):
-                    self._reader(
-                        path=path, expected_case_ids=expected, leg=Leg.R1,
-                        require_file_exact=True, receipt_path=receipt,
-                    ).read_jsonl_once()
-                self.assertEqual(
-                    "selection_mismatch",
-                    json.loads(receipt.read_text(encoding="utf-8"))["status"],
-                )
-
-    def test_reader_requires_sealed_activation_and_dense_index_hash_bindings(self) -> None:
-        path = self.temp_path / "synthetic-targets.jsonl"
-        path.write_bytes(_jsonl(_rows(("case-00",))))
-        from latent_triz.a0x_execution import OneShotTargetReader
-
-        kwargs = {
-            "path": path,
-            "expected_sha256": sha256_file(path),
-            "expected_case_ids": ("case-00",),
-            "require_file_exact": True,
-            "receipt_path": self.temp_path / "receipt.json",
-            "pair_binding": pair_binding(),
-            "activation_receipt_sha256": sha(61),
-            "dense_sha256": sha(62),
-            "index_sha256": sha(63),
-        }
-        for field in ("activation_receipt_sha256", "dense_sha256", "index_sha256"):
-            with self.subTest(field=field):
-                invalid = dict(kwargs)
-                invalid[field] = "not-a-hash"
-                with self.assertRaisesRegex(A0XExecutionError, "sealed activation"):
-                    OneShotTargetReader(**invalid)
-
-    def test_r1_reader_refuses_non_exact_target_mode(self) -> None:
-        path = self.temp_path / "synthetic-targets.jsonl"
-        path.write_bytes(_jsonl(_rows(("case-00",))))
-        from latent_triz.a0x_execution import OneShotTargetReader
-
-        with self.assertRaisesRegex(A0XExecutionError, "R1 target selection"):
-            OneShotTargetReader(
-                path=path,
-                expected_sha256=sha256_file(path),
-                expected_case_ids=("case-00",),
-                require_file_exact=False,
-                receipt_path=self.temp_path / "receipt.json",
-                pair_binding=pair_binding(Leg.R1),
-                activation_receipt_sha256=sha(61),
-                dense_sha256=sha(62),
-                index_sha256=sha(63),
-            )
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(1, receipt["content_reads"])
+        self.assertEqual("read_failed", receipt["status"])
+        self.assertIsNone(receipt["observed_sha256"])
+        self._assert_schema("a0x-target-read-receipt.schema.json", receipt)
 
     def test_activation_interfaces_have_no_target_reader_or_generic_filesystem_capability(self) -> None:
         from latent_triz.a0x_a0_activations import extract_a0x_a0
         from latent_triz.a0x_r1_activations import extract_a0x_r1
-
         forbidden = {"targets_path", "target_reader", "filesystem", "target_path"}
         for callable_ in (extract_a0x_a0, extract_a0x_r1):
             with self.subTest(callable=callable_.__name__):
@@ -239,84 +225,71 @@ class A0XExecutionTests(A0XTempTestCase):
 
     def test_state_machine_refuses_backwards_transitions_and_terminal_retry(self) -> None:
         from latent_triz.a0x_execution import AttemptState, advance_attempt
-
         self.assertIs(AttemptState.ACTIVATION, advance_attempt(AttemptState.PREFLIGHT))
         self.assertIs(AttemptState.ANALYSIS, advance_attempt(AttemptState.ACTIVATION))
         self.assertIs(AttemptState.SEALED, advance_attempt(AttemptState.ANALYSIS))
         with self.assertRaisesRegex(A0XExecutionError, "sealed"):
             advance_attempt(AttemptState.SEALED)
 
-    def test_terminal_requires_persisted_receipt_after_analysis_and_no_statistic_before_analysis(self) -> None:
-        from latent_triz.a0x_execution import (
-            AttemptState,
-            seal_terminal_attempt,
-        )
+    def test_terminal_taxonomy_pair_binding_and_exclusive_first_terminal(self) -> None:
+        from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
+        receipt_path, pair = self._successful_receipt(), pair_binding()
+        for status in ("positive", "null"):
+            with self.subTest(status=status):
+                terminal_path = self.temp_path / f"{status}.json"
+                terminal = seal_terminal_attempt(
+                    state=AttemptState.ANALYSIS, status=status, target_receipt_path=receipt_path,
+                    terminal_path=terminal_path, pair_binding=pair,
+                    statistical_result={"p_value": 0.5, "result_status": "completed"},
+                )
+                self.assertEqual(1, terminal["analysis_target_content_reads"])
+                self.assertEqual(pair, terminal["pair_binding"])
+                self._assert_schema("a0x-terminal-result.schema.json", terminal)
 
+        path = self.temp_path / "non-interpretable.json"
         terminal = seal_terminal_attempt(
-            state=AttemptState.PREFLIGHT, status="incompatible", target_reads=0,
+            state=AttemptState.ANALYSIS, status="non_interpretable", target_receipt_path=receipt_path,
+            terminal_path=path, pair_binding=pair,
         )
-        self.assertEqual(0, terminal["analysis_target_content_reads"])
         self.assertIsNone(terminal["statistical_result"])
-        with self.assertRaisesRegex(A0XExecutionError, "persisted target-read receipt"):
+        self._assert_schema("a0x-terminal-result.schema.json", terminal)
+
+        first_path = self.temp_path / "first-terminal.json"
+        first = seal_terminal_attempt(
+            state=AttemptState.PREFLIGHT, status="incompatible", terminal_path=first_path, pair_binding=pair,
+        )
+        before = first_path.read_bytes()
+        self.assertEqual(0, first["analysis_target_content_reads"])
+        self._assert_schema("a0x-terminal-result.schema.json", first)
+        with self.assertRaisesRegex(A0XExecutionError, "already exists"):
             seal_terminal_attempt(
-                state=AttemptState.ANALYSIS, status="failed", target_reads=1,
+                state=AttemptState.PREFLIGHT, status="failed", terminal_path=first_path, pair_binding=pair,
+            )
+        self.assertEqual(before, first_path.read_bytes())
+        with self.assertRaisesRegex(A0XExecutionError, "pair binding"):
+            seal_terminal_attempt(
+                state=AttemptState.PREFLIGHT, status="failed", terminal_path=self.temp_path / "missing-pair.json",
             )
 
-    def test_terminal_refuses_statistic_after_read_error(self) -> None:
+    def test_terminal_refuses_statistic_for_read_error_and_requires_passing_read_for_result(self) -> None:
         from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
-
-        path = self.temp_path / "synthetic-failure.jsonl"
-        path.write_bytes(b"bad-json\n")
-        receipt_path = self.temp_path / "failure-receipt.json"
-        reader = self._reader(
-            path=path,
-            expected_case_ids=("case-00",),
-            expected_sha256=sha256_file(path),
-            receipt_path=receipt_path,
-        )
+        failure = self.temp_path / "synthetic-failure.jsonl"
+        failure.write_bytes(b"bad-json\n")
+        failure_receipt = self.temp_path / "failure-receipt.json"
         with self.assertRaises(A0XExecutionError):
-            reader.read_jsonl_once()
+            self._reader(path=failure, expected_sha256=sha256_file(failure), receipt_path=failure_receipt).read_jsonl_once()
         with self.assertRaisesRegex(A0XExecutionError, "statistical result"):
             seal_terminal_attempt(
-                state=AttemptState.ANALYSIS,
-                status="failed",
-                target_receipt_path=receipt_path,
+                state=AttemptState.ANALYSIS, status="failed", target_receipt_path=failure_receipt,
+                terminal_path=self.temp_path / "failed-result.json", pair_binding=pair_binding(),
                 statistical_result={"p_value": 0.5, "result_status": "completed"},
             )
-
-    def test_terminal_uses_persisted_successful_read_receipt(self) -> None:
-        from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
-
-        path = self.temp_path / "synthetic-success.jsonl"
-        path.write_bytes(_jsonl(_rows(("case-00",))))
-        receipt_path = self.temp_path / "success-receipt.json"
-        self._reader(
-            path=path, expected_case_ids=("case-00",), receipt_path=receipt_path,
-        ).read_jsonl_once()
-
-        terminal = seal_terminal_attempt(
-            state=AttemptState.ANALYSIS,
-            status="passed",
-            target_receipt_path=receipt_path,
-            statistical_result={"p_value": 0.5, "result_status": "completed"},
-        )
-        self.assertEqual(1, terminal["analysis_target_content_reads"])
-        self.assertEqual("passed", terminal["status"])
-        self.assertEqual("completed", terminal["statistical_result"]["result_status"])
-        self.assertEqual(pair_binding(), terminal["pair_binding"])
-
-    def test_receipt_refuses_overwrite_and_reader_never_retries_after_receipt_failure(self) -> None:
-        path = self.temp_path / "synthetic-targets.jsonl"
-        path.write_bytes(_jsonl(_rows(("case-00",))))
-        receipt_path = self.temp_path / "existing-receipt.json"
-        receipt_path.write_text("already here", encoding="utf-8")
-        reader = self._reader(path=path, expected_case_ids=("case-00",), receipt_path=receipt_path)
-
-        with self.assertRaisesRegex(A0XExecutionError, "already exists"):
-            reader.read_jsonl_once()
-        self.assertEqual("already here", receipt_path.read_text(encoding="utf-8"))
-        with self.assertRaisesRegex(A0XExecutionError, "already consumed"):
-            reader.read_jsonl_once()
+        with self.assertRaisesRegex(A0XExecutionError, "passing target read"):
+            seal_terminal_attempt(
+                state=AttemptState.ANALYSIS, status="positive", target_receipt_path=failure_receipt,
+                terminal_path=self.temp_path / "positive-failure.json", pair_binding=pair_binding(),
+                statistical_result={"p_value": 0.5, "result_status": "completed"},
+            )
 
 
 if __name__ == "__main__":

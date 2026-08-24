@@ -62,7 +62,7 @@ class A0XSchemasTests(unittest.TestCase):
             "a0x-ccp-observation.schema.json": lambda value: value.__setitem__("read_counter", -1),
             "a0x-preflight-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("leg", "other"),
             "a0x-activation-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("output_path", "/absolute"),
-            "a0x-target-read-receipt.schema.json": lambda value: value.__setitem__("target_read_count", 1),
+            "a0x-target-read-receipt.schema.json": lambda value: value.__setitem__("content_reads", 2),
             "a0x-output-occupancy-receipt.schema.json": lambda value: value["pair_binding"]["dense_bound"].__setitem__("cap_bytes", 0),
             "a0x-representation-record.schema.json": lambda value: value.__setitem__("representation_path", "/absolute"),
             "a0x-statistical-result.schema.json": lambda value: value["pair_binding"].__setitem__("dossier_sha256", "short"),
@@ -75,10 +75,12 @@ class A0XSchemasTests(unittest.TestCase):
                 mutate(value)
                 self.assertTrue(validate(value, self.schemas[name]))
 
-    def test_terminal_preanalysis_failures_prohibit_results_and_success_requires_one(self) -> None:
+    def test_terminal_taxonomy_requires_receipt_and_statistics_by_status(self) -> None:
         terminal_schema = self.schemas["a0x-terminal-result.schema.json"]
         failed = artifact("a0x-terminal-result.schema.json")
         failed["status"] = "failed"
+        failed["analysis_target_content_reads"] = 0
+        failed["target_read_receipt_sha256"] = None
         failed["statistical_result"] = None
         self.assertEqual([], validate(failed, terminal_schema))
 
@@ -86,9 +88,29 @@ class A0XSchemasTests(unittest.TestCase):
         contradictory["statistical_result"] = {"p_value": 0.5, "result_status": "completed"}
         self.assertTrue(validate(contradictory, terminal_schema))
 
-        passed = artifact("a0x-terminal-result.schema.json")
-        passed["statistical_result"] = None
-        self.assertTrue(validate(passed, terminal_schema))
+        positive = artifact("a0x-terminal-result.schema.json")
+        positive["statistical_result"] = None
+        self.assertTrue(validate(positive, terminal_schema))
+
+        non_interpretable = artifact("a0x-terminal-result.schema.json")
+        non_interpretable["status"] = "non_interpretable"
+        non_interpretable["statistical_result"] = None
+        self.assertEqual([], validate(non_interpretable, terminal_schema))
+
+    def test_target_read_schema_represents_preopen_and_postopen_terminal_states(self) -> None:
+        schema = self.schemas["a0x-target-read-receipt.schema.json"]
+        preopen = artifact("a0x-target-read-receipt.schema.json")
+        self.assertEqual([], validate(preopen, schema))
+
+        postopen = copy.deepcopy(preopen)
+        postopen["content_reads"] = 1
+        postopen["status"] = "parse_failed"
+        postopen["observed_sha256"] = "a" * 64
+        self.assertEqual([], validate(postopen, schema))
+
+        contradictory = copy.deepcopy(preopen)
+        contradictory["status"] = "pass"
+        self.assertTrue(validate(contradictory, schema))
 
     def test_protocol_binds_leg_to_exact_frozen_endpoints(self) -> None:
         protocol_schema = self.schemas["a0x-protocol.schema.json"]

@@ -44,6 +44,7 @@ class TargetReadReceipt:
     """Immutable evidence of exactly one attempted target-content open."""
 
     pair_binding: Mapping[str, Any]
+    selection_corpus_sha256: str
     activation_receipt_sha256: str
     dense_sha256: str
     index_sha256: str
@@ -56,6 +57,7 @@ class TargetReadReceipt:
             "artifact_class": "a0x-target-read-receipt",
             **_COMMON,
             "pair_binding": dict(self.pair_binding),
+            "selection_corpus_sha256": self.selection_corpus_sha256,
             "activation_receipt_sha256": self.activation_receipt_sha256,
             "dense_sha256": self.dense_sha256,
             "index_sha256": self.index_sha256,
@@ -70,6 +72,7 @@ class TargetReadReceipt:
             if value.get("artifact_class") != "a0x-target-read-receipt":
                 raise ValueError("wrong artifact class")
             pair = PairBinding.from_mapping(_mapping(value, "pair_binding")).as_mapping()
+            selection = _sha(value, "selection_corpus_sha256")
             activation = _sha(value, "activation_receipt_sha256")
             dense = _sha(value, "dense_sha256")
             index = _sha(value, "index_sha256")
@@ -86,7 +89,7 @@ class TargetReadReceipt:
                 raise ValueError("zero reads must record a failed open")
             if reads == 1 and status != "read_failed" and observed is None:
                 raise ValueError("successful hash/parse must record observed hash")
-            return cls(pair, activation, dense, index, reads, status, observed)
+            return cls(pair, selection, activation, dense, index, reads, status, observed)
         except (KeyError, TypeError, ValueError) as error:
             raise A0XExecutionError("persisted target-read receipt is invalid") from error
 
@@ -103,6 +106,7 @@ class OneShotTargetReader:
         require_file_exact: bool,
         receipt_path: str | Path,
         pair_binding: Mapping[str, Any],
+        selection_corpus_sha256: str,
         activation_receipt_sha256: str,
         dense_sha256: str,
         index_sha256: str,
@@ -112,10 +116,16 @@ class OneShotTargetReader:
         self._expected_case_ids = _case_ids(expected_case_ids)
         self._require_file_exact = bool(require_file_exact)
         self._receipt_path = Path(receipt_path)
-        parsed_pair = PairBinding.from_mapping(pair_binding)
+        if self._receipt_path.exists():
+            raise A0XExecutionError("target-read receipt already exists")
+        try:
+            parsed_pair = PairBinding.from_mapping(pair_binding)
+        except Exception as error:
+            raise A0XExecutionError("sealed target pair binding is invalid") from error
         if parsed_pair.leg is Leg.R1 and not self._require_file_exact:
             raise A0XExecutionError("R1 target selection must require the exact frozen file")
         self._pair_binding = parsed_pair.as_mapping()
+        self._selection_corpus_sha256 = _required_sha(selection_corpus_sha256, "sealed selection")
         self._activation_receipt_sha256 = _required_sha(activation_receipt_sha256, "sealed activation")
         self._dense_sha256 = _required_sha(dense_sha256, "sealed activation")
         self._index_sha256 = _required_sha(index_sha256, "sealed activation")
@@ -186,6 +196,7 @@ class OneShotTargetReader:
     ) -> TargetReadReceipt:
         receipt = TargetReadReceipt(
             pair_binding=self._pair_binding,
+            selection_corpus_sha256=self._selection_corpus_sha256,
             activation_receipt_sha256=self._activation_receipt_sha256,
             dense_sha256=self._dense_sha256,
             index_sha256=self._index_sha256,
@@ -196,6 +207,7 @@ class OneShotTargetReader:
         encoded = json.dumps(
             receipt.as_mapping(), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
         ).encode("utf-8")
+        _validate_artifact("a0x-target-read-receipt.schema.json", receipt.as_mapping())
         try:
             with self._receipt_path.open("xb") as stream:
                 stream.write(encoded)
@@ -228,9 +240,9 @@ def seal_terminal_attempt(
     state: AttemptState | str,
     status: str,
     target_receipt_path: str | Path | None = None,
-    target_reads: int | None = None,
     statistical_result: Mapping[str, Any] | None = None,
     pair_binding: Mapping[str, Any] | None = None,
+    terminal_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build the first terminal envelope from a persisted read receipt.
 
@@ -245,26 +257,37 @@ def seal_terminal_attempt(
         raise A0XExecutionError("unknown A0X attempt state") from error
     if current is AttemptState.SEALED:
         raise A0XExecutionError("sealed A0X attempt cannot be finalized again")
-    if status not in {"passed", "failed", "incompatible"}:
+    if status not in {"positive", "null", "non_interpretable", "incompatible", "failed"}:
         raise A0XExecutionError("unknown A0X terminal status")
+    if not isinstance(pair_binding, Mapping):
+        raise A0XExecutionError("terminal pair binding is required")
+    try:
+        required_pair = PairBinding.from_mapping(pair_binding).as_mapping()
+    except Exception as error:
+        raise A0XExecutionError("terminal pair binding is invalid") from error
+    if terminal_path is None:
+        raise A0XExecutionError("terminal path is required")
+    destination = Path(terminal_path)
+    if destination.exists():
+        raise A0XExecutionError("terminal artifact already exists")
 
-    bound_pair: Mapping[str, Any] | None = None
+    target_receipt_sha256: str | None = None
     if current in {AttemptState.PREFLIGHT, AttemptState.ACTIVATION}:
-        if target_receipt_path is not None or target_reads not in (None, 0):
+        if target_receipt_path is not None:
             raise A0XExecutionError("pre-analysis terminal outcome must have zero target reads")
-        if status == "passed":
-            raise A0XExecutionError("pre-analysis attempt cannot pass")
+        if status not in {"incompatible", "failed"}:
+            raise A0XExecutionError("pre-analysis attempt must be incompatible or failed")
         reads = 0
     else:
-        if target_receipt_path is None or target_reads is not None:
+        if target_receipt_path is None:
             raise A0XExecutionError("analysis terminal outcome requires persisted target-read receipt")
         receipt = _read_persisted_receipt(target_receipt_path)
         reads = receipt.content_reads
-        bound_pair = receipt.pair_binding
-        if pair_binding is not None and PairBinding.from_mapping(pair_binding).as_mapping() != bound_pair:
+        if required_pair != receipt.pair_binding:
             raise A0XExecutionError("terminal pair binding differs from target-read receipt")
-        if status == "passed" and (receipt.status != "pass" or reads != 1):
-            raise A0XExecutionError("successful terminal outcome requires one passing target read")
+        target_receipt_sha256 = _sha256_file(Path(target_receipt_path))
+        if status in {"positive", "null", "non_interpretable"} and (receipt.status != "pass" or reads != 1):
+            raise A0XExecutionError("result terminal outcome requires one passing target read")
         if receipt.status != "pass" and statistical_result is not None:
             raise A0XExecutionError("read error cannot carry a statistical result")
 
@@ -272,23 +295,26 @@ def seal_terminal_attempt(
         if statistical_result is not None:
             raise A0XExecutionError("failed or incompatible terminal outcome cannot carry a statistical result")
         statistic: Mapping[str, Any] | None = None
-    else:
+    elif status in {"positive", "null"}:
         if statistical_result is None:
-            raise A0XExecutionError("passed terminal outcome requires a statistical result")
+            raise A0XExecutionError("positive or null terminal outcome requires a statistical result")
         statistic = dict(statistical_result)
+    else:
+        if statistical_result is not None:
+            raise A0XExecutionError("non-interpretable terminal outcome cannot carry a statistical result")
+        statistic = None
 
     terminal: dict[str, Any] = {
         "artifact_class": "a0x-terminal-result",
         **_COMMON,
         "status": status,
         "analysis_target_content_reads": reads,
+        "target_read_receipt_sha256": target_receipt_sha256,
         "statistical_result": statistic,
+        "pair_binding": required_pair,
     }
-    if bound_pair is not None:
-        terminal["pair_binding"] = dict(bound_pair)
-        terminal["target_read_receipt_sha256"] = _sha256_file(Path(target_receipt_path))
-    elif pair_binding is not None:
-        terminal["pair_binding"] = PairBinding.from_mapping(pair_binding).as_mapping()
+    _validate_artifact("a0x-terminal-result.schema.json", terminal)
+    _persist_exclusive(destination, terminal, label="terminal artifact")
     return terminal
 
 
@@ -333,10 +359,10 @@ def _required_sha(value: object, label: str) -> str:
 
 
 def _case_ids(values: tuple[str, ...]) -> tuple[str, ...]:
-    if not isinstance(values, tuple) or not values or any(not isinstance(value, str) or not value for value in values):
-        raise A0XExecutionError("sealed target selection is invalid")
-    if len(set(values)) != len(values):
-        raise A0XExecutionError("sealed target selection contains duplicate case IDs")
+    if not isinstance(values, tuple) or len(values) != 48 or any(not isinstance(value, str) or not value for value in values):
+        raise A0XExecutionError("sealed target selection must contain exactly 48 unique case IDs")
+    if len(set(values)) != 48:
+        raise A0XExecutionError("sealed target selection must contain exactly 48 unique case IDs")
     return values
 
 
@@ -353,6 +379,30 @@ def _sha256_file(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _validate_artifact(schema_name: str, artifact: Mapping[str, Any]) -> None:
+    from .validator import validate
+
+    schema_path = Path(__file__).resolve().parents[2] / "schemas" / schema_name
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XExecutionError(f"strict schema {schema_name} is unavailable") from error
+    issues = validate(dict(artifact), schema)
+    if issues:
+        raise A0XExecutionError(f"strict schema {schema_name} rejected produced artifact: {issues[0].message}")
+
+
+def _persist_exclusive(destination: Path, artifact: Mapping[str, Any], *, label: str) -> None:
+    encoded = json.dumps(dict(artifact), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    try:
+        with destination.open("xb") as stream:
+            stream.write(encoded)
+    except FileExistsError as error:
+        raise A0XExecutionError(f"{label} already exists") from error
+    except OSError as error:
+        raise A0XExecutionError(f"{label} could not be persisted") from error
 
 
 __all__ = [
