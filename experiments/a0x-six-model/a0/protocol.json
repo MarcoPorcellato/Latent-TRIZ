@@ -1,0 +1,163 @@
+{
+  "artifact_class": "a0x-leg-protocol",
+  "claim_ids": [],
+  "descriptive_final_block_endpoint": {
+    "model_card_index_field": "final_transformer_block_tuple_index",
+    "required_equal_model_card_field": "num_hidden_layers",
+    "rescues_primary": false,
+    "role": "descriptive_sensitivity"
+  },
+  "empirical": true,
+  "endpoint_indices": [
+    0,
+    2,
+    4,
+    6
+  ],
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "identity": {
+    "leg": "a0",
+    "protected_tree_sha256": "334a24453b3f7449300df25174737ac92fdfd2914f72d7c83550685c8d7524bd",
+    "protocol_id": "a0x-a0-six-model-v1",
+    "selection_corpus_sha256": "cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295",
+    "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
+  },
+  "inherited_rules": {
+    "calibration_families_per_domain": 8,
+    "corpus_generation": {
+      "seed": 20260814
+    },
+    "frozen_analysis": {
+      "calibration_freeze_candidate_sha256": "4992ecd73376df9678d81a4bc8e6e32c3d72a36194f0608ab806c31042d12796",
+      "calibration_protocol_hash": "cfe01731aafbe27d2f3262853a004492efc4ec14d4de95eb626bda91c6d9b153",
+      "calibration_protocol_id": "a0-automated-weak-proxy-v1.0.2",
+      "calibration_status": "pass",
+      "critical_successes": 19,
+      "effect_definition": "family_level_macro_f1_margin_over_balanced_chance",
+      "max_statistic_multiplicity": 12,
+      "minimum_detectable_effect": 0.333212784429589,
+      "power_method": "exact_family_blocked_binomial_max_statistic",
+      "sealed_family_selection_rule": "lexicographic_family_id_first_n_within_each_domain",
+      "selected_families_per_domain": 4,
+      "selected_family_count": 24,
+      "selected_permutation_budget": 199,
+      "shortcut_status": "pass"
+    },
+    "neutral_domains": [
+      "manufacturing",
+      "energy",
+      "software",
+      "medicine",
+      "transport",
+      "agriculture"
+    ],
+    "outcome_rules": {
+      "failed": "an execution, integrity, identity, or receipt gate fails before a valid statistic",
+      "non_interpretable": "any shortcut gate reaches or exceeds its frozen threshold",
+      "null": "all shortcut gates pass and the positive rule is false",
+      "positive": "all shortcut gates pass and max_statistic_p <= 0.05 and macro_f1_margin_over_surface >= 0.10"
+    },
+    "paired_syntax_templates": [
+      {
+        "inversion_like": "{collective_role} signals before {local_role} signals.",
+        "segmentation_like": "{local_role} signals before {collective_role} signals.",
+        "template_id": "tpl_seg_inv_001"
+      },
+      {
+        "inversion_like": "{collective_role} responds before {local_role} responds.",
+        "segmentation_like": "{local_role} responds before {collective_role} responds.",
+        "template_id": "tpl_seg_inv_002"
+      },
+      {
+        "inversion_like": "{collective_role} activates before {local_role} activates.",
+        "segmentation_like": "{local_role} activates before {collective_role} activates.",
+        "template_id": "tpl_seg_inv_003"
+      },
+      {
+        "inversion_like": "{collective_role} updates before {local_role} updates.",
+        "segmentation_like": "{local_role} updates before {collective_role} updates.",
+        "template_id": "tpl_seg_inv_004"
+      }
+    ],
+    "predeclared_calibration_rule": {
+      "candidate_families_per_domain": [
+        4,
+        6,
+        8
+      ],
+      "choose_smallest_deterministic_rule": "choose-smallest",
+      "deterministic_seed": 20260814,
+      "maximum_false_positive_rate": 0.06,
+      "permutation_budgets": [
+        199,
+        499,
+        999
+      ],
+      "selection_mode": "deterministic_predeclared",
+      "target_effect_size": 0.35,
+      "target_power": 0.8
+    },
+    "preregistered_layers": [
+      0,
+      2,
+      4,
+      6
+    ],
+    "runtime": {
+      "requires_interactive_model_server": false
+    },
+    "sealed_families_per_domain": 8,
+    "shortcut_evaluation": {
+      "a0_controls": [
+        "bag_of_words_baselines",
+        "character_ngram_baselines",
+        "length_and_punctuation_baselines",
+        "style_and_template_baselines",
+        "provenance_classifiers",
+        "problem_only_label_prediction",
+        "leave_one_domain_out_surface_evaluation",
+        "duplicate_and_near_duplicate_detection",
+        "family_leakage_detection",
+        "random_label_controls",
+        "random_partition_controls",
+        "generic_action_taxonomy_controls",
+        "generic_transformation_taxonomy_controls",
+        "adjacent_principle_proxy_controls"
+      ],
+      "macro_f1_threshold": 0.65,
+      "margin_over_majority": 0.1
+    },
+    "shortcuts": [
+      "problem_only",
+      "length_template",
+      "surface_lexicon",
+      "domain_lexicon"
+    ],
+    "splits": {
+      "calibration_partition": "calibration",
+      "sealed_partition": "sealed"
+    },
+    "target_families": [
+      "segmentation_like",
+      "inversion_like"
+    ],
+    "token_sites": [
+      "sentinel",
+      "final_transformation_token",
+      "mean_transformation_span"
+    ],
+    "views": [
+      "problem_only",
+      "transformation_only",
+      "problem_plus_transformation",
+      "problem_plus_solution"
+    ]
+  },
+  "model_output_accessed": false,
+  "protocol_status": "frozen",
+  "scientific_status": "exploratory",
+  "sealed_targets_accessed": false,
+  "source_protocol_path": "experiments/a0-automated-weak-proxy/protocol.json",
+  "source_protocol_raw_sha256": "36d52643d419fd4e8feada63d19a42429940f3559dda72adf342c484411fc244"
+}

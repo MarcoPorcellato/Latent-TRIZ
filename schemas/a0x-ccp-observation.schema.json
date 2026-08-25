@@ -4,6 +4,7 @@
   "additionalProperties": false,
   "required": [
     "admission_status",
+    "binary",
     "artifact_class",
     "authorization_chain",
     "claim_ids",
@@ -12,6 +13,14 @@
     "expert_validated",
     "pair_binding",
     "read_counter",
+    "resource",
+    "admission",
+    "resource_raw_path",
+    "resource_raw_sha256",
+    "resource_raw_bytes",
+    "admission_raw_path",
+    "admission_raw_sha256",
+    "admission_raw_bytes",
     "scientific_status"
   ],
   "properties": {
@@ -46,8 +55,34 @@
     },
     "authorization_chain": {
       "$ref": "#/$defs/authorization_chain"
-    }
+    },
+    "binary": {"$ref": "#/$defs/binary"},
+    "resource": {"$ref": "#/$defs/resource"},
+    "admission": {"$ref": "#/$defs/admission"},
+    "resource_raw_path": {"$ref": "#/$defs/path"},
+    "resource_raw_sha256": {"$ref": "#/$defs/sha"},
+    "resource_raw_bytes": {"type": "integer", "minimum": 1},
+    "admission_raw_path": {"$ref": "#/$defs/path"},
+    "admission_raw_sha256": {"$ref": "#/$defs/sha"},
+    "admission_raw_bytes": {"type": "integer", "minimum": 1},
+    "source_head": {"$ref": "#/$defs/rev"},
+    "material_contract_raw_sha256": {"$ref": "#/$defs/sha"},
+    "ccp_trace": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/ccp_trace"}},
+    "dry_run_reviewed": {"type": "boolean"},
+    "claim_identity": {"type": ["string", "null"]},
+    "guard_exec_argv_commitment": {"$ref": "#/$defs/sha"},
+    "run_count": {"type": "integer", "minimum": 0, "maximum": 1}
+    ,"policy_raw_sha256": {"$ref": "#/$defs/sha"}
+    ,"pre_run_observation_sha256": {"$ref": "#/$defs/sha"}
+    ,"pre_run_observation": {"$ref": "#/$defs/pre_guard_observation"}
+    ,"claim_sha256": {"$ref": "#/$defs/sha"}
+    ,"run_record": {"$ref": "#/$defs/guard_trace"}
   },
+  "allOf": [
+    {"if": {"required": ["ccp_trace"]}, "then": {"required": ["source_head", "material_contract_raw_sha256", "dry_run_reviewed", "claim_identity", "run_count"]}},
+    {"if": {"required": ["policy_raw_sha256"]}, "then": {"required": ["claim_sha256", "guard_exec_argv_commitment"]}},
+    {"if": {"properties": {"run_count": {"const": 1}}, "required": ["run_count"]}, "then": {"required": ["pre_run_observation", "pre_run_observation_sha256", "run_record"]}}
+  ],
   "$defs": {
     "sha": {
       "type": "string",
@@ -60,6 +95,136 @@
     "path": {
       "type": "string",
       "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+    },
+    "ccp_trace": {"type": "object", "additionalProperties": false, "required": ["command", "argv", "executable_sha256", "exit_code", "raw_sha256", "raw_bytes", "state"], "properties": {"command": {"enum": ["admission status --json", "resource status --json", "plan --json", "doctor --json", "dry-run --json"]}, "argv": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "executable_sha256": {"$ref": "#/$defs/sha"}, "exit_code": {"const": 0}, "raw_sha256": {"$ref": "#/$defs/sha"}, "raw_bytes": {"type": "integer", "minimum": 1}, "state": {"type": "object"}}},
+    "guard_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "executable_sha256", "exit_code", "raw_sha256", "raw_bytes", "state"],
+      "properties": {
+        "command": {"const": "guard exec"},
+        "executable_sha256": {"$ref": "#/$defs/sha"},
+        "exit_code": {"const": 0},
+        "raw_sha256": {"$ref": "#/$defs/sha"},
+        "raw_bytes": {"type": "integer", "minimum": 0},
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["argv_commitment", "guard_exit_classification", "child_exit", "child_exit_classification", "lifecycle_status", "terminal_links"],
+          "properties": {
+            "argv_commitment": {"$ref": "#/$defs/sha"},
+            "guard_exit_classification": {"const": "completed"},
+            "child_exit": {"const": 0},
+            "child_exit_classification": {"const": "completed"},
+            "lifecycle_status": {"enum": ["completed", "positive", "null", "non_interpretable", "incompatible", "failed"]},
+            "terminal_links": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"type": "string", "minLength": 1}}
+          }
+        }
+      }
+    },
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "source_commit", "sha256", "version_output"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/"},
+        "source_commit": {"const": "3fccc197e5055a2759ee7afe51b91133938ec904"},
+        "sha256": {"$ref": "#/$defs/sha"},
+        "version_output": {"const": "commit-ci-preflight 0.1.0\n"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "policy_version", "platform", "capability", "decision", "available_percent", "reclaimable_uncompressed_bytes", "compressor_occupied_bytes", "total_memory_bytes", "swap_used_bytes", "swap_total_bytes", "consecutive_soft_samples"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "policy_version": {"const": "macos-v4"},
+        "platform": {"const": "macos"},
+        "capability": {"const": "supported_enforced"},
+        "decision": {"const": "admit"},
+        "available_percent": {"type": "integer", "minimum": 0, "maximum": 100},
+        "reclaimable_uncompressed_bytes": {"type": "integer", "minimum": 0},
+        "compressor_occupied_bytes": {"type": "integer", "minimum": 0},
+        "total_memory_bytes": {"type": "integer", "minimum": 0},
+        "swap_used_bytes": {"type": "integer", "minimum": 0},
+        "swap_total_bytes": {"type": "integer", "minimum": 0},
+        "consecutive_soft_samples": {"const": 0}
+      }
+    },
+    "lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "state", "owner_run_id", "acquired_at_unix_seconds", "heartbeat_at_unix_seconds", "lease_state"],
+      "properties": {
+        "kind": {"enum": ["slot_lock", "queue_lock"]},
+        "state": {"const": "free"},
+        "owner_run_id": {"type": "null"},
+        "acquired_at_unix_seconds": {"type": "null"},
+        "heartbeat_at_unix_seconds": {"type": "null"},
+        "lease_state": {"const": "not_applicable"}
+      }
+    },
+    "slot_lock": {
+      "allOf": [
+        {"$ref": "#/$defs/lock"},
+        {"properties": {"kind": {"const": "slot_lock"}}}
+      ]
+    },
+    "queue_lock": {
+      "allOf": [
+        {"$ref": "#/$defs/lock"},
+        {"properties": {"kind": {"const": "queue_lock"}}}
+      ]
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "active", "queue_count", "ticket_ids", "slot", "queue_lock", "process_visibility_note"],
+      "properties": {
+        "schema_version": {"const": "2.0"},
+        "active": {"const": false},
+        "queue_count": {"const": 0},
+        "ticket_ids": {"type": "array", "maxItems": 0},
+        "slot": {"$ref": "#/$defs/slot_lock"},
+        "queue_lock": {"$ref": "#/$defs/queue_lock"},
+        "process_visibility_note": {"const": "No process visible in the local shell does not prove global inactivity."}
+      }
+    },
+    "pre_guard_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_class", "empirical", "scientific_status", "evidence_eligible", "expert_validated", "claim_ids", "pair_binding", "authorization_chain", "read_counter", "admission_status", "binary", "resource", "admission", "resource_raw_path", "resource_raw_sha256", "resource_raw_bytes", "admission_raw_path", "admission_raw_sha256", "admission_raw_bytes", "source_head", "material_contract_raw_sha256", "policy_raw_sha256", "ccp_trace", "dry_run_reviewed", "claim_identity", "claim_sha256", "guard_exec_argv_commitment", "run_count"],
+      "properties": {
+        "artifact_class": {"const": "a0x-ccp-observation"},
+        "empirical": {"const": true},
+        "scientific_status": {"const": "exploratory"},
+        "evidence_eligible": {"const": false},
+        "expert_validated": {"const": false},
+        "claim_ids": {"type": "array", "maxItems": 0},
+        "pair_binding": {"$ref": "#/$defs/pair"},
+        "authorization_chain": {"$ref": "#/$defs/authorization_chain"},
+        "read_counter": {"const": 0},
+        "admission_status": {"const": "not_requested"},
+        "binary": {"$ref": "#/$defs/binary"},
+        "resource": {"$ref": "#/$defs/resource"},
+        "admission": {"$ref": "#/$defs/admission"},
+        "resource_raw_path": {"$ref": "#/$defs/path"},
+        "resource_raw_sha256": {"$ref": "#/$defs/sha"},
+        "resource_raw_bytes": {"type": "integer", "minimum": 1},
+        "admission_raw_path": {"$ref": "#/$defs/path"},
+        "admission_raw_sha256": {"$ref": "#/$defs/sha"},
+        "admission_raw_bytes": {"type": "integer", "minimum": 1},
+        "source_head": {"$ref": "#/$defs/rev"},
+        "material_contract_raw_sha256": {"$ref": "#/$defs/sha"},
+        "policy_raw_sha256": {"$ref": "#/$defs/sha"},
+        "ccp_trace": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/ccp_trace"}},
+        "dry_run_reviewed": {"const": true},
+        "claim_identity": {"type": "string", "minLength": 1},
+        "claim_sha256": {"$ref": "#/$defs/sha"},
+        "guard_exec_argv_commitment": {"$ref": "#/$defs/sha"},
+        "run_count": {"const": 0}
+      }
     },
     "dense": {
       "type": "object",
@@ -295,7 +460,7 @@
       ],
       "properties": {
         "profile": {
-          "const": "a0x-approval-dossier-json-v1"
+          "const": "a0x-approval-dossier-json-v2"
         },
         "commitment_sha256": {
           "$ref": "#/$defs/sha"
@@ -311,7 +476,7 @@
       ],
       "properties": {
         "profile": {
-          "const": "a0x-execution-authorization-json-v1"
+          "const": "a0x-execution-authorization-json-v2"
         },
         "commitment_sha256": {
           "$ref": "#/$defs/sha"

@@ -164,7 +164,7 @@ class A0XContractTests(A0XTempTestCase):
         self.assertEqual([], validate(authorization, self._schema("a0x-execution-authorization.schema.json")))
         first = canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE)
         self.assertEqual(
-            "e0f7053ece6c554e505094faffa847239b5346cfa722f4ac2526da4f85da341c",
+            "235bda6fd32b35189f99f4c1b9f6954fafd00d232d622437a4e13dda8d925d38",
             first.commitment_sha256,
         )
         compact_variant = strict_json_object(
@@ -185,7 +185,7 @@ class A0XContractTests(A0XTempTestCase):
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE), first,
         )
         self.assertEqual(
-            "88713dc61edc945f66fe027dc0819d2cdf087a670b427a1047c0eb844d852835",
+            "d3415b7c31b7cf73ff7b26c062807aea73ed28f34cfd59ccb31439ad8fbe7943",
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256,
         )
         for invalid_document, profile in (

@@ -1,0 +1,18 @@
+{
+  "artifact_class": "a0x-leg-freeze-manifest",
+  "claim_ids": [],
+  "empirical": true,
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "freeze_status": "frozen",
+  "identity": {
+    "leg": "a0",
+    "protected_tree_sha256": "334a24453b3f7449300df25174737ac92fdfd2914f72d7c83550685c8d7524bd",
+    "protocol_id": "a0x-a0-six-model-v1",
+    "selection_corpus_sha256": "cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295",
+    "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
+  },
+  "implementation_sha256": "b09e3a11553e783dad3011127e0a78c7cbb074f218a9b9d996b48a749eaf27af",
+  "protocol_sha256": "42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586",
+  "scientific_status": "exploratory"
+}

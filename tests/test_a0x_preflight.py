@@ -80,11 +80,11 @@ def valid_ccp_raw_observations() -> tuple[dict[str, object], dict[str, object]]:
 def valid_ccp_binary_binding() -> dict[str, str]:
     return {
         "path": "/private/tmp/commit-ci-preflight",
-        "source_commit": "866db18a571f55ed3d9b481d6c9c9c3bd5e98d55",
+        "source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904",
         "sha256": "a" * 64,
         "version_output": "commit-ci-preflight 0.1.0\n",
         "expected_path": "/private/tmp/commit-ci-preflight",
-        "expected_source_commit": "866db18a571f55ed3d9b481d6c9c9c3bd5e98d55",
+        "expected_source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904",
         "expected_sha256": "a" * 64,
         "expected_version_output": "commit-ci-preflight 0.1.0\n",
     }
@@ -118,6 +118,9 @@ class A0XPreflightTests(A0XTempTestCase):
             "ccp_observation": {
                 "pair_binding": binding.as_mapping(), "authorization_chain": chain,
             },
+            "material_contract_raw_sha256": "c" * 64,
+            "ccp_observation_path": "a0x-ccp-observation.json",
+            "ccp_observation_raw_sha256": "d" * 64,
             "authorization_chain": chain,
         }
         return arguments, {"dossier": dossier, "authorization": authorization, "chain": chain}
@@ -466,6 +469,9 @@ class A0XPreflightTests(A0XTempTestCase):
             "dossier_path": dossier, "expected_dossier_raw_sha256": hashlib.sha256(dossier.read_bytes()).hexdigest(),
             "authorization_path": authorization, "expected_authorization_raw_sha256": hashlib.sha256(authorization.read_bytes()).hexdigest(),
             "ccp_observation": observation,
+            "material_contract_raw_sha256": "c" * 64,
+            "ccp_observation_path": "a0x-ccp-observation.json",
+            "ccp_observation_raw_sha256": "d" * 64,
             "authorization_chain": authorization_documents(binding.as_mapping())[2],
         }
         for missing in ("dossier", "authorization"):

@@ -11,6 +11,13 @@
     "expert_validated",
     "pair_binding",
     "preflight_status",
+    "model_key",
+    "origin",
+    "endpoint_availability",
+    "source_head",
+    "material_contract_raw_sha256",
+    "ccp_observation_raw_sha256",
+    "ccp_observation_path",
     "scientific_status"
   ],
   "properties": {
@@ -41,7 +48,14 @@
     },
     "authorization_chain": {
       "$ref": "#/$defs/authorization_chain"
-    }
+    },
+    "model_key": {"type": "string", "minLength": 1},
+    "origin": {"$ref": "#/$defs/rev"},
+    "endpoint_availability": {"type": "object"},
+    "source_head": {"$ref": "#/$defs/rev"},
+    "material_contract_raw_sha256": {"$ref": "#/$defs/sha"},
+    "ccp_observation_raw_sha256": {"$ref": "#/$defs/sha"},
+    "ccp_observation_path": {"$ref": "#/$defs/path"}
   },
   "$defs": {
     "sha": {
@@ -290,7 +304,7 @@
       ],
       "properties": {
         "profile": {
-          "const": "a0x-approval-dossier-json-v1"
+          "const": "a0x-approval-dossier-json-v2"
         },
         "commitment_sha256": {
           "$ref": "#/$defs/sha"
@@ -306,7 +320,7 @@
       ],
       "properties": {
         "profile": {
-          "const": "a0x-execution-authorization-json-v1"
+          "const": "a0x-execution-authorization-json-v2"
         },
         "commitment_sha256": {
           "$ref": "#/$defs/sha"

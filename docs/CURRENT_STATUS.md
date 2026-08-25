@@ -121,6 +121,16 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
+The A0X six-model campaign is now at its frozen no-model checkpoint. Two
+independent legs preserve the historical A0 and A0-R1 rules, and twelve
+single-pair dossiers cover six exact model snapshots without pooling. Every
+dossier remains `approval_requested`; none authorizes material access. The
+complete local no-model qualification and independent architecture/science
+review now pass, and the exact freeze/dossier hashes are recorded. A0X is
+stopped at `sealed_gate_pending`: the consolidation commit is the next source
+anchor, no CCP exact-head qualification exists, and no pair is authorized for material
+execution. See [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
+
 The next scientific priority is human construct validation: three independent
 TRIZ experts, blinded cases, agreement and abstention receipts, and an explicit
 keep/amend decision. After that gate, the priority is one preregistered causal
@@ -132,9 +142,11 @@ See the [Roadmap](./ROADMAP.md) for the short sequence, the [Laboratory Master
 Plan](./LABORATORY_MASTER_PLAN.md) for dependencies and exit evidence, and the
 [Hypotheses and Falsification](./HYPOTHESES_AND_FALSIFICATION.md) contract for
 the normative interpretation rules.
-The current CCP coordination runbook is `commit-ci-preflight` `origin/main`
-`5f2ef66`: admission is host-wide and manual lock/lease quarantine is
-unsupported. The installed CCP preflight is currently fail-closed with an
-unsafe `.../quarantine` layout and an unreadable OrbStack Docker API; no
-material EXP-002 execution is permitted until the CCP owner restores a
-readable Admit/inactive/queue-0 gate.
+The current installed CCP producer is the separately qualified build from
+source commit `3fccc197e5055a2759ee7afe51b91133938ec904`, tree
+`9e478c1489a9926772e8ab8bea21bd57470494b6`, executable SHA-256
+`b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c`.
+Admission remains host-wide and manual lock/lease quarantine is unsupported.
+This installed producer identity does not authorize an A0X run: a fresh live
+Admit/inactive/queue-zero gate, exact-head qualification, and separate
+hash-bound pair authorization are still required.

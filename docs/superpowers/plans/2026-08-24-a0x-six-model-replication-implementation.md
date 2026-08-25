@@ -977,7 +977,7 @@ rtk git commit -m "feat: verify immutable A0X packages"
 
 **Interfaces:**
 - Consumes: Tasks 2-9.
-- Produces: `run_a0x_pair`, `verify_a0x_implementation`, `main` for fixed dossier execution, `make a0x-synthetic-verify`, and twelve argument-free material targets that remain blocked until Task 11 creates exact dossiers.
+- Produces: an internal one-pair lifecycle callable only as the direct child of CCP `guard exec`, `verify_a0x_implementation`, `main` for fixed dossier execution, `make a0x-synthetic-verify`, and twelve argument-free material targets that remain blocked until Task 11 creates exact dossiers. Matrix-V2 `run` qualifies the exact repository HEAD separately and never owns or nests the scientific lifecycle.
 
 - [ ] **Step 1: Write failing runner state and fixed-target tests**
 
@@ -1002,7 +1002,7 @@ Expected: FAIL on missing runner/scripts.
 
 - [ ] **Step 3: Implement one-pair orchestration**
 
-`run_a0x_pair` must verify the exact dossier and approval object, run static preflight, construct tokenizer then model, run the selected leg activation, seal activation hashes, construct the one-shot target capability, run the selected leg analysis, seal the first terminal package, verify protected inputs postflight, and release model references. It must never loop over models or legs and must refuse a non-empty output or existing terminal receipt.
+The private one-pair child must verify the exact dossier and approval object, run static preflight, construct tokenizer then model, run the selected leg activation, seal activation hashes, construct the one-shot target capability, run the selected leg analysis, seal the first terminal package, verify protected inputs postflight, and release model references. It must never loop over models or legs and must refuse a non-empty output or existing terminal receipt. The only public material entrypoint must prove that this child ran inside one injected/authentic `guard exec` boundary; no claim-free or unguarded lifecycle API may remain.
 
 - [ ] **Step 4: Implement no-model aggregate verification**
 
@@ -1027,7 +1027,7 @@ a0x-material-r1-gpt-neo-125m
 a0x-material-r1-qwen2-5-0-5b
 ```
 
-Each target invokes `scripts/a0x_material.py` with a single hard-coded dossier path and no user-selectable model, leg, target, output, cap, or retry argument. The script verifies live CCP `resource status --json` and `admission status --json` through the exact binary bound in the dossier, proceeds only on Admit/inactive/empty queue, and enters one CCP guard for the one fixed runner. Unknown output or binary/hash drift seals a pre-model `incompatible` outcome.
+Each target invokes `scripts/a0x_material.py` with a single hard-coded dossier path and no user-selectable model, leg, target, output, cap, or retry argument. The script verifies the exact-head canonical Matrix-V2 qualification receipt, then performs the hash-before-command sequence using the single frozen Matrix config for `plan`, `doctor`, and reviewed `dry-run`. The latter two commands must bind both runtime envelopes and their nested V1 runtime evidence. It proceeds only on Admit/inactive/empty queue and enters exactly one CCP `guard exec` whose direct fixed child is the one-pair runner. Unknown output, missing qualification, binary/hash drift, or config/policy drift seals or refuses a pre-model `incompatible` outcome. It never nests Matrix `run` inside `guard exec`.
 
 - [ ] **Step 6: Integrate repository checks**
 
@@ -1069,31 +1069,31 @@ rtk git commit -m "feat: integrate one-shot A0X runner"
 - Consumes: complete no-model system from Tasks 1-10 and exact source/model receipts.
 - Produces: two hash-bound frozen legs, twelve unapproved dossier objects, `verify_a0x_no_model`, `make a0x-no-model-verify`, campaign runbook, and the exact hashes needed for later operator approval.
 
-- [ ] **Step 1: Write failing frozen-package tests**
+- [x] **Step 1: Write failing frozen-package tests**
 
-Assert that both protocols copy every inherited corpus/split/control/statistic/threshold field by value, use new A0X IDs, bind the exact protected trees and selection manifest, and preserve the literal endpoints. Assert neither protocol nor implementation contains its own hash, and neither freeze manifest contains its own hash. Serialize and hash the two components, write and hash each freeze, then reconstruct the two derived `LegFreezeBinding` objects. Assert twelve dossiers equal the Cartesian product of two legs and six cards, with no multi-pair dossier and `authorization_status: approval_required`. Prove the six A0 dossiers share the one derived A0 binding and the six R1 dossiers share the one derived R1 binding; mutate one dossier to the wrong leg and one to the wrong freeze hash and require fail-closed rejection.
+Assert that both protocols copy every inherited corpus/split/control/statistic/threshold field by value, use new A0X IDs, bind the exact protected trees and selection manifest, and preserve the literal endpoints. Assert neither protocol nor implementation contains its own hash, and neither freeze manifest contains its own hash. Serialize and hash the two components, write and hash each freeze, then reconstruct the two derived `LegFreezeBinding` objects. Assert twelve dossiers equal the Cartesian product of two legs and six cards, with no multi-pair dossier and `dossier_status: approval_requested`. Prove the six A0 dossiers share the one derived A0 binding and the six R1 dossiers share the one derived R1 binding; mutate one dossier to the wrong leg and one to the wrong freeze hash and require fail-closed rejection. Task 11 creates no execution authorization and grants no run.
 
-- [ ] **Step 2: Run tests before generating freezes**
+- [x] **Step 2: Run tests before generating freezes**
 
 Run: `rtk env PYTHONPATH=src python3 -m unittest tests.test_a0x_frozen_package -v`
 
 Expected: FAIL because frozen A0X artifacts do not exist.
 
-- [ ] **Step 3: Generate protocols, implementations, freezes, and dossiers deterministically**
+- [x] **Step 3: Generate protocols, implementations, freezes, and dossiers deterministically**
 
 Run: `rtk env PYTHONPATH=src python3 -m latent_triz.a0x_freeze --root . --freeze-all --prepare-dossiers`
 
 Expected: two protocols, two implementation manifests, two freezes, and twelve dossiers; no model/tokenizer/target/CCP access.
 
-- [ ] **Step 4: Write the operator/Luna runbook**
+- [x] **Step 4: Write the operator/Luna runbook**
 
 Document the exact per-pair approval template, the corresponding fixed Make target, CCP prerequisites, read counters, caps, first-terminal publication rule, no-retry rule, cleanup evidence, and post-run verifier. State that Luna may invoke a fixed target only after the operator supplies authorization bound to the exact dossier SHA-256 and a primary reviewer confirms the exact CCP binary/hash and live gate.
 
-- [ ] **Step 5: Promote the no-model verifier to the frozen phase**
+- [x] **Step 5: Promote the no-model verifier to the frozen phase**
 
 Implement `verify_a0x_no_model(root)` as a strict superset of the synthetic verifier: require both frozen protocols/implementations, both freeze manifests, all twelve dossier shapes, exact source/test hash bindings, and the fixed Make-target-to-dossier bijection. Add `a0x-no-model-verify` to `.PHONY`; it must invoke `scripts/a0x_contract_check.py --phase frozen` and the focused test suite. Keep `a0x-synthetic-verify` for earlier implementation checkpoints.
 
-- [ ] **Step 6: Run complete synthetic qualification**
+- [x] **Step 6: Run complete synthetic qualification**
 
 Run: `rtk make a0x-no-model-verify`
 
@@ -1105,11 +1105,11 @@ Run: `rtk git diff --check`
 
 Expected: all PASS; output explicitly reports zero model loads, zero material tokenizer constructions, zero sealed-target reads, zero CCP invocations, and zero remote mutations.
 
-- [ ] **Step 7: Perform fresh architecture/science review before committing**
+- [x] **Step 7: Perform fresh architecture/science review before committing**
 
 Reviewer checks exact endpoint semantics, cap math, target capability, six identity cards, twelve dossier isolation, no-pooling guards, and absence of imports from EXP-002/R5. Any correction changes bound hashes and requires dossier regeneration before commit.
 
-- [ ] **Step 8: Commit exact Task 11 paths**
+- [x] **Step 8: Commit exact Task 11 paths**
 
 ```bash
 rtk git add -- experiments/a0x-six-model/a0/protocol.json experiments/a0x-six-model/a0/implementation.json experiments/a0x-six-model/r1/protocol.json experiments/a0x-six-model/r1/implementation.json experiments/a0x-six-model/freeze/a0-freeze.json experiments/a0x-six-model/freeze/r1-freeze.json experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json experiments/a0x-six-model/approval-dossiers/a0/qwen3_0_6b_base.json experiments/a0x-six-model/approval-dossiers/a0/gpt2.json experiments/a0x-six-model/approval-dossiers/a0/smollm2_135m.json experiments/a0x-six-model/approval-dossiers/a0/gpt_neo_125m.json experiments/a0x-six-model/approval-dossiers/a0/qwen2_5_0_5b.json experiments/a0x-six-model/approval-dossiers/r1/smollm2_360m.json experiments/a0x-six-model/approval-dossiers/r1/qwen3_0_6b_base.json experiments/a0x-six-model/approval-dossiers/r1/gpt2.json experiments/a0x-six-model/approval-dossiers/r1/smollm2_135m.json experiments/a0x-six-model/approval-dossiers/r1/gpt_neo_125m.json experiments/a0x-six-model/approval-dossiers/r1/qwen2_5_0_5b.json docs/A0X_SIX_MODEL_CAMPAIGN.md tests/test_a0x_frozen_package.py docs/LABORATORY_MASTER_PLAN.md docs/PERSISTENT_GOAL.txt Makefile

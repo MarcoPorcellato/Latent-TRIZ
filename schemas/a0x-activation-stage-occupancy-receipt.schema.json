@@ -133,13 +133,13 @@
         "dossier_commitment": {
           "allOf": [
             {"$ref": "#/$defs/commitment"},
-            {"properties": {"profile": {"const": "a0x-approval-dossier-json-v1"}}}
+            {"properties": {"profile": {"const": "a0x-approval-dossier-json-v2"}}}
           ]
         },
         "authorization_commitment": {
           "allOf": [
             {"$ref": "#/$defs/commitment"},
-            {"properties": {"profile": {"const": "a0x-execution-authorization-json-v1"}}}
+            {"properties": {"profile": {"const": "a0x-execution-authorization-json-v2"}}}
           ]
         }
       }

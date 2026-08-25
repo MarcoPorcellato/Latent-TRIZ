@@ -909,6 +909,48 @@ Proceed only when the predecessor result justifies the next cost:
 Cost reduction never weakens an evidence gate. `RUNNING`, partial tests, source
 inspection, or a receipt for another commit are not a pass.
 
+## A0X six-model A0/A0-R1 replication tranche
+
+A0X is the bounded model-family replication route for the six exact snapshots
+that were acquired after the original Pythia work. It is not an alternative to
+the human H1 gate and does not pool outcomes across models or legs.
+
+The preparatory dependency chain is:
+
+```text
+historical A0 and A0-R1 rules
+        -> protected trees and public selection identities
+        -> exact source/test implementation bindings
+        -> one freeze per leg
+        -> six approval-requested dossiers per leg
+        -> no-model qualification and independent review
+        -> separate exact-head qualification and approval for one pair
+        -> first terminal outcome and immutable publication
+```
+
+Tasks 10 and 11 have completed offline implementation, final no-model
+qualification, and independent review. The two frozen legs and twelve
+pair-isolated dossiers are recorded with exact hashes; the consolidation
+commit becomes the live source anchor for `sealed_gate_pending`. Task 12 is not authorized. The authoritative
+operator-facing contract is
+[`A0X_SIX_MODEL_CAMPAIGN.md`](./A0X_SIX_MODEL_CAMPAIGN.md).
+
+A0X acceptance criteria are:
+
+- inherited corpus, split, control, statistic, threshold, and endpoint rules
+  are copied by value while historical model identity is not misrepresented;
+- six exact cards form a complete two-leg by six-model Cartesian product;
+- every dossier binds one and only one leg/model pair, dense cap, output path,
+  material contract, and future authorization path;
+- the verifier rejects cross-leg, cross-model, wrong-freeze, source/test drift,
+  cap overflow, and Make-target mapping drift;
+- no-model qualification proves zero model loads, tokenizer constructions,
+  sealed-target reads, CCP invocations, and remote mutations;
+- each later material pair has a new exact authorization and publishes its
+  first terminal outcome without retry, tuning, substitution, or pooling;
+- interpretation remains E0 exploratory and does not promote a general TRIZ,
+  causal, or training-data claim.
+
 ## Improvement-tranche checklist
 
 - [x] Preserve A0/R1 positives, seven-model comparative nulls, and the R3
@@ -932,6 +974,10 @@ inspection, or a receipt for another commit are not a pass.
   SmolLM2-135M without conditioning on prior model scores.
 - [ ] Acquire, integrity-verify, feasibility-test, and execute the two new
   candidates under separate exact approvals and one-run limits.
+- [x] Freeze the A0X two-leg, six-model no-material contract and prepare twelve
+  separate `approval_requested` dossiers.
+- [x] Qualify and independently review the complete A0X no-model package, then
+  stop before any Task-12 material execution.
 
 The unchecked items are genuine prerequisites, not missing documentation. A
 future run may not be called WLT or SLT evidence while any applicable item is

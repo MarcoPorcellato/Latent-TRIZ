@@ -24,6 +24,7 @@ from .a0x_contract import (
     strict_json_object,
 )
 from .a0x_execution import validate_authorization_chain
+from latent_triz.validator import validate
 
 
 class A0XPreflightError(ValueError):
@@ -50,7 +51,7 @@ _ADMISSION_FIELDS = frozenset((
     "process_visibility_note",
 ))
 _VISIBILITY_NOTE = "No process visible in the local shell does not prove global inactivity."
-_CCP_SOURCE_COMMIT = "866db18a571f55ed3d9b481d6c9c9c3bd5e98d55"
+_CCP_SOURCE_COMMIT = "3fccc197e5055a2759ee7afe51b91133938ec904"
 
 
 @dataclass(frozen=True)
@@ -258,6 +259,9 @@ def require_empty_output(path: Path) -> None:
 def parse_ccp_observation(
     *, resource_raw: bytes, admission_raw: bytes, binary: Mapping[str, str],
     pair_binding: PairBinding, authorization_chain: Mapping[str, Any], output_dir: Path,
+    source_head: str | None = None, material_contract_raw_sha256: str | None = None,
+    ccp_trace: list[Mapping[str, Any]] | None = None, dry_run_reviewed: bool | None = None,
+    claim_identity: str | None = None, run_count: int | None = None,
 ) -> dict[str, object]:
     """Persist and validate one exact privacy-minimized CCP observation."""
     _validate_binary_binding(binary)
@@ -297,6 +301,18 @@ def parse_ccp_observation(
         "admission_raw_sha256": hashlib.sha256(admission_raw).hexdigest(),
         "admission_raw_bytes": len(admission_raw),
     }
+    extension = (source_head, material_contract_raw_sha256, ccp_trace, dry_run_reviewed, claim_identity, run_count)
+    if any(value is not None for value in extension):
+        if not (_REVISION.fullmatch(str(source_head)) and _sha(material_contract_raw_sha256) and isinstance(ccp_trace, list) and isinstance(dry_run_reviewed, bool) and isinstance(run_count, int) and run_count in (0, 1)):
+            raise A0XPreflightError("extended CCP observation binding is invalid")
+        receipt.update({"source_head": source_head, "material_contract_raw_sha256": material_contract_raw_sha256, "ccp_trace": ccp_trace, "dry_run_reviewed": dry_run_reviewed, "claim_identity": claim_identity, "run_count": run_count})
+    schema_path = Path(__file__).resolve().parents[2] / "schemas/a0x-ccp-observation.schema.json"
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XPreflightError("CCP observation schema is unavailable") from error
+    if validate(receipt, schema):
+        raise A0XPreflightError("CCP observation does not satisfy its schema")
     _exclusive_write(output_dir / "a0x-ccp-observation.json", _stable_json_bytes(receipt))
     return receipt
 
@@ -307,7 +323,8 @@ def verify_static_preflight(
     protected_trees: Sequence[tuple[str | Path, Mapping[str, Any]]], protected_tree_verifier: Any,
     dossier_path: str | Path, expected_dossier_raw_sha256: str, authorization_path: str | Path,
     expected_authorization_raw_sha256: str, ccp_observation: Mapping[str, Any],
-    authorization_chain: Mapping[str, Any],
+    authorization_chain: Mapping[str, Any], material_contract_raw_sha256: str,
+    ccp_observation_path: str, ccp_observation_raw_sha256: str,
 ) -> dict[str, object]:
     """Validate every material no-load prerequisite and otherwise fail closed."""
     if expected_origin != observed_origin or not _REVISION.fullmatch(expected_origin):
@@ -316,6 +333,8 @@ def verify_static_preflight(
         chain = validate_authorization_chain(authorization_chain)
     except Exception as error:
         raise A0XPreflightError("preflight authorization chain is invalid") from error
+    if not _sha(material_contract_raw_sha256) or not _sha(ccp_observation_raw_sha256) or not _safe_relative(ccp_observation_path):
+        raise A0XPreflightError("hash-bound CCP/preflight provenance is invalid")
     values = dict(environment)
     if values.get("HF_HUB_OFFLINE") != "1" or values.get("TRANSFORMERS_OFFLINE") != "1":
         raise A0XPreflightError("offline environment is not enforced")
@@ -353,7 +372,7 @@ def verify_static_preflight(
     except Exception as error:
         raise A0XPreflightError("authorization source chain does not bind preflight inputs") from error
     _verify_ccp_observation(ccp_observation, pair_binding, chain)
-    return {
+    receipt = {
         "artifact_class": "a0x-preflight-receipt",
         "empirical": True,
         "scientific_status": "exploratory",
@@ -366,7 +385,19 @@ def verify_static_preflight(
         "model_key": card.model_key,
         "origin": observed_origin,
         "endpoint_availability": endpoint,
+        "source_head": observed_origin,
+        "material_contract_raw_sha256": material_contract_raw_sha256,
+        "ccp_observation_path": ccp_observation_path,
+        "ccp_observation_raw_sha256": ccp_observation_raw_sha256,
     }
+    schema_path = Path(__file__).resolve().parents[2] / "schemas/a0x-preflight-receipt.schema.json"
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XPreflightError("preflight receipt schema is unavailable") from error
+    if validate(receipt, schema):
+        raise A0XPreflightError("preflight receipt does not satisfy its schema")
+    return receipt
 
 
 def _require_common_card_boundary(value: Mapping[str, Any]) -> None:
@@ -465,14 +496,27 @@ def _verify_fact_provenance(root: Path, provenance: Mapping[str, Any], label: st
 def _verify_ccp_observation(
     observation: Mapping[str, Any], pair_binding: PairBinding, authorization_chain: Mapping[str, Any],
 ) -> None:
-    fields = {
+    base_fields = {
         "artifact_class", "empirical", "scientific_status", "evidence_eligible", "expert_validated", "claim_ids",
         "pair_binding", "authorization_chain", "read_counter", "admission_status", "binary", "resource", "admission",
         "resource_raw_path", "resource_raw_sha256", "resource_raw_bytes", "admission_raw_path",
         "admission_raw_sha256", "admission_raw_bytes",
     }
-    if not isinstance(observation, Mapping) or set(observation) != fields or observation.get("artifact_class") != "a0x-ccp-observation":
+    pre_guard_fields = base_fields | {
+        "source_head", "material_contract_raw_sha256", "policy_raw_sha256", "ccp_trace",
+        "dry_run_reviewed", "claim_identity", "claim_sha256",
+        "guard_exec_argv_commitment", "run_count",
+    }
+    observed_fields = frozenset(observation) if isinstance(observation, Mapping) else frozenset()
+    if not isinstance(observation, Mapping) or observed_fields not in {frozenset(base_fields), frozenset(pre_guard_fields)} or observation.get("artifact_class") != "a0x-ccp-observation":
         raise A0XPreflightError("CCP observation is invalid")
+    schema_path = Path(__file__).resolve().parents[2] / "schemas/a0x-ccp-observation.schema.json"
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XPreflightError("CCP observation schema is unavailable") from error
+    if validate(observation, schema):
+        raise A0XPreflightError("CCP observation does not satisfy its schema")
     if observation.get("pair_binding") != pair_binding.as_mapping():
         raise A0XPreflightError("CCP observation pair binding mismatch")
     try:
@@ -494,6 +538,35 @@ def _verify_ccp_observation(
     for label in ("resource", "admission"):
         if not _sha(observation.get(f"{label}_raw_sha256")) or not _positive_int(observation.get(f"{label}_raw_bytes"), f"{label} raw bytes"):
             raise A0XPreflightError("CCP observation raw binding is invalid")
+    if set(observation) == pre_guard_fields:
+        expected_commands = [
+            "admission status --json", "resource status --json", "plan --json",
+            "doctor --json", "dry-run --json",
+        ]
+        # These are execution boundaries, not merely descriptive labels.
+        expected_argv = [
+            ["admission", "status", "--json"],
+            ["resource", "status", "--json"],
+            ["plan", "--config", ".commit-ci-preflight.toml", "--json"],
+            ["doctor", "--config", ".commit-ci-preflight.toml", "--json"],
+            ["dry-run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"],
+        ]
+        trace = observation.get("ccp_trace")
+        if (
+            not _REVISION.fullmatch(str(observation.get("source_head")))
+            or not _sha(observation.get("material_contract_raw_sha256"))
+            or not _sha(observation.get("policy_raw_sha256"))
+            or observation.get("dry_run_reviewed") is not True
+            or not isinstance(observation.get("claim_identity"), str)
+            or not observation["claim_identity"]
+            or not _sha(observation.get("claim_sha256"))
+            or not _sha(observation.get("guard_exec_argv_commitment"))
+            or observation.get("run_count") != 0
+            or not isinstance(trace, list)
+            or [item.get("command") for item in trace if isinstance(item, Mapping)] != expected_commands
+            or [item.get("argv") for item in trace if isinstance(item, Mapping)] != expected_argv
+        ):
+            raise A0XPreflightError("pre-guard CCP observation binding is invalid")
 
 
 def _validate_binary_binding(binary: Mapping[str, str]) -> None:

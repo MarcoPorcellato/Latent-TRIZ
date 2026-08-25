@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "claim_version", "pair_binding", "authorization_chain", "authorization_id", "attempt_id", "material_contract_raw_sha256", "state"],
+  "properties": {
+    "artifact_class": {"const": "a0x-attempt-claim"},
+    "claim_version": {"const": "a0x-attempt-claim-v1"},
+    "pair_binding": {"$ref": "#/$defs/pair"},
+    "authorization_chain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dossier_commitment", "authorization_commitment"],
+      "properties": {
+        "dossier_commitment": {"$ref": "#/$defs/commitment"},
+        "authorization_commitment": {"$ref": "#/$defs/commitment"}
+      }
+    },
+    "authorization_id": {"type": "string", "minLength": 1},
+    "attempt_id": {"type": "string", "minLength": 1},
+    "material_contract_raw_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "state": {"const": "reserved"}
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "rev": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "commitment": {"type": "object", "additionalProperties": false, "required": ["profile", "commitment_sha256"], "properties": {"profile": {"enum": ["a0x-approval-dossier-json-v2", "a0x-execution-authorization-json-v2"]}, "commitment_sha256": {"$ref": "#/$defs/sha"}}},
+    "dense": {"type": "object", "additionalProperties": false, "required": ["leg", "cases", "view_site_count", "endpoint_count", "hidden_width", "scalar_bytes", "vector_count", "dense_bytes", "dense_copy_count", "atomic_dense_bytes", "index_copy_count", "index_reservation_bytes", "payload_allowance_bytes", "total_bytes", "cap_bytes"], "properties": {"leg": {"enum": ["a0", "r1"]}, "cases": {"const": 48}, "view_site_count": {"type": "integer", "minimum": 1}, "endpoint_count": {"type": "integer", "minimum": 1}, "hidden_width": {"type": "integer", "minimum": 1}, "scalar_bytes": {"const": 4}, "vector_count": {"type": "integer", "minimum": 1}, "dense_bytes": {"type": "integer", "minimum": 1}, "dense_copy_count": {"const": 2}, "atomic_dense_bytes": {"type": "integer", "minimum": 1}, "index_copy_count": {"const": 2}, "index_reservation_bytes": {"type": "integer", "minimum": 1}, "payload_allowance_bytes": {"type": "integer", "minimum": 1}, "total_bytes": {"type": "integer", "minimum": 1}, "cap_bytes": {"type": "integer", "minimum": 1}}},
+    "pair": {"type": "object", "additionalProperties": false, "required": ["binding_profile", "dense_bound", "leg", "leg_freeze_sha256", "model_id", "model_key", "output_path", "revision", "run_id"], "properties": {"binding_profile": {"const": "a0x-pair-scope-v2"}, "dense_bound": {"$ref": "#/$defs/dense"}, "leg": {"enum": ["a0", "r1"]}, "leg_freeze_sha256": {"$ref": "#/$defs/sha"}, "model_id": {"type": "string", "minLength": 1}, "model_key": {"enum": ["smollm2_360m", "qwen3_0_6b_base", "gpt2", "smollm2_135m", "gpt_neo_125m", "qwen2_5_0_5b"]}, "output_path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"}, "revision": {"$ref": "#/$defs/rev"}, "run_id": {"type": "string", "minLength": 1}}}
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "artifact_class": "a0x-authorization-dossier",
+  "claim_ids": [],
+  "commitment_profile": "a0x-approval-dossier-json-v2",
+  "dossier_status": "approval_requested",
+  "empirical": true,
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "future_authorization_path": "results/a0x/r1/qwen3_0_6b_base/a0x-r1-qwen3_0_6b_base-da87bfb6-attempt-01/execution-authorization.json",
+  "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
+  "material_contract_raw_sha256": "e56bf9814a150a610536a0e68f4b6ce476971ee020e66057354b4ed66fc5b196",
+  "pair_binding": {
+    "binding_profile": "a0x-pair-scope-v2",
+    "dense_bound": {
+      "atomic_dense_bytes": 1572864,
+      "cap_bytes": 4194304,
+      "cases": 48,
+      "dense_bytes": 786432,
+      "dense_copy_count": 2,
+      "endpoint_count": 2,
+      "hidden_width": 1024,
+      "index_copy_count": 2,
+      "index_reservation_bytes": 1048576,
+      "leg": "r1",
+      "payload_allowance_bytes": 524288,
+      "scalar_bytes": 4,
+      "total_bytes": 3145728,
+      "vector_count": 192,
+      "view_site_count": 2
+    },
+    "leg": "r1",
+    "leg_freeze_sha256": "767373b57b51a8f4cfac6205e404caeccaf0cdf886850fcaa9471ad010d633c5",
+    "model_id": "Qwen/Qwen3-0.6B-Base",
+    "model_key": "qwen3_0_6b_base",
+    "output_path": "results/a0x/r1/qwen3_0_6b_base/a0x-r1-qwen3_0_6b_base-da87bfb6-attempt-01",
+    "revision": "da87bfb608c14b7cf20ba1ce41287e8de496c0cd",
+    "run_id": "a0x-r1-qwen3_0_6b_base-da87bfb6-attempt-01"
+  },
+  "scientific_status": "exploratory"
+}

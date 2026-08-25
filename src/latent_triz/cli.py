@@ -820,6 +820,8 @@ def _run_a0r1_verify(root: str) -> int:
     except (A0R1VerifyError, OSError, ValueError) as exc:
         _print_error(f"a0r1-verify: {exc}")
         return 1
+    print(stable_json_dumps(summary))
+    return 0
 
 
 def _run_a0x_synthetic_verify(root: str) -> int:
@@ -829,8 +831,6 @@ def _run_a0x_synthetic_verify(root: str) -> int:
     except A0XRunnerError as exc:
         _print_error(str(exc))
         return 1
-    print(stable_json_dumps(summary))
-    return 0
 
 
 def _run_a0r1_freeze(

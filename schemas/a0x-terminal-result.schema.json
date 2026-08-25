@@ -1425,7 +1425,7 @@
       ],
       "properties": {
         "profile": {
-          "const": "a0x-approval-dossier-json-v1"
+          "const": "a0x-approval-dossier-json-v2"
         },
         "commitment_sha256": {
           "$ref": "#/$defs/sha"
@@ -1441,7 +1441,7 @@
       ],
       "properties": {
         "profile": {
-          "const": "a0x-execution-authorization-json-v1"
+          "const": "a0x-execution-authorization-json-v2"
         },
         "commitment_sha256": {
           "$ref": "#/$defs/sha"

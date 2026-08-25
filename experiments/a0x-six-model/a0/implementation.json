@@ -1,0 +1,248 @@
+{
+  "artifact_class": "a0x-leg-implementation",
+  "claim_ids": [],
+  "empirical": true,
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "identity": {
+    "leg": "a0",
+    "protected_tree_sha256": "334a24453b3f7449300df25174737ac92fdfd2914f72d7c83550685c8d7524bd",
+    "protocol_id": "a0x-a0-six-model-v1",
+    "selection_corpus_sha256": "cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295",
+    "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
+  },
+  "implementation_files": [
+    {
+      "bytes": 982,
+      "path": "scripts/a0x_contract_check.py",
+      "sha256": "a5fb96db4607b52d38ff9feb017f0e37d5c325e6cf133bc2a2c52880ad911b2f"
+    },
+    {
+      "bytes": 1325,
+      "path": "scripts/a0x_material.py",
+      "sha256": "5dd90df41da6429dd312e48bbc8123f707296b53d04c2c19eb181636b7d796f0"
+    },
+    {
+      "bytes": 24871,
+      "path": "src/latent_triz/a0x_a0_activations.py",
+      "sha256": "70e70b0a1ba12331e2242fcfcdf8e354972e1fd23a7b0b1f1bb3eb4e1cd93b5a"
+    },
+    {
+      "bytes": 22749,
+      "path": "src/latent_triz/a0x_a0_analysis.py",
+      "sha256": "2faf8552aabc14e2cf757bc54938c60cda9fa4368e9618c1907a03f9b20b7f93"
+    },
+    {
+      "bytes": 26193,
+      "path": "src/latent_triz/a0x_contract.py",
+      "sha256": "f5bf81c32da483a9fe36664268c8a2374659999bbe5347855da380541070a5a3"
+    },
+    {
+      "bytes": 33183,
+      "path": "src/latent_triz/a0x_execution.py",
+      "sha256": "fb308fab14319f3a60c72016fbb77ebe91667ca5a28f17748008f56772c26721"
+    },
+    {
+      "bytes": 43454,
+      "path": "src/latent_triz/a0x_freeze.py",
+      "sha256": "06bae20f3f103a292c84916f357716ec0be67b54ce80d70c55b2c47702acd6dd"
+    },
+    {
+      "bytes": 13940,
+      "path": "src/latent_triz/a0x_model_adapter.py",
+      "sha256": "590d56927e10f53084761498e8bcd18dda5ec90ab41e1eded0ece07b6c3dc3f1"
+    },
+    {
+      "bytes": 37799,
+      "path": "src/latent_triz/a0x_preflight.py",
+      "sha256": "0a36eae93728848ab467b6831e5572f96df5a26fda9c2bc600fc7b9ab57c1540"
+    },
+    {
+      "bytes": 16035,
+      "path": "src/latent_triz/a0x_r1_analysis.py",
+      "sha256": "51d7cd8d0ccdac02b58b4ce820ed2aacb687b14814dcc82fe79f6e536ab130cc"
+    },
+    {
+      "bytes": 1120,
+      "path": "src/latent_triz/a0x_r1_activations.py",
+      "sha256": "27bb51d3a0a2fecdab3cb217a2d8bfd0021c6a6727173de2787b618b56dbfc7c"
+    },
+    {
+      "bytes": 28879,
+      "path": "src/latent_triz/a0x_report.py",
+      "sha256": "90f3d7b595052487dd4089efba8d079ebed28503be3add87fdf789c30c1836cb"
+    },
+    {
+      "bytes": 80910,
+      "path": "src/latent_triz/a0x_runner.py",
+      "sha256": "0101f1cfa690a23e3df90a7f62211f0eef60310851e160c059e096f6bac4f4bc"
+    },
+    {
+      "bytes": 23250,
+      "path": "src/latent_triz/a0x_verify.py",
+      "sha256": "17d6cb385025c1c7ba11136ef88e8ff1303a4c1cb8c036c996008185f3ff9c0d"
+    },
+    {
+      "bytes": 19092,
+      "path": "tests/test_a0x_activations.py",
+      "sha256": "8f531a8f1ac7006c9b42ce98ebe7d3c676f049b251c903fe508a4cdbd309bbea"
+    },
+    {
+      "bytes": 20663,
+      "path": "tests/test_a0x_a0_analysis.py",
+      "sha256": "422f19c46b864a2d088e9624011d421b1ac7c77435e302456417b85e256f043b"
+    },
+    {
+      "bytes": 14542,
+      "path": "tests/test_a0x_contract.py",
+      "sha256": "a1e34b1c856258ed7a37b4e849b5429651b35ab0e26ab4013a3b992dae80a299"
+    },
+    {
+      "bytes": 1261,
+      "path": "tests/test_a0x_contract_check.py",
+      "sha256": "7fd9eace4a3871337ad98114ed54e692be3398132a813302bc2efec9ecc5f43d"
+    },
+    {
+      "bytes": 31356,
+      "path": "tests/test_a0x_execution.py",
+      "sha256": "ff0a4da825fc16201616bb90ae55358f0a0f004089417a5c26c495f8776a8c88"
+    },
+    {
+      "bytes": 12318,
+      "path": "tests/test_a0x_freeze.py",
+      "sha256": "357c61cef7a9631727556af8dea6d982d378380c2ef4ad2189436bd3a03bbff1"
+    },
+    {
+      "bytes": 10399,
+      "path": "tests/test_a0x_frozen_package.py",
+      "sha256": "3689fa1d31565704cbd8f9df2a97b24a65274e55f318f3ef750dec424aae16ac"
+    },
+    {
+      "bytes": 38096,
+      "path": "tests/test_a0x_material.py",
+      "sha256": "183c53d8021380f4acae004dd2d0342891ee42eaf489b15bfb5ada424aec59b2"
+    },
+    {
+      "bytes": 25659,
+      "path": "tests/test_a0x_preflight.py",
+      "sha256": "f84d904c40a5cd1b062ee5469cb019a5fd8550a61aa1d52c4f25bbf43c85bf20"
+    },
+    {
+      "bytes": 9904,
+      "path": "tests/test_a0x_r1_analysis.py",
+      "sha256": "ab1d4d1c642a7a7b8c7a1a1222937775e38fd4898601315c4fe5236d166bb0f4"
+    },
+    {
+      "bytes": 16938,
+      "path": "tests/test_a0x_report.py",
+      "sha256": "11a7bc66633b04c2aa19f25191efb1ac30ba4bca3e24074c0a63cdab084316a6"
+    },
+    {
+      "bytes": 33490,
+      "path": "tests/test_a0x_runner.py",
+      "sha256": "b676535d4e4fd22c578cfb08badca1bb8bdbb2175f0878a9d15eaf154f5b4b55"
+    },
+    {
+      "bytes": 19958,
+      "path": "tests/test_a0x_schemas.py",
+      "sha256": "c2d899e7d56e7f8af36f46029911a35531a31978473dce0a715eac962adc5cc4"
+    },
+    {
+      "bytes": 18292,
+      "path": "tests/test_a0x_verify.py",
+      "sha256": "3fc6a7a5273aa743f6e6c5e7a0f9a07830a93ecec9f8e7a7d2e2d6a546409e74"
+    }
+  ],
+  "implementation_paths": [
+    "scripts/a0x_contract_check.py",
+    "scripts/a0x_material.py",
+    "src/latent_triz/a0x_a0_activations.py",
+    "src/latent_triz/a0x_a0_analysis.py",
+    "src/latent_triz/a0x_contract.py",
+    "src/latent_triz/a0x_execution.py",
+    "src/latent_triz/a0x_freeze.py",
+    "src/latent_triz/a0x_model_adapter.py",
+    "src/latent_triz/a0x_preflight.py",
+    "src/latent_triz/a0x_r1_analysis.py",
+    "src/latent_triz/a0x_r1_activations.py",
+    "src/latent_triz/a0x_report.py",
+    "src/latent_triz/a0x_runner.py",
+    "src/latent_triz/a0x_verify.py",
+    "tests/test_a0x_activations.py",
+    "tests/test_a0x_a0_analysis.py",
+    "tests/test_a0x_contract.py",
+    "tests/test_a0x_contract_check.py",
+    "tests/test_a0x_execution.py",
+    "tests/test_a0x_freeze.py",
+    "tests/test_a0x_frozen_package.py",
+    "tests/test_a0x_material.py",
+    "tests/test_a0x_preflight.py",
+    "tests/test_a0x_r1_analysis.py",
+    "tests/test_a0x_report.py",
+    "tests/test_a0x_runner.py",
+    "tests/test_a0x_schemas.py",
+    "tests/test_a0x_verify.py"
+  ],
+  "implementation_status": "frozen_before_model_output",
+  "inherited_rules": {
+    "classifier": {
+      "alpha": 1.0,
+      "decision_threshold": 0.0,
+      "name": "l2_regularized_linear_least_squares",
+      "preprocessing": "train_fold_zscore"
+    },
+    "cross_validation": {
+      "group": "problem_family_id",
+      "method": "leave_one_domain_out"
+    },
+    "epistemic_boundary": {
+      "claim_ids": [],
+      "empirical": true,
+      "evidence_eligible": false,
+      "expert_validated": false,
+      "scientific_status": "exploratory"
+    },
+    "layer_index_semantics": "hidden_states_tuple_index_including_embedding_at_zero",
+    "paired_family_success": "segmentation_like_score_strictly_greater_than_inversion_like_score",
+    "permutations": {
+      "budget": 199,
+      "correction": "max_statistic_across_preregistered_layers_and_token_sites",
+      "scheme": "shared_independent_within_family_label_swaps",
+      "seed": 20260814
+    },
+    "primary_aggregation": "maximum_family_success_count_across_the_12_preregistered_layer_site_combinations",
+    "primary_view": "problem_plus_transformation",
+    "sensitivity_views": [
+      "transformation_only",
+      "problem_plus_solution"
+    ],
+    "sentinel_text": "Analysis anchor:",
+    "surface_baseline_view": "problem_only",
+    "surface_margin": "maximum_primary_macro_f1_minus_maximum_problem_only_sentinel_macro_f1",
+    "token_site_applicability": {
+      "problem_only": [
+        "sentinel"
+      ],
+      "problem_plus_solution": [
+        "sentinel",
+        "final_transformation_token",
+        "mean_transformation_span"
+      ],
+      "problem_plus_transformation": [
+        "sentinel",
+        "final_transformation_token",
+        "mean_transformation_span"
+      ],
+      "transformation_only": [
+        "sentinel",
+        "final_transformation_token",
+        "mean_transformation_span"
+      ]
+    }
+  },
+  "model_output_accessed": false,
+  "scientific_status": "exploratory",
+  "sealed_targets_accessed": false,
+  "source_implementation_path": "experiments/a0-automated-weak-proxy/implementation.json",
+  "source_implementation_raw_sha256": "2d08085d8cfc566f62b1b414c6ca09ad23af8df67de0fbd6876a896783721df9"
+}

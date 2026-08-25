@@ -38,6 +38,7 @@ def verify_a0x_package(*, package_root:str|Path, repository_root:str|Path, leg_f
             if _pair(value).as_mapping()!=pair.as_mapping() or (role!="authorization_record" and not isinstance(value.get("authorization_chain"),Mapping)): raise A0XVerificationError("artifact pair/chain differs")
         values[role]=value; raws[role]=raw
     _sources(repo,ledgers["source_inputs"],dossier_path,dossier_raw,authorization_path,auth_raw,raws,seen)
+    _ccp_preflight_link(values, raws)
     _external(repo,ledgers["external_outputs"],values,pair,seen); _residue(repo,ledgers["retained_residue"],seen)
     _matrix(manifest,values,raws,leg_freeze); _root(root,root_raw,manifest_raw,ledgers,pair)
     try:
@@ -92,6 +93,39 @@ def _external(repo:Path,ledger:Sequence[Mapping[str,Any]],values:Mapping[str,Map
     for e in ledger:
         p=_safe(repo,e["repository_relative_path"],e["role"]); _unique(p,seen,e["role"]); raw=_read(p,e["role"])
         if len(raw)!=e["bytes"] or _sha(raw)!=e["raw_sha256"]: raise A0XVerificationError("external raw differs")
+
+def _ccp_preflight_link(values:Mapping[str,Mapping[str,Any]],raws:Mapping[str,bytes])->None:
+    """When a final guarded observation is packaged, bind preflight to its immutable pre-run bytes."""
+    observation, receipt = values.get("ccp_observation"), values.get("preflight_receipt")
+    if not isinstance(observation,Mapping) or not isinstance(receipt,Mapping) or "pre_run_observation" not in observation:
+        return
+    pre=observation["pre_run_observation"]
+    if not isinstance(pre,Mapping): raise A0XVerificationError("guarded pre-run observation is malformed")
+    try: schema=json.loads((_ROOT/"schemas/a0x-ccp-observation.schema.json").read_text())
+    except (OSError,json.JSONDecodeError) as error: raise A0XVerificationError("pre-run observation schema unavailable") from error
+    pre_guard=schema.get("$defs",{}).get("pre_guard_observation")
+    if not isinstance(pre_guard,Mapping): raise A0XVerificationError("pre-run observation shape schema unavailable")
+    wrapper={"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":schema["$defs"],"$ref":"#/$defs/pre_guard_observation"}
+    issues=validate(pre,wrapper)
+    if issues: raise A0XVerificationError(f"pre-run observation shape rejected: {issues[0].message}")
+    expected_argv=[
+        ["admission","status","--json"], ["resource","status","--json"],
+        ["plan","--config",".commit-ci-preflight.toml","--json"],
+        ["doctor","--config",".commit-ci-preflight.toml","--json"],
+        ["dry-run","--config",".commit-ci-preflight.toml","--repository",".","--cache-dir","/Users/marco1/Library/Caches/commit-ci-preflight-build-v1","--json"],
+    ]
+    trace=pre.get("ccp_trace")
+    if not isinstance(trace,list) or [item.get("argv") for item in trace if isinstance(item,Mapping)]!=expected_argv:
+        raise A0XVerificationError("pre-run observation argv differs")
+    for key,value in pre.items():
+        if key!="run_count" and observation.get(key)!=value: raise A0XVerificationError("final observation pre-run projection differs")
+    run_record=observation.get("run_record")
+    state=run_record.get("state") if isinstance(run_record,Mapping) else None
+    if not isinstance(state,Mapping) or state.get("argv_commitment")!=pre.get("guard_exec_argv_commitment"):
+        raise A0XVerificationError("final observation guard commitment differs")
+    raw=(json.dumps(pre,sort_keys=True,separators=(",",":"),ensure_ascii=False)).encode()
+    if observation.get("pre_run_observation_sha256")!=_sha(raw): raise A0XVerificationError("final observation pre-run hash differs")
+    if receipt.get("ccp_observation_raw_sha256")!=_sha(raw) or receipt.get("ccp_observation_path")!="pre-run-observation.json": raise A0XVerificationError("preflight CCP observation binding differs")
 
 def _residue(repo:Path,ledger:Sequence[Mapping[str,Any]],seen:set[tuple[str,int,int]])->None:
     roles:set[str]=set()

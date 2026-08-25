@@ -10,15 +10,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from latent_triz.a0x_runner import A0XRunnerError, verify_a0x_implementation  # noqa: E402
+from latent_triz.a0x_runner import (  # noqa: E402
+    A0XRunnerError,
+    verify_a0x_implementation,
+    verify_a0x_no_model,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--phase", required=True, choices=("synthetic",))
+    parser.add_argument("--phase", required=True, choices=("synthetic", "frozen"))
     args = parser.parse_args(argv)
     try:
-        receipt = verify_a0x_implementation(ROOT)
+        receipt = verify_a0x_implementation(ROOT) if args.phase == "synthetic" else verify_a0x_no_model(ROOT)
     except A0XRunnerError as error:
         print(f"a0x-contract-check: {error}", file=sys.stderr)
         return 1

@@ -15,7 +15,17 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from .a0x_contract import canonical_json_sha256, sha256_file
+from .a0x_contract import (
+    APPROVAL_DOSSIER_PROFILE,
+    Leg,
+    PairBinding,
+    LegFreezeBinding,
+    build_leg_freeze_binding,
+    canonical_json_sha256,
+    compute_dense_bound,
+    sha256_file,
+)
+from .validator import validate
 
 
 class A0XFreezeError(ValueError):
@@ -33,6 +43,84 @@ _COMMON = {
     "evidence_eligible": False,
     "expert_validated": False,
     "claim_ids": [],
+}
+
+_LEG_SOURCES = {
+    Leg.A0: {
+        "protocol": "experiments/a0-automated-weak-proxy/protocol.json",
+        "implementation": "experiments/a0-automated-weak-proxy/implementation.json",
+        "protected_tree": "experiments/a0x-six-model/protected-a0-tree.json",
+        "selection": "experiments/a0x-six-model/a0-selection-manifest.json",
+        "protocol_fields": (
+            "corpus_generation", "calibration_families_per_domain", "sealed_families_per_domain",
+            "paired_syntax_templates", "neutral_domains", "target_families", "splits",
+            "predeclared_calibration_rule", "frozen_analysis", "views", "token_sites",
+            "preregistered_layers", "shortcut_evaluation", "outcome_rules", "shortcuts", "runtime",
+        ),
+        "implementation_fields": (
+            "primary_view", "surface_baseline_view", "sensitivity_views", "sentinel_text",
+            "layer_index_semantics", "classifier", "cross_validation", "paired_family_success",
+            "primary_aggregation", "surface_margin", "permutations", "token_site_applicability",
+            "epistemic_boundary",
+        ),
+    },
+    Leg.R1: {
+        "protocol": "experiments/a0r1-independent-proxy/protocol.json",
+        "implementation": "experiments/a0r1-independent-proxy/implementation.json",
+        "protected_tree": "experiments/a0x-six-model/protected-a0r1-tree.json",
+        "selection": "data/a0r1/manifest.json",
+        "protocol_fields": (
+            "protocol_type", "independence_audit", "runtime", "primary_endpoint",
+            "sensitivity_endpoints", "shortcut_evaluation", "thresholds", "calibration",
+            "outcome_rules", "outcome_classes",
+        ),
+        "implementation_fields": (
+            "classifier", "permutations", "primary_endpoint", "surface_baseline_view",
+            "surface_baseline_token_site", "sentinel_text", "sensitivity_view_definition",
+            "sensitivity_may_replace_primary", "hidden_state_contract", "domain_direction",
+            "outcome_rules", "outcome_classes", "token_site_applicability", "epistemic_boundary",
+        ),
+    },
+}
+
+_IMPLEMENTATION_PATHS = (
+    "scripts/a0x_contract_check.py",
+    "scripts/a0x_material.py",
+    "src/latent_triz/a0x_a0_activations.py",
+    "src/latent_triz/a0x_a0_analysis.py",
+    "src/latent_triz/a0x_contract.py",
+    "src/latent_triz/a0x_execution.py",
+    "src/latent_triz/a0x_freeze.py",
+    "src/latent_triz/a0x_model_adapter.py",
+    "src/latent_triz/a0x_preflight.py",
+    "src/latent_triz/a0x_r1_analysis.py",
+    "src/latent_triz/a0x_r1_activations.py",
+    "src/latent_triz/a0x_report.py",
+    "src/latent_triz/a0x_runner.py",
+    "src/latent_triz/a0x_verify.py",
+    "tests/test_a0x_activations.py",
+    "tests/test_a0x_a0_analysis.py",
+    "tests/test_a0x_contract.py",
+    "tests/test_a0x_contract_check.py",
+    "tests/test_a0x_execution.py",
+    "tests/test_a0x_freeze.py",
+    "tests/test_a0x_frozen_package.py",
+    "tests/test_a0x_material.py",
+    "tests/test_a0x_preflight.py",
+    "tests/test_a0x_r1_analysis.py",
+    "tests/test_a0x_report.py",
+    "tests/test_a0x_runner.py",
+    "tests/test_a0x_schemas.py",
+    "tests/test_a0x_verify.py",
+)
+
+_DOSSIER_FILENAMES = {
+    "smollm2_360m": "smollm2_360m.json",
+    "qwen3_0_6b_base": "qwen3_0_6b_base.json",
+    "gpt2": "gpt2.json",
+    "smollm2_135m": "smollm2_135m.json",
+    "gpt_neo_125m": "gpt_neo_125m.json",
+    "qwen2_5_0_5b": "qwen2_5_0_5b.json",
 }
 
 
@@ -124,6 +212,25 @@ def verify_protected_tree(
         if path.stat().st_size != entry["bytes"] or sha256_file(path) != entry["sha256"]:
             raise A0XFreezeError(f"protected input drift: {relative}")
         _verify_provenance_manifest(repository, entry)
+
+
+def verify_protected_tree_metadata_only(root: str | Path, tree: Mapping[str, Any]) -> None:
+    """Validate only tree declarations/provenance without opening protected inputs.
+
+    This is the synthetic verifier's boundary: sealed target and calibration
+    paths remain names plus committed metadata, never file handles.
+    """
+    repository = Path(root).resolve()
+    _verify_tree_shape(tree)
+    if tree.get("protected_tree_sha256") != _tree_sha256(dict(tree)):
+        raise A0XFreezeError("protected tree digest mismatch")
+    for entry in tree["entries"]:
+        if entry["entry_kind"] == "sealed_target":
+            _verify_sealed_target_declaration(repository, entry)
+        elif entry["entry_kind"] == "external_asset":
+            _verify_provenance_manifest(repository, entry)
+        elif entry["entry_kind"] != "file":
+            raise A0XFreezeError("protected tree has unknown entry kind")
 
 
 def build_a0_selection_manifest(
@@ -518,11 +625,276 @@ def _canonical_tree_inputs(
     return roots, declarations, provenance, external_assets
 
 
+def freeze_a0x_campaign(
+    root: str | Path,
+    *,
+    prepare_dossiers: bool,
+    output_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Write the two target-free leg freezes and twelve approval requests.
+
+    The operation reads only public manifests, already-frozen declarations,
+    source/test files, and model-card metadata.  It has no model, tokenizer,
+    target-content, CCP, subprocess, network, or authorization capability.
+    """
+
+    repository = Path(root).resolve()
+    destination = repository if output_root is None else Path(output_root).resolve()
+    campaign = repository / "experiments/a0x-six-model"
+    output_campaign = destination / "experiments/a0x-six-model"
+    material_path = campaign / "material-execution-contract.json"
+    material_sha256 = sha256_file(material_path)
+    registry = _read_json_object(campaign / "model-registry.json", "A0X model registry")
+    cards = _load_model_cards(repository, campaign, registry)
+    written: list[str] = []
+    bindings: dict[Leg, str] = {}
+
+    for leg in (Leg.A0, Leg.R1):
+        spec = _LEG_SOURCES[leg]
+        protocol_path = output_campaign / leg.value / "protocol.json"
+        implementation_path = output_campaign / leg.value / "implementation.json"
+        freeze_path = output_campaign / "freeze" / f"{leg.value}-freeze.json"
+        identity = _leg_identity(repository, leg, spec)
+        source_protocol_path = str(spec["protocol"])
+        source_implementation_path = str(spec["implementation"])
+        source_protocol = _read_json_object(repository / source_protocol_path, f"historical {leg.value} protocol")
+        source_implementation = _read_json_object(
+            repository / source_implementation_path, f"historical {leg.value} implementation",
+        )
+        protocol = {
+            **_COMMON,
+            "artifact_class": "a0x-leg-protocol",
+            "identity": identity,
+            "protocol_status": "frozen",
+            "endpoint_indices": [0, 2, 4, 6] if leg is Leg.A0 else [6],
+            "descriptive_final_block_endpoint": {
+                "model_card_index_field": "final_transformer_block_tuple_index",
+                "required_equal_model_card_field": "num_hidden_layers",
+                "role": "descriptive_sensitivity",
+                "rescues_primary": False,
+            },
+            "source_protocol_path": source_protocol_path,
+            "source_protocol_raw_sha256": sha256_file(repository / source_protocol_path),
+            "inherited_rules": _copy_fields(source_protocol, spec["protocol_fields"], f"{leg.value} protocol"),
+            "sealed_targets_accessed": False,
+            "model_output_accessed": False,
+        }
+        implementation = {
+            **_COMMON,
+            "artifact_class": "a0x-leg-implementation",
+            "identity": identity,
+            "implementation_status": "frozen_before_model_output",
+            "source_implementation_path": source_implementation_path,
+            "source_implementation_raw_sha256": sha256_file(repository / source_implementation_path),
+            "inherited_rules": _copy_fields(
+                source_implementation, spec["implementation_fields"], f"{leg.value} implementation",
+            ),
+            "sealed_targets_accessed": False,
+            "model_output_accessed": False,
+            "implementation_paths": list(_IMPLEMENTATION_PATHS),
+            "implementation_files": [_file_binding(repository, relative) for relative in _IMPLEMENTATION_PATHS],
+        }
+        _write_json(protocol_path, protocol)
+        _write_json(implementation_path, implementation)
+        freeze = {
+            **_COMMON,
+            "artifact_class": "a0x-leg-freeze-manifest",
+            "identity": identity,
+            "protocol_sha256": sha256_file(protocol_path),
+            "implementation_sha256": sha256_file(implementation_path),
+            "freeze_status": "frozen",
+        }
+        _write_json(freeze_path, freeze)
+        bindings[leg] = sha256_file(freeze_path)
+        written.extend(_relative_paths(destination, (protocol_path, implementation_path, freeze_path)))
+
+    dossier_count = 0
+    if prepare_dossiers:
+        for leg in (Leg.A0, Leg.R1):
+            for card_path, card in cards:
+                model_key = str(card.get("model_key"))
+                filename = _DOSSIER_FILENAMES.get(model_key)
+                if filename is None:
+                    raise A0XFreezeError(f"unsupported A0X model key: {model_key}")
+                hidden_size = card.get("hidden_size")
+                if not isinstance(hidden_size, int) or isinstance(hidden_size, bool):
+                    raise A0XFreezeError(f"A0X card lacks hidden size: {model_key}")
+                run_id = f"a0x-{leg.value}-{model_key}-{str(card['revision'])[:8]}-attempt-01"
+                output_path = f"results/a0x/{leg.value}/{model_key}/{run_id}"
+                pair = PairBinding(
+                    binding_profile="a0x-pair-scope-v2",
+                    leg=leg,
+                    leg_freeze_sha256=bindings[leg],
+                    model_key=model_key,
+                    model_id=str(card["model_id"]),
+                    revision=str(card["revision"]),
+                    run_id=run_id,
+                    output_path=output_path,
+                    dense_bound=compute_dense_bound(leg, cases=48, hidden_width=hidden_size),
+                ).as_mapping()
+                dossier = {
+                    **_COMMON,
+                    "artifact_class": "a0x-authorization-dossier",
+                    "commitment_profile": APPROVAL_DOSSIER_PROFILE,
+                    "pair_binding": pair,
+                    "dossier_status": "approval_requested",
+                    "future_authorization_path": f"{output_path}/execution-authorization.json",
+                    "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
+                    "material_contract_raw_sha256": material_sha256,
+                }
+                dossier_path = output_campaign / "approval-dossiers" / leg.value / filename
+                _write_json(dossier_path, dossier)
+                written.append(dossier_path.relative_to(destination).as_posix())
+                dossier_count += 1
+
+    return {
+        "artifact_class": "a0x-freeze-generation-receipt",
+        "written": written,
+        "frozen_leg_count": 2,
+        "dossier_count": dossier_count,
+        "sealed_target_content_reads": 0,
+        "model_loads": 0,
+        "tokenizer_constructions": 0,
+        "ccp_invocations": 0,
+        "remote_mutations": 0,
+    }
+
+
+def verify_frozen_legs(root: str | Path) -> dict[Leg, LegFreezeBinding]:
+    """Verify the frozen leg artifacts and exact source/test bindings read-only."""
+
+    repository = Path(root).resolve()
+    campaign = repository / "experiments/a0x-six-model"
+    schemas = repository / "schemas"
+    protocol_schema = _read_json_object(schemas / "a0x-protocol.schema.json", "A0X protocol schema")
+    implementation_schema = _read_json_object(
+        schemas / "a0x-implementation.schema.json", "A0X implementation schema",
+    )
+    freeze_schema = _read_json_object(schemas / "a0x-freeze-manifest.schema.json", "A0X freeze schema")
+    bindings: dict[Leg, LegFreezeBinding] = {}
+    for leg in (Leg.A0, Leg.R1):
+        spec = _LEG_SOURCES[leg]
+        protocol_path = campaign / leg.value / "protocol.json"
+        implementation_path = campaign / leg.value / "implementation.json"
+        freeze_path = campaign / "freeze" / f"{leg.value}-freeze.json"
+        protocol = _read_json_object(protocol_path, f"frozen {leg.value} protocol")
+        implementation = _read_json_object(implementation_path, f"frozen {leg.value} implementation")
+        freeze = _read_json_object(freeze_path, f"frozen {leg.value} manifest")
+        for value, schema, label in (
+            (protocol, protocol_schema, "protocol"),
+            (implementation, implementation_schema, "implementation"),
+            (freeze, freeze_schema, "freeze"),
+        ):
+            issues = validate(value, schema)
+            if issues:
+                raise A0XFreezeError(f"{leg.value} {label} fails schema: {issues[0].message}")
+        if {"protocol_sha256", "leg_freeze_sha256"}.intersection(protocol):
+            raise A0XFreezeError(f"{leg.value} protocol contains a self-dependent hash")
+        if {"implementation_sha256", "leg_freeze_sha256"}.intersection(implementation):
+            raise A0XFreezeError(f"{leg.value} implementation contains a self-dependent hash")
+        if "leg_freeze_sha256" in freeze:
+            raise A0XFreezeError(f"{leg.value} freeze contains its own hash")
+        expected_identity = _leg_identity(repository, leg, spec)
+        if protocol.get("identity") != expected_identity or implementation.get("identity") != expected_identity:
+            raise A0XFreezeError(f"{leg.value} frozen identity drifted")
+        source_protocol = _read_json_object(repository / str(spec["protocol"]), f"historical {leg.value} protocol")
+        source_implementation = _read_json_object(
+            repository / str(spec["implementation"]), f"historical {leg.value} implementation",
+        )
+        if (
+            protocol.get("source_protocol_path") != spec["protocol"]
+            or protocol.get("source_protocol_raw_sha256") != sha256_file(repository / str(spec["protocol"]))
+            or protocol.get("inherited_rules")
+            != _copy_fields(source_protocol, spec["protocol_fields"], f"{leg.value} protocol")
+        ):
+            raise A0XFreezeError(f"{leg.value} inherited protocol rules drifted")
+        if (
+            implementation.get("source_implementation_path") != spec["implementation"]
+            or implementation.get("source_implementation_raw_sha256")
+            != sha256_file(repository / str(spec["implementation"]))
+            or implementation.get("inherited_rules")
+            != _copy_fields(source_implementation, spec["implementation_fields"], f"{leg.value} implementation")
+        ):
+            raise A0XFreezeError(f"{leg.value} inherited implementation rules drifted")
+        rows = implementation.get("implementation_files")
+        if implementation.get("implementation_paths") != list(_IMPLEMENTATION_PATHS) or not isinstance(rows, list):
+            raise A0XFreezeError(f"{leg.value} implementation path binding drifted")
+        if rows != [_file_binding(repository, relative) for relative in _IMPLEMENTATION_PATHS]:
+            raise A0XFreezeError(f"{leg.value} source/test hash binding drifted")
+        try:
+            bindings[leg] = build_leg_freeze_binding(protocol_path, implementation_path, freeze_path)
+        except Exception as error:
+            raise A0XFreezeError(f"{leg.value} freeze binding drifted") from error
+    return bindings
+
+
+def _leg_identity(repository: Path, leg: Leg, spec: Mapping[str, Any]) -> dict[str, str]:
+    tree = _read_json_object(repository / str(spec["protected_tree"]), f"{leg.value} protected tree")
+    protected_sha = tree.get("protected_tree_sha256")
+    if not isinstance(protected_sha, str) or not _SHA256.fullmatch(protected_sha):
+        raise A0XFreezeError(f"{leg.value} protected tree lacks its commitment")
+    selection_path = repository / str(spec["selection"])
+    return {
+        "leg": leg.value,
+        "protocol_id": f"a0x-{leg.value}-six-model-v1",
+        "protected_tree_sha256": protected_sha,
+        "selection_corpus_sha256": sha256_file(selection_path),
+        "source_base_commit": SOURCE_BASE_COMMIT,
+    }
+
+
+def _copy_fields(source: Mapping[str, Any], fields: object, label: str) -> dict[str, Any]:
+    if not isinstance(fields, tuple):
+        raise A0XFreezeError(f"{label} field declaration is invalid")
+    missing = [field for field in fields if field not in source]
+    if missing:
+        raise A0XFreezeError(f"{label} is missing inherited fields: {missing}")
+    # JSON round-trip prevents accidental shared mutable references and keeps
+    # the exact JSON value domain used by the frozen source artifacts.
+    return {field: json.loads(json.dumps(source[field])) for field in fields}
+
+
+def _file_binding(repository: Path, relative: str) -> dict[str, Any]:
+    path = repository / relative
+    if not path.is_file() or path.is_symlink():
+        raise A0XFreezeError(f"implementation binding is unavailable: {relative}")
+    return {"path": relative, "bytes": path.stat().st_size, "sha256": sha256_file(path)}
+
+
+def _load_model_cards(
+    repository: Path, campaign: Path, registry: Mapping[str, Any],
+) -> list[tuple[str, dict[str, Any]]]:
+    declared = registry.get("cards")
+    if not isinstance(declared, list) or len(declared) != 6 or len(set(declared)) != 6:
+        raise A0XFreezeError("A0X model registry must declare six unique cards")
+    cards: list[tuple[str, dict[str, Any]]] = []
+    for relative in declared:
+        if not isinstance(relative, str):
+            raise A0XFreezeError("A0X model card path is invalid")
+        path = campaign / _safe_relative(relative, "model card path")
+        card = _read_json_object(path, "A0X model card")
+        if card.get("card_path") != path.relative_to(repository).as_posix():
+            raise A0XFreezeError("A0X model card path binding drifted")
+        cards.append((path.relative_to(repository).as_posix(), card))
+    return cards
+
+
+def _relative_paths(repository: Path, paths: Iterable[Path]) -> list[str]:
+    return [path.relative_to(repository).as_posix() for path in paths]
+
+
+def _write_json(path: Path, value: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(value), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".")
     parser.add_argument("--write-protected-trees", action="store_true")
     parser.add_argument("--write-a0-selection", action="store_true")
+    parser.add_argument("--freeze-all", action="store_true")
+    parser.add_argument("--prepare-dossiers", action="store_true")
     args = parser.parse_args(argv)
     repository = Path(args.root).resolve()
     written: list[str] = []
@@ -547,7 +919,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(selection, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         written.append(path.relative_to(repository).as_posix())
-    print(json.dumps({"written": written, "sealed_target_content_reads": 0}, sort_keys=True))
+    receipt: dict[str, Any] = {"written": written, "sealed_target_content_reads": 0}
+    if args.freeze_all:
+        receipt = freeze_a0x_campaign(repository, prepare_dossiers=args.prepare_dossiers)
+    elif args.prepare_dossiers:
+        parser.error("--prepare-dossiers requires --freeze-all")
+    print(json.dumps(receipt, sort_keys=True))
     return 0
 
 

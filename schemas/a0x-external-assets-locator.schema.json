@@ -93,7 +93,7 @@
       "additionalProperties": false,
       "required": ["profile", "commitment_sha256"],
       "properties": {
-        "profile": {"enum": ["a0x-approval-dossier-json-v1", "a0x-execution-authorization-json-v1"]},
+        "profile": {"enum": ["a0x-approval-dossier-json-v2", "a0x-execution-authorization-json-v2"]},
         "commitment_sha256": {"$ref": "#/$defs/sha"}
       }
     },
@@ -106,8 +106,8 @@
         "authorization_commitment": {"$ref": "#/$defs/commitment"}
       },
       "allOf": [
-        {"if": {"properties": {"dossier_commitment": {"required": ["profile"], "properties": {"profile": {"const": "a0x-approval-dossier-json-v1"}}}}}, "then": true, "else": false},
-        {"if": {"properties": {"authorization_commitment": {"required": ["profile"], "properties": {"profile": {"const": "a0x-execution-authorization-json-v1"}}}}}, "then": true, "else": false}
+        {"if": {"properties": {"dossier_commitment": {"required": ["profile"], "properties": {"profile": {"const": "a0x-approval-dossier-json-v2"}}}}}, "then": true, "else": false},
+        {"if": {"properties": {"authorization_commitment": {"required": ["profile"], "properties": {"profile": {"const": "a0x-execution-authorization-json-v2"}}}}}, "then": true, "else": false}
       ]
     }
   }

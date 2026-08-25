@@ -21,8 +21,11 @@ SCHEMA_FILES = (
     "a0x-protocol.schema.json",
     "a0x-implementation.schema.json",
     "a0x-freeze-manifest.schema.json",
+    "a0x-material-execution-contract.schema.json",
+    "a0x-attempt-claim.schema.json",
     "a0x-authorization-dossier.schema.json",
     "a0x-execution-authorization.schema.json",
+    "a0x-qualification-authorization.schema.json",
     "a0x-model-identity-receipt.schema.json",
     "a0x-ccp-observation.schema.json",
     "a0x-preflight-receipt.schema.json",
@@ -59,8 +62,11 @@ class A0XSchemasTests(unittest.TestCase):
             "a0x-protocol.schema.json": lambda value: value.__setitem__("claim_ids", ["claim"]),
             "a0x-implementation.schema.json": lambda value: value["identity"].__setitem__("source_base_commit", "short"),
             "a0x-freeze-manifest.schema.json": lambda value: value.__setitem__("protocol_sha256", "short"),
+            "a0x-material-execution-contract.schema.json": lambda value: value["ccp"]["matrix_plan_binding"].__setitem__("outer_digest", "sha256:" + "0" * 64),
+            "a0x-attempt-claim.schema.json": lambda value: value.__setitem__("state", "reused"),
             "a0x-authorization-dossier.schema.json": lambda value: value["pair_binding"].__setitem__("model_key", ""),
             "a0x-execution-authorization.schema.json": lambda value: value["pair_binding"].__setitem__("revision", "short"),
+            "a0x-qualification-authorization.schema.json": lambda value: value.__setitem__("generation", 0),
             "a0x-model-identity-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("run_id", ""),
             "a0x-ccp-observation.schema.json": lambda value: value.__setitem__("read_counter", -1),
             "a0x-preflight-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("leg", "other"),
@@ -232,6 +238,12 @@ class A0XSchemasTests(unittest.TestCase):
         wrong_profile = copy.deepcopy(authorization)
         wrong_profile["approved_dossier_commitment"]["profile"] = "a0x-execution-authorization-json-v1"
         self.assertTrue(validate(wrong_profile, authorization_schema))
+        missing_qualification = copy.deepcopy(authorization)
+        missing_qualification.pop("qualification_receipt_raw_sha256")
+        self.assertTrue(validate(missing_qualification, authorization_schema))
+        missing_guard = copy.deepcopy(authorization)
+        missing_guard.pop("guard_exec_argv_commitment")
+        self.assertTrue(validate(missing_guard, authorization_schema))
 
         downstream_schema = self.schemas["a0x-model-identity-receipt.schema.json"]
         downstream = artifact("a0x-model-identity-receipt.schema.json")

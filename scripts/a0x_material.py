@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from latent_triz.a0x_runner import planned_material_dossiers
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -17,6 +19,9 @@ def main(argv: list[str] | None = None) -> int:
     dossier = Path(args.fixed_dossier)
     if dossier.is_absolute() or ".." in dossier.parts:
         print("a0x-material: dossier path is not a fixed repository-relative path", file=sys.stderr)
+        return 2
+    if dossier.as_posix() not in set(planned_material_dossiers().values()):
+        print("a0x-material: dossier path is not one of the twelve fixed Task-11 locations", file=sys.stderr)
         return 2
     if not (ROOT / dossier).is_file():
         print("a0x-material: planned Task-11 dossier is absent; refusing before CCP or model access", file=sys.stderr)

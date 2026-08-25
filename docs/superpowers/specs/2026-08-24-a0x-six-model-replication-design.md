@@ -178,11 +178,30 @@ emptiness check, or source anchor drifts.
 `PairBinding` contains only the stable one-run scope under the exact profile
 `a0x-pair-scope-v2`: leg and freeze, model identity and revision, run ID,
 output path, and complete dense bound. It never contains a dossier or
-authorization self-hash. Approval lineage is instead an acyclic chain. The
-complete validated dossier is canonically committed as `D` with the profile
-`a0x-approval-dossier-json-v1`; the authorization contains `D`, and the
-complete validated authorization is canonically committed as `A` with the
-profile `a0x-execution-authorization-json-v1`. Every post-authorization
+authorization self-hash. Approval lineage is instead an acyclic chain. A
+shared `a0x-material-execution-contract-v1` first binds the stable repository
+identity and exact CCP producer identity; one Matrix-V2 repository
+qualification config and policy with their raw hashes, expected outer/runtime
+plan digests, and canonical receipt contract. That same Matrix configuration
+owns `plan`, `doctor`, reviewed `dry-run`, and the separately authorized
+qualification `run`; `doctor` and `dry-run` must return a complete two-runtime
+Matrix envelope whose nested V1 runtime objects are validated individually. It
+also binds the offline runtime prohibitions, command order,
+qualification/run limits, and fixed stop-boundary vocabulary without binding a
+mutable source HEAD or granting permission. A declared configuration digest is
+never substituted for a live observed plan digest. Each Task-11 dossier
+binds that contract by repository-relative path and raw SHA-256 and names the
+future authorization path, while remaining `approval_requested`. The complete
+validated dossier is canonically committed as `D` with the profile
+`a0x-approval-dossier-json-v2`. Repository qualification is separately
+authorized for one exact source HEAD and one positive operator-selected CCP
+generation and produces one canonical Matrix-V2 receipt. A later per-pair
+execution authorization contains `D`, the complete selected source HEAD, the
+exact qualifying receipt raw SHA-256, authorization/attempt IDs, exact CCP
+identity, exact `guard exec` argv commitment, one-guard limit, and stop
+boundary. It contains no CCP generation because `guard exec` has no generation
+argument. The complete validated per-pair authorization is canonically committed as `A` with the profile
+`a0x-execution-authorization-json-v2`. Every post-authorization
 artifact carries the identical pair binding and `(D, A)` authorization chain.
 The two commitments use strict UTF-8 JSON with duplicate-key and floating-point
 rejection, repository-defined sorted-key serialization, and distinct
@@ -231,6 +250,45 @@ path, literal and final-block index availability, file permissions, and a CCP
 observation of `resource.decision=admit`, `admission.active=false`, and
 `admission.queue_count=0`. Unknown, stale binary, deny, active, queued,
 unreadable, or inconclusive observations fail closed.
+
+The exact CCP qualification trace is fail-closed and ordered:
+`admission status --json`, `resource status --json`, Matrix-V2 `plan --json`,
+V1 `doctor --json`, reviewed V1 `dry-run --json`, then at most one separately
+authorized Matrix-V2 `run --generation <authorized-u64> --json`. The runner
+hashes the exact executable immediately before every command and requires the
+observed digest to equal the shared material contract and the applicable
+qualification authorization. The run qualifies the exact repository HEAD; it
+does not execute or qualify a scientific pair. Its immutable observation uses
+the authentic Matrix plan and canonical receipt envelopes and binds the exact
+numeric generation.
+
+Each separately authorized scientific pair repeats the read-only preflight,
+revalidates the dossier, per-pair authorization, source HEAD, both config
+families, policy bytes, qualifying receipt, executable, and empty output, then
+exclusively creates and fsyncs an `a0x-attempt-claim`. The claim is never
+deleted or reused. Exactly one CCP `guard exec` owns exactly one frozen child
+program and argv for that pair; no local model path is available outside that
+guard and no public unguarded runner exists. The immutable pre-guard observation
+is hashed into the child preflight receipt; the final pair observation binds
+that hash, the exact guard argv commitment, child exit, and terminal package
+links. It is not described as a CCP run receipt. Any concurrent claim, crash,
+interruption, ambiguous output, live lease, binary or policy drift, failed
+doctor, rejected dry-run, nonzero qualification command, guard failure, or
+child failure consumes or refuses the applicable attempt without permitting a
+retry. Matrix `run` and `guard exec` are never nested because admission is
+non-reentrant.
+
+Cooperative child exceptions that reach the lifecycle boundary are sealed into
+the first terminal package. Abrupt outer timeout, cancellation, process kill,
+or cleanup uncertainty cannot truthfully guarantee that Python completed a
+package: in that case the already-fsynced immutable attempt claim plus the
+terminal `guard exec` classification is the durable consumed-attempt and
+recovery evidence. It must not be promoted to a scientific result or described
+as a CCP receipt, and it never authorizes a retry. The pre-guard observation
+accepted by the child has one strict shared schema/validator shape. The final
+pair observation recursively binds that exact observation by SHA-256 and a
+non-recursive closed schema, plus the guard argv commitment, child/guard exit
+classification, and any terminal package links.
 
 Activation receives only public inputs and an activation capability that cannot
 open target bytes. Its receipt must record `activation_target_content_reads: 0`.
@@ -360,6 +418,8 @@ Implementation is intentionally narrow and additive:
 | one-shot activation/analysis capability boundary | `src/latent_triz/a0x_execution.py`, `src/latent_triz/a0x_runner.py` |
 | fixed-primary plus descriptive final-block analysis | `src/latent_triz/a0x_a0_analysis.py`, `src/latent_triz/a0x_r1_analysis.py` |
 | terminal package/report/verification | `src/latent_triz/a0x_report.py`, `src/latent_triz/a0x_verify.py` |
+| shared CCP/runtime material contract | `schemas/a0x-material-execution-contract.schema.json` |
+| durable exclusive attempt reservation | `schemas/a0x-attempt-claim.schema.json` |
 | focused synthetic tests | `tests/test_a0x_*.py` |
 
 Tests are written before each implementation unit and begin with synthetic
@@ -373,13 +433,21 @@ mutation detection; empty-output enforcement; all terminal package shapes; and
 cross-leg/cross-model pooling rejection. Material tests are never replaced by
 mocked pass-through tests to conceal a product defect.
 
+Synthetic and repository verification validates protected-tree schemas,
+internal tree commitments and provenance declarations but must never open the
+two calibration-target files or the two sealed-target files. Full byte-level
+protected-tree verification is reserved for an explicitly authorized material
+boundary. Tests instrument all four paths and require zero content opens.
+
 Luna-safe preparatory work is limited to no-model, no-target, no-CCP commands
 such as a focused `pytest tests/test_a0x_preflight.py -q`,
 `pytest tests/test_a0x_execution.py -q`, schema validation, manifest hashing,
 `make a0x-no-model-verify`, `make docs-audit`, and `git diff --check`.
-After the operator explicitly authorizes one exact dossier and a primary
-reviewer confirms the live CCP gate, Luna may invoke only that dossier's
-argument-free material command and capture its first terminal receipt. Luna
+After the exact repository HEAD has one authorized canonical Matrix-V2
+qualification receipt, the operator explicitly authorizes one exact dossier,
+and a primary reviewer confirms the live CCP gate, Luna may invoke only that
+dossier's argument-free material command and capture its first terminal
+receipt. Luna
 must not choose or alter a model, leg, path, endpoint, limit, target, CCP
 decision, retry policy, interpretation, publication state, or merge decision.
 Authorization recording, exception handling, scientific interpretation,
@@ -396,7 +464,10 @@ publication, and merge remain with the operator and primary reviewer.
 - Task 10 has a saved but unqualified local implementation checkpoint. Resume
   from `docs/A0X_RESTART_HANDOFF.md`; run the configured schema and synthetic
   gates, then obtain independent review before integration.
-- Task 11 and all twelve approval dossiers remain pending.
+- Task 11 has materialized two frozen no-model legs and all twelve separate
+  `approval_requested` dossiers. The focused and complete A0X gates pass;
+  independent architecture/science review and the final exact-hash ledger
+  remain pending before the Task-12 stop boundary.
 - Task 12 remains outside the current authorization. This checkpoint grants no
   model, tokenizer, target, CCP, material-run, network, or publication access.
 

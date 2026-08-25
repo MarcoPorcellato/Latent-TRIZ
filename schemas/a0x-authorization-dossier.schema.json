@@ -11,7 +11,10 @@
     "evidence_eligible",
     "expert_validated",
     "pair_binding",
-    "scientific_status"
+    "scientific_status",
+    "future_authorization_path",
+    "material_contract_path",
+    "material_contract_raw_sha256"
   ],
   "properties": {
     "artifact_class": {
@@ -40,7 +43,16 @@
       "const": "approval_requested"
     },
     "commitment_profile": {
-      "const": "a0x-approval-dossier-json-v1"
+      "const": "a0x-approval-dossier-json-v2"
+    },
+    "future_authorization_path": {
+      "$ref": "#/$defs/path"
+    },
+    "material_contract_path": {
+      "const": "experiments/a0x-six-model/material-execution-contract.json"
+    },
+    "material_contract_raw_sha256": {
+      "$ref": "#/$defs/sha"
     }
   },
   "$defs": {

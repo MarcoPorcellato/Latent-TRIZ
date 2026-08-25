@@ -12,7 +12,17 @@
     "evidence_eligible",
     "expert_validated",
     "pair_binding",
-    "scientific_status"
+    "scientific_status",
+    "repository",
+    "source_head",
+    "material_contract_raw_sha256",
+    "ccp",
+    "qualification_receipt_raw_sha256",
+    "guard_exec_argv_commitment",
+    "max_guard_exec_count",
+    "stop_boundary",
+    "authorization_id",
+    "attempt_id"
   ],
   "properties": {
     "artifact_class": {
@@ -41,11 +51,44 @@
       "const": "authorized"
     },
     "commitment_profile": {
-      "const": "a0x-execution-authorization-json-v1"
+      "const": "a0x-execution-authorization-json-v2"
     },
     "approved_dossier_commitment": {
       "$ref": "#/$defs/dossier_commitment"
-    }
+    },
+    "repository": {
+      "const": "MarcoPorcellato/Latent-TRIZ"
+    },
+    "source_head": {
+      "$ref": "#/$defs/rev"
+    },
+    "material_contract_raw_sha256": {
+      "$ref": "#/$defs/sha"
+    },
+    "ccp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "source_commit", "qualified_source_tree", "sha256", "version"],
+      "properties": {
+        "path": {"const": "/Users/marco1/.cargo/bin/commit-ci-preflight"},
+        "source_commit": {"const": "3fccc197e5055a2759ee7afe51b91133938ec904"},
+        "qualified_source_tree": {"const": "9e478c1489a9926772e8ab8bea21bd57470494b6"},
+        "sha256": {"const": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c"},
+        "version": {"const": "commit-ci-preflight 0.1.0"}
+      }
+    },
+    "qualification_receipt_raw_sha256": {
+      "$ref": "#/$defs/sha"
+    },
+    "guard_exec_argv_commitment": {
+      "$ref": "#/$defs/sha"
+    },
+    "max_guard_exec_count": {
+      "const": 1
+    },
+    "stop_boundary": {"enum": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"]},
+    "authorization_id": {"type": "string", "minLength": 1},
+    "attempt_id": {"type": "string", "minLength": 1}
   },
   "$defs": {
     "sha": {
@@ -206,7 +249,7 @@
       ],
       "properties": {
         "profile": {
-          "const": "a0x-approval-dossier-json-v1"
+          "const": "a0x-approval-dossier-json-v2"
         },
         "commitment_sha256": {
           "$ref": "#/$defs/sha"

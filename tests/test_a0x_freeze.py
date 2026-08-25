@@ -18,6 +18,7 @@ from latent_triz.a0x_freeze import (  # noqa: E402
     build_protected_tree,
     verify_a0_selection_manifest,
     verify_protected_tree,
+    verify_protected_tree_metadata_only,
 )
 from latent_triz.validator import validate  # noqa: E402
 
@@ -197,6 +198,33 @@ class A0XFreezeTests(unittest.TestCase):
             )
             verify_protected_tree(self.root, tree, phase="preflight")
         self.assertEqual("declaration_only", tree["entries"][0]["verification_phase"])
+
+    def test_metadata_only_verifier_never_opens_any_sealed_or_calibration_target(self) -> None:
+        targets = (
+            "data/a0/sealed-targets/targets.jsonl",
+            "data/a0/procedural-targets/calibration-targets.jsonl",
+            "data/a0r1/targets/sealed.jsonl",
+            "data/a0r1/targets/calibration.jsonl",
+        )
+        declarations: dict[str, dict[str, object]] = {}
+        files: dict[str, dict[str, object]] = {}
+        for index, relative in enumerate(targets):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            raw = f"sealed-{index}".encode()
+            path.write_bytes(raw)
+            declarations[relative] = {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw), "provenance_manifest": "data/provenance.json"}
+            files[relative] = {"path": Path(relative).relative_to("data").as_posix(), "sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
+        provenance = self.root / "data/provenance.json"
+        provenance.write_text(json.dumps({"files": files}), encoding="utf-8")
+        tree = build_protected_tree(self.root, roots=(), external_assets=(), sealed_target_declarations=declarations)
+        original_open = Path.open
+        def deny_target_open(path: Path, *args: object, **kwargs: object):
+            if path.resolve() in {(self.root / item).resolve() for item in targets}:
+                raise AssertionError("sealed or calibration target opened")
+            return original_open(path, *args, **kwargs)
+        with patch.object(Path, "open", new=deny_target_open):
+            verify_protected_tree_metadata_only(self.root, tree)
 
     def test_protected_tree_requires_explicit_external_assets(self) -> None:
         external = self.root / "external.bin"

@@ -63,6 +63,9 @@ def authorization_documents(pair: dict[str, object]) -> tuple[dict[str, object],
         "commitment_profile": APPROVAL_DOSSIER_PROFILE,
         "pair_binding": pair,
         "dossier_status": "approval_requested",
+        "future_authorization_path": "results/a0x/synthetic/execution-authorization.json",
+        "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
+        "material_contract_raw_sha256": sha(900),
     }
     dossier_commitment = canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE).as_mapping()
     authorization = {
@@ -72,6 +75,22 @@ def authorization_documents(pair: dict[str, object]) -> tuple[dict[str, object],
         "pair_binding": pair,
         "authorization_status": "authorized",
         "approved_dossier_commitment": dossier_commitment,
+        "repository": "MarcoPorcellato/Latent-TRIZ",
+        "source_head": "a" * 40,
+        "material_contract_raw_sha256": sha(900),
+        "ccp": {
+            "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
+            "source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904",
+            "qualified_source_tree": "9e478c1489a9926772e8ab8bea21bd57470494b6",
+            "sha256": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c",
+            "version": "commit-ci-preflight 0.1.0",
+        },
+        "qualification_receipt_raw_sha256": sha(901),
+        "guard_exec_argv_commitment": sha(902),
+        "max_guard_exec_count": 1,
+        "stop_boundary": "after_one_sealed_target_read",
+        "authorization_id": "synthetic-authorization",
+        "attempt_id": "synthetic-attempt",
     }
     authorization_commitment = canonical_commitment(
         authorization, EXECUTION_AUTHORIZATION_PROFILE,
@@ -264,6 +283,15 @@ def artifact(name: str) -> dict[str, object]:
             "identity": identity(),
             "protocol_status": "frozen",
             "endpoint_indices": [0, 2, 4, 6],
+            "descriptive_final_block_endpoint": {
+                "model_card_index_field": "final_transformer_block_tuple_index",
+                "required_equal_model_card_field": "num_hidden_layers",
+                "role": "descriptive_sensitivity",
+                "rescues_primary": False,
+            },
+            "source_protocol_path": "experiments/a0-automated-weak-proxy/protocol.json",
+            "source_protocol_raw_sha256": sha(30),
+            "inherited_rules": {"views": ["problem_plus_transformation"]},
             "sealed_targets_accessed": False,
             "model_output_accessed": False,
         }
@@ -273,9 +301,15 @@ def artifact(name: str) -> dict[str, object]:
             "artifact_class": "a0x-leg-implementation",
             "identity": identity(),
             "implementation_status": "frozen_before_model_output",
+            "source_implementation_path": "experiments/a0-automated-weak-proxy/implementation.json",
+            "source_implementation_raw_sha256": sha(31),
+            "inherited_rules": {"primary_view": "problem_plus_transformation"},
             "sealed_targets_accessed": False,
             "model_output_accessed": False,
             "implementation_paths": ["src/latent_triz/a0x_contract.py"],
+            "implementation_files": [{
+                "path": "src/latent_triz/a0x_contract.py", "bytes": 1, "sha256": sha(32),
+            }],
         }
     if name == "a0x-freeze-manifest.schema.json":
         return {
@@ -288,8 +322,32 @@ def artifact(name: str) -> dict[str, object]:
         }
     pair_artifacts = {
         "a0x-model-identity-receipt.schema.json": ("a0x-model-identity-receipt", {"identity_status": "verified"}),
-        "a0x-ccp-observation.schema.json": ("a0x-ccp-observation", {"read_counter": 0, "admission_status": "not_requested"}),
-        "a0x-preflight-receipt.schema.json": ("a0x-preflight-receipt", {"preflight_status": "passed"}),
+        "a0x-ccp-observation.schema.json": ("a0x-ccp-observation", {
+            "read_counter": 0,
+            "admission_status": "not_requested",
+            "binary": {
+                "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
+                "source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904",
+                "sha256": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c",
+                "version_output": "commit-ci-preflight 0.1.0\n",
+            },
+            "resource": {
+                "schema_version": "1.0", "policy_version": "macos-v4", "platform": "macos",
+                "capability": "supported_enforced", "decision": "admit", "available_percent": 50,
+                "reclaimable_uncompressed_bytes": 1, "compressor_occupied_bytes": 0,
+                "total_memory_bytes": 1, "swap_used_bytes": 0, "swap_total_bytes": 1,
+                "consecutive_soft_samples": 0,
+            },
+            "admission": {
+                "schema_version": "2.0", "active": False, "queue_count": 0, "ticket_ids": [],
+                "slot": {"kind": "slot_lock", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None, "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"},
+                "queue_lock": {"kind": "queue_lock", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None, "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"},
+                "process_visibility_note": "No process visible in the local shell does not prove global inactivity.",
+            },
+            "resource_raw_path": "resource-status.raw.json", "resource_raw_sha256": sha(301), "resource_raw_bytes": 1,
+            "admission_raw_path": "admission-status.raw.json", "admission_raw_sha256": sha(302), "admission_raw_bytes": 1,
+        }),
+        "a0x-preflight-receipt.schema.json": ("a0x-preflight-receipt", {"preflight_status": "passed", "model_key": "gpt2", "origin": "a" * 40, "endpoint_availability": {}, "source_head": "a" * 40, "material_contract_raw_sha256": sha(303), "ccp_observation_path": "a0x-ccp-observation.json", "ccp_observation_raw_sha256": sha(304)}),
         "a0x-activation-receipt.schema.json": ("a0x-activation-receipt", {"activation_status": "not_started"}),
         "a0x-target-read-receipt.schema.json": (
             "a0x-target-read-receipt",
@@ -309,6 +367,45 @@ def artifact(name: str) -> dict[str, object]:
         return dossier
     if name == "a0x-execution-authorization.schema.json":
         return authorization
+    if name == "a0x-qualification-authorization.schema.json":
+        return {
+            **common_fields, "artifact_class": "a0x-qualification-authorization",
+            "commitment_profile": "a0x-qualification-authorization-json-v1",
+            "qualification_status": "authorized", "repository": "MarcoPorcellato/Latent-TRIZ",
+            "source_head": "a" * 40, "material_contract_raw_sha256": sha(900),
+            "ccp": {"path": "/Users/marco1/.cargo/bin/commit-ci-preflight", "source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904", "qualified_source_tree": "9e478c1489a9926772e8ab8bea21bd57470494b6", "sha256": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c", "version": "commit-ci-preflight 0.1.0"},
+            "generation": 1, "max_qualification_run_count": 1,
+            "stop_boundary": "after_repository_qualification_receipt",
+            "authorization_id": "synthetic-qualification",
+        }
+    if name == "a0x-material-execution-contract.schema.json":
+        return {
+            "artifact_class": "a0x-material-execution-contract",
+            "contract_version": "a0x-material-execution-contract-v1",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "ccp": {
+                "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
+                "source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904",
+                "qualified_source_tree": "9e478c1489a9926772e8ab8bea21bd57470494b6",
+                "sha256": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c",
+                "version": "commit-ci-preflight 0.1.0",
+                "commands": [["admission", "status", "--json"], ["resource", "status", "--json"], ["plan", "--config", ".commit-ci-preflight.toml", "--json"], ["doctor", "--config", ".commit-ci-preflight.toml", "--json"], ["dry-run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"], ["run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "<authorized-u64>", "--json"], ["guard", "exec"]],
+                "hash_before_command": True,
+                "matrix_config_binding": {"path": ".commit-ci-preflight.toml", "raw_sha256": "3dc320e11a22cd0774a64b4a3773fd7568e389b1092b165da17b073685832a9b"},
+                "matrix_policy_binding": {"path": ".commit-ci-policy-v2.toml", "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce"},
+                "location_binding": {"repository": ".", "cache_dir": "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1"},
+                "matrix_plan_binding": {"outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178", "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562", "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"},
+            },
+            "offline": {"network": False, "generation": False, "local_cpu_float32": True},
+            "max_run_count": 1,
+            "stop_boundaries": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"],
+        }
+    if name == "a0x-attempt-claim.schema.json":
+        return {
+            "artifact_class": "a0x-attempt-claim", "claim_version": "a0x-attempt-claim-v1",
+            "pair_binding": pair, "authorization_chain": chain, "authorization_id": "synthetic-auth",
+            "attempt_id": "synthetic-attempt", "material_contract_raw_sha256": sha(700), "state": "reserved",
+        }
     if name == "a0x-activation-stage-occupancy-receipt.schema.json":
         return {
             **common_fields,
