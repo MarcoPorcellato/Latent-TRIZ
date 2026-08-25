@@ -185,17 +185,23 @@ gates.
 
 ## Current checkpoint
 
-The local no-model package is at `sealed_gate_pending`. An authorized
-preflight against source `2af9a159...` stopped before `doctor`, `dry-run`, or
-`run` because the repository policy still carried obsolete Matrix V2 plan
-digests. That source was not qualified and no CCP run was consumed. The
-correction binds policy, contract, schema, runner, fixtures, and tests to a
+The local no-model package is at `sealed_gate_pending`. The Matrix V2
+correction is committed at `0114cdc0f14344a9bceb1f442128c55195e69a71` and
+binds policy, contract, schema, runner, fixtures, and tests to a
 repository-owned observation of the real `plan --json` output from CCP binary
 SHA-256 `b8d260...f2fcd4c`; the observation is deliberately independent of the
-material contract, so future plan drift cannot self-confirm. After the
-correction, final regeneration, 194 A0X tests (three documented optional-NumPy
-skips), schema cross-validation, documentation audit, compile/diff checks, and
-independent review passed.
+material contract, so future plan drift cannot self-confirm. Its one authorized
+exact-head CCP qualification reached a terminal `FAIL` without timeout: both
+schema checks passed, while both repository checks exposed a test-only
+dependency on seven ignored EXP-002 dense assets unavailable in a clean clone.
+The receipt ID is
+`sha256:6e462b9c9bcb0389d886b2b2f56d386e8b4cbdc7ebf3865e8c6478ed47fc1352`
+and the receipt file SHA-256 is
+`763c845ef4065945a4057149997f44c652dd2cfccdf590795bdaa5b9da430835`.
+The production verifier remains fail-closed; the local corrective test uses
+seven deterministic synthetic assets and retains explicit missing/mutated
+failure coverage. A new commit and a new exact-head authorization are required
+before any retry.
 The verifier receipt reports two frozen legs, twelve `approval_requested`
 dossiers, and zero model loads, tokenizer constructions, sealed-target reads,
 CCP invocations, or remote mutations.

@@ -1,13 +1,17 @@
 A0X checkpoint (2026-08-25): preparatory work remains on branch
-`agent/a0x-six-model-design`. Source `2af9a159b9abd4e82786c668470e8517e7f76f2a`
-was not CCP-qualified: its preflight found stale Matrix V2 plan digests and
-stopped before `doctor`, `dry-run`, or `run`. The authorized offline correction
-adds an independent real-plan fixture bound to CCP SHA-256 `b8d260...f2fcd4c`,
-updates policy/contract/schema/runner/tests, and regenerates both freeze
-manifests and all twelve `approval_requested` dossiers. The corrected local
-commit must be resolved live before any new exact-head authorization. The
-current state remains `sealed_gate_pending`; do not treat it as Task-12
-authorization. Resume through
+`agent/a0x-six-model-design`. The Matrix V2 correction is committed at
+`0114cdc0f14344a9bceb1f442128c55195e69a71`. Its single authorized exact-head
+CCP run terminated `FAIL`, without timeout: both schema checks passed and both
+repository checks exposed a fresh-clone test dependency on seven ignored
+EXP-002 dense assets. Receipt ID
+`sha256:6e462b9c9bcb0389d886b2b2f56d386e8b4cbdc7ebf3865e8c6478ed47fc1352`,
+file SHA-256
+`763c845ef4065945a4057149997f44c652dd2cfccdf590795bdaa5b9da430835`.
+The production publication verifier remains fail-closed; the local correction
+materializes deterministic synthetic assets in the positive test and preserves
+missing/mutated negative tests. Resolve and verify a new clean commit before
+requesting another exact-head run. The current state remains
+`sealed_gate_pending`; do not treat it as Task-12 authorization. Resume through
 `docs/A0X_SIX_MODEL_CAMPAIGN.md`, `docs/A0X_RESTART_HANDOFF.md`, the canonical
 A0X design/plan, and the SDD ledger. No model, material tokenizer, historical
 or sealed target, CCP run, material Make target, network, GitHub, retry,
@@ -26,12 +30,13 @@ contract are frozen;
 the seven-model EXP-002A baseline is published with terminal `null` packages.
 The exact seven-model material dossier is operator-authorized at approval hash
 `0c5943ad5a7bf2c598511b8c3ecc29bd566f33140af59c8c6d788f2423483d67`.
-The CCP `origin/main` runbook
-`5f2ef665be4dc47fd354befcba53251a4e51744f` is the current coordination
-contract; the prior baseline used an isolated exact
-binary; all seven runs had Admit/inactive/queue-0 preflights and clean
-post-run handoffs. The installed older binary remains stale and must not be
-used for future material work. The next objective is to freeze and execute the
+The current official CCP source and coordination runbook are anchored at
+`origin/main` `3fccc197e5055a2759ee7afe51b91133938ec904`; the separately qualified
+installed executable SHA-256 is
+`b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c`.
+All future heavy work must use the fresh resource/admission/runtime preflight,
+non-reentrant slot ownership, and explicit terminal handoff documented in
+`docs/reference/commit-ci-preflight.md`. The next objective is to freeze and execute the
 remaining response-surface, direct TRIZ/source-familiarity, and new blinded
 transfer stages; do not rerun the seven baseline packages.
 

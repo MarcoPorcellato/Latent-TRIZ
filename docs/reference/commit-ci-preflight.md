@@ -3,7 +3,7 @@ type: Reference
 title: Stable merge policy and Commit CI Preflight
 description: Path-aware GitHub qualification with exact-head CCP evidence for scientific changes.
 status: active
-last_verified: 2026-08-16
+last_verified: 2026-08-25
 ---
 
 # Stable merge policy and Commit CI Preflight
@@ -48,13 +48,73 @@ default temporary-directory selection when shared memory is unavailable. This
 keeps the checkout and model artifacts read-only while allowing the existing
 isolated fixture tests to run without filling the bounded CCP tmpfs.
 
-Run CCP only from an exact clean commit:
+The installed producer is the separately qualified build of official CCP
+`origin/main` at commit `3fccc197e5055a2759ee7afe51b91133938ec904`,
+tree `9e478c1489a9926772e8ab8bea21bd57470494b6`, executable
+SHA-256 `b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c`.
+The executable path is `/Users/marco1/.cargo/bin/commit-ci-preflight`. Verify
+that complete hash immediately before every `plan`, `doctor`, `dry-run`,
+`run`, or `verify`; the version string alone is not a producer identity.
+
+### Current coordination workflow
+
+Immediately before reserving heavy work, collect a fresh snapshot in this
+order:
 
 ```text
+commit-ci-preflight --version
+git status --short --branch
+git rev-parse HEAD
+commit-ci-preflight resource status --json
+commit-ci-preflight admission status --json
+docker context show
+docker ps -q
+commit-ci-preflight plan --config .commit-ci-preflight.toml --json
+commit-ci-preflight doctor --config .commit-ci-preflight.toml --json
+commit-ci-preflight dry-run --config .commit-ci-preflight.toml --repository . --json
+```
+
+`plan`, `doctor`, `dry-run`, `verify`, resource/admission inspection,
+read-only cache inspection, `recover status`, and workflow migration do not
+reserve the heavy slot. `run`, `benchmark`, and `guard exec` do. These commands
+are deliberately non-reentrant: never wrap a CCP `run`, benchmark, integration
+test that starts CCP, or another `guard exec` inside `guard exec`.
+
+Proceed only from the exact selected clean commit, with resource decision
+`Admit`, admission `active=false`, `queue_count=0`, a responsive configured
+Docker context, and no unaccounted container or owner. A status sample is not a
+reservation. One activity owns the complete heavy lifecycle and records the
+repository, exact commit, command, expected receipt, and opaque owner run ID.
+Every heavy run requires a separate exact authorization that fixes the binary
+hash, generation, maximum run count, and stop boundary.
+
+After any terminal outcome, run `admission status --json`, `docker ps -q`, and
+`resource status --json`. Record the exit/outcome, receipt state, inner-stage
+summary, cleanup status, post-run admission/runtime state, and next owner.
+Never infer release from an idle-looking terminal, and never let an inner PASS
+override outer pressure, timeout, internal, or cleanup failure.
+
+The convenience targets expose the individual stages; they do not replace
+hash verification, authorization, or operator review:
+
+```text
+make preflight-status
 make preflight-plan
+make preflight-doctor
+make preflight-dry-run
+# separately authorized only:
 make preflight-run
 make preflight-verify
+make preflight-postflight
 ```
+
+When a receipt-producing run fails, preserve the terminal receipt and do not
+retry. Use `recover status --json` only as read-only journal inspection. If
+more detail is required, reproduce only the failing explicit project check in
+a deliberate diagnostic context. `recover apply`, receipt publication,
+evidence-branch push, PR creation, and merge each require their own bounded
+authorization. Never manually edit, remove, quarantine, or reinterpret CCP
+locks, tickets, leases, journals, cache entries, or admission state.
 
 The acceptance policy pins the project identity, outer and per-runtime
 configuration digests, required check-to-runtime assignments, image digests,
@@ -93,7 +153,8 @@ is `044697dee9a0d678d30a4847d62ddf9b4970505b`. The active policy requires:
   compression together with a companion pressure signal; a bounded 16-sample
   window also detects swap growth of 1 GiB or more as a soft signal.
 
-Before an official guarded runner, execute:
+Before an official guarded runner, execute a fresh resource/admission pair in
+the full preflight above:
 
 ```text
 commit-ci-preflight resource status --json
@@ -107,8 +168,12 @@ runner start.
 The Rust 1.96 Bookworm runner image is pinned to
 `sha256:5e2214abe154fe26e39f64488952e5c991eeed1d6d6da7cc8381ae83927f0cfc`
 and cached persistently in OrbStack. Preserve `macos-v2` and `macos-v3`
-receipts as historical evidence; never relabel them as `macos-v4`. The
-still-draft upstream CCP PR 34 is not part of the installed contract.
+receipts as historical evidence; never relabel them as `macos-v4`.
+
+Public coordination records must contain only bounded facts such as opaque
+identifiers, timestamps, lease state, exact source SHA when required, and
+sanitized outcomes. Do not publish raw logs, usernames, local paths, commands,
+environment values, secrets, customer data, or container identifiers.
 
 ## Stable path and risk contract
 

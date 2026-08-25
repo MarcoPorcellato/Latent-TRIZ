@@ -63,17 +63,20 @@ Task 11 has now generated, without material access:
 - `docs/A0X_SIX_MODEL_CAMPAIGN.md`;
 - the frozen-package TDD suite and `make a0x-no-model-verify`.
 
-Task 11 is locally complete at `sealed_gate_pending`. Source `2af9a159...` was
-not CCP-qualified: the authorized preflight found stale Matrix V2 plan digests
-and stopped before `doctor`, `dry-run`, or `run`, consuming no CCP run. The
-offline corrective tranche adds a non-tautological observed-plan fixture bound
-to CCP SHA-256 `b8d260...f2fcd4c`, updates every normative binding, and
-regenerates the dependent artifacts. The 9/9 focused gate passes; the aggregate
-is 194/194 with three documented optional-NumPy skips; and the exact material
-contract, two freeze, and twelve dossier hashes are recorded in
-`docs/A0X_SIX_MODEL_CAMPAIGN.md`. No Task-12 execution is authorized. The
-corrective commit must be resolved live because this handoff cannot safely
-self-record it.
+Task 11 is locally complete at `sealed_gate_pending`. The Matrix V2 correction
+is committed at `0114cdc0f14344a9bceb1f442128c55195e69a71`. Its one authorized
+exact-head CCP qualification terminated `FAIL`, without timeout: both schema
+checks passed, while both repository checks exposed that
+`test_exp002_publication_verify.py` depended on seven ignored external dense
+assets unavailable in the isolated clone. Receipt ID
+`sha256:6e462b9c9bcb0389d886b2b2f56d386e8b4cbdc7ebf3865e8c6478ed47fc1352`,
+file SHA-256
+`763c845ef4065945a4057149997f44c652dd2cfccdf590795bdaa5b9da430835`.
+The production verifier remains fail-closed. The local test correction uses
+seven deterministic synthetic assets and preserves missing/mutated negative
+coverage. No retry, Task-12 execution, model, tokenizer, or target access is
+authorized. Consolidate and verify the correction, then request a new
+exact-head CCP authorization.
 
 ## Preserved unrelated work
 

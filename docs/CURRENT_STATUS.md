@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-08-20
+last_verified: 2026-08-25
 ---
 
 # Current laboratory status
@@ -154,3 +154,16 @@ Admission remains host-wide and manual lock/lease quarantine is unsupported.
 This installed producer identity does not authorize an A0X run: a fresh live
 Admit/inactive/queue-zero gate, exact-head qualification, and separate
 hash-bound pair authorization are still required.
+
+The single authorized A0X exact-head qualification of
+`0114cdc0f14344a9bceb1f442128c55195e69a71` reached a terminal `FAIL` without
+timeout. Both schema checks passed; both repository checks failed because
+`tests/test_exp002_publication_verify.py` required seven ignored external dense
+assets to exist in the fresh isolated checkout. The terminal receipt ID is
+`sha256:6e462b9c9bcb0389d886b2b2f56d386e8b4cbdc7ebf3865e8c6478ed47fc1352`
+(file SHA-256
+`763c845ef4065945a4057149997f44c652dd2cfccdf590795bdaa5b9da430835`).
+The production verifier remains fail-closed. The local corrective change makes
+the positive test materialize seven deterministic synthetic assets and keeps
+explicit missing/mutated-asset failures. This correction requires a new clean
+commit and new exact-head authorization before any CCP retry.
