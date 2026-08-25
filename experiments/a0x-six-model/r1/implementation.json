@@ -43,9 +43,9 @@
       "sha256": "fb308fab14319f3a60c72016fbb77ebe91667ca5a28f17748008f56772c26721"
     },
     {
-      "bytes": 43454,
+      "bytes": 43558,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "06bae20f3f103a292c84916f357716ec0be67b54ce80d70c55b2c47702acd6dd"
+      "sha256": "d662ff2ff0f2aa60edf16ce16f8e44099815434c4b2baafaa515dd7f2fec227a"
     },
     {
       "bytes": 13940,
@@ -75,7 +75,7 @@
     {
       "bytes": 80910,
       "path": "src/latent_triz/a0x_runner.py",
-      "sha256": "0101f1cfa690a23e3df90a7f62211f0eef60310851e160c059e096f6bac4f4bc"
+      "sha256": "0b5d2a94aa4d910226815f8b864a97f3bec882b9283c5464e257fe64a7e8a7b3"
     },
     {
       "bytes": 23250,
@@ -123,6 +123,11 @@
       "sha256": "183c53d8021380f4acae004dd2d0342891ee42eaf489b15bfb5ada424aec59b2"
     },
     {
+      "bytes": 2325,
+      "path": "tests/test_a0x_matrix_plan_binding.py",
+      "sha256": "9a5899f4af75ed13a3f241c5f76466acb45a2c2de0aa708c528f2b40d414cac1"
+    },
+    {
       "bytes": 25659,
       "path": "tests/test_a0x_preflight.py",
       "sha256": "f84d904c40a5cd1b062ee5469cb019a5fd8550a61aa1d52c4f25bbf43c85bf20"
@@ -151,6 +156,11 @@
       "bytes": 18292,
       "path": "tests/test_a0x_verify.py",
       "sha256": "3fc6a7a5273aa743f6e6c5e7a0f9a07830a93ecec9f8e7a7d2e2d6a546409e74"
+    },
+    {
+      "bytes": 3730,
+      "path": "tests/fixtures/a0x/ccp-matrix-v2-plan-3fccc197.json",
+      "sha256": "7955ff03f9c09dedef1c599061ead6ac0f6aae1604395e9bab9cadd2d9e9e40a"
     }
   ],
   "implementation_paths": [
@@ -176,12 +186,14 @@
     "tests/test_a0x_freeze.py",
     "tests/test_a0x_frozen_package.py",
     "tests/test_a0x_material.py",
+    "tests/test_a0x_matrix_plan_binding.py",
     "tests/test_a0x_preflight.py",
     "tests/test_a0x_r1_analysis.py",
     "tests/test_a0x_report.py",
     "tests/test_a0x_runner.py",
     "tests/test_a0x_schemas.py",
-    "tests/test_a0x_verify.py"
+    "tests/test_a0x_verify.py",
+    "tests/fixtures/a0x/ccp-matrix-v2-plan-3fccc197.json"
   ],
   "implementation_status": "frozen_before_model_output",
   "inherited_rules": {

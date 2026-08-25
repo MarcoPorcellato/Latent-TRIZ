@@ -1,13 +1,13 @@
 A0X checkpoint (2026-08-25): preparatory work remains on branch
-`agent/a0x-six-model-design` at source HEAD
-`223f776d9ffbcf6a0992902a2874ba95b80ce88e` with an intentionally dirty,
-uncommitted Task-10/Task-11 worktree. Task 10 is independently approved and
-fully verified offline. Task 11 is also complete locally: two frozen no-model
-legs and twelve separate `approval_requested` dossiers passed the final
-aggregate, documentation/schema/compile/diff gates, official-source audit,
-independent Sol review, and exact-hash ledger. The current state is
-`sealed_gate_pending`; resolve the consolidation commit live before any
-exact-head qualification, and do not treat it as Task-12 authorization. Resume through
+`agent/a0x-six-model-design`. Source `2af9a159b9abd4e82786c668470e8517e7f76f2a`
+was not CCP-qualified: its preflight found stale Matrix V2 plan digests and
+stopped before `doctor`, `dry-run`, or `run`. The authorized offline correction
+adds an independent real-plan fixture bound to CCP SHA-256 `b8d260...f2fcd4c`,
+updates policy/contract/schema/runner/tests, and regenerates both freeze
+manifests and all twelve `approval_requested` dossiers. The corrected local
+commit must be resolved live before any new exact-head authorization. The
+current state remains `sealed_gate_pending`; do not treat it as Task-12
+authorization. Resume through
 `docs/A0X_SIX_MODEL_CAMPAIGN.md`, `docs/A0X_RESTART_HANDOFF.md`, the canonical
 A0X design/plan, and the SDD ledger. No model, material tokenizer, historical
 or sealed target, CCP run, material Make target, network, GitHub, retry,

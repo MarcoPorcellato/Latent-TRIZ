@@ -931,7 +931,12 @@ historical A0 and A0-R1 rules
 Tasks 10 and 11 have completed offline implementation, final no-model
 qualification, and independent review. The two frozen legs and twelve
 pair-isolated dossiers are recorded with exact hashes; the consolidation
-commit becomes the live source anchor for `sealed_gate_pending`. Task 12 is not authorized. The authoritative
+commit becomes the live source anchor for `sealed_gate_pending`. The first
+exact-head preflight stopped safely on stale Matrix V2 plan bindings before
+`doctor`, `dry-run`, or `run`; the offline corrective tranche now binds a
+non-tautological observation of the real CCP plan and regenerates every
+dependent freeze and dossier. A future qualification therefore requires a new
+exact-head authorization. Task 12 is not authorized. The authoritative
 operator-facing contract is
 [`A0X_SIX_MODEL_CAMPAIGN.md`](./A0X_SIX_MODEL_CAMPAIGN.md).
 

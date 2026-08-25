@@ -75,7 +75,7 @@ schema-cross-validate:
 
 a0x-synthetic-verify:
 	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_contract_check.py --phase synthetic
-	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_runner tests.test_a0x_contract_check tests.test_a0x_material tests.test_a0x_contract tests.test_a0x_preflight tests.test_a0x_freeze tests.test_a0x_frozen_package tests.test_a0x_schemas tests.test_a0x_activations tests.test_a0x_a0_analysis tests.test_a0x_r1_analysis tests.test_a0x_report tests.test_a0x_verify tests.test_a0x_execution tests.test_a0x_model_adapter
+	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_runner tests.test_a0x_contract_check tests.test_a0x_material tests.test_a0x_contract tests.test_a0x_preflight tests.test_a0x_freeze tests.test_a0x_frozen_package tests.test_a0x_schemas tests.test_a0x_activations tests.test_a0x_a0_analysis tests.test_a0x_r1_analysis tests.test_a0x_report tests.test_a0x_verify tests.test_a0x_execution tests.test_a0x_model_adapter tests.test_a0x_matrix_plan_binding
 	@echo "A0X synthetic implementation verified: no model, tokenizer, sealed target, or CCP access."
 
 a0x-no-model-verify:

@@ -106,12 +106,14 @@ _IMPLEMENTATION_PATHS = (
     "tests/test_a0x_freeze.py",
     "tests/test_a0x_frozen_package.py",
     "tests/test_a0x_material.py",
+    "tests/test_a0x_matrix_plan_binding.py",
     "tests/test_a0x_preflight.py",
     "tests/test_a0x_r1_analysis.py",
     "tests/test_a0x_report.py",
     "tests/test_a0x_runner.py",
     "tests/test_a0x_schemas.py",
     "tests/test_a0x_verify.py",
+    "tests/fixtures/a0x/ccp-matrix-v2-plan-3fccc197.json",
 )
 
 _DOSSIER_FILENAMES = {

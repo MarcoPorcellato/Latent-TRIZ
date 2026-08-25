@@ -128,8 +128,12 @@ dossier remains `approval_requested`; none authorizes material access. The
 complete local no-model qualification and independent architecture/science
 review now pass, and the exact freeze/dossier hashes are recorded. A0X is
 stopped at `sealed_gate_pending`: the consolidation commit is the next source
-anchor, no CCP exact-head qualification exists, and no pair is authorized for material
-execution. See [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
+anchor, no CCP exact-head qualification exists, and no pair is authorized for
+material execution. The preflight for `2af9a159...` correctly stopped before
+`doctor`, `dry-run`, and `run` when a stale Matrix V2 digest was detected. The
+offline correction now has a non-tautological real-plan fixture and regenerated
+freeze/dossier hashes; it does not reuse the obsolete qualification
+authorization. See [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
 
 The next scientific priority is human construct validation: three independent
 TRIZ experts, blinded cases, agreement and abstention receipts, and an explicit
