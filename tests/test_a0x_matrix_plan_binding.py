@@ -8,7 +8,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OBSERVATION_PATH = ROOT / "tests/fixtures/a0x/ccp-matrix-v2-plan-3fccc197.json"
+OBSERVATION_PATH = ROOT / "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-c91915a.json"
 CONTRACT_PATH = ROOT / "experiments/a0x-six-model/material-execution-contract.json"
 POLICY_PATH = ROOT / ".commit-ci-policy-v2.toml"
 
@@ -32,7 +32,7 @@ class A0XMatrixPlanBindingTests(unittest.TestCase):
         }
 
         self.assertEqual(
-            "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c",
+            "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
             observation["ccp"]["sha256"],
         )
         self.assertEqual(

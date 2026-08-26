@@ -1,17 +1,21 @@
-A0X checkpoint (2026-08-25): preparatory work remains on branch
-`agent/a0x-six-model-design`. The Matrix V2 correction is committed at
-`0114cdc0f14344a9bceb1f442128c55195e69a71`. Its single authorized exact-head
-CCP run terminated `FAIL`, without timeout: both schema checks passed and both
-repository checks exposed a fresh-clone test dependency on seven ignored
-EXP-002 dense assets. Receipt ID
-`sha256:6e462b9c9bcb0389d886b2b2f56d386e8b4cbdc7ebf3865e8c6478ed47fc1352`,
-file SHA-256
-`763c845ef4065945a4057149997f44c652dd2cfccdf590795bdaa5b9da430835`.
-The production publication verifier remains fail-closed; the local correction
-materializes deterministic synthetic assets in the positive test and preserves
-missing/mutated negative tests. Resolve and verify a new clean commit before
-requesting another exact-head run. The current state remains
-`sealed_gate_pending`; do not treat it as Task-12 authorization. Resume through
+A0X checkpoint (2026-08-26): preparatory work remains on branch
+`agent/a0x-six-model-design`. The no-model package is bound to the reviewed,
+not-yet-qualified CCP compatibility candidate commit
+`c91915adcb8706898574c0c74d033b9ff991eefb`, tree
+`687fcaaa3643d35a66ba748409e5621d13e25dd7`, executable SHA-256
+`72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be`,
+and profile `matrix-v2-legacy-v1`. The fetched public CCP `origin/main` is
+`2b4b55ce1a4be0a2b610656ae4a56a7641b29f26`; the compatibility profile is
+additional candidate work, not an installed or released public contract. The
+generator regenerated two frozen legs and twelve `approval_requested`
+dossiers with zero material access. A0X verification passed 197 tests with
+three expected skips, frozen verification passed 9/9, schema cross-validation
+reported 155 agreements and 19 rejected mutations, and the pinned Python 3.11
+repository check passed 1,024 tests with one expected skip. The current state
+remains `sealed_gate_pending`; do not treat it as Task-12 authorization. First
+obtain one explicitly authorized terminal qualification receipt for the exact
+CCP candidate, then a separate installation decision and a new Latent-TRIZ
+exact-head qualification. Resume through
 `docs/A0X_SIX_MODEL_CAMPAIGN.md`, `docs/A0X_RESTART_HANDOFF.md`, the canonical
 A0X design/plan, and the SDD ledger. No model, material tokenizer, historical
 or sealed target, CCP run, material Make target, network, GitHub, retry,

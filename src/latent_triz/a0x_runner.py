@@ -156,17 +156,24 @@ def _ccp_argvs(contract: Mapping[str, Any], *, generation: int | None = None) ->
     repository, cache_dir = location.get("repository"), location.get("cache_dir")
     if not all(isinstance(item, str) and item for item in (matrix_path, repository, cache_dir)):
         raise A0XRunnerError("material contract CCP argv paths are invalid")
+    profile = ccp.get("matrix_plan_profile")
+    if profile is None:
+        profile_argv: tuple[str, ...] = ()
+    elif profile == "matrix-v2-legacy-v1":
+        profile_argv = ("--matrix-plan-profile", profile)
+    else:
+        raise A0XRunnerError("material contract Matrix plan profile is invalid")
     rows: list[tuple[str, tuple[str, ...]]] = [
         (_PREFLIGHT_LABELS[0], ("admission", "status", "--json")),
         (_PREFLIGHT_LABELS[1], ("resource", "status", "--json")),
-        (_PREFLIGHT_LABELS[2], ("plan", "--config", matrix_path, "--json")),
-        (_PREFLIGHT_LABELS[3], ("doctor", "--config", matrix_path, "--json")),
-        (_PREFLIGHT_LABELS[4], ("dry-run", "--config", matrix_path, "--repository", repository, "--cache-dir", cache_dir, "--json")),
+        (_PREFLIGHT_LABELS[2], ("plan", "--config", matrix_path, *profile_argv, "--json")),
+        (_PREFLIGHT_LABELS[3], ("doctor", "--config", matrix_path, *profile_argv, "--json")),
+        (_PREFLIGHT_LABELS[4], ("dry-run", "--config", matrix_path, *profile_argv, "--repository", repository, "--cache-dir", cache_dir, "--json")),
     ]
     if generation is not None:
         if not _is_integer(generation) or generation <= 0:
             raise A0XRunnerError("CCP generation is invalid")
-        rows.append(("run --generation <authorized-u64> --json", ("run", "--config", matrix_path, "--repository", repository, "--cache-dir", cache_dir, "--generation", str(generation), "--json")))
+        rows.append(("run --generation <authorized-u64> --json", ("run", "--config", matrix_path, *profile_argv, "--repository", repository, "--cache-dir", cache_dir, "--generation", str(generation), "--json")))
     return tuple(rows)
 
 
@@ -256,7 +263,8 @@ def _run_ccp_preflight(
         raise A0XRunnerError("material contract or source HEAD is invalid")
     expected = _ccp_argvs(contract)
     expected_contract_argv = [list(argv) for _label, argv in _ccp_argvs(contract)]
-    expected_contract_argv.append(["run", "--config", ccp["matrix_config_binding"]["path"], "--repository", ccp["location_binding"]["repository"], "--cache-dir", ccp["location_binding"]["cache_dir"], "--generation", "<authorized-u64>", "--json"])
+    profile_argv = ["--matrix-plan-profile", ccp["matrix_plan_profile"]]
+    expected_contract_argv.append(["run", "--config", ccp["matrix_config_binding"]["path"], *profile_argv, "--repository", ccp["location_binding"]["repository"], "--cache-dir", ccp["location_binding"]["cache_dir"], "--generation", "<authorized-u64>", "--json"])
     expected_contract_argv.append(["guard", "exec"])
     if ccp.get("commands") != expected_contract_argv or ccp.get("hash_before_command") is not True:
         raise A0XRunnerError("material CCP command order is invalid")
@@ -354,7 +362,13 @@ def _validate_ccp_response(command: str, parsed: Mapping[str, Any], ccp: Mapping
             _validate_resource(parsed)
         elif command == "plan --json":
             plan_binding = ccp["matrix_plan_binding"]
-            if set(parsed) != {"plan_digest", "plan"} or parsed.get("plan_digest") != plan_binding["outer_digest"]:
+            profile = ccp.get("matrix_plan_profile")
+            expected_keys = {"plan_digest", "plan"}
+            if profile == "matrix-v2-legacy-v1":
+                expected_keys |= {"matrix_plan_profile", "legacy_digest_basis"}
+            elif profile is not None:
+                raise A0XRunnerError("CCP Matrix plan profile is invalid")
+            if set(parsed) != expected_keys or parsed.get("plan_digest") != plan_binding["outer_digest"]:
                 raise A0XRunnerError("CCP plan digest does not match the frozen configuration")
             plan = parsed.get("plan")
             if not isinstance(plan, Mapping) or set(plan) != {"schema_version", "project", "receipt", "environment", "caches", "runtimes"}:
@@ -374,6 +388,8 @@ def _validate_ccp_response(command: str, parsed: Mapping[str, Any], ccp: Mapping
             }
             if observed_digests != expected_digests:
                 raise A0XRunnerError("CCP Matrix plan runtime digests drifted")
+            if profile == "matrix-v2-legacy-v1":
+                _validate_legacy_matrix_plan_disclosure(parsed, plan, ccp)
         elif command == "doctor --json":
             _validate_matrix_doctor(parsed, ccp)
         elif command == "dry-run --json":
@@ -382,6 +398,45 @@ def _validate_ccp_response(command: str, parsed: Mapping[str, Any], ccp: Mapping
             raise A0XRunnerError("CCP command is not allowed")
     except (A0XPreflightError, KeyError, TypeError) as error:
         raise A0XRunnerError("CCP response is invalid for its command") from error
+
+
+def _validate_legacy_matrix_plan_disclosure(
+    envelope: Mapping[str, Any], plan: Mapping[str, Any], ccp: Mapping[str, Any],
+) -> None:
+    """Bind the explicit legacy profile to its independently hashable basis."""
+    if envelope.get("matrix_plan_profile") != "matrix-v2-legacy-v1":
+        raise A0XRunnerError("CCP legacy Matrix profile disclosure is invalid")
+    basis = envelope.get("legacy_digest_basis")
+    expected_basis_keys = {
+        "schema_version", "project", "receipt", "environment_allow", "caches", "runtimes",
+    }
+    if not isinstance(basis, Mapping) or set(basis) != expected_basis_keys:
+        raise A0XRunnerError("CCP legacy Matrix digest basis is malformed")
+    environment = plan.get("environment")
+    if not isinstance(environment, Mapping) or set(environment) != {
+        "inherit", "fixed", "runtime_internal", "remote_secret_only",
+    }:
+        raise A0XRunnerError("CCP legacy Matrix environment is malformed")
+    if any(environment[name] for name in ("fixed", "runtime_internal", "remote_secret_only")):
+        raise A0XRunnerError("CCP legacy Matrix environment is not representable")
+    if (
+        basis.get("schema_version") != plan.get("schema_version")
+        or basis.get("project") != plan.get("project")
+        or basis.get("receipt") != plan.get("receipt")
+        or basis.get("environment_allow") != environment.get("inherit")
+        or basis.get("caches") != plan.get("caches")
+        or basis.get("runtimes") != plan.get("runtimes")
+    ):
+        raise A0XRunnerError("CCP legacy Matrix digest basis differs from the execution plan")
+    try:
+        encoded = json.dumps(
+            dict(basis), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise A0XRunnerError("CCP legacy Matrix digest basis is not canonical JSON") from error
+    observed_digest = "sha256:" + hashlib.sha256(encoded).hexdigest()
+    if observed_digest != ccp["matrix_plan_binding"]["outer_digest"]:
+        raise A0XRunnerError("CCP legacy Matrix digest basis does not reproduce the frozen digest")
 
 
 def _is_integer(value: Any) -> bool:
@@ -611,7 +666,10 @@ def validate_matrix_qualification_receipt(raw: bytes, *, contract: Mapping[str, 
     if receipt["schema_version"] != "2.0" or receipt["overall_status"] != "PASS" or receipt["incomplete_reason"] is not None or not isinstance(receipt["redaction_policy_version"], str) or not receipt["redaction_policy_version"]:
         raise A0XRunnerError("CCP Matrix qualification status is invalid")
     producer = _require_keys(receipt["producer"], {"name", "version"}, "Matrix receipt producer")
-    if producer != {"name": "commit-ci-preflight", "version": ccp["version"].removeprefix("commit-ci-preflight ")}:
+    expected_producer_version = ccp["version"].removeprefix("commit-ci-preflight ")
+    if ccp.get("matrix_plan_profile") == "matrix-v2-legacy-v1":
+        expected_producer_version += "+matrix-v2-legacy-v1"
+    if producer != {"name": "commit-ci-preflight", "version": expected_producer_version}:
         raise A0XRunnerError("CCP Matrix receipt producer drifted")
     repository = _require_keys(receipt["repository"], {"repository", "commit_sha", "dirty"}, "Matrix receipt repository")
     if repository != {"repository": contract["repository"], "commit_sha": source_head, "dirty": False}:
@@ -720,16 +778,26 @@ def _fsync_directory(path: Path) -> None:
 def _validate_material_contract(contract: Mapping[str, Any]) -> None:
     expected_ccp = {
         "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
-        "source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904",
-        "qualified_source_tree": "9e478c1489a9926772e8ab8bea21bd57470494b6",
-        "sha256": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c",
+        "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
+        "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7",
+        "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
         "version": "commit-ci-preflight 0.1.0",
     }
     if contract.get("repository") != "MarcoPorcellato/Latent-TRIZ" or contract.get("max_run_count") != 1:
         raise A0XRunnerError("material contract identity is invalid")
-    bindings = {"matrix_config_binding": {"path": ".commit-ci-preflight.toml", "raw_sha256": "3dc320e11a22cd0774a64b4a3773fd7568e389b1092b165da17b073685832a9b"}, "matrix_policy_binding": {"path": ".commit-ci-policy-v2.toml", "raw_sha256": "4f68f75523b1a5131f81db668a3e017f62cf180f9cf1c2422d2b2e94b471d0ca"}, "location_binding": {"repository": ".", "cache_dir": "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1"}, "matrix_plan_binding": {"outer_digest": "sha256:25b35b942a6ff9b6237ebed7cefbdbc96b968bbe8954a38b606942f36b8df4b2", "python311_digest": "sha256:b3d8beef1542566d9d925bfee77d2244995dc74adcd879128ef65e82ed1d354b", "python312_digest": "sha256:d446c4ca0602c09eee61c796ad2972f58ab0eebe84a39f928fd90aac5bfb535c"}}
+    bindings = {
+        "matrix_plan_profile": "matrix-v2-legacy-v1",
+        "matrix_config_binding": {"path": ".commit-ci-preflight.toml", "raw_sha256": "3dc320e11a22cd0774a64b4a3773fd7568e389b1092b165da17b073685832a9b"},
+        "matrix_policy_binding": {"path": ".commit-ci-policy-v2.toml", "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce"},
+        "location_binding": {"repository": ".", "cache_dir": "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1"},
+        "matrix_plan_binding": {
+            "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
+            "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
+            "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
+        },
+    }
     expected_commands = [list(argv) for _label, argv in _ccp_argvs({"ccp": {**expected_ccp, **bindings}})]
-    expected_commands.append(["run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "<authorized-u64>", "--json"])
+    expected_commands.append(["run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "<authorized-u64>", "--json"])
     expected_commands.append(["guard", "exec"])
     if contract.get("ccp") != {**expected_ccp, "commands": expected_commands, "hash_before_command": True, **bindings}:
         raise A0XRunnerError("material contract CCP identity is invalid")

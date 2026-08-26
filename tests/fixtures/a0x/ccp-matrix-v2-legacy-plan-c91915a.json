@@ -2,12 +2,12 @@
   "artifact_class": "a0x-ccp-matrix-v2-plan-observation",
   "observation_version": "a0x-ccp-matrix-v2-plan-observation-v1",
   "observation_source": "authorized_ccp_plan_preflight",
-  "observed_source_head": "2af9a159b9abd4e82786c668470e8517e7f76f2a",
+  "observed_source_head": "34b52c42ef08cfe7043dde53f300154cc01d22f9",
   "ccp": {
     "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
-    "source_commit": "3fccc197e5055a2759ee7afe51b91133938ec904",
-    "qualified_source_tree": "9e478c1489a9926772e8ab8bea21bd57470494b6",
-    "sha256": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c",
+    "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
+    "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7",
+    "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
     "version": "commit-ci-preflight 0.1.0"
   },
   "matrix_config_binding": {
@@ -21,6 +21,34 @@
     "ccp_run_executed": false
   },
   "observed_plan": {
+    "matrix_plan_profile": "matrix-v2-legacy-v1",
+    "legacy_digest_basis": {
+      "schema_version": "2.0",
+      "project": "MarcoPorcellato/Latent-TRIZ",
+      "receipt": {"output": ".ccp/receipt.json", "freshness_seconds": 3600},
+      "environment_allow": [],
+      "caches": [],
+      "runtimes": [
+        {
+          "id": "python311",
+          "configuration_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
+          "runtime": {"kind": "docker_compatible", "image": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:25de19baba5938c80de18c930342ccdcdf3c6759051196c3c713bd3e434d2f0e", "cpu_count": 1, "memory_mib": 1024, "pids_limit": 256, "network": false},
+          "checks": [
+            {"id": "repository-check-py311", "required": true, "argv": ["python", "scripts/repository_check.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []},
+            {"id": "schema-cross-validate-py311", "required": true, "argv": ["python", "scripts/schema_cross_validate.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []}
+          ]
+        },
+        {
+          "id": "python312",
+          "configuration_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
+          "runtime": {"kind": "docker_compatible", "image": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:e984457d591121c52517027f49bb55371f68075caace763b8859db136e434dd0", "cpu_count": 1, "memory_mib": 1024, "pids_limit": 256, "network": false},
+          "checks": [
+            {"id": "repository-check-py312", "required": true, "argv": ["python", "scripts/repository_check.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []},
+            {"id": "schema-cross-validate-py312", "required": true, "argv": ["python", "scripts/schema_cross_validate.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []}
+          ]
+        }
+      ]
+    },
     "plan": {
       "caches": [],
       "environment": {
@@ -56,7 +84,7 @@
               "working_directory": "."
             }
           ],
-          "configuration_digest": "sha256:b3d8beef1542566d9d925bfee77d2244995dc74adcd879128ef65e82ed1d354b",
+          "configuration_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
           "id": "python311",
           "runtime": {
             "cpu_count": 1,
@@ -88,7 +116,7 @@
               "working_directory": "."
             }
           ],
-          "configuration_digest": "sha256:d446c4ca0602c09eee61c796ad2972f58ab0eebe84a39f928fd90aac5bfb535c",
+          "configuration_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
           "id": "python312",
           "runtime": {
             "cpu_count": 1,
@@ -102,6 +130,6 @@
       ],
       "schema_version": "2.0"
     },
-    "plan_digest": "sha256:25b35b942a6ff9b6237ebed7cefbdbc96b968bbe8954a38b606942f36b8df4b2"
+    "plan_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178"
   }
 }

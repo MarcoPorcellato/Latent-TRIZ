@@ -83,9 +83,9 @@ class _SyntheticCcp:
         labels = {
             ("admission", "status", "--json"): "admission status --json",
             ("resource", "status", "--json"): "resource status --json",
-            ("plan", "--config", ".commit-ci-preflight.toml", "--json"): "plan --json",
-            ("doctor", "--config", ".commit-ci-preflight.toml", "--json"): "doctor --json",
-            ("dry-run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"): "dry-run --json",
+            ("plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"): "plan --json",
+            ("doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"): "doctor --json",
+            ("dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"): "dry-run --json",
         }
         command = labels.get(argv)
         if command is None:
@@ -569,9 +569,9 @@ class A0XMaterialEntrypointTests(unittest.TestCase):
                     labels = {
                         ("admission", "status", "--json"): "admission status --json",
                         ("resource", "status", "--json"): "resource status --json",
-                        ("plan", "--config", ".commit-ci-preflight.toml", "--json"): "plan --json",
-                        ("doctor", "--config", ".commit-ci-preflight.toml", "--json"): "doctor --json",
-                        ("dry-run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"): "dry-run --json",
+                        ("plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"): "plan --json",
+                        ("doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"): "doctor --json",
+                        ("dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"): "dry-run --json",
                     }
                     command = labels.get(command, "unknown")
                     trace.append(command)

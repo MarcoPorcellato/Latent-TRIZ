@@ -1,6 +1,6 @@
 schema_version = "2.0"
 project = "MarcoPorcellato/Latent-TRIZ"
-configuration_digest = "sha256:25b35b942a6ff9b6237ebed7cefbdbc96b968bbe8954a38b606942f36b8df4b2"
+configuration_digest = "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178"
 max_age_seconds = 3600
 
 [[required_checks]]
@@ -22,11 +22,11 @@ runtime_id = "python312"
 [[runtimes]]
 id = "python311"
 image_reference = "ghcr.io/marcoporcellato/latent-triz-verify@sha256:25de19baba5938c80de18c930342ccdcdf3c6759051196c3c713bd3e434d2f0e"
-configuration_digest = "sha256:b3d8beef1542566d9d925bfee77d2244995dc74adcd879128ef65e82ed1d354b"
+configuration_digest = "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562"
 platforms = [{ host_os = "macos", host_arch = "aarch64", runtime_kind = "docker_compatible" }]
 
 [[runtimes]]
 id = "python312"
 image_reference = "ghcr.io/marcoporcellato/latent-triz-verify@sha256:e984457d591121c52517027f49bb55371f68075caace763b8859db136e434dd0"
-configuration_digest = "sha256:d446c4ca0602c09eee61c796ad2972f58ab0eebe84a39f928fd90aac5bfb535c"
+configuration_digest = "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"
 platforms = [{ host_os = "macos", host_arch = "aarch64", runtime_kind = "docker_compatible" }]

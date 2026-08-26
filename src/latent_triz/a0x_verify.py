@@ -110,9 +110,9 @@ def _ccp_preflight_link(values:Mapping[str,Mapping[str,Any]],raws:Mapping[str,by
     if issues: raise A0XVerificationError(f"pre-run observation shape rejected: {issues[0].message}")
     expected_argv=[
         ["admission","status","--json"], ["resource","status","--json"],
-        ["plan","--config",".commit-ci-preflight.toml","--json"],
-        ["doctor","--config",".commit-ci-preflight.toml","--json"],
-        ["dry-run","--config",".commit-ci-preflight.toml","--repository",".","--cache-dir","/Users/marco1/Library/Caches/commit-ci-preflight-build-v1","--json"],
+        ["plan","--config",".commit-ci-preflight.toml","--matrix-plan-profile","matrix-v2-legacy-v1","--json"],
+        ["doctor","--config",".commit-ci-preflight.toml","--matrix-plan-profile","matrix-v2-legacy-v1","--json"],
+        ["dry-run","--config",".commit-ci-preflight.toml","--matrix-plan-profile","matrix-v2-legacy-v1","--repository",".","--cache-dir","/Users/marco1/Library/Caches/commit-ci-preflight-build-v1","--json"],
     ]
     trace=pre.get("ccp_trace")
     if not isinstance(trace,list) or [item.get("argv") for item in trace if isinstance(item,Mapping)]!=expected_argv:

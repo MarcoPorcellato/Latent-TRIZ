@@ -113,7 +113,7 @@ _IMPLEMENTATION_PATHS = (
     "tests/test_a0x_runner.py",
     "tests/test_a0x_schemas.py",
     "tests/test_a0x_verify.py",
-    "tests/fixtures/a0x/ccp-matrix-v2-plan-3fccc197.json",
+    "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-c91915a.json",
 )
 
 _DOSSIER_FILENAMES = {

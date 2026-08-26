@@ -185,7 +185,7 @@ class A0XContractTests(A0XTempTestCase):
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE), first,
         )
         self.assertEqual(
-            "d3415b7c31b7cf73ff7b26c062807aea73ed28f34cfd59ccb31439ad8fbe7943",
+            "f8a9f5f644800150b9924ec1711803aaea2bc62d09809412c8e6ad987fd2b629",
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256,
         )
         for invalid_document, profile in (

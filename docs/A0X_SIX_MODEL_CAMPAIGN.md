@@ -185,44 +185,51 @@ gates.
 
 ## Current checkpoint
 
-The local no-model package is at `sealed_gate_pending`. The Matrix V2
-correction is committed at `0114cdc0f14344a9bceb1f442128c55195e69a71` and
-binds policy, contract, schema, runner, fixtures, and tests to a
-repository-owned observation of the real `plan --json` output from CCP binary
-SHA-256 `b8d260...f2fcd4c`; the observation is deliberately independent of the
-material contract, so future plan drift cannot self-confirm. Its one authorized
-exact-head CCP qualification reached a terminal `FAIL` without timeout: both
-schema checks passed, while both repository checks exposed a test-only
-dependency on seven ignored EXP-002 dense assets unavailable in a clean clone.
-The receipt ID is
-`sha256:6e462b9c9bcb0389d886b2b2f56d386e8b4cbdc7ebf3865e8c6478ed47fc1352`
-and the receipt file SHA-256 is
-`763c845ef4065945a4057149997f44c652dd2cfccdf590795bdaa5b9da430835`.
-The production verifier remains fail-closed; the local corrective test uses
-seven deterministic synthetic assets and retains explicit missing/mutated
-failure coverage. A new commit and a new exact-head authorization are required
-before any retry.
-The verifier receipt reports two frozen legs, twelve `approval_requested`
-dossiers, and zero model loads, tokenizer constructions, sealed-target reads,
-CCP invocations, or remote mutations.
+The local no-model package remains at `sealed_gate_pending`. It is now bound to
+the reviewed CCP compatibility candidate at source commit
+`c91915adcb8706898574c0c74d033b9ff991eefb`, tree
+`687fcaaa3643d35a66ba748409e5621d13e25dd7`, and executable SHA-256
+`72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be`.
+The exact `matrix-v2-legacy-v1` profile reproduces the historical trusted-base
+outer and runtime digests from a disclosed, reconstructible digest basis. The
+default CCP profile remains unchanged.
+
+The fetched official CCP `origin/main` is
+`2b4b55ce1a4be0a2b610656ae4a56a7641b29f26`. That public main includes the
+current admission rules, full-lifecycle standard-run cache locks, and
+spawn-boundary generation revalidation. The legacy Matrix profile is an
+additional reviewed candidate change on top of that main; it is not yet an
+official released capability. Its static suite passed 394 tests with four
+documented ignores, and an independent review returned GO. No terminal CCP
+qualification receipt exists for the candidate yet.
+
+After regeneration, the A0X suite passed 197 tests with three expected skips;
+the frozen-package suite passed 9/9; and schema cross-validation reported 155
+tracked pairs in agreement with 19 mutations rejected by both validators. The
+no-model receipt reports two frozen legs, twelve `approval_requested` dossiers,
+and zero model loads, tokenizer constructions, sealed-target reads, CCP
+invocations, or remote mutations. The next gate is an explicitly authorized
+single exact-head CCP qualification of the candidate. A positive candidate
+receipt would still not authorize installation, Latent-TRIZ exact-head
+qualification, publication, or any scientific run.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Material execution contract | `592356b8c637608806737581cd2591452bb77034debe6b9ea9dcae6531d5732e` |
-| A0 freeze | `32383a4e756e6ef17527a55693f4edaffde5f64ce96eb49bf3ec852ab3ddbe21` |
-| A0-R1 freeze | `1ea2ec5eede41635b68a62900f467fa6778420ac77237864b02d5b7d285141eb` |
-| A0 / SmolLM2-360M dossier | `64ab8737f4848f3dea2491ac8003a9892404d5ad8c65e76f644699773b4b4ba0` |
-| A0 / Qwen3-0.6B-Base dossier | `e63450e9493e1fb775439c50530b370d289cf672350021ba254173d5a8fbee3a` |
-| A0 / GPT-2 dossier | `b44b65e685ee1baac60a2725202e5fb013b287b04477472e788d4d8907e4bff0` |
-| A0 / SmolLM2-135M dossier | `0ce1d2ef29a00fe3e1b6eebb8effffa9ad5964fe00a055e347debce9224a6480` |
-| A0 / GPT-Neo-125M dossier | `0be25d9b0505ad88f4afa53051fcd6ebf89c8837adab69c5ae00b273199f19c1` |
-| A0 / Qwen2.5-0.5B dossier | `33af77bbcc20b4a1ec8c7171f849e4f69d01f773cf96204fb35e96512dee039c` |
-| A0-R1 / SmolLM2-360M dossier | `cb500d13337aa7433ae5b7df1b9a742018f8bb6cdea981b2d7819b8c9d50f250` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `a6e7fb813035e1b1307df030686f8ae9e45787abf148afed4926e9e75c936c6b` |
-| A0-R1 / GPT-2 dossier | `11aede16c6c13a4ef383bfd2ca8d471c15faa80974f7261d62744f181c21507e` |
-| A0-R1 / SmolLM2-135M dossier | `69aab70047f03a0d112f1ce4014a4d887f5f7cf3ac353f21f6cc519c3c5b6bb1` |
-| A0-R1 / GPT-Neo-125M dossier | `e4894de0256d730fa30c4a440bd9c7bb196fce33dc7ca8ac836063178430a45a` |
-| A0-R1 / Qwen2.5-0.5B dossier | `dbb09087fcdf8516b3b5129be2430e22d406548d45df066c0f117a01cd00e9b9` |
+| Material execution contract | `5b9754c5689b6f48476768c61a58afcac6b7c6e88ee289a5b16678ec26021ca4` |
+| A0 freeze | `711d7df84baf2cceaea6f0567733feec24292e4ca872fc66da79ece7e7577569` |
+| A0-R1 freeze | `d43a91f02089ce6a103d6afe6126076ea53e480bbe68e49abcf61f3dee0e240b` |
+| A0 / SmolLM2-360M dossier | `26ed343b750ea396eddc5b7b413e900b4dcc1b28e63b4d013212b9689992a7a9` |
+| A0 / Qwen3-0.6B-Base dossier | `64fe1cacbd1999fc7d539ff0ddc557a0ee7bcf7edd3c53a76102c97d2d99c64d` |
+| A0 / GPT-2 dossier | `d7c72afa535a7d2f708f380981fce64fb03df4dcb2882f5a5021f1769afc8647` |
+| A0 / SmolLM2-135M dossier | `41cc33d1e7d99d156e1f77d19ddde816d33f69de41c4f5e79309a623808a19e7` |
+| A0 / GPT-Neo-125M dossier | `9429986eb13bac01772ac6812fc5577faf9f4c5cfac56c2fbafdf9af917f6802` |
+| A0 / Qwen2.5-0.5B dossier | `e86b56373d7b1e4951212ae9397e96f0c1026fe19ef810da3be8a50c9cd7084c` |
+| A0-R1 / SmolLM2-360M dossier | `ebeefd625ebfa482552110de361668229c746cd5edb6bcee358358254f5b6b53` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `2e88c6618450e0576333cb628c6dc95cad1f81a53fcb45e1f80127b2013286d1` |
+| A0-R1 / GPT-2 dossier | `5abfb2f9c48b489aeb5ac9ac50f106514ef4517e66be9dc97cf7327eb38e1ced` |
+| A0-R1 / SmolLM2-135M dossier | `fa9cedff182aa229b93f06c2955885de015bb02dd13d1b62309a00e8c7cdc630` |
+| A0-R1 / GPT-Neo-125M dossier | `6f5b01d86a6ca3477d54321622a3954ba53312991ef39dd544e07422225a0f03` |
+| A0-R1 / Qwen2.5-0.5B dossier | `5268f25e090023c33779e29ada93862695e8b1dc249c72470f73a7208ca97816` |
 
 These hashes identify approval requests only. The consolidation commit that
 contains this table is the next source anchor and must be resolved live rather

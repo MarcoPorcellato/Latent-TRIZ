@@ -128,8 +128,8 @@
       "required": ["path", "source_commit", "sha256", "version_output"],
       "properties": {
         "path": {"type": "string", "pattern": "^/"},
-        "source_commit": {"const": "3fccc197e5055a2759ee7afe51b91133938ec904"},
-        "sha256": {"$ref": "#/$defs/sha"},
+        "source_commit": {"const": "c91915adcb8706898574c0c74d033b9ff991eefb"},
+        "sha256": {"const": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be"},
         "version_output": {"const": "commit-ci-preflight 0.1.0\n"}
       }
     },

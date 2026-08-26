@@ -51,7 +51,9 @@ _ADMISSION_FIELDS = frozenset((
     "process_visibility_note",
 ))
 _VISIBILITY_NOTE = "No process visible in the local shell does not prove global inactivity."
-_CCP_SOURCE_COMMIT = "3fccc197e5055a2759ee7afe51b91133938ec904"
+_CCP_SOURCE_COMMIT = "c91915adcb8706898574c0c74d033b9ff991eefb"
+_CCP_BINARY_SHA256 = "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be"
+_CCP_LEGACY_PROFILE = "matrix-v2-legacy-v1"
 
 
 @dataclass(frozen=True)
@@ -547,9 +549,9 @@ def _verify_ccp_observation(
         expected_argv = [
             ["admission", "status", "--json"],
             ["resource", "status", "--json"],
-            ["plan", "--config", ".commit-ci-preflight.toml", "--json"],
-            ["doctor", "--config", ".commit-ci-preflight.toml", "--json"],
-            ["dry-run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"],
+            ["plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", _CCP_LEGACY_PROFILE, "--json"],
+            ["doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", _CCP_LEGACY_PROFILE, "--json"],
+            ["dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", _CCP_LEGACY_PROFILE, "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"],
         ]
         trace = observation.get("ccp_trace")
         if (
@@ -576,7 +578,7 @@ def _validate_binary_binding(binary: Mapping[str, str]) -> None:
     for actual, expected in (("path", "expected_path"), ("source_commit", "expected_source_commit"), ("sha256", "expected_sha256"), ("version_output", "expected_version_output")):
         if not isinstance(binary[actual], str) or binary[actual] != binary[expected]:
             raise A0XPreflightError("CCP binary binding does not match dossier")
-    if not Path(binary["path"]).is_absolute() or binary["source_commit"] != _CCP_SOURCE_COMMIT or not _sha(binary["sha256"]) or not binary["version_output"]:
+    if not Path(binary["path"]).is_absolute() or binary["source_commit"] != _CCP_SOURCE_COMMIT or binary["sha256"] != _CCP_BINARY_SHA256 or not binary["version_output"]:
         raise A0XPreflightError("CCP binary binding is invalid")
 
 

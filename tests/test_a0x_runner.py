@@ -23,7 +23,7 @@ def _runtime_receipt(*, runtime_id: str, configuration_digest: str, check_ids: l
     image_digest = image.rsplit("@", 1)[1]
     receipt = {
         "schema_version": "1.0",
-        "producer": {"name": "commit-ci-preflight", "version": "0.1.0"},
+        "producer": {"name": "commit-ci-preflight", "version": "0.1.0+matrix-v2-legacy-v1"},
         "repository": {"repository": "MarcoPorcellato/Latent-TRIZ", "commit_sha": source_head, "dirty": False},
         "run": {"run_id": f"matrix-{runtime_id}", "generation": generation, "started_at_utc": "2026-08-24T12:00:00Z", "finished_at_utc": "2026-08-24T12:00:01Z"},
         "platform": {"host_os": "macos", "host_arch": "aarch64", "runtime_kind": "docker_compatible", "runtime_version": "synthetic", "image_reference": image, "image_digest": image_digest},
@@ -49,7 +49,7 @@ def matrix_receipt_envelope(*, source_head: str = "a" * 40, generation: int = 7)
     binding = contract["ccp"]["matrix_plan_binding"]
     receipt = {
         "schema_version": "2.0",
-        "producer": {"name": "commit-ci-preflight", "version": "0.1.0"},
+        "producer": {"name": "commit-ci-preflight", "version": "0.1.0+matrix-v2-legacy-v1"},
         "repository": {"repository": "MarcoPorcellato/Latent-TRIZ", "commit_sha": source_head, "dirty": False},
         "run": {"run_id": "matrix-synthetic", "generation": generation, "started_at_utc": "2026-08-24T12:00:00Z", "finished_at_utc": "2026-08-24T12:00:02Z"},
         "configuration_digest": binding["outer_digest"],
@@ -79,7 +79,17 @@ def matrix_plan_envelope() -> dict[str, object]:
             "runtime": {"kind": "docker_compatible", "image": _RUNTIME_IMAGES[runtime_id], "cpu_count": 1, "memory_mib": 1024, "pids_limit": 256, "network": False},
             "checks": [{"id": check_id, "required": True, "argv": ["python", "scripts/repository_check.py" if check_id.startswith("repository-check-") else "scripts/schema_cross_validate.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []} for check_id in check_ids],
         })
-    return {"plan_digest": binding["outer_digest"], "plan": {"schema_version": "2.0", "project": "MarcoPorcellato/Latent-TRIZ", "receipt": {"output": ".ccp/receipt.json", "freshness_seconds": 3600}, "environment": {"inherit": [], "fixed": [], "runtime_internal": [], "remote_secret_only": []}, "caches": [], "runtimes": runtimes}}
+    plan = {"schema_version": "2.0", "project": "MarcoPorcellato/Latent-TRIZ", "receipt": {"output": ".ccp/receipt.json", "freshness_seconds": 3600}, "environment": {"inherit": [], "fixed": [], "runtime_internal": [], "remote_secret_only": []}, "caches": [], "runtimes": runtimes}
+    legacy_basis = {
+        "schema_version": plan["schema_version"], "project": plan["project"],
+        "receipt": plan["receipt"], "environment_allow": [],
+        "caches": plan["caches"], "runtimes": plan["runtimes"],
+    }
+    return {
+        "matrix_plan_profile": "matrix-v2-legacy-v1",
+        "plan_digest": binding["outer_digest"], "plan": plan,
+        "legacy_digest_basis": legacy_basis,
+    }
 
 
 def v1_doctor_envelope(*, omit_capabilities: bool = False) -> dict[str, object]:
@@ -190,12 +200,95 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
         expected = (
             ("admission status --json", ("admission", "status", "--json")),
             ("resource status --json", ("resource", "status", "--json")),
-            ("plan --json", ("plan", "--config", config, "--json")),
-            ("doctor --json", ("doctor", "--config", config, "--json")),
-            ("dry-run --json", ("dry-run", "--config", config, "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json")),
-            ("run --generation <authorized-u64> --json", ("run", "--config", config, "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "7", "--json")),
+            ("plan --json", ("plan", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json")),
+            ("doctor --json", ("doctor", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json")),
+            ("dry-run --json", ("dry-run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json")),
+            ("run --generation <authorized-u64> --json", ("run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "7", "--json")),
         )
         self.assertEqual(expected, _ccp_argvs(contract, generation=7))
+
+    def test_legacy_matrix_profile_is_bound_to_every_configuration_command(self) -> None:
+        """Catch a profile flag omitted from any plan/doctor/dry-run/run argv."""
+        from latent_triz.a0x_runner import _ccp_argvs
+
+        path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
+        contract = json.loads(path.read_text())
+        contract["ccp"]["matrix_plan_profile"] = "matrix-v2-legacy-v1"
+        commands = dict(_ccp_argvs(contract, generation=7))
+        for label in ("plan --json", "doctor --json", "dry-run --json", "run --generation <authorized-u64> --json"):
+            with self.subTest(label=label):
+                argv = commands[label]
+                position = argv.index("--matrix-plan-profile")
+                self.assertEqual("matrix-v2-legacy-v1", argv[position + 1])
+
+    def test_legacy_matrix_plan_requires_disclosure_and_reconstructible_digest_basis(self) -> None:
+        """Catch accepting a legacy digest without its exact disclosed hash basis."""
+        from latent_triz.a0x_runner import A0XRunnerError, _validate_ccp_response
+
+        path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
+        contract = json.loads(path.read_text())
+        contract["ccp"]["matrix_plan_profile"] = "matrix-v2-legacy-v1"
+        binding = contract["ccp"]["matrix_plan_binding"] = {
+            "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
+            "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
+            "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
+        }
+        envelope = matrix_plan_envelope()
+        envelope["plan_digest"] = binding["outer_digest"]
+        for runtime in envelope["plan"]["runtimes"]:
+            runtime["configuration_digest"] = binding[f"{runtime['id']}_digest"]
+        basis = {
+            "schema_version": envelope["plan"]["schema_version"],
+            "project": envelope["plan"]["project"],
+            "receipt": envelope["plan"]["receipt"],
+            "environment_allow": [],
+            "caches": envelope["plan"]["caches"],
+            "runtimes": envelope["plan"]["runtimes"],
+        }
+        envelope.update(matrix_plan_profile="matrix-v2-legacy-v1", legacy_digest_basis=basis)
+        _validate_ccp_response("plan --json", envelope, contract["ccp"])
+
+        for mutate in (
+            lambda value: value.pop("matrix_plan_profile"),
+            lambda value: value.__setitem__("matrix_plan_profile", "current-v2"),
+            lambda value: value["legacy_digest_basis"].__setitem__("project", "other/project"),
+        ):
+            changed = copy.deepcopy(envelope)
+            mutate(changed)
+            with self.subTest(changed=changed), self.assertRaises(A0XRunnerError):
+                _validate_ccp_response("plan --json", changed, contract["ccp"])
+
+    def test_material_contract_accepts_only_the_reviewed_legacy_candidate_identity(self) -> None:
+        """Catch retaining the obsolete producer after selecting legacy parity."""
+        from latent_triz.a0x_runner import _ccp_argvs, _validate_material_contract
+
+        path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
+        contract = json.loads(path.read_text())
+        ccp = contract["ccp"]
+        ccp.update({
+            "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
+            "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7",
+            "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
+            "matrix_plan_profile": "matrix-v2-legacy-v1",
+            "matrix_policy_binding": {
+                "path": ".commit-ci-policy-v2.toml",
+                "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce",
+            },
+            "matrix_plan_binding": {
+                "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
+                "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
+                "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
+            },
+        })
+        ccp["commands"] = [list(argv) for _label, argv in _ccp_argvs(contract)]
+        ccp["commands"].append([
+            "run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile",
+            "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir",
+            "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1",
+            "--generation", "<authorized-u64>", "--json",
+        ])
+        ccp["commands"].append(["guard", "exec"])
+        _validate_material_contract(contract)
 
     def test_matrix_doctor_and_dry_run_bind_both_runtime_envelopes(self) -> None:
         from latent_triz.a0x_runner import A0XRunnerError, _validate_ccp_response
@@ -325,13 +418,13 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
                 }
                 if command in expected:
                     return 0, expected[command]
-                if command == ("plan", "--config", ".commit-ci-preflight.toml", "--json"):
+                if command == ("plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"):
                     return 0, json.dumps(matrix_plan_envelope(), separators=(",", ":")).encode()
-                if command == ("doctor", "--config", ".commit-ci-preflight.toml", "--json"):
+                if command == ("doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"):
                     return 0, json.dumps(matrix_doctor_envelope(), separators=(",", ":")).encode()
-                if command == ("dry-run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"):
+                if command == ("dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"):
                     return 0, json.dumps(matrix_dry_run_envelope(), separators=(",", ":")).encode()
-                test_case.assertEqual(("run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "7", "--json"), command)
+                test_case.assertEqual(("run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "7", "--json"), command)
                 return 0, json.dumps(matrix_receipt_envelope(), sort_keys=True, separators=(",", ":")).encode()
         source = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as directory:

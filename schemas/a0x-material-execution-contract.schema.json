@@ -9,15 +9,16 @@
     "repository": {"const": "MarcoPorcellato/Latent-TRIZ"},
     "ccp": {
       "type": "object", "additionalProperties": false,
-      "required": ["path", "source_commit", "qualified_source_tree", "sha256", "version", "commands", "hash_before_command", "matrix_config_binding", "matrix_policy_binding", "location_binding", "matrix_plan_binding"],
+      "required": ["path", "source_commit", "qualified_source_tree", "sha256", "version", "commands", "hash_before_command", "matrix_plan_profile", "matrix_config_binding", "matrix_policy_binding", "location_binding", "matrix_plan_binding"],
       "properties": {
         "path": {"const": "/Users/marco1/.cargo/bin/commit-ci-preflight"},
-        "source_commit": {"const": "3fccc197e5055a2759ee7afe51b91133938ec904"},
-        "qualified_source_tree": {"const": "9e478c1489a9926772e8ab8bea21bd57470494b6"},
-        "sha256": {"const": "b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c"},
+        "source_commit": {"const": "c91915adcb8706898574c0c74d033b9ff991eefb"},
+        "qualified_source_tree": {"const": "687fcaaa3643d35a66ba748409e5621d13e25dd7"},
+        "sha256": {"const": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be"},
         "version": {"const": "commit-ci-preflight 0.1.0"},
-        "commands": {"const": [["admission", "status", "--json"], ["resource", "status", "--json"], ["plan", "--config", ".commit-ci-preflight.toml", "--json"], ["doctor", "--config", ".commit-ci-preflight.toml", "--json"], ["dry-run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"], ["run", "--config", ".commit-ci-preflight.toml", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "<authorized-u64>", "--json"], ["guard", "exec"]]},
+        "commands": {"const": [["admission", "status", "--json"], ["resource", "status", "--json"], ["plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"], ["doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"], ["dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"], ["run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "<authorized-u64>", "--json"], ["guard", "exec"]]},
         "hash_before_command": {"const": true},
+        "matrix_plan_profile": {"const": "matrix-v2-legacy-v1"},
         "matrix_config_binding": {
           "type": "object", "additionalProperties": false,
           "required": ["path", "raw_sha256"],
@@ -25,9 +26,9 @@
             "path": {"const": ".commit-ci-preflight.toml"}, "raw_sha256": {"const": "3dc320e11a22cd0774a64b4a3773fd7568e389b1092b165da17b073685832a9b"}
           }
         },
-        "matrix_policy_binding": {"type": "object", "additionalProperties": false, "required": ["path", "raw_sha256"], "properties": {"path": {"const": ".commit-ci-policy-v2.toml"}, "raw_sha256": {"const": "4f68f75523b1a5131f81db668a3e017f62cf180f9cf1c2422d2b2e94b471d0ca"}}},
+        "matrix_policy_binding": {"type": "object", "additionalProperties": false, "required": ["path", "raw_sha256"], "properties": {"path": {"const": ".commit-ci-policy-v2.toml"}, "raw_sha256": {"const": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce"}}},
         "location_binding": {"type": "object", "additionalProperties": false, "required": ["repository", "cache_dir"], "properties": {"repository": {"const": "."}, "cache_dir": {"const": "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1"}}},
-        "matrix_plan_binding": {"type": "object", "additionalProperties": false, "required": ["outer_digest", "python311_digest", "python312_digest"], "properties": {"outer_digest": {"const": "sha256:25b35b942a6ff9b6237ebed7cefbdbc96b968bbe8954a38b606942f36b8df4b2"}, "python311_digest": {"const": "sha256:b3d8beef1542566d9d925bfee77d2244995dc74adcd879128ef65e82ed1d354b"}, "python312_digest": {"const": "sha256:d446c4ca0602c09eee61c796ad2972f58ab0eebe84a39f928fd90aac5bfb535c"}}}
+        "matrix_plan_binding": {"type": "object", "additionalProperties": false, "required": ["outer_digest", "python311_digest", "python312_digest"], "properties": {"outer_digest": {"const": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178"}, "python311_digest": {"const": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562"}, "python312_digest": {"const": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"}}}
       }
     },
     "offline": {"const": {"network": false, "generation": false, "local_cpu_float32": true}},
