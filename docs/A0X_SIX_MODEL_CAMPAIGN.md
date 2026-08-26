@@ -213,6 +213,12 @@ single exact-head CCP qualification of the candidate. A positive candidate
 receipt would still not authorize installation, Latent-TRIZ exact-head
 qualification, publication, or any scientific run.
 
+The local implementation anchor containing these bindings is
+`4e7378f1ed6d994a80f31c9ff45984c96156d572`, tree
+`9b0e998168b76855144056e1658963df214a04bf`. Resolve later documentation-only
+checkpoint commits live; do not substitute their hashes for this implementation
+anchor.
+
 | Artifact | SHA-256 |
 | --- | --- |
 | Material execution contract | `5b9754c5689b6f48476768c61a58afcac6b7c6e88ee289a5b16678ec26021ca4` |

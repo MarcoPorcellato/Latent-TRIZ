@@ -85,11 +85,15 @@ material command is runnable yet, even if host admission is free.
 
 - Repository: `/Users/marco1/Documents/CODICE con VS CODE/Emergent-AI-TRIZ`.
 - Branch: `agent/a0x-six-model-design`.
-- Exact local HEAD: `34b52c42ef08cfe7043dde53f300154cc01d22f9`.
-- Exact local tree: `3f09362de6094db68560628492d14d0029057e1b`.
+- A0X compatibility implementation anchor:
+  `4e7378f1ed6d994a80f31c9ff45984c96156d572`, tree
+  `9b0e998168b76855144056e1658963df214a04bf`.
+- Resolve the current documentation-checkpoint HEAD live with
+  `git rev-parse HEAD`; this document does not self-claim its own commit hash.
+- Last published PR head: `34b52c42ef08cfe7043dde53f300154cc01d22f9`.
 - Locally recorded and GitHub-verified PR base: public `main`
   `188eb65b5e249923baddadeba52659f07fcd1609`.
-- Branch distance: 32 commits ahead and 0 behind that base.
+- The implementation anchor is 33 commits ahead of that base.
 - The checkout preserves these unrelated, pre-existing untracked paths:
   `experiments/exp002-auto-partial-recovery/`,
   `results/exp002-auto-partial-recovery/`, and `tmp/`. They must remain
@@ -97,7 +101,8 @@ material command is runnable yet, even if host admission is free.
 
 ### Published review state
 
-- Public source branch: `agent/a0x-six-model-design` at the exact HEAD above.
+- Public source branch: `agent/a0x-six-model-design` at the last published PR
+  head above; the local compatibility implementation anchor is not published.
 - Public evidence branch:
   `ccp-evidence/34b52c42ef08cfe7043dde53f300154cc01d22f9`,
   evidence commit `b6a7d8cfa1a575f0a5ed379337b2d93093d9dfac`.
