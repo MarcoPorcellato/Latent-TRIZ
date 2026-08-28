@@ -930,20 +930,19 @@ historical A0 and A0-R1 rules
 
 Tasks 10 and 11 have completed offline implementation, final no-model
 qualification, and independent review. The two frozen legs and twelve
-pair-isolated dossiers are recorded with exact hashes; the next consolidation
-commit becomes the live source anchor for `sealed_gate_pending`. The current
-offline corrective tranche binds a non-tautological observation of the exact
-`matrix-v2-legacy-v1` plan and regenerates every dependent freeze and dossier.
-Its originally bound producer is now superseded. The TDD-corrected successor at
+pair-isolated dossiers are recorded with exact hashes. The TDD-corrected
+producer at
 commit `faf587890e4f899803f027660bc66452623f405e`, tree
 `4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
 `7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`
 has passed one exact Matrix qualification with all five checks terminally
-green. That producer is still local, uninstalled, unpublished, and not bound
-into the frozen A0X artifacts. Durable CCP integration, deliberate producer
-selection, zero-access regeneration, and a separate Latent-TRIZ exact-head gate
-remain required. Task 12 is not authorized. The authoritative operator-facing
-contract is
+green. Its source and receipt are durably preserved on dedicated public
+branches, with CCP PR #70 remaining a draft. It is not installed, but A0X now
+deliberately binds that exact identity. Implementation anchor
+`7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9` regenerated the complete package
+deterministically in two isolated clones and the active checkout. The next
+gate is a separate Latent-TRIZ exact-head qualification. Task 12 is not
+authorized. The authoritative operator-facing contract is
 [`A0X_SIX_MODEL_CAMPAIGN.md`](./A0X_SIX_MODEL_CAMPAIGN.md).
 
 A0X acceptance criteria are:

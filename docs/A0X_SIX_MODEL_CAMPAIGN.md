@@ -206,13 +206,13 @@ seconds only so it does not race CCP's own 3,600-second timeout and final
 cleanup. It does not extend the authorized material workload.
 
 The public contract is host-path-free. It binds roles, relative locators,
-hashes, the exact shell-free guard template, and the exact reconciled CCP
-candidate:
+hashes, the exact shell-free guard template, and the exact terminally
+qualified CCP producer:
 
-- source commit `a73ebed945d9d9e9744c4aff987589f3478a7f3c`;
-- source tree `b12ff9ac9daa67d52e28c6793e14f646c5e37225`;
+- source commit `faf587890e4f899803f027660bc66452623f405e`;
+- source tree `4615028176f3d594fbce0554f5e5edecfb802af1`;
 - executable SHA-256
-  `2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f`;
+  `7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`;
 - plan-output SHA-256
   `4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e`.
 
@@ -225,52 +225,51 @@ context, and active-container count. Each probe has a 30-second timeout and a
 wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
 an active container.
 
-Implementation anchor: `3dc40aa104358a83855cd59a40df30319131ea1e`.
+Implementation anchor: `7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`.
 The two freezes and twelve dossiers were regenerated from that exact anchor.
-The synthetic aggregate passed 245 tests with three documented skips; the
-frozen package passed 10/10. The no-model receipt reports zero model loads,
+The A0X aggregate passed 246 tests; the frozen package passed 10/10. The
+repository-wide suite passed 1,073 tests with one documented skip. The
+no-model receipt reports zero model loads,
 tokenizer constructions, sealed-target reads, CCP invocations, and remote
 mutations.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Material execution contract | `e4ab21c24a491a26e43b07be4cbc0102a84c7482cc425883ca5bda38ba988e1a` |
+| Material execution contract | `f7b8ea1066cbd26d6112394c05fbd4704fffd4da809be86c031d6dbaff9ad2e1` |
 | A0 protocol | `42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586` |
-| A0 implementation | `886a2ec13b64ed376b443e36426322d64b59b6b38293484dfd0e2ed4e688efd5` |
-| A0 freeze | `8817b260737f558259ad5091858513e0f7a156ec751e6191d077a5bdde057aee` |
+| A0 implementation | `0c4bd3cd58cfedfc0a3c6f9c58f30df186790ea11f930c6871b9307bfe2beb8e` |
+| A0 freeze | `3bbb2b2e2799bf0012e5ded25973d1f81f72ab9dd436d09efb5ec275cd2969e4` |
 | A0-R1 protocol | `32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52` |
-| A0-R1 implementation | `4467bc8d07b18372b9467e613ad54323a498dcc121f62ba3da01493e46d4459c` |
-| A0-R1 freeze | `c1f43cfc834b788c45c90c66ab4602ccd3836c6da0b97b1fc4272089e05b19df` |
+| A0-R1 implementation | `d164329919186be8646dfab40d78b6eda9b8458a3afb8f1ba5ae3ed01fc5e648` |
+| A0-R1 freeze | `347dfd8fefb3e73366d7837aa0b96a5aa0e08943548fd65387f575266c4f106e` |
 | No-model verification receipt | `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c` |
-| A0 / SmolLM2-360M dossier | `ca9baf450e7c6528b80a9ed9dd5ccd619f23477829c7a78ee28531c3bc55b59e` |
-| A0 / Qwen3-0.6B-Base dossier | `9a8afb0bdefa7a2f84b50269c6d9df36269a6eeab7ba3819c3bb0a25e702b326` |
-| A0 / GPT-2 dossier | `526e3f86dcf6a0749afb578ad18ecd3f728c49c044f2b2a01408adc9534acf26` |
-| A0 / SmolLM2-135M dossier | `02d211e42396c9d7b007409853b1d97473281a72ff3320e9b7113b0a034179df` |
-| A0 / GPT-Neo-125M dossier | `0332331604f1f20ea752f186d3d5eff99f5e067e3e06017ab5fa5a5478721830` |
-| A0 / Qwen2.5-0.5B dossier | `c3ea7d33e28a88819d2b74dda2ed35d788312b4a4c17040b4b43caef25942916` |
-| A0-R1 / SmolLM2-360M dossier | `d930d2eda9385f5d44d3e30e3f28d1003f58042f0273758818072a8852b2de2b` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `0cb374df8a7e877a4df06bd3dedbbda1d53a87eaff9eb2b311aa90a6db0145d4` |
-| A0-R1 / GPT-2 dossier | `ca2519b5ed92f25a792ac4679a8a0df682c212b779dc7c21ea4810eb6fdc5edf` |
-| A0-R1 / SmolLM2-135M dossier | `f3acc82247c614790d84cc66110c7436bdeb1daecb4ab8f50b862cf09f4b46f1` |
-| A0-R1 / GPT-Neo-125M dossier | `5691cdadc19c14c17fe699c73c43433bb14e84299b49ed9512e7e0f49ef893d8` |
-| A0-R1 / Qwen2.5-0.5B dossier | `af2ed0739dfc144d6629753efc26c8e29cab6edc9334f39f79463cf99daf348a` |
+| A0 / SmolLM2-360M dossier | `39483e525c91b87862c367ac885267eb42a5b377399723942dae4286529a0bd3` |
+| A0 / Qwen3-0.6B-Base dossier | `e9b3ae75311d3b53513c2a8bc65e3e6058e24acbb07716a2d8564d8a53faa732` |
+| A0 / GPT-2 dossier | `1439d6d15fe11dbbb5add366a0ba6218fdb0b6c7e906779fa7dbbb5682d9264d` |
+| A0 / SmolLM2-135M dossier | `73635f4d021a177453b719fb1eaea9c551f83ecac612a01d3169d6f0536315d0` |
+| A0 / GPT-Neo-125M dossier | `3436cec8873fd863c2ab4a177d0b226d17cf892b5f5ec98199ea4328a3c96452` |
+| A0 / Qwen2.5-0.5B dossier | `e4816ee890b4b0942daf52ccb73ea37feb977c5f1e5179d13b52fbd018a3d1d2` |
+| A0-R1 / SmolLM2-360M dossier | `e5a9e21a8044711bc12eae0f491d9978b14782f3cba5677a8f18ef02e2f9af07` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `f62628de0ed9d3bea3509ce9798ca52b95c6a944c91b91e912343c6771161475` |
+| A0-R1 / GPT-2 dossier | `b6695a4727c468bcb544b01a3b9ae8d784610c10c9eb31b81dfcff84e37b4a8c` |
+| A0-R1 / SmolLM2-135M dossier | `51c8dcca0593fd1206cc64893aac9f4bde334136a65d46fad2032d86dad921b0` |
+| A0-R1 / GPT-Neo-125M dossier | `81634c9ddc048939031a3c68e8d3335341cb53cd9a5e3ebd4b16948ec85b8e93` |
+| A0-R1 / Qwen2.5-0.5B dossier | `d464f8f098eeb7bc34a30207f8ee4e99b6a7a3dc7ac51d35d0d98841b8a3e896` |
 
-These are approval-request artifacts only. The currently frozen contract still
-reflects the superseded `a73ebed…` producer identity. A TDD-corrected successor,
-commit `faf587890e4f899803f027660bc66452623f405e`, tree
-`4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
-`7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`,
-has now passed one exact generation-1 Matrix qualification. Its receipt ID is
+These are approval-request artifacts only. They now bind the TDD-corrected
+producer that passed one exact generation-1 Matrix qualification. Its receipt ID is
 `sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`
 and its receipt-file SHA-256 is
 `12f6d8988be5dc119eaa469cd3617a0f74e3416f7f66b5155d6cf3e1c1219670`.
-This evidence makes that exact local producer eligible for deliberate
-selection; it does not silently rebind these frozen artifacts.
+The source is preserved on public branch
+`agent/matrix-v2-legacy-terminal-release-qualified`; its receipt is published
+only on `ccp-evidence/faf587890e4f899803f027660bc66452623f405e`, and
+[CCP PR #70](https://github.com/MarcoPorcellato/commit-ci-preflight/pull/70)
+remains a draft. The producer is deliberately selected for A0X but is not the
+installed stable executable and has not been merged into public CCP `main`.
 
-Before any scientific attempt, preserve and review the corrected CCP branch,
-select its exact producer identity, and regenerate the material contract, both
-freezes, all twelve dossiers, and the zero-access receipt. Each scientific pair
-then needs a new
+Before any scientific attempt, complete one separate exact-head Latent-TRIZ
+qualification using this selected producer. Each scientific pair then needs a new
 execution authorization bound to its exact dossier, live source HEAD,
 qualification receipt, authorization ID, and attempt ID. No CCP heavy run,
 Docker action, model/tokenizer construction, target read, publication, or retry

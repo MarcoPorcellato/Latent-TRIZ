@@ -1,24 +1,20 @@
 A0X checkpoint (2026-08-28): preparatory work remains on branch
 `agent/a0x-six-model-design` at `sealed_gate_pending`. The current
-implementation anchor is `3dc40aa104358a83855cd59a40df30319131ea1e`, tree
-`4de3f2f704935d388d0b806dbf9a71cfa7d398e3`. The regenerated public material
-contract remains bound to the superseded CCP candidate source
-`a73ebed945d9d9e9744c4aff987589f3478a7f3c`, tree
-`b12ff9ac9daa67d52e28c6793e14f646c5e37225`, executable SHA-256
-`2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f`.
-That producer failed its first qualification because two tests wrote fixtures
-below the read-only container root. The TDD correction is commit
+implementation anchor is `7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`, tree
+`3fa91354585fe5b3bb0394a1514418ac5a3deda4`. The public material contract
+deliberately binds the TDD-corrected CCP producer at commit
 `faf587890e4f899803f027660bc66452623f405e`, tree
 `4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
 `7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`.
-Its one authorized Matrix qualification passed all five required checks. The
+Its authorized Matrix qualification passed all five required checks. The
 receipt ID is
 `sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`
 and the receipt-file SHA-256 is
 `12f6d8988be5dc119eaa469cd3617a0f74e3416f7f66b5155d6cf3e1c1219670`.
-Both candidate and installed-stable verifiers returned PASS. The corrected
-candidate remains local, uninstalled, unpublished, and not yet bound into the
-A0X material artifacts.
+Both candidate and installed-stable verifiers returned PASS. The source is
+preserved on public branch `agent/matrix-v2-legacy-terminal-release-qualified`,
+the receipt only on its exact evidence branch, and CCP PR #70 remains a draft.
+The candidate is not installed and has not replaced the stable executable.
 
 The fixed material envelope is 3,600 seconds outer, 3,300 seconds internal,
 300 seconds reserved for sealing/cleanup, and 300 seconds for admission. The
@@ -29,8 +25,10 @@ container IDs. Private runtime inlets are deterministic per leg/model/run and
 remain outside immutable result directories.
 
 The generator produced two frozen legs and twelve `approval_requested`
-dossiers with zero material access. The A0X synthetic aggregate passed 245
-tests with three documented skips, the frozen package passed 10/10, and the
+dossiers with zero material access. Two isolated no-hardlink clones and the
+active checkout produced byte-identical artifacts. The A0X aggregate passed
+246 tests, the frozen package passed 10/10, and the repository-wide suite
+passed 1,073 tests with one documented skip. The
 no-model receipt SHA-256 is
 `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`.
 The receipt reports zero model loads, tokenizer constructions, sealed-target
@@ -39,15 +37,21 @@ reads, CCP invocations, and remote mutations. Resume through
 `docs/A0X_ENGINEERING_PROBLEM_SOLUTION_LOG.md`, and the canonical A0X
 design/plan.
 
-Next gate: preserve and review the corrected CCP source on a durable branch,
-then deliberately select its exact qualified producer identity for A0X and
-regenerate the material contract, both freezes, all twelve dossiers, and the
-zero-access receipt. Installation, CCP publication, Latent-TRIZ exact-head
-qualification, each of the twelve dossier-bound scientific attempts,
-publication, and merge remain separate decisions. No
+Current hashes: material contract
+`f7b8ea1066cbd26d6112394c05fbd4704fffd4da809be86c031d6dbaff9ad2e1`,
+A0 freeze
+`3bbb2b2e2799bf0012e5ded25973d1f81f72ab9dd436d09efb5ec275cd2969e4`,
+and A0-R1 freeze
+`347dfd8fefb3e73366d7837aa0b96a5aa0e08943548fd65387f575266c4f106e`.
+
+Next gate: commit the regenerated A0X package and canonical documentation,
+then request a new exact-head Latent-TRIZ qualification authorization bound to
+that commit and the exact selected candidate. Installation, each of the twelve
+dossier-bound scientific attempts, Latent-TRIZ publication, and merge remain
+separate decisions. No
 model, material tokenizer, historical or sealed target, CCP heavy command,
 Docker, network, GitHub action, retry, tuning, pooling, or claim promotion is
-authorized by this checkpoint. The earlier `c91915a…` PENDING receipt and all
+authorized by this checkpoint. The earlier `c91915a…` PENDING receipt and the
 failed `a73ebed…` receipt remain historical evidence only.
 
 EXP-002 checkpoint (2026-08-20): branch `exp002-qwen3-followup` is the active

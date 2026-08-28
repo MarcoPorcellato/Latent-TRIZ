@@ -127,13 +127,12 @@ single-pair dossiers cover six exact model snapshots without pooling. Every
 dossier remains `approval_requested`; none authorizes material access. The
 complete local no-model qualification and independent architecture/science
 review now pass, and the exact freeze/dossier hashes are recorded. A0X is
-stopped at `sealed_gate_pending`: the consolidation commit is the next source
-anchor, no CCP exact-head qualification exists, and no pair is authorized for
-material execution. The preflight for `2af9a159...` correctly stopped before
-`doctor`, `dry-run`, and `run` when a stale Matrix V2 digest was detected. The
-offline correction now has a non-tautological real-plan fixture and regenerated
-freeze/dossier hashes; it does not reuse the obsolete qualification
-authorization. See [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
+stopped at `sealed_gate_pending`: implementation anchor
+`7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9` deterministically regenerated the
+two freezes and twelve dossiers, but no Latent-TRIZ exact-head qualification
+exists and no pair is authorized for material execution. The repository-wide
+suite passed 1,073 tests with one documented skip. See
+[A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
 
 The later CCP compatibility producer has now completed its own exact
 qualification after a TDD fixture-path correction. Qualified source commit
@@ -142,10 +141,12 @@ qualification after a TDD fixture-path correction. Qualified source commit
 `7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`
 passed all five Matrix checks; receipt ID
 `sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`.
-This qualifies that exact local producer only. It is not installed or
-published, and the current A0X contract still binds its superseded predecessor.
-The remaining preparatory gate is therefore durable CCP integration followed by
-zero-access regeneration and a new Latent-TRIZ exact-head qualification.
+This qualifies that exact producer only. It remains uninstalled, but its exact
+source and receipt are durably published on dedicated branches and CCP PR #70
+is a draft. A0X now deliberately binds this producer; its material contract is
+SHA-256
+`f7b8ea1066cbd26d6112394c05fbd4704fffd4da809be86c031d6dbaff9ad2e1`.
+The remaining preparatory gate is a new Latent-TRIZ exact-head qualification.
 
 The next scientific priority is human construct validation: three independent
 TRIZ experts, blinded cases, agreement and abstention receipts, and an explicit

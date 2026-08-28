@@ -285,7 +285,7 @@ impossible self-reference: committing the dossier changes the commit.
 **Correction.** Dossiers bind an `implementation_source_head` containing the
 reviewed implementation. A later execution authorization separately binds the
 exact live `source_head`. The current implementation anchor is
-`3dc40aa104358a83855cd59a40df30319131ea1e`.
+`7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`.
 
 **Status.** Resolved.
 
@@ -390,16 +390,44 @@ exact Matrix qualification: formatting, all-target/all-feature tests, strict
 Clippy, documentation, and release metadata all passed. Candidate and stable
 verification accepted the same terminal receipt.
 
-**Status.** Resolved in qualified commit `faf587890e4f899803f027660bc66452623f405e`;
-durable source integration remains pending.
+**Status.** Resolved in qualified commit `faf587890e4f899803f027660bc66452623f405e`.
+The exact source and receipt are durably published on dedicated branches;
+CCP PR #70 remains a draft and the candidate is not installed.
+
+## 20. No-model import tests depended on repository-suite order
+
+**Symptom.** The isolated A0X aggregate passed, but the repository-wide suite
+reported failures in no-model import assertions after earlier tests had
+legitimately imported `torch` into the shared Python process.
+
+**Root cause.** The assertions inspected the global `sys.modules` state rather
+than the import delta caused by the entry point under test. They therefore
+tested suite history, not entry-point behavior.
+
+**Consequence.** Repository qualification would fail even though the A0X
+entry points did not import a model library. The frozen implementation hashes
+also correctly detected each test-file correction and required regeneration.
+
+**Correction.** Entry-point import/help probes now execute in clean
+subprocesses. Adapter tests that require injected in-process fixtures compare
+the model-library module state before and after the operation. The final
+implementation anchor was regenerated twice in independent no-hardlink clones
+and once in the active checkout; all three artifact trees were byte-identical.
+
+**Regression evidence.** The targeted tests passed, the A0X aggregate passed
+246 tests, the frozen package passed 10/10, and the repository-wide suite
+passed 1,073 tests with one documented skip.
+
+**Status.** Resolved at implementation anchor
+`7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`.
 
 ## Current stop boundary
 
-The approved offline correction may change code, schemas, documentation,
-material contract, freezes, and the twelve `approval_requested` dossiers. It
-must stop after deterministic regeneration, no-material gates, independent
-review, and exact hash reporting.
+The selected-producer regeneration may be committed locally after all
+no-material gates and exact hash records pass. It must then stop for a new
+Latent-TRIZ exact-head qualification authorization.
 
 It does **not** authorize CCP heavy execution, Docker, model/tokenizer
-construction, protected-target access, network use, installation, publication,
-push, pull request, merge, or scientific retry.
+construction, protected-target access, installation, Latent-TRIZ publication,
+merge, or scientific retry. The separately authorized CCP source/evidence
+publication ended at draft PR #70 and grants no further CCP mutation.
