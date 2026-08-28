@@ -285,7 +285,7 @@ impossible self-reference: committing the dossier changes the commit.
 **Correction.** Dossiers bind an `implementation_source_head` containing the
 reviewed implementation. A later execution authorization separately binds the
 exact live `source_head`. The current implementation anchor is
-`7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`.
+`9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`.
 
 **Status.** Resolved.
 
@@ -392,7 +392,8 @@ verification accepted the same terminal receipt.
 
 **Status.** Resolved in qualified commit `faf587890e4f899803f027660bc66452623f405e`.
 The exact source and receipt are durably published on dedicated branches;
-CCP PR #70 remains a draft and the candidate is not installed.
+at this historical checkpoint CCP PR #70 remained a draft and the candidate
+was not installed. Issue 21 records the later producer and merge state.
 
 ## 20. No-model import tests depended on repository-suite order
 
@@ -421,13 +422,55 @@ passed 1,073 tests with one documented skip.
 **Status.** Resolved at implementation anchor
 `7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`.
 
+## 21. CCP source snapshots rejected a required tracked blob above 1 MiB
+
+**Symptom.** The later CCP candidate could not faithfully stage the complete
+Latent-TRIZ source snapshot because a required tracked repository blob exceeded
+the producer's 1 MiB per-blob ceiling.
+
+**Root cause.** The ceiling was suitable as a defensive default for small
+source trees but was too low for this repository's legitimate tracked fixture.
+Bypassing the file, changing the A0X source set, or weakening snapshot integrity
+would have changed the qualification subject.
+
+**Consequence.** The earlier `faf587…` producer remained valid historical
+evidence, but it could not be the final producer for an exact complete A0X
+qualification. No Latent-TRIZ heavy retry was attempted.
+
+**Correction.** CCP raised the bounded tracked-blob ceiling to 64 MiB with TDD
+coverage while retaining total-snapshot bounds and fail-closed behavior. Exact
+source `27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
+`d8e0364d1313fde0898a44517ae6d233d9e10763`, executable SHA-256
+`c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`
+then passed one authorized generation-1 Matrix qualification. The receipt-file
+SHA-256 is
+`14df36450ce982b0c5233651baa4c5f5d0e0c462b1b5f119ec8f93a9ad7465ce`.
+
+**Publication and selection evidence.** The candidate and receipt are preserved
+byte-identically under hash-bound paths. CCP PR #70 passed its GitHub gates and
+was squash-merged as `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`;
+the merge tree is exactly the qualified tree. A0X binds the qualified source,
+tree, executable, and receipt directly. The installed stable executable was not
+replaced.
+
+**A0X regression evidence.** Implementation anchor
+`9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`, tree
+`5f11c2323b2657ed202ffa0bd1918037313568ce`, regenerated both freezes and all
+twelve dossiers without material access. Frozen verification passed 10/10, the
+A0X aggregate passed 246 tests with three documented optional-NumPy skips,
+schema cross-validation reported 155 agreements and 19 rejected mutations, and
+the repository suite passed 1,073 tests with one documented skip.
+
+**Status.** Resolved for offline A0X preparation. A fresh exact-head
+Latent-TRIZ CCP qualification remains a separate authorization gate.
+
 ## Current stop boundary
 
-The selected-producer regeneration may be committed locally after all
-no-material gates and exact hash records pass. It must then stop for a new
-Latent-TRIZ exact-head qualification authorization.
+The large-blob-qualified producer regeneration may be committed locally after
+all no-material gates, independent review, and exact hash records pass. It must
+then stop for a new Latent-TRIZ exact-head qualification authorization.
 
 It does **not** authorize CCP heavy execution, Docker, model/tokenizer
 construction, protected-target access, installation, Latent-TRIZ publication,
 merge, or scientific retry. The separately authorized CCP source/evidence
-publication ended at draft PR #70 and grants no further CCP mutation.
+publication ended with merged PR #70 and grants no further CCP mutation.

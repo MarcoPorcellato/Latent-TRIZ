@@ -209,10 +209,10 @@ The public contract is host-path-free. It binds roles, relative locators,
 hashes, the exact shell-free guard template, and the exact terminally
 qualified CCP producer:
 
-- source commit `faf587890e4f899803f027660bc66452623f405e`;
-- source tree `4615028176f3d594fbce0554f5e5edecfb802af1`;
+- source commit `27adf8d0820b3cd96f9c5e149de9b580ae41f639`;
+- source tree `d8e0364d1313fde0898a44517ae6d233d9e10763`;
 - executable SHA-256
-  `7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`;
+  `c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`;
 - plan-output SHA-256
   `4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e`.
 
@@ -225,7 +225,7 @@ context, and active-container count. Each probe has a 30-second timeout and a
 wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
 an active container.
 
-Implementation anchor: `7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`.
+Implementation anchor: `9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`.
 The two freezes and twelve dossiers were regenerated from that exact anchor.
 The A0X aggregate passed 246 tests; the frozen package passed 10/10. The
 repository-wide suite passed 1,073 tests with one documented skip. The
@@ -235,38 +235,39 @@ mutations.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Material execution contract | `f7b8ea1066cbd26d6112394c05fbd4704fffd4da809be86c031d6dbaff9ad2e1` |
+| Material execution contract | `626c373dfc231f1f0448772a4a0483f8573b533d12cbe816348a11c83b954ed1` |
 | A0 protocol | `42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586` |
-| A0 implementation | `0c4bd3cd58cfedfc0a3c6f9c58f30df186790ea11f930c6871b9307bfe2beb8e` |
-| A0 freeze | `3bbb2b2e2799bf0012e5ded25973d1f81f72ab9dd436d09efb5ec275cd2969e4` |
+| A0 implementation | `58fc058af9db862b90bec64c6891ec960806935c29eb3dda06b9629318db7e14` |
+| A0 freeze | `e32b79866466fd960b4ecc8916bab1ac098a449dac434df8afe224a9b4c68cc9` |
 | A0-R1 protocol | `32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52` |
-| A0-R1 implementation | `d164329919186be8646dfab40d78b6eda9b8458a3afb8f1ba5ae3ed01fc5e648` |
-| A0-R1 freeze | `347dfd8fefb3e73366d7837aa0b96a5aa0e08943548fd65387f575266c4f106e` |
+| A0-R1 implementation | `989ef95e6a2e77d06c0bb3d2670c9717e744d3ce4ca3c0c228aa37e0d947018e` |
+| A0-R1 freeze | `0d72f58d96455b69268f11ddbf32016c3c06dc18cb3ddfe515c5c63e216d769a` |
 | No-model verification receipt | `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c` |
-| A0 / SmolLM2-360M dossier | `39483e525c91b87862c367ac885267eb42a5b377399723942dae4286529a0bd3` |
-| A0 / Qwen3-0.6B-Base dossier | `e9b3ae75311d3b53513c2a8bc65e3e6058e24acbb07716a2d8564d8a53faa732` |
-| A0 / GPT-2 dossier | `1439d6d15fe11dbbb5add366a0ba6218fdb0b6c7e906779fa7dbbb5682d9264d` |
-| A0 / SmolLM2-135M dossier | `73635f4d021a177453b719fb1eaea9c551f83ecac612a01d3169d6f0536315d0` |
-| A0 / GPT-Neo-125M dossier | `3436cec8873fd863c2ab4a177d0b226d17cf892b5f5ec98199ea4328a3c96452` |
-| A0 / Qwen2.5-0.5B dossier | `e4816ee890b4b0942daf52ccb73ea37feb977c5f1e5179d13b52fbd018a3d1d2` |
-| A0-R1 / SmolLM2-360M dossier | `e5a9e21a8044711bc12eae0f491d9978b14782f3cba5677a8f18ef02e2f9af07` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `f62628de0ed9d3bea3509ce9798ca52b95c6a944c91b91e912343c6771161475` |
-| A0-R1 / GPT-2 dossier | `b6695a4727c468bcb544b01a3b9ae8d784610c10c9eb31b81dfcff84e37b4a8c` |
-| A0-R1 / SmolLM2-135M dossier | `51c8dcca0593fd1206cc64893aac9f4bde334136a65d46fad2032d86dad921b0` |
-| A0-R1 / GPT-Neo-125M dossier | `81634c9ddc048939031a3c68e8d3335341cb53cd9a5e3ebd4b16948ec85b8e93` |
-| A0-R1 / Qwen2.5-0.5B dossier | `d464f8f098eeb7bc34a30207f8ee4e99b6a7a3dc7ac51d35d0d98841b8a3e896` |
+| A0 / SmolLM2-360M dossier | `a8e564df562ecaedf20380febdfa52cdb55910b6c3207c70c92b5c59baa44941` |
+| A0 / Qwen3-0.6B-Base dossier | `ad1b8028a238be01e58d8b3bf0d0bf5b2caf5aea4057676f05d499ed7f7e443d` |
+| A0 / GPT-2 dossier | `6a0fecb5ec0d1d5a0e60eea16d6b42a7b5f8646353de348d6ea07360e59d143e` |
+| A0 / SmolLM2-135M dossier | `694a9df6bb86076dc06771910dfa79628b64d74225ab2f64dd7daf3b5e982378` |
+| A0 / GPT-Neo-125M dossier | `aa7443c656a3929df355a2f57edbc7946c82bfb18408e6e78fb65ae8ad8b9ad0` |
+| A0 / Qwen2.5-0.5B dossier | `d7265ec1f0fb8369f59d768847d3f016a164af8601f87230c2198cc45be013e8` |
+| A0-R1 / SmolLM2-360M dossier | `9b2b6f3d17577e181992347b9e3a347308741ec0171bb913c2b000039bb4f89c` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `0c751d638c47230a6914a41f839b5bcd395f0865394871ea814ec7e69200d694` |
+| A0-R1 / GPT-2 dossier | `74a32fcdd32d46df1b570b0f3c3abe14470ac2ee7e053ca8c572bc0a5eb6d88a` |
+| A0-R1 / SmolLM2-135M dossier | `57621fc314a5093c53cd8eb5658137191ed7654c074fbfa9c8971e6cae784547` |
+| A0-R1 / GPT-Neo-125M dossier | `6ad25612f23892cc78f809207dad8149f0f55f1896c339000ce8783de182de7d` |
+| A0-R1 / Qwen2.5-0.5B dossier | `348f7385f3c2a764406a559719d190d106ea9115d24de7323e63da14de671053` |
 
 These are approval-request artifacts only. They now bind the TDD-corrected
 producer that passed one exact generation-1 Matrix qualification. Its receipt ID is
-`sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`
+`sha256:21d5cf99a9d142b879b37ef8bb2f50573e45fd569a2259fa863a50fe6be08e85`
 and its receipt-file SHA-256 is
-`12f6d8988be5dc119eaa469cd3617a0f74e3416f7f66b5155d6cf3e1c1219670`.
+`14df36450ce982b0c5233651baa4c5f5d0e0c462b1b5f119ec8f93a9ad7465ce`.
 The source is preserved on public branch
 `agent/matrix-v2-legacy-terminal-release-qualified`; its receipt is published
-only on `ccp-evidence/faf587890e4f899803f027660bc66452623f405e`, and
+only on `ccp-evidence/27adf8d0820b3cd96f9c5e149de9b580ae41f639`, and
 [CCP PR #70](https://github.com/MarcoPorcellato/commit-ci-preflight/pull/70)
-remains a draft. The producer is deliberately selected for A0X but is not the
-installed stable executable and has not been merged into public CCP `main`.
+is merged as `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`; that merge has the exact
+qualified tree. The producer is deliberately selected for A0X but is not the
+installed stable executable.
 
 Before any scientific attempt, complete one separate exact-head Latent-TRIZ
 qualification using this selected producer. Each scientific pair then needs a new

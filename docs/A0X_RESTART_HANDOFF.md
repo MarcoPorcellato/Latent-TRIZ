@@ -15,6 +15,54 @@ authorization.
 This section supersedes older status statements below when they conflict. The
 older chronology remains in this file as historical context.
 
+### Large-blob-qualified producer and regenerated A0X package (2026-08-29)
+
+This subsection is the current resume authority. It supersedes the current
+producer, implementation-anchor, package-hash, publication-state, and next-gate
+statements below while preserving the older chronology as historical evidence.
+
+- CCP source `27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
+  `d8e0364d1313fde0898a44517ae6d233d9e10763`, executable SHA-256
+  `c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`
+  passed one exact generation-1 Matrix qualification. Receipt ID:
+  `sha256:21d5cf99a9d142b879b37ef8bb2f50573e45fd569a2259fa863a50fe6be08e85`;
+  receipt-file SHA-256:
+  `14df36450ce982b0c5233651baa4c5f5d0e0c462b1b5f119ec8f93a9ad7465ce`.
+- The candidate and receipt are preserved byte-identically under hash-bound
+  local paths. The stable installed executable was not replaced. The source is
+  published on `agent/matrix-v2-legacy-terminal-release-qualified`, and the
+  receipt only on
+  `ccp-evidence/27adf8d0820b3cd96f9c5e149de9b580ae41f639`.
+- CCP PR #70 passed its terminal GitHub gates and was squash-merged as
+  `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`. Its public-main tree is exactly
+  `d8e0364d1313fde0898a44517ae6d233d9e10763`, equal to the qualified source
+  tree. A0X remains bound to the exact qualified source commit, executable,
+  and receipt rather than inferring qualification from the squash commit.
+- The A0X implementation anchor is
+  `9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`, tree
+  `5f11c2323b2657ed202ffa0bd1918037313568ce`. It selects the exact producer
+  above without changing either frozen scientific protocol.
+- Material contract SHA-256:
+  `626c373dfc231f1f0448772a4a0483f8573b533d12cbe816348a11c83b954ed1`.
+  Freeze SHA-256 values: A0
+  `e32b79866466fd960b4ecc8916bab1ac098a449dac434df8afe224a9b4c68cc9`;
+  A0-R1
+  `0d72f58d96455b69268f11ddbf32016c3c06dc18cb3ddfe515c5c63e216d769a`.
+- The no-model receipt remains byte-identical at SHA-256
+  `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`
+  and records zero model loads, tokenizer constructions, sealed-target reads,
+  CCP invocations, and remote mutations.
+- Verification passed: frozen package 10/10, A0X aggregate 246 tests with
+  three documented optional-NumPy skips, schema cross-validation 155
+  agreements and 19 rejected mutations, and repository suite 1,073 tests with
+  one documented skip.
+
+Current gate: commit the regenerated package and canonical documentation
+locally, then stop for a new exact-head Latent-TRIZ qualification authorization
+bound to that commit and this producer. Do not run CCP heavy, Docker, a model,
+material tokenizer, or target. Publication of Latent-TRIZ PR #105 and every
+scientific pair remain separately authorized actions.
+
 ### Qualified-producer selection and deterministic A0X closure (2026-08-28)
 
 This subsection is the current resume authority. It supersedes the candidate,

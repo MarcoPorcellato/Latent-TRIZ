@@ -128,7 +128,7 @@ dossier remains `approval_requested`; none authorizes material access. The
 complete local no-model qualification and independent architecture/science
 review now pass, and the exact freeze/dossier hashes are recorded. A0X is
 stopped at `sealed_gate_pending`: implementation anchor
-`7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9` deterministically regenerated the
+`9aeb6ef664b0576cb8a1ed58f50791be3bb070cb` deterministically regenerated the
 two freezes and twelve dossiers, but no Latent-TRIZ exact-head qualification
 exists and no pair is authorized for material execution. The repository-wide
 suite passed 1,073 tests with one documented skip. See
@@ -136,16 +136,17 @@ suite passed 1,073 tests with one documented skip. See
 
 The later CCP compatibility producer has now completed its own exact
 qualification after a TDD fixture-path correction. Qualified source commit
-`faf587890e4f899803f027660bc66452623f405e`, tree
-`4615028176f3d594fbce0554f5e5edecfb802af1`, and executable SHA-256
-`7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`
+`27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
+`d8e0364d1313fde0898a44517ae6d233d9e10763`, and executable SHA-256
+`c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`
 passed all five Matrix checks; receipt ID
-`sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`.
+`sha256:21d5cf99a9d142b879b37ef8bb2f50573e45fd569a2259fa863a50fe6be08e85`.
 This qualifies that exact producer only. It remains uninstalled, but its exact
 source and receipt are durably published on dedicated branches and CCP PR #70
-is a draft. A0X now deliberately binds this producer; its material contract is
+is merged as `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`, with the exact qualified
+tree. A0X now deliberately binds this producer; its material contract is
 SHA-256
-`f7b8ea1066cbd26d6112394c05fbd4704fffd4da809be86c031d6dbaff9ad2e1`.
+`626c373dfc231f1f0448772a4a0483f8573b533d12cbe816348a11c83b954ed1`.
 The remaining preparatory gate is a new Latent-TRIZ exact-head qualification.
 
 The next scientific priority is human construct validation: three independent

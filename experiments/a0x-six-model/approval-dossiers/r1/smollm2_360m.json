@@ -6,9 +6,9 @@
   "empirical": true,
   "evidence_eligible": false,
   "expert_validated": false,
-  "implementation_source_head": "7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9",
+  "implementation_source_head": "9aeb6ef664b0576cb8a1ed58f50791be3bb070cb",
   "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
-  "material_contract_raw_sha256": "f7b8ea1066cbd26d6112394c05fbd4704fffd4da809be86c031d6dbaff9ad2e1",
+  "material_contract_raw_sha256": "626c373dfc231f1f0448772a4a0483f8573b533d12cbe816348a11c83b954ed1",
   "pair_binding": {
     "binding_profile": "a0x-pair-scope-v2",
     "dense_bound": {
@@ -29,7 +29,7 @@
       "view_site_count": 2
     },
     "leg": "r1",
-    "leg_freeze_sha256": "347dfd8fefb3e73366d7837aa0b96a5aa0e08943548fd65387f575266c4f106e",
+    "leg_freeze_sha256": "0d72f58d96455b69268f11ddbf32016c3c06dc18cb3ddfe515c5c63e216d769a",
     "model_id": "HuggingFaceTB/SmolLM2-360M",
     "model_key": "smollm2_360m",
     "output_path": "results/a0x/r1/smollm2_360m/a0x-r1-smollm2_360m-f8027fd0-attempt-01",
