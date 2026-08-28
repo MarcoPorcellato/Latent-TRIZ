@@ -185,59 +185,80 @@ gates.
 
 ## Current checkpoint
 
-The local no-model package remains at `sealed_gate_pending`. It is now bound to
-the reviewed CCP compatibility candidate at source commit
-`c91915adcb8706898574c0c74d033b9ff991eefb`, tree
-`687fcaaa3643d35a66ba748409e5621d13e25dd7`, and executable SHA-256
-`72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be`.
-The exact `matrix-v2-legacy-v1` profile reproduces the historical trusted-base
-outer and runtime digests from a disclosed, reconstructible digest basis. The
-default CCP profile remains unchanged.
+The campaign remains `sealed_gate_pending`. The material composition is no
+longer a refusal stub: it now has a fixed outer launcher, an exact child
+descriptor, a pair-scoped private runtime inlet, a one-shot target reader,
+terminal sealing, package verification, protected-tree postflight, and model
+release. All of those paths have been exercised only with synthetic injected
+dependencies.
 
-The fetched official CCP `origin/main` is
-`2b4b55ce1a4be0a2b610656ae4a56a7641b29f26`. That public main includes the
-current admission rules, full-lifecycle standard-run cache locks, and
-spawn-boundary generation revalidation. The legacy Matrix profile is an
-additional reviewed candidate change on top of that main; it is not yet an
-official released capability. Its static suite passed 394 tests with four
-documented ignores, and an independent review returned GO. No terminal CCP
-qualification receipt exists for the candidate yet.
+Every pair uses the same execution envelope:
 
-After regeneration, the A0X suite passed 197 tests with three expected skips;
-the frozen-package suite passed 9/9; and schema cross-validation reported 155
-tracked pairs in agreement with 19 mutations rejected by both validators. The
-no-model receipt reports two frozen legs, twelve `approval_requested` dossiers,
-and zero model loads, tokenizer constructions, sealed-target reads, CCP
-invocations, or remote mutations. The next gate is an explicitly authorized
-single exact-head CCP qualification of the candidate. A positive candidate
-receipt would still not authorize installation, Latent-TRIZ exact-head
-qualification, publication, or any scientific run.
+- CCP child timeout: exactly 3,600 seconds;
+- internal monotonic scientific budget: exactly 3,300 seconds;
+- reserved sealing and cleanup margin: 300 seconds;
+- admission wait: 300 seconds.
 
-The local implementation anchor containing these bindings is
-`4e7378f1ed6d994a80f31c9ff45984c96156d572`, tree
-`9b0e998168b76855144056e1658963df214a04bf`. Resolve later documentation-only
-checkpoint commits live; do not substitute their hashes for this implementation
-anchor.
+The extra 300 seconds are not scientific compute time. Crossing the internal
+deadline seals the first terminal result; the remaining time is reserved for
+durable packaging and cleanup. The private supervisor may wait up to 3,900
+seconds only so it does not race CCP's own 3,600-second timeout and final
+cleanup. It does not extend the authorized material workload.
+
+The public contract is host-path-free. It binds roles, relative locators,
+hashes, the exact shell-free guard template, and the exact reconciled CCP
+candidate:
+
+- source commit `a73ebed945d9d9e9744c4aff987589f3478a7f3c`;
+- source tree `b12ff9ac9daa67d52e28c6793e14f646c5e37225`;
+- executable SHA-256
+  `2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f`;
+- plan-output SHA-256
+  `4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e`.
+
+Repository qualification remains a separate configuration-backed `run` flow.
+The scientific workload uses `guard exec`, so its fresh preflight does not call
+`plan`, `doctor`, or `dry-run`. It records six bounded read-only roles instead:
+CCP version, resource status, admission status, Git source state, runtime
+context, and active-container count. Each probe has a 30-second timeout and a
+64-KiB capture ceiling and fails closed on timeout, excess output, dirty or
+wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
+an active container.
+
+Implementation anchor: `3dc40aa104358a83855cd59a40df30319131ea1e`.
+The two freezes and twelve dossiers were regenerated from that exact anchor.
+The synthetic aggregate passed 245 tests with three documented skips; the
+frozen package passed 10/10. The no-model receipt reports zero model loads,
+tokenizer constructions, sealed-target reads, CCP invocations, and remote
+mutations.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Material execution contract | `5b9754c5689b6f48476768c61a58afcac6b7c6e88ee289a5b16678ec26021ca4` |
-| A0 freeze | `711d7df84baf2cceaea6f0567733feec24292e4ca872fc66da79ece7e7577569` |
-| A0-R1 freeze | `d43a91f02089ce6a103d6afe6126076ea53e480bbe68e49abcf61f3dee0e240b` |
-| A0 / SmolLM2-360M dossier | `26ed343b750ea396eddc5b7b413e900b4dcc1b28e63b4d013212b9689992a7a9` |
-| A0 / Qwen3-0.6B-Base dossier | `64fe1cacbd1999fc7d539ff0ddc557a0ee7bcf7edd3c53a76102c97d2d99c64d` |
-| A0 / GPT-2 dossier | `d7c72afa535a7d2f708f380981fce64fb03df4dcb2882f5a5021f1769afc8647` |
-| A0 / SmolLM2-135M dossier | `41cc33d1e7d99d156e1f77d19ddde816d33f69de41c4f5e79309a623808a19e7` |
-| A0 / GPT-Neo-125M dossier | `9429986eb13bac01772ac6812fc5577faf9f4c5cfac56c2fbafdf9af917f6802` |
-| A0 / Qwen2.5-0.5B dossier | `e86b56373d7b1e4951212ae9397e96f0c1026fe19ef810da3be8a50c9cd7084c` |
-| A0-R1 / SmolLM2-360M dossier | `ebeefd625ebfa482552110de361668229c746cd5edb6bcee358358254f5b6b53` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `2e88c6618450e0576333cb628c6dc95cad1f81a53fcb45e1f80127b2013286d1` |
-| A0-R1 / GPT-2 dossier | `5abfb2f9c48b489aeb5ac9ac50f106514ef4517e66be9dc97cf7327eb38e1ced` |
-| A0-R1 / SmolLM2-135M dossier | `fa9cedff182aa229b93f06c2955885de015bb02dd13d1b62309a00e8c7cdc630` |
-| A0-R1 / GPT-Neo-125M dossier | `6f5b01d86a6ca3477d54321622a3954ba53312991ef39dd544e07422225a0f03` |
-| A0-R1 / Qwen2.5-0.5B dossier | `5268f25e090023c33779e29ada93862695e8b1dc249c72470f73a7208ca97816` |
+| Material execution contract | `e4ab21c24a491a26e43b07be4cbc0102a84c7482cc425883ca5bda38ba988e1a` |
+| A0 protocol | `42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586` |
+| A0 implementation | `886a2ec13b64ed376b443e36426322d64b59b6b38293484dfd0e2ed4e688efd5` |
+| A0 freeze | `8817b260737f558259ad5091858513e0f7a156ec751e6191d077a5bdde057aee` |
+| A0-R1 protocol | `32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52` |
+| A0-R1 implementation | `4467bc8d07b18372b9467e613ad54323a498dcc121f62ba3da01493e46d4459c` |
+| A0-R1 freeze | `c1f43cfc834b788c45c90c66ab4602ccd3836c6da0b97b1fc4272089e05b19df` |
+| No-model verification receipt | `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c` |
+| A0 / SmolLM2-360M dossier | `ca9baf450e7c6528b80a9ed9dd5ccd619f23477829c7a78ee28531c3bc55b59e` |
+| A0 / Qwen3-0.6B-Base dossier | `9a8afb0bdefa7a2f84b50269c6d9df36269a6eeab7ba3819c3bb0a25e702b326` |
+| A0 / GPT-2 dossier | `526e3f86dcf6a0749afb578ad18ecd3f728c49c044f2b2a01408adc9534acf26` |
+| A0 / SmolLM2-135M dossier | `02d211e42396c9d7b007409853b1d97473281a72ff3320e9b7113b0a034179df` |
+| A0 / GPT-Neo-125M dossier | `0332331604f1f20ea752f186d3d5eff99f5e067e3e06017ab5fa5a5478721830` |
+| A0 / Qwen2.5-0.5B dossier | `c3ea7d33e28a88819d2b74dda2ed35d788312b4a4c17040b4b43caef25942916` |
+| A0-R1 / SmolLM2-360M dossier | `d930d2eda9385f5d44d3e30e3f28d1003f58042f0273758818072a8852b2de2b` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `0cb374df8a7e877a4df06bd3dedbbda1d53a87eaff9eb2b311aa90a6db0145d4` |
+| A0-R1 / GPT-2 dossier | `ca2519b5ed92f25a792ac4679a8a0df682c212b779dc7c21ea4810eb6fdc5edf` |
+| A0-R1 / SmolLM2-135M dossier | `f3acc82247c614790d84cc66110c7436bdeb1daecb4ab8f50b862cf09f4b46f1` |
+| A0-R1 / GPT-Neo-125M dossier | `5691cdadc19c14c17fe699c73c43433bb14e84299b49ed9512e7e0f49ef893d8` |
+| A0-R1 / Qwen2.5-0.5B dossier | `af2ed0739dfc144d6629753efc26c8e29cab6edc9334f39f79463cf99daf348a` |
 
-These hashes identify approval requests only. The consolidation commit that
-contains this table is the next source anchor and must be resolved live rather
-than self-recorded here. No CCP exact-head qualification, model/target access,
-GitHub publication, or execution authorization has occurred.
+These are approval-request artifacts only. The reconciled CCP candidate still
+requires its own terminal heavy qualification and deliberate installation or
+an exact authorized candidate path. Each scientific pair then needs a new
+execution authorization bound to its exact dossier, live source HEAD,
+qualification receipt, authorization ID, and attempt ID. No CCP heavy run,
+Docker action, model/tokenizer construction, target read, publication, or retry
+occurred in this correction.

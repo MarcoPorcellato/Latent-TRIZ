@@ -15,6 +15,84 @@ authorization.
 This section supersedes older status statements below when they conflict. The
 older chronology remains in this file as historical context.
 
+### A0X material-composition closure (2026-08-28)
+
+This subsection is the current resume authority and supersedes every older A0X
+candidate, timeout, implementation-anchor, and no-model count below. Older
+sections are retained only as an audit chronology.
+
+- Latent-TRIZ implementation anchor:
+  `3dc40aa104358a83855cd59a40df30319131ea1e`, tree
+  `4de3f2f704935d388d0b806dbf9a71cfa7d398e3`.
+- Reconciled A0X CCP candidate: source
+  `a73ebed945d9d9e9744c4aff987589f3478a7f3c`, tree
+  `b12ff9ac9daa67d52e28c6793e14f646c5e37225`, executable SHA-256
+  `2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f`.
+- Candidate state: statically prepared and reviewed, but not installed and not
+  terminally heavy-qualified for A0X.
+- Timeout contract: 3,600 seconds outer, 3,300 seconds internal, 300 seconds
+  for sealing/cleanup, and 300 seconds for admission.
+- Guard preflight: six configuration-free roles, each bounded to 30 seconds and
+  64 KiB. `plan`, `doctor`, and `dry-run` belong to the separate repository
+  `run` qualification family and are not guard prerequisites.
+- Public/private boundary: public contracts contain only roles, hashes,
+  relative locators, and safe state. Executable, repository, cache, model, and
+  target paths are resolved only in ignored pair-derived runtime state.
+- No-model evidence: synthetic aggregate 245 tests PASS with three documented
+  skips; frozen package 10/10 PASS; zero model loads, tokenizer constructions,
+  target reads, CCP invocations, and remote mutations.
+- Canonical no-model receipt:
+  `results/a0x/preexecution/a0x-no-model-verification-receipt.json`, SHA-256
+  `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`.
+- Material contract SHA-256:
+  `e4ab21c24a491a26e43b07be4cbc0102a84c7482cc425883ca5bda38ba988e1a`.
+- Freeze SHA-256 values: A0
+  `8817b260737f558259ad5091858513e0f7a156ec751e6191d077a5bdde057aee`;
+  A0-R1
+  `c1f43cfc834b788c45c90c66ab4602ccd3836c6da0b97b1fc4272089e05b19df`.
+
+Resume boundary: do not run CCP heavy, Docker, a model, a material tokenizer,
+or a target. First obtain a new exact authorization for one terminal
+qualification of the reconciled CCP candidate. Installation or exact candidate
+path selection is a separate deliberate action. After a positive exact-head
+repository receipt, each of the twelve scientific pairs needs its own dossier-
+bound authorization and gets exactly one attempt. Publication remains a
+separate authorization.
+
+### CCP upstream reconciliation checkpoint (2026-08-26)
+
+This subsection supersedes the older CCP compatibility wording immediately
+below. The fetched public CCP `origin/main` is now
+`46426f2a12ed98f0dffce254a00c644c0e629b71`, tree
+`ca0ffefc941508bdc7e54deb02ee40f678eb4e2e`, merged from PR #69 after its
+receipt checks passed. It adds one shared terminal-owned-resource finalizer for
+historical and Matrix `run`, `benchmark`, and `guard exec`: owned completion
+precedes exactly one admission-release attempt, and an uncertain release
+overrides the primary outcome. It does not change the `macos-v4` resource
+thresholds or prevent resource-pressure watchdog trips.
+
+The legacy Matrix profile remains only on local candidate
+`c91915adcb8706898574c0c74d033b9ff991eefb`. That candidate was exercised once
+under its exact authorization. The run terminated `PENDING` with exit code 5
+after the format stage passed and before later stages ran because the host
+resource watchdog tripped. Its receipt is preserved at
+`/private/tmp/ccp-qualification-c91915a/.ccp/receipt.json`, file SHA-256
+`dae63a016d6ddc2396ed1d27b01c6f6b447353f0f3b87d834b183d8720114ce8`,
+receipt ID
+`sha256:78103241a5c0a0d887cb1d261398fa6c8a950187fe40468870aa6aff7ad89b83`.
+Integrity verification passed; policy verification failed as expected because
+the terminal outcome and required checks were not PASS. That one authorized
+run is consumed and must not be retried.
+
+The next safe preparatory tranche is an offline, isolated reconciliation of
+the current public terminal-release implementation with the reviewed legacy
+Matrix profile. Preserve the old branch, candidate, clone, and receipt. The
+combined candidate requires TDD, the full static suite, independent review,
+new path/commit/tree/binary hashes, and a fresh plan-digest comparison before a
+new heavy authorization. If selected, its new producer identity also requires
+regenerating the A0X material contract, both freezes, and all twelve dossiers;
+no model, tokenizer, target, CCP run, installation, or publication is implied.
+
 ### CCP compatibility checkpoint (2026-08-26)
 
 - The fetched official CCP `origin/main` is

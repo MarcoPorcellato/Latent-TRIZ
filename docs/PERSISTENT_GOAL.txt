@@ -1,29 +1,41 @@
-A0X checkpoint (2026-08-26): preparatory work remains on branch
-`agent/a0x-six-model-design`. The no-model package is bound to the reviewed,
-not-yet-qualified CCP compatibility candidate commit
-`c91915adcb8706898574c0c74d033b9ff991eefb`, tree
-`687fcaaa3643d35a66ba748409e5621d13e25dd7`, executable SHA-256
-`72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be`,
-and profile `matrix-v2-legacy-v1`. The fetched public CCP `origin/main` is
-`2b4b55ce1a4be0a2b610656ae4a56a7641b29f26`; the compatibility profile is
-additional candidate work, not an installed or released public contract. The
-generator regenerated two frozen legs and twelve `approval_requested`
-dossiers with zero material access. A0X verification passed 197 tests with
-three expected skips, frozen verification passed 9/9, schema cross-validation
-reported 155 agreements and 19 rejected mutations, and the pinned Python 3.11
-repository check passed 1,024 tests with one expected skip. The current state
-remains `sealed_gate_pending`; do not treat it as Task-12 authorization. The
-local A0X implementation anchor is
-`4e7378f1ed6d994a80f31c9ff45984c96156d572`, tree
-`9b0e998168b76855144056e1658963df214a04bf`; resolve later documentation-only
-checkpoint commits live. First
-obtain one explicitly authorized terminal qualification receipt for the exact
-CCP candidate, then a separate installation decision and a new Latent-TRIZ
-exact-head qualification. Resume through
-`docs/A0X_SIX_MODEL_CAMPAIGN.md`, `docs/A0X_RESTART_HANDOFF.md`, the canonical
-A0X design/plan, and the SDD ledger. No model, material tokenizer, historical
-or sealed target, CCP run, material Make target, network, GitHub, retry,
-tuning, pooling, or claim promotion is authorized by this checkpoint.
+A0X checkpoint (2026-08-28): preparatory work remains on branch
+`agent/a0x-six-model-design` at `sealed_gate_pending`. The current
+implementation anchor is `3dc40aa104358a83855cd59a40df30319131ea1e`, tree
+`4de3f2f704935d388d0b806dbf9a71cfa7d398e3`. The regenerated public material
+contract is bound to the reconciled CCP candidate source
+`a73ebed945d9d9e9744c4aff987589f3478a7f3c`, tree
+`b12ff9ac9daa67d52e28c6793e14f646c5e37225`, executable SHA-256
+`2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f`.
+This candidate is statically prepared but is not installed and has no terminal
+heavy qualification for A0X.
+
+The fixed material envelope is 3,600 seconds outer, 3,300 seconds internal,
+300 seconds reserved for sealing/cleanup, and 300 seconds for admission. The
+scientific workload uses one `guard exec`; its fresh six-role preflight does
+not call configuration-backed `plan`, `doctor`, or `dry-run`. Public artifacts
+contain no host paths, argv logs, environment, usernames, cache paths, or
+container IDs. Private runtime inlets are deterministic per leg/model/run and
+remain outside immutable result directories.
+
+The generator produced two frozen legs and twelve `approval_requested`
+dossiers with zero material access. The A0X synthetic aggregate passed 245
+tests with three documented skips, the frozen package passed 10/10, and the
+no-model receipt SHA-256 is
+`c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`.
+The receipt reports zero model loads, tokenizer constructions, sealed-target
+reads, CCP invocations, and remote mutations. Resume through
+`docs/A0X_SIX_MODEL_CAMPAIGN.md`, `docs/A0X_RESTART_HANDOFF.md`,
+`docs/A0X_ENGINEERING_PROBLEM_SOLUTION_LOG.md`, and the canonical A0X
+design/plan.
+
+Next gate: obtain a new exact authorization for one terminal qualification of
+the reconciled CCP candidate. Installation or exact candidate-path selection,
+Latent-TRIZ exact-head qualification, each of the twelve dossier-bound
+scientific attempts, publication, and merge remain separate decisions. No
+model, material tokenizer, historical or sealed target, CCP heavy command,
+Docker, network, GitHub action, retry, tuning, pooling, or claim promotion is
+authorized by this checkpoint. The earlier `c91915a…` PENDING receipt and all
+older producer identities remain historical evidence only.
 
 EXP-002 checkpoint (2026-08-20): branch `exp002-qwen3-followup` is the active
 implementation branch at implementation checkpoint `e47937c` (followed by

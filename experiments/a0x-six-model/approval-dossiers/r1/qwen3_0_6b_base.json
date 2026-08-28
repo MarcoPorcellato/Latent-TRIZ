@@ -6,9 +6,9 @@
   "empirical": true,
   "evidence_eligible": false,
   "expert_validated": false,
-  "future_authorization_path": "results/a0x/r1/qwen3_0_6b_base/a0x-r1-qwen3_0_6b_base-da87bfb6-attempt-01/execution-authorization.json",
+  "implementation_source_head": "3dc40aa104358a83855cd59a40df30319131ea1e",
   "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
-  "material_contract_raw_sha256": "5b9754c5689b6f48476768c61a58afcac6b7c6e88ee289a5b16678ec26021ca4",
+  "material_contract_raw_sha256": "e4ab21c24a491a26e43b07be4cbc0102a84c7482cc425883ca5bda38ba988e1a",
   "pair_binding": {
     "binding_profile": "a0x-pair-scope-v2",
     "dense_bound": {
@@ -29,12 +29,13 @@
       "view_site_count": 2
     },
     "leg": "r1",
-    "leg_freeze_sha256": "d43a91f02089ce6a103d6afe6126076ea53e480bbe68e49abcf61f3dee0e240b",
+    "leg_freeze_sha256": "c1f43cfc834b788c45c90c66ab4602ccd3836c6da0b97b1fc4272089e05b19df",
     "model_id": "Qwen/Qwen3-0.6B-Base",
     "model_key": "qwen3_0_6b_base",
     "output_path": "results/a0x/r1/qwen3_0_6b_base/a0x-r1-qwen3_0_6b_base-da87bfb6-attempt-01",
     "revision": "da87bfb608c14b7cf20ba1ce41287e8de496c0cd",
     "run_id": "a0x-r1-qwen3_0_6b_base-da87bfb6-attempt-01"
   },
+  "runtime_authorization_path": ".a0x-runtime/authorizations/r1/qwen3_0_6b_base/a0x-r1-qwen3_0_6b_base-da87bfb6-attempt-01.json",
   "scientific_status": "exploratory"
 }
