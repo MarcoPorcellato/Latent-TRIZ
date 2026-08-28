@@ -192,29 +192,35 @@ def matrix_dry_run_envelope() -> dict[str, object]:
 
 class A0XRunnerPublicSurfaceTests(unittest.TestCase):
     def test_single_matrix_config_owns_all_preflight_and_run_vectors(self) -> None:
-        from latent_triz.a0x_runner import _ccp_argvs
+        from latent_triz.a0x_runner import QualificationRuntimeResolution, _qualification_argvs
 
         path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
         contract = json.loads(path.read_text())
-        config = ".commit-ci-preflight.toml"
+        runtime = QualificationRuntimeResolution(
+            executable_path="/ccp", repository_root="/repository", cache_root="/cache",
+        )
+        config = "/repository/.commit-ci-preflight.toml"
         expected = (
             ("admission status --json", ("admission", "status", "--json")),
             ("resource status --json", ("resource", "status", "--json")),
             ("plan --json", ("plan", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json")),
             ("doctor --json", ("doctor", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json")),
-            ("dry-run --json", ("dry-run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json")),
-            ("run --generation <authorized-u64> --json", ("run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "7", "--json")),
+            ("dry-run --json", ("dry-run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", "/repository", "--cache-dir", "/cache", "--json")),
+            ("run --generation <authorized-u64> --json", ("run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", "/repository", "--cache-dir", "/cache", "--generation", "7", "--json")),
         )
-        self.assertEqual(expected, _ccp_argvs(contract, generation=7))
+        self.assertEqual(expected, _qualification_argvs(contract, runtime, generation=7))
 
     def test_legacy_matrix_profile_is_bound_to_every_configuration_command(self) -> None:
         """Catch a profile flag omitted from any plan/doctor/dry-run/run argv."""
-        from latent_triz.a0x_runner import _ccp_argvs
+        from latent_triz.a0x_runner import QualificationRuntimeResolution, _qualification_argvs
 
         path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
         contract = json.loads(path.read_text())
         contract["ccp"]["matrix_plan_profile"] = "matrix-v2-legacy-v1"
-        commands = dict(_ccp_argvs(contract, generation=7))
+        runtime = QualificationRuntimeResolution(
+            executable_path="/ccp", repository_root="/repository", cache_root="/cache",
+        )
+        commands = dict(_qualification_argvs(contract, runtime, generation=7))
         for label in ("plan --json", "doctor --json", "dry-run --json", "run --generation <authorized-u64> --json"):
             with self.subTest(label=label):
                 argv = commands[label]
@@ -258,37 +264,50 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(A0XRunnerError):
                 _validate_ccp_response("plan --json", changed, contract["ccp"])
 
-    def test_material_contract_accepts_only_the_reviewed_legacy_candidate_identity(self) -> None:
-        """Catch retaining the obsolete producer after selecting legacy parity."""
-        from latent_triz.a0x_runner import _ccp_argvs, _validate_material_contract
+    def test_material_contract_accepts_only_the_reconciled_candidate_identity(self) -> None:
+        """Catch retaining an obsolete producer after reconciliation."""
+        from latent_triz.a0x_runner import A0XRunnerError, _validate_material_contract
 
         path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
         contract = json.loads(path.read_text())
-        ccp = contract["ccp"]
-        ccp.update({
-            "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
-            "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7",
-            "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
-            "matrix_plan_profile": "matrix-v2-legacy-v1",
-            "matrix_policy_binding": {
-                "path": ".commit-ci-policy-v2.toml",
-                "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce",
-            },
-            "matrix_plan_binding": {
-                "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
-                "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
-                "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
-            },
-        })
-        ccp["commands"] = [list(argv) for _label, argv in _ccp_argvs(contract)]
-        ccp["commands"].append([
-            "run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile",
-            "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir",
-            "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1",
-            "--generation", "<authorized-u64>", "--json",
-        ])
-        ccp["commands"].append(["guard", "exec"])
         _validate_material_contract(contract)
+        for field in ("source_commit", "source_tree", "sha256"):
+            changed = copy.deepcopy(contract)
+            changed["ccp"][field] = "0" * len(changed["ccp"][field])
+            with self.subTest(field=field), self.assertRaises(A0XRunnerError):
+                _validate_material_contract(changed)
+
+    def test_public_safe_material_contract_v2_has_no_host_execution_surface(self) -> None:
+        from latent_triz.a0x_runner import A0XRunnerError, _validate_material_contract
+
+        schema_path = __import__("pathlib").Path(__file__).resolve().parents[1] / "schemas/a0x-material-execution-contract.schema.json"
+        schema = json.loads(schema_path.read_text())
+        ccp, plan = schema["$defs"]["ccp"]["properties"], schema["$defs"]["plan_binding"]["properties"]
+        contract = {
+            "artifact_class": "a0x-material-execution-contract",
+            "contract_version": "a0x-material-execution-contract-v2",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "ccp": {
+                "producer_role": ccp["producer_role"]["const"], "source_commit": ccp["source_commit"]["const"],
+                "source_tree": ccp["source_tree"]["const"], "sha256": ccp["sha256"]["const"],
+                "version": ccp["version"]["const"], "qualification_status": ccp["qualification_status"]["const"],
+                "command_roles": ccp["command_roles"]["const"], "hash_before_command": True,
+                "matrix_plan_profile": ccp["matrix_plan_profile"]["const"],
+                "matrix_config_binding": {"locator": "repository/.commit-ci-preflight.toml", "raw_sha256": "1" * 64},
+                "matrix_policy_binding": {"locator": "repository/.commit-ci-policy-v2.toml", "raw_sha256": "2" * 64},
+                "location_roles": ccp["location_roles"]["const"],
+                "matrix_plan_binding": {name: plan[name]["const"] for name in plan},
+            },
+            "offline": {"network": False, "generation": False, "local_cpu_float32": True},
+            "max_run_count": 1,
+            "stop_boundaries": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"],
+        }
+        _validate_material_contract(contract)
+        for field, value in (("path", "/Users/marco1/.cargo/bin/commit-ci-preflight"), ("cache_dir", "/private/cache"), ("commands", ["run"])):
+            changed = copy.deepcopy(contract)
+            changed["ccp"][field] = value
+            with self.subTest(field=field), self.assertRaises(A0XRunnerError):
+                _validate_material_contract(changed)
 
     def test_matrix_doctor_and_dry_run_bind_both_runtime_envelopes(self) -> None:
         from latent_triz.a0x_runner import A0XRunnerError, _validate_ccp_response
@@ -362,21 +381,15 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
     def test_qualification_authorization_owns_positive_generation_and_execution_authorization_does_not(self) -> None:
         from latent_triz.a0x_contract import QUALIFICATION_AUTHORIZATION_PROFILE, canonical_commitment
         from latent_triz.a0x_runner import A0XRunnerError, validate_qualification_authorization
+        from tests.a0x_test_support import artifact
 
         contract_path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
         raw = contract_path.read_bytes()
         contract = json.loads(raw)
-        authorization = {
-            "artifact_class": "a0x-qualification-authorization", "claim_ids": [],
-            "commitment_profile": QUALIFICATION_AUTHORIZATION_PROFILE, "qualification_status": "authorized",
-            "empirical": True, "evidence_eligible": False, "expert_validated": False, "scientific_status": "exploratory",
-            "repository": "MarcoPorcellato/Latent-TRIZ", "source_head": "a" * 40,
-            "material_contract_raw_sha256": hashlib.sha256(raw).hexdigest(),
-            "ccp": {name: contract["ccp"][name] for name in ("path", "source_commit", "qualified_source_tree", "sha256", "version")},
-            "generation": 7, "max_qualification_run_count": 1,
-            "stop_boundary": "after_repository_qualification_receipt",
-            "authorization_id": "synthetic-qualification",
-        }
+        authorization = artifact("a0x-qualification-authorization.schema.json")
+        authorization["source_head"] = "a" * 40
+        authorization["material_contract_raw_sha256"] = hashlib.sha256(raw).hexdigest()
+        authorization["generation"] = 7
         self.assertEqual(7, validate_qualification_authorization(authorization, material_contract_raw=raw, source_head="a" * 40, contract=contract)["generation"])
         self.assertEqual(QUALIFICATION_AUTHORIZATION_PROFILE, canonical_commitment(authorization, QUALIFICATION_AUTHORIZATION_PROFILE).profile)
         authorization["generation"] = 0
@@ -396,13 +409,15 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
         from latent_triz.a0x_runner import run_a0x_repository_qualification
         from pathlib import Path
         from tempfile import TemporaryDirectory
+        from tests.a0x_test_support import artifact
 
         contract_path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
         raw = contract_path.read_bytes()
         contract = json.loads(raw)
-        authorization = {
-            "artifact_class": "a0x-qualification-authorization", "claim_ids": [], "commitment_profile": "a0x-qualification-authorization-json-v1", "qualification_status": "authorized", "empirical": True, "evidence_eligible": False, "expert_validated": False, "scientific_status": "exploratory", "repository": "MarcoPorcellato/Latent-TRIZ", "source_head": "a" * 40, "material_contract_raw_sha256": hashlib.sha256(raw).hexdigest(), "ccp": {name: contract["ccp"][name] for name in ("path", "source_commit", "qualified_source_tree", "sha256", "version")}, "generation": 7, "max_qualification_run_count": 1, "stop_boundary": "after_repository_qualification_receipt", "authorization_id": "synthetic-qualification",
-        }
+        authorization = artifact("a0x-qualification-authorization.schema.json")
+        authorization["source_head"] = "a" * 40
+        authorization["material_contract_raw_sha256"] = hashlib.sha256(raw).hexdigest()
+        authorization["generation"] = 7
         test_case = self
         class FakeCcp:
             def __init__(self):
@@ -418,13 +433,14 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
                 }
                 if command in expected:
                     return 0, expected[command]
-                if command == ("plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"):
+                config_path = str(root / ".commit-ci-preflight.toml")
+                if command == ("plan", "--config", config_path, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"):
                     return 0, json.dumps(matrix_plan_envelope(), separators=(",", ":")).encode()
-                if command == ("doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"):
+                if command == ("doctor", "--config", config_path, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"):
                     return 0, json.dumps(matrix_doctor_envelope(), separators=(",", ":")).encode()
-                if command == ("dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"):
+                if command == ("dry-run", "--config", config_path, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", str(root), "--cache-dir", str(root / "cache"), "--json"):
                     return 0, json.dumps(matrix_dry_run_envelope(), separators=(",", ":")).encode()
-                test_case.assertEqual(("run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "7", "--json"), command)
+                test_case.assertEqual(("run", "--config", config_path, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", str(root), "--cache-dir", str(root / "cache"), "--generation", "7", "--json"), command)
                 return 0, json.dumps(matrix_receipt_envelope(), sort_keys=True, separators=(",", ":")).encode()
         source = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as directory:
@@ -434,11 +450,16 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
             authorization_path = root / "qualification-authorization.json"
             authorization_path.write_text(json.dumps(authorization), encoding="utf-8")
             executor = FakeCcp()
+            runtime_resolution = {
+                "executable_path": str(root / "ccp"),
+                "repository_root": str(root),
+                "cache_root": str(root / "cache"),
+            }
             result = run_a0x_repository_qualification(
                 material_contract_raw=raw, authorization_path=authorization_path,
                 expected_authorization_raw_sha256=hashlib.sha256(authorization_path.read_bytes()).hexdigest(),
                 qualification_claim_path=root / "qualification-claim.json",
-                repository_root=root, source_head_probe=lambda: "a" * 40,
+                runtime_resolution=runtime_resolution, source_head_probe=lambda: "a" * 40,
                 executor=executor, source_head="a" * 40,
             )
             self.assertEqual(7, result["generation"])
@@ -451,7 +472,7 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
                     material_contract_raw=raw, authorization_path=authorization_path,
                     expected_authorization_raw_sha256=hashlib.sha256(authorization_path.read_bytes()).hexdigest(),
                     qualification_claim_path=root / "qualification-claim.json",
-                    repository_root=root, source_head_probe=lambda: "a" * 40,
+                    runtime_resolution=runtime_resolution, source_head_probe=lambda: "a" * 40,
                     executor=executor, source_head="a" * 40,
                 )
             self.assertEqual(before_second_use, executor.calls)
@@ -474,24 +495,30 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
                     material_contract_raw=raw, authorization_path=authorization_path,
                     expected_authorization_raw_sha256=hashlib.sha256(authorization_path.read_bytes()).hexdigest(),
                     qualification_claim_path=drift_claim,
-                    repository_root=root, source_head_probe=lambda: "a" * 40,
+                    runtime_resolution=runtime_resolution, source_head_probe=lambda: "a" * 40,
                     executor=drift_executor, source_head="a" * 40,
                 )
             self.assertTrue(drift_claim.is_file())
             self.assertEqual(5, len(drift_executor.calls))
 
-    def test_every_frozen_ccp_argument_is_contract_bound(self) -> None:
+    def test_public_ccp_roles_and_bindings_reject_invalid_shapes(self) -> None:
         from latent_triz.a0x_runner import A0XRunnerError, _validate_material_contract
 
         path = __import__("pathlib").Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/material-execution-contract.json"
         baseline = json.loads(path.read_text())
         _validate_material_contract(baseline)
-        for command_index, command in enumerate(baseline["ccp"]["commands"]):
-            for argument_index, _argument in enumerate(command):
-                changed = copy.deepcopy(baseline)
-                changed["ccp"]["commands"][command_index][argument_index] = "__mutated__"
-                with self.subTest(command=command_index, argument=argument_index), self.assertRaises(A0XRunnerError):
-                    _validate_material_contract(changed)
+        mutations = (
+            lambda value: value["ccp"]["command_roles"].__setitem__(0, "unknown"),
+            lambda value: value["ccp"]["matrix_config_binding"].__setitem__("locator", "../other.toml"),
+            lambda value: value["ccp"]["matrix_policy_binding"].__setitem__("raw_sha256", "0" * 63),
+            lambda value: value["ccp"]["location_roles"].__setitem__("repository_root", "host_path"),
+            lambda value: value["ccp"]["matrix_plan_binding"].__setitem__("outer_digest", "sha256:" + "0" * 64),
+        )
+        for mutate in mutations:
+            changed = copy.deepcopy(baseline)
+            mutate(changed)
+            with self.assertRaises(A0XRunnerError):
+                _validate_material_contract(changed)
 
     def test_material_contract_rejects_each_offline_and_stop_boundary_mutation(self) -> None:
         from latent_triz.a0x_runner import A0XRunnerError, _validate_material_contract

@@ -1,33 +1,43 @@
 #!/usr/bin/env python3
-"""Fixed-dossier A0X material entrypoint; unavailable until Task 11 freezes it."""
+"""Launch exactly one frozen A0X dossier through the shell-free CCP guard."""
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from latent_triz.a0x_runner import planned_material_dossiers
+from latent_triz.a0x_ccp_executor import A0XCcpExecutorError, launch_fixed_dossier
+
+
+def _source_head() -> str:
+    completed = subprocess.run(
+        ("git", "rev-parse", "HEAD"), cwd=str(ROOT), check=False,
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    if completed.returncode != 0:
+        raise A0XCcpExecutorError("repository source HEAD is unavailable")
+    return completed.stdout.decode("ascii", "strict").strip()
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixed-dossier", required=True)
     args = parser.parse_args(argv)
-    dossier = Path(args.fixed_dossier)
-    if dossier.is_absolute() or ".." in dossier.parts:
-        print("a0x-material: dossier path is not a fixed repository-relative path", file=sys.stderr)
+    try:
+        result = launch_fixed_dossier(
+            repository_root=ROOT,
+            fixed_dossier=args.fixed_dossier,
+            source_head_probe=_source_head,
+        )
+    except A0XCcpExecutorError as error:
+        print(f"a0x-material: {error}", file=sys.stderr)
         return 2
-    if dossier.as_posix() not in set(planned_material_dossiers().values()):
-        print("a0x-material: dossier path is not one of the twelve fixed Task-11 locations", file=sys.stderr)
-        return 2
-    if not (ROOT / dossier).is_file():
-        print("a0x-material: planned Task-11 dossier is absent; refusing before CCP or model access", file=sys.stderr)
-        return 2
-    print("a0x-material: Task-11 material bindings are not available; refusing before CCP or model access", file=sys.stderr)
-    return 2
+    print(result["terminal_observation_path"])
+    return 0
 
 
 if __name__ == "__main__":

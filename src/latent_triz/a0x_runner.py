@@ -13,7 +13,7 @@ import re
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
 from latent_triz.validator import validate
 
@@ -36,9 +36,30 @@ from .a0x_freeze import (
 )
 from .a0x_preflight import A0XPreflightError, _validate_admission, _validate_resource, load_registry, verify_card_sources
 
+if TYPE_CHECKING:
+    from .a0x_material_runtime import MaterialLifecycleDependencies
+
 
 class A0XRunnerError(RuntimeError):
     """Raised when an A0X pair cannot stay one-shot and fail-closed."""
+
+
+@dataclass(frozen=True)
+class QualificationRuntimeResolution:
+    """Private, non-publishable resolution used only by repository qualification."""
+
+    executable_path: str
+    repository_root: str
+    cache_root: str
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> "QualificationRuntimeResolution":
+        if not isinstance(value, Mapping) or set(value) != {"executable_path", "repository_root", "cache_root"}:
+            raise A0XRunnerError("qualification runtime resolution is incomplete")
+        values = {name: value[name] for name in value}
+        if any(not isinstance(item, str) or not Path(item).is_absolute() for item in values.values()):
+            raise A0XRunnerError("qualification runtime resolution must be private absolute paths")
+        return cls(**values)
 
 
 @dataclass(frozen=True)
@@ -63,6 +84,11 @@ class A0XRunnerDependencies:
     protected_tree_postflight: Callable[[Path], None]
     failure_sealer: Callable[[str, BaseException, PairBinding, Mapping[str, Any]], Mapping[str, Any]]
     release_model: Callable[[Any], None]
+    # New production adapters must opt into the explicit material lifecycle.
+    # Keeping it optional preserves the legacy synthetic seam until Task 3
+    # replaces that test-only wiring with the fixed child launcher.
+    material_lifecycle: "MaterialLifecycleDependencies | None" = None
+    monotonic: Callable[[], float] | None = None
 
 
 class CcpExecutor(Protocol):
@@ -138,43 +164,32 @@ _MATRIX_CHECK_ARGV = {
 }
 
 
-def _ccp_argvs(contract: Mapping[str, Any], *, generation: int | None = None) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    """Return the complete frozen CCP argv vectors, never symbolic labels.
-
-    One Matrix V2 configuration owns ``plan``, ``doctor``, ``dry-run`` and
-    ``run``. Cache and repository are explicit because CCP resolves them at
-    the command boundary rather than from an opaque process default.
-    """
+def _qualification_argvs(
+    contract: Mapping[str, Any], runtime: QualificationRuntimeResolution, *, generation: int | None = None,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Resolve public V2 locator roles only at the private qualification seam."""
     ccp = contract.get("ccp")
     if not isinstance(ccp, Mapping):
-        raise A0XRunnerError("material contract CCP identity is invalid")
-    matrix = ccp.get("matrix_config_binding")
-    location = ccp.get("location_binding")
-    if not isinstance(matrix, Mapping) or not isinstance(location, Mapping):
-        raise A0XRunnerError("material contract CCP argv bindings are invalid")
-    matrix_path = matrix.get("path")
-    repository, cache_dir = location.get("repository"), location.get("cache_dir")
-    if not all(isinstance(item, str) and item for item in (matrix_path, repository, cache_dir)):
-        raise A0XRunnerError("material contract CCP argv paths are invalid")
-    profile = ccp.get("matrix_plan_profile")
-    if profile is None:
-        profile_argv: tuple[str, ...] = ()
-    elif profile == "matrix-v2-legacy-v1":
-        profile_argv = ("--matrix-plan-profile", profile)
-    else:
-        raise A0XRunnerError("material contract Matrix plan profile is invalid")
-    rows: list[tuple[str, tuple[str, ...]]] = [
-        (_PREFLIGHT_LABELS[0], ("admission", "status", "--json")),
-        (_PREFLIGHT_LABELS[1], ("resource", "status", "--json")),
-        (_PREFLIGHT_LABELS[2], ("plan", "--config", matrix_path, *profile_argv, "--json")),
-        (_PREFLIGHT_LABELS[3], ("doctor", "--config", matrix_path, *profile_argv, "--json")),
-        (_PREFLIGHT_LABELS[4], ("dry-run", "--config", matrix_path, *profile_argv, "--repository", repository, "--cache-dir", cache_dir, "--json")),
-    ]
-    if generation is not None:
-        if not _is_integer(generation) or generation <= 0:
-            raise A0XRunnerError("CCP generation is invalid")
-        rows.append(("run --generation <authorized-u64> --json", ("run", "--config", matrix_path, *profile_argv, "--repository", repository, "--cache-dir", cache_dir, "--generation", str(generation), "--json")))
-    return tuple(rows)
+        raise A0XRunnerError("qualification contract CCP scope is invalid")
+    binding = ccp.get("matrix_config_binding")
+    if not isinstance(binding, Mapping) or not isinstance(binding.get("locator"), str):
+        raise A0XRunnerError("qualification Matrix config locator is invalid")
+    locator = binding["locator"]
+    if locator.startswith("/") or ".." in locator.split("/"):
+        raise A0XRunnerError("qualification Matrix config locator is unsafe")
+    config = str(Path(runtime.repository_root) / locator.removeprefix("repository/"))
+    base = (
+        ("admission status --json", ("admission", "status", "--json")),
+        ("resource status --json", ("resource", "status", "--json")),
+        ("plan --json", ("plan", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json")),
+        ("doctor --json", ("doctor", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json")),
+        ("dry-run --json", ("dry-run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", runtime.repository_root, "--cache-dir", runtime.cache_root, "--json")),
+    )
+    if generation is None:
+        return base
+    if not _is_integer(generation) or generation <= 0:
+        raise A0XRunnerError("CCP generation is invalid")
+    return (*base, ("run --generation <authorized-u64> --json", ("run", "--config", config, "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", runtime.repository_root, "--cache-dir", runtime.cache_root, "--generation", str(generation), "--json")))
 
 
 def planned_material_dossiers() -> dict[tuple[str, str], str]:
@@ -248,7 +263,7 @@ def reserve_attempt_claim(path: str | Path, payload: Mapping[str, Any]) -> Path:
 
 def _run_ccp_preflight(
     *, contract: Mapping[str, Any], material_contract_raw: bytes, executor: CcpExecutor,
-    source_head: str,
+    source_head: str, runtime: QualificationRuntimeResolution,
 ) -> dict[str, Any]:
     """Run exactly the five reviewed read-only commands through an injected fake."""
     try:
@@ -261,17 +276,11 @@ def _run_ccp_preflight(
     ccp = contract.get("ccp") if isinstance(contract, Mapping) else None
     if not isinstance(ccp, Mapping) or not _REVISION.fullmatch(source_head):
         raise A0XRunnerError("material contract or source HEAD is invalid")
-    expected = _ccp_argvs(contract)
-    expected_contract_argv = [list(argv) for _label, argv in _ccp_argvs(contract)]
-    profile_argv = ["--matrix-plan-profile", ccp["matrix_plan_profile"]]
-    expected_contract_argv.append(["run", "--config", ccp["matrix_config_binding"]["path"], *profile_argv, "--repository", ccp["location_binding"]["repository"], "--cache-dir", ccp["location_binding"]["cache_dir"], "--generation", "<authorized-u64>", "--json"])
-    expected_contract_argv.append(["guard", "exec"])
-    if ccp.get("commands") != expected_contract_argv or ccp.get("hash_before_command") is not True:
-        raise A0XRunnerError("material CCP command order is invalid")
+    expected = _qualification_argvs(contract, runtime)
     trace: list[dict[str, Any]] = []
     validated_inputs: dict[str, dict[str, Any]] = {}
     for command, argv in expected:
-        observed_hash = executor.sha256(ccp["path"])
+        observed_hash = executor.sha256(runtime.executable_path)
         if observed_hash != ccp.get("sha256"):
             raise A0XRunnerError("CCP executable hash drift")
         exit_code, raw = executor.execute(argv)
@@ -776,35 +785,19 @@ def _fsync_directory(path: Path) -> None:
 
 
 def _validate_material_contract(contract: Mapping[str, Any]) -> None:
-    expected_ccp = {
-        "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
-        "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
-        "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7",
-        "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
-        "version": "commit-ci-preflight 0.1.0",
-    }
-    if contract.get("repository") != "MarcoPorcellato/Latent-TRIZ" or contract.get("max_run_count") != 1:
-        raise A0XRunnerError("material contract identity is invalid")
-    bindings = {
-        "matrix_plan_profile": "matrix-v2-legacy-v1",
-        "matrix_config_binding": {"path": ".commit-ci-preflight.toml", "raw_sha256": "3dc320e11a22cd0774a64b4a3773fd7568e389b1092b165da17b073685832a9b"},
-        "matrix_policy_binding": {"path": ".commit-ci-policy-v2.toml", "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce"},
-        "location_binding": {"repository": ".", "cache_dir": "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1"},
-        "matrix_plan_binding": {
-            "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
-            "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
-            "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
-        },
-    }
-    expected_commands = [list(argv) for _label, argv in _ccp_argvs({"ccp": {**expected_ccp, **bindings}})]
-    expected_commands.append(["run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "<authorized-u64>", "--json"])
-    expected_commands.append(["guard", "exec"])
-    if contract.get("ccp") != {**expected_ccp, "commands": expected_commands, "hash_before_command": True, **bindings}:
-        raise A0XRunnerError("material contract CCP identity is invalid")
-    if contract.get("offline") != {"network": False, "generation": False, "local_cpu_float32": True}:
-        raise A0XRunnerError("material contract offline prohibitions are invalid")
-    if contract.get("stop_boundaries") != ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"]:
-        raise A0XRunnerError("material contract stop-boundary vocabulary is invalid")
+    """Accept only the public-safe V2 contract.
+
+    V2 intentionally names roles and repository-relative locators, never an
+    executable path, cache root, concrete repository checkout, or argv.  The
+    latter values are resolved only by the separately authorized launcher.
+    """
+    issues = validate(contract, _read_schema(_REPOSITORY_ROOT / "schemas/a0x-material-execution-contract.schema.json"))
+    if issues:
+        raise A0XRunnerError("public-safe material contract v2 is invalid")
+    ccp = contract["ccp"]
+    forbidden = {"path", "cache_dir", "repository", "commands", "location_binding"}
+    if any(name in ccp for name in forbidden):
+        raise A0XRunnerError("public-safe material contract v2 contains host-local execution data")
 
 
 def validate_qualification_authorization(
@@ -825,8 +818,22 @@ def validate_qualification_authorization(
     authorization_ccp = authorization.get("ccp")
     if not isinstance(ccp, Mapping) or not isinstance(authorization_ccp, Mapping):
         raise A0XRunnerError("qualification authorization CCP scope is invalid")
-    identity_fields = ("path", "source_commit", "qualified_source_tree", "sha256", "version")
-    if authorization.get("qualification_status") != "authorized" or authorization.get("repository") != contract.get("repository") or authorization.get("source_head") != source_head or authorization.get("material_contract_raw_sha256") != hashlib.sha256(material_contract_raw).hexdigest() or any(authorization_ccp.get(field) != ccp.get(field) for field in identity_fields):
+    plan = ccp.get("matrix_plan_binding")
+    if not isinstance(plan, Mapping):
+        raise A0XRunnerError("qualification authorization plan binding is invalid")
+    expected_ccp = {
+        "producer_role": ccp.get("producer_role"),
+        "source_commit": ccp.get("source_commit"),
+        "source_tree": ccp.get("source_tree"),
+        "sha256": ccp.get("sha256"),
+        "version": ccp.get("version"),
+        "matrix_plan_profile": ccp.get("matrix_plan_profile"),
+        "plan_output_sha256": plan.get("plan_output_sha256"),
+        "outer_digest": plan.get("outer_digest"),
+        "python311_digest": plan.get("python311_digest"),
+        "python312_digest": plan.get("python312_digest"),
+    }
+    if authorization.get("qualification_status") != "authorized" or authorization.get("repository") != contract.get("repository") or authorization.get("source_head") != source_head or authorization.get("material_contract_raw_sha256") != hashlib.sha256(material_contract_raw).hexdigest() or dict(authorization_ccp) != expected_ccp:
         raise A0XRunnerError("qualification authorization binding drifted")
     generation = authorization.get("generation")
     if not _is_integer(generation) or generation <= 0 or authorization.get("max_qualification_run_count") != 1 or authorization.get("stop_boundary") != "after_repository_qualification_receipt" or not isinstance(authorization.get("authorization_id"), str) or not authorization["authorization_id"]:
@@ -837,7 +844,7 @@ def validate_qualification_authorization(
 def run_a0x_repository_qualification(
     *, material_contract_raw: bytes, authorization_path: str | Path,
     expected_authorization_raw_sha256: str, qualification_claim_path: str | Path,
-    repository_root: str | Path, source_head_probe: Callable[[], str], executor: CcpExecutor,
+    runtime_resolution: Mapping[str, Any], source_head_probe: Callable[[], str], executor: CcpExecutor,
     source_head: str,
 ) -> dict[str, Any]:
     """Perform the separately authorized Matrix-v2 qualification seam.
@@ -848,7 +855,8 @@ def run_a0x_repository_qualification(
     """
     contract = strict_json_object(material_contract_raw)
     _validate_material_contract(contract)
-    repository = Path(repository_root).resolve()
+    runtime = QualificationRuntimeResolution.from_mapping(runtime_resolution)
+    repository = Path(runtime.repository_root).resolve()
     qualification, authorization_raw = _read_json_document_with_raw(Path(authorization_path), "qualification authorization")
     if not _SHA256.fullmatch(expected_authorization_raw_sha256) or hashlib.sha256(authorization_raw).hexdigest() != expected_authorization_raw_sha256:
         raise A0XRunnerError("qualification authorization bytes are not hash-bound")
@@ -857,7 +865,7 @@ def run_a0x_repository_qualification(
     )
     if os.path.lexists(qualification_claim_path):
         raise A0XRunnerError("qualification claim already exists")
-    preflight = _run_ccp_preflight(contract=contract, material_contract_raw=material_contract_raw, executor=executor, source_head=source_head)
+    preflight = _run_ccp_preflight(contract=contract, material_contract_raw=material_contract_raw, executor=executor, source_head=source_head, runtime=runtime)
     if executor.review_dry_run(preflight) is not True:
         raise A0XRunnerError("CCP dry-run review was rejected")
     if source_head_probe() != source_head:
@@ -869,15 +877,15 @@ def run_a0x_repository_qualification(
     qualification = validate_qualification_authorization(qualification, material_contract_raw=material_contract_raw, source_head=source_head, contract=contract)
     generation = qualification["generation"]
     ccp = contract["ccp"]
-    observed_hash = executor.sha256(ccp["path"])
+    observed_hash = executor.sha256(runtime.executable_path)
     if observed_hash != ccp["sha256"]:
         raise A0XRunnerError("CCP executable hash drift")
     _reserve_qualification_claim(
         qualification_claim_path, authorization=qualification,
         authorization_raw_sha256=expected_authorization_raw_sha256, source_head=source_head,
     )
-    command_label, command_argv = _ccp_argvs(contract, generation=generation)[-1]
-    observed_hash = executor.sha256(ccp["path"])
+    command_label, command_argv = _qualification_argvs(contract, runtime, generation=generation)[-1]
+    observed_hash = executor.sha256(runtime.executable_path)
     if observed_hash != ccp["sha256"]:
         raise A0XRunnerError("CCP executable hash drift")
     exit_code, raw = executor.execute(command_argv)
@@ -1099,7 +1107,10 @@ def _validate_policy_binding(repository: Path, contract: Mapping[str, Any]) -> N
         binding = ccp.get(name)
         if not isinstance(binding, Mapping):
             raise A0XRunnerError("material configuration binding is invalid")
-        path = repository / str(binding.get("path", ""))
+        locator = binding.get("locator", binding.get("path", ""))
+        if not isinstance(locator, str) or locator.startswith("/") or ".." in locator.split("/"):
+            raise A0XRunnerError("material configuration locator is invalid")
+        path = repository / locator.removeprefix("repository/")
         if not path.is_file() or path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != binding.get("raw_sha256"):
             raise A0XRunnerError("material configuration raw bytes drifted or are unavailable")
 
@@ -1136,6 +1147,40 @@ def _run_injected_lifecycle(
     claim_payload = _claim_payload(pair, chain, authorization)
     if not claim_reserved:
         reserve_attempt_claim(attempt_claim_path, claim_payload)
+    if dependencies.material_lifecycle is not None:
+        if pre_run_context is None:
+            raise A0XRunnerError("claimed lifecycle requires a persisted pre-run context")
+        from .a0x_material_runtime import run_material_lifecycle
+
+        outcome = run_material_lifecycle(
+            pair=pair,
+            preflight_context=pre_run_context,
+            dependencies=dependencies.material_lifecycle,
+            **({} if dependencies.monotonic is None else {"monotonic": dependencies.monotonic}),
+        )
+        terminal = outcome.get("terminal_outcome")
+        package = outcome.get("package_path")
+        recovery_required = (
+            outcome.get("lifecycle_status") == "post_terminal_failure"
+            and isinstance(outcome.get("post_terminal_failure"), Mapping)
+            and not package
+        )
+        if not isinstance(terminal, Mapping) or (not recovery_required and (not isinstance(package, str) or not package)):
+            raise A0XRunnerError("material lifecycle did not retain one sealed terminal package link")
+        terminal_status = terminal.get("status")
+        if terminal_status not in {"positive", "null", "non_interpretable", "incompatible", "failed"}:
+            raise A0XRunnerError("material lifecycle terminal status is invalid")
+        return {
+            "status": terminal_status,
+            "pair_binding": pair.as_mapping(),
+            "authorization_chain": dict(chain),
+            "package_path": None if recovery_required else package,
+            "attempt_claim_path": str(attempt_claim_path),
+            "dossier_status": dossier.get("dossier_status"),
+            "material_lifecycle": outcome,
+            "terminal_outcome": dict(terminal),
+            "recovery_required": recovery_required,
+        }
     model: Any | None = None
     release_attempted = False
     stage = "static_preflight"

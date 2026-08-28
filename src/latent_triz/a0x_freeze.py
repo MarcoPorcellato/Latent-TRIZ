@@ -36,6 +36,7 @@ SOURCE_BASE_COMMIT = "188eb65b5e249923baddadeba52659f07fcd1609"
 FROZEN_DOMAINS = ("agriculture", "energy", "manufacturing", "medicine", "software", "transport")
 SELECTION_PATH = "experiments/a0x-six-model/a0-selection-manifest.json"
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
+_REVISION = re.compile(r"^[a-f0-9]{40}$")
 _SAFE_RELATIVE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$")
 _COMMON = {
     "empirical": True,
@@ -84,15 +85,28 @@ _LEG_SOURCES = {
 }
 
 _IMPLEMENTATION_PATHS = (
+    "schemas/a0x-authorization-dossier.schema.json",
+    "schemas/a0x-ccp-observation.schema.json",
+    "schemas/a0x-execution-authorization.schema.json",
+    "schemas/a0x-guard-launch.schema.json",
+    "schemas/a0x-material-execution-contract.schema.json",
+    "schemas/a0x-publication-manifest.schema.json",
+    "schemas/a0x-qualification-authorization.schema.json",
+    "schemas/a0x-qualification-evidence.schema.json",
     "scripts/a0x_contract_check.py",
     "scripts/a0x_material.py",
+    "scripts/a0x_material_child.py",
     "src/latent_triz/a0x_a0_activations.py",
     "src/latent_triz/a0x_a0_analysis.py",
     "src/latent_triz/a0x_contract.py",
+    "src/latent_triz/a0x_ccp_executor.py",
     "src/latent_triz/a0x_execution.py",
     "src/latent_triz/a0x_freeze.py",
+    "src/latent_triz/a0x_material_contract.py",
+    "src/latent_triz/a0x_material_runtime.py",
     "src/latent_triz/a0x_model_adapter.py",
     "src/latent_triz/a0x_preflight.py",
+    "src/latent_triz/a0x_production_adapter.py",
     "src/latent_triz/a0x_r1_analysis.py",
     "src/latent_triz/a0x_r1_activations.py",
     "src/latent_triz/a0x_report.py",
@@ -102,12 +116,17 @@ _IMPLEMENTATION_PATHS = (
     "tests/test_a0x_a0_analysis.py",
     "tests/test_a0x_contract.py",
     "tests/test_a0x_contract_check.py",
+    "tests/test_a0x_ccp_executor.py",
     "tests/test_a0x_execution.py",
     "tests/test_a0x_freeze.py",
     "tests/test_a0x_frozen_package.py",
     "tests/test_a0x_material.py",
+    "tests/test_a0x_material_child.py",
+    "tests/test_a0x_material_contract.py",
+    "tests/test_a0x_material_runtime.py",
     "tests/test_a0x_matrix_plan_binding.py",
     "tests/test_a0x_preflight.py",
+    "tests/test_a0x_production_adapter.py",
     "tests/test_a0x_r1_analysis.py",
     "tests/test_a0x_report.py",
     "tests/test_a0x_runner.py",
@@ -631,6 +650,7 @@ def freeze_a0x_campaign(
     root: str | Path,
     *,
     prepare_dossiers: bool,
+    implementation_source_head: str,
     output_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Write the two target-free leg freezes and twelve approval requests.
@@ -640,6 +660,8 @@ def freeze_a0x_campaign(
     target-content, CCP, subprocess, network, or authorization capability.
     """
 
+    if not isinstance(implementation_source_head, str) or not _REVISION.fullmatch(implementation_source_head):
+        raise A0XFreezeError("implementation source head must be an exact revision")
     repository = Path(root).resolve()
     destination = repository if output_root is None else Path(output_root).resolve()
     campaign = repository / "experiments/a0x-six-model"
@@ -740,7 +762,7 @@ def freeze_a0x_campaign(
                     "commitment_profile": APPROVAL_DOSSIER_PROFILE,
                     "pair_binding": pair,
                     "dossier_status": "approval_requested",
-                    "future_authorization_path": f"{output_path}/execution-authorization.json",
+                    "implementation_source_head": implementation_source_head,
                     "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
                     "material_contract_raw_sha256": material_sha256,
                 }
@@ -897,6 +919,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--write-a0-selection", action="store_true")
     parser.add_argument("--freeze-all", action="store_true")
     parser.add_argument("--prepare-dossiers", action="store_true")
+    parser.add_argument("--implementation-source-head")
     args = parser.parse_args(argv)
     repository = Path(args.root).resolve()
     written: list[str] = []
@@ -923,7 +946,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         written.append(path.relative_to(repository).as_posix())
     receipt: dict[str, Any] = {"written": written, "sealed_target_content_reads": 0}
     if args.freeze_all:
-        receipt = freeze_a0x_campaign(repository, prepare_dossiers=args.prepare_dossiers)
+        if args.implementation_source_head is None:
+            parser.error("--freeze-all requires --implementation-source-head")
+        receipt = freeze_a0x_campaign(
+            repository,
+            prepare_dossiers=args.prepare_dossiers,
+            implementation_source_head=args.implementation_source_head,
+        )
     elif args.prepare_dossiers:
         parser.error("--prepare-dossiers requires --freeze-all")
     print(json.dumps(receipt, sort_keys=True))

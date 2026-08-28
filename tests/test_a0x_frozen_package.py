@@ -194,24 +194,48 @@ class A0XFrozenPackageTests(unittest.TestCase):
                 verify_a0x_dossier_inventory(root)
 
     def test_freeze_generation_is_byte_deterministic(self) -> None:
-        expected = {
-            path.relative_to(ROOT): path.read_bytes()
-            for pattern in ("a0/*.json", "r1/*.json", "freeze/*.json", "approval-dossiers/**/*.json")
-            for path in sorted(CAMPAIGN.glob(pattern))
-            if path.is_file()
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            destination = Path(directory)
-            receipt = freeze_a0x_campaign(ROOT, prepare_dossiers=True, output_root=destination)
+        with tempfile.TemporaryDirectory() as first_directory, tempfile.TemporaryDirectory() as second_directory:
+            first = Path(first_directory)
+            second = Path(second_directory)
+            receipt = freeze_a0x_campaign(
+                ROOT,
+                prepare_dossiers=True,
+                output_root=first,
+                implementation_source_head="f" * 40,
+            )
+            freeze_a0x_campaign(
+                ROOT,
+                prepare_dossiers=True,
+                output_root=second,
+                implementation_source_head="f" * 40,
+            )
             generated = {
-                path.relative_to(destination): path.read_bytes()
-                for path in sorted((destination / "experiments/a0x-six-model").glob("**/*.json"))
+                path.relative_to(first): path.read_bytes()
+                for path in sorted((first / "experiments/a0x-six-model").glob("**/*.json"))
             }
-        self.assertEqual(expected, generated)
+            repeated = {
+                path.relative_to(second): path.read_bytes()
+                for path in sorted((second / "experiments/a0x-six-model").glob("**/*.json"))
+            }
+            dossier_schema = json.loads(
+                (ROOT / "schemas/a0x-authorization-dossier.schema.json").read_text(encoding="utf-8"),
+            )
+            dossiers = sorted((first / "experiments/a0x-six-model/approval-dossiers").glob("**/*.json"))
+            self.assertEqual(12, len(dossiers))
+            for dossier_path in dossiers:
+                dossier = json.loads(dossier_path.read_text(encoding="utf-8"))
+                self.assertEqual("f" * 40, dossier["implementation_source_head"])
+                self.assertEqual([], validate(dossier, dossier_schema))
+        self.assertEqual(generated, repeated)
         self.assertEqual(12, receipt["dossier_count"])
         self.assertEqual(0, receipt["sealed_target_content_reads"])
         self.assertEqual(0, receipt["model_loads"])
         self.assertEqual(0, receipt["ccp_invocations"])
+
+    def test_freeze_generator_requires_an_explicit_implementation_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(TypeError, "implementation_source_head"):
+                freeze_a0x_campaign(ROOT, prepare_dossiers=True, output_root=Path(directory))
 
     def test_no_model_verifier_is_a_strict_frozen_phase_superset(self) -> None:
         receipt = verify_a0x_no_model(ROOT)

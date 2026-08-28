@@ -51,8 +51,11 @@ _ADMISSION_FIELDS = frozenset((
     "process_visibility_note",
 ))
 _VISIBILITY_NOTE = "No process visible in the local shell does not prove global inactivity."
-_CCP_SOURCE_COMMIT = "c91915adcb8706898574c0c74d033b9ff991eefb"
-_CCP_BINARY_SHA256 = "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be"
+_CCP_SOURCE_COMMIT = "a73ebed945d9d9e9744c4aff987589f3478a7f3c"
+_CCP_SOURCE_TREE = "b12ff9ac9daa67d52e28c6793e14f646c5e37225"
+_CCP_BINARY_SHA256 = "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f"
+_CCP_ROLE = "ccp_executable"
+_CCP_VERSION = "commit-ci-preflight 0.1.0"
 _CCP_LEGACY_PROFILE = "matrix-v2-legacy-v1"
 
 
@@ -263,9 +266,17 @@ def parse_ccp_observation(
     pair_binding: PairBinding, authorization_chain: Mapping[str, Any], output_dir: Path,
     source_head: str | None = None, material_contract_raw_sha256: str | None = None,
     ccp_trace: list[Mapping[str, Any]] | None = None, dry_run_reviewed: bool | None = None,
-    claim_identity: str | None = None, run_count: int | None = None,
+    claim_locator: str | None = None, claim_sha256: str | None = None,
+    policy_raw_sha256: str | None = None, guard_exec_argv_commitment: str | None = None,
+    run_count: int | None = None,
 ) -> dict[str, object]:
-    """Persist and validate one exact privacy-minimized CCP observation."""
+    """Retired legacy parser; public observations come from guard preflight."""
+    raise A0XPreflightError(
+        "legacy CCP observation parsing is retired; use the canonical guard preflight observation"
+    )
+    # Historical implementation retained below temporarily for narrow source
+    # archaeology only; it must never translate raw host observations into a
+    # public artifact.
     _validate_binary_binding(binary)
     try:
         chain = validate_authorization_chain(authorization_chain)
@@ -293,21 +304,27 @@ def parse_ccp_observation(
         "authorization_chain": chain,
         "read_counter": 0,
         "admission_status": "not_requested",
-        "binary": {name: binary[name] for name in ("path", "source_commit", "sha256", "version_output")},
+        # Resolved executable locations are local runtime facts.  The public
+        # receipt carries only a role plus hash-bound producer identity.
+        "binary": {name: binary[name] for name in ("role", "source_commit", "source_tree", "sha256", "version")},
         "resource": resource,
         "admission": admission,
-        "resource_raw_path": resource_path.name,
         "resource_raw_sha256": hashlib.sha256(resource_raw).hexdigest(),
         "resource_raw_bytes": len(resource_raw),
-        "admission_raw_path": admission_path.name,
         "admission_raw_sha256": hashlib.sha256(admission_raw).hexdigest(),
         "admission_raw_bytes": len(admission_raw),
     }
-    extension = (source_head, material_contract_raw_sha256, ccp_trace, dry_run_reviewed, claim_identity, run_count)
+    extension = (source_head, material_contract_raw_sha256, ccp_trace, dry_run_reviewed, claim_locator, claim_sha256, policy_raw_sha256, guard_exec_argv_commitment, run_count)
     if any(value is not None for value in extension):
         if not (_REVISION.fullmatch(str(source_head)) and _sha(material_contract_raw_sha256) and isinstance(ccp_trace, list) and isinstance(dry_run_reviewed, bool) and isinstance(run_count, int) and run_count in (0, 1)):
             raise A0XPreflightError("extended CCP observation binding is invalid")
-        receipt.update({"source_head": source_head, "material_contract_raw_sha256": material_contract_raw_sha256, "ccp_trace": ccp_trace, "dry_run_reviewed": dry_run_reviewed, "claim_identity": claim_identity, "run_count": run_count})
+        if (
+            not isinstance(claim_locator, str) or not _safe_relative(claim_locator)
+            or not _sha(claim_sha256) or not _sha(policy_raw_sha256)
+            or not _sha(guard_exec_argv_commitment)
+        ):
+            raise A0XPreflightError("extended CCP observation claim locator is invalid")
+        receipt.update({"source_head": source_head, "material_contract_raw_sha256": material_contract_raw_sha256, "ccp_trace": ccp_trace, "dry_run_reviewed": dry_run_reviewed, "claim_locator": claim_locator, "claim_sha256": claim_sha256, "policy_raw_sha256": policy_raw_sha256, "guard_exec_argv_commitment": guard_exec_argv_commitment, "run_count": run_count})
     schema_path = Path(__file__).resolve().parents[2] / "schemas/a0x-ccp-observation.schema.json"
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
@@ -363,17 +380,14 @@ def verify_static_preflight(
         assert_authorization_chain(
             dossier,
             authorization,
-            (
-                ccp_observation,
-                {
-                    "pair_binding": pair_binding.as_mapping(),
-                    "authorization_chain": chain,
-                },
-            ),
+            ({"pair_binding": pair_binding.as_mapping(), "authorization_chain": chain},),
         )
     except Exception as error:
         raise A0XPreflightError("authorization source chain does not bind preflight inputs") from error
-    _verify_ccp_observation(ccp_observation, pair_binding, chain)
+    _verify_guard_preflight_observation(
+        ccp_observation, pair_binding=pair_binding, source_head=observed_origin,
+        authorization=authorization,
+    )
     receipt = {
         "artifact_class": "a0x-preflight-receipt",
         "empirical": True,
@@ -495,18 +509,78 @@ def _verify_fact_provenance(root: Path, provenance: Mapping[str, Any], label: st
         raise A0XPreflightError(f"model card {label} fact provenance pointer mismatch")
 
 
+def _verify_guard_preflight_observation(
+    observation: Mapping[str, Any], *, pair_binding: PairBinding, source_head: str,
+    authorization: Mapping[str, Any],
+) -> None:
+    """Validate the canonical public guard-preflight projection directly.
+
+    This observation intentionally carries no authorization chain and no raw
+    command output. The execution authorization supplies its identity binding;
+    the public record supplies the six zero-sensitive facts needed before the
+    one guarded child can run.
+    """
+    schema_path = Path(__file__).resolve().parents[2] / "schemas/a0x-ccp-observation.schema.json"
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XPreflightError("guard preflight observation schema is unavailable") from error
+    if not isinstance(observation, Mapping) or validate(observation, schema):
+        raise A0XPreflightError("guard preflight observation does not satisfy its schema")
+    if (
+        observation.get("pair_binding") != pair_binding.as_mapping()
+        or observation.get("source_head") != source_head
+        or observation.get("source") != {"head": source_head, "clean": True}
+        or observation.get("resource") != {"decision": "admit"}
+        or observation.get("admission") != {"active": False, "queue_count": 0, "slot_state": "free"}
+        or observation.get("runtime") != {"intended_runtime_responsive": True, "active_container_count": 0}
+    ):
+        raise A0XPreflightError("guard preflight observation state differs from the fixed safe boundary")
+    ccp = observation.get("ccp")
+    authorization_ccp = authorization.get("ccp")
+    if not isinstance(ccp, Mapping) or not isinstance(authorization_ccp, Mapping) or any(
+        ccp.get(left) != authorization_ccp.get(right)
+        for left, right in (
+            ("sha256", "sha256"), ("source_commit", "source_commit"),
+            ("qualified_source_tree", "qualified_source_tree"), ("version", "version"),
+        )
+    ):
+        raise A0XPreflightError("guard preflight observation CCP identity differs from authorization")
+    expected_roles = (
+        "ccp_version", "resource_status", "admission_status", "git_source_state",
+        "docker_context", "docker_active_count",
+    )
+    commands = observation.get("commands")
+    if not isinstance(commands, list) or tuple(item.get("role") for item in commands if isinstance(item, Mapping)) != expected_roles:
+        raise A0XPreflightError("guard preflight observation command roles differ")
+    _reject_public_observation_leaks(observation)
+
+
+def _reject_public_observation_leaks(value: Any) -> None:
+    forbidden = {"argv", "path", "raw", "stdout", "stderr", "environment", "container_id", "local_path"}
+    if isinstance(value, Mapping):
+        if set(value).intersection(forbidden):
+            raise A0XPreflightError("guard preflight observation leaks a private field")
+        for child in value.values():
+            _reject_public_observation_leaks(child)
+    elif isinstance(value, list):
+        for child in value:
+            _reject_public_observation_leaks(child)
+    elif isinstance(value, str) and (value.startswith(("/", "~")) or "file://" in value.lower()):
+        raise A0XPreflightError("guard preflight observation leaks a local locator")
+
+
 def _verify_ccp_observation(
     observation: Mapping[str, Any], pair_binding: PairBinding, authorization_chain: Mapping[str, Any],
 ) -> None:
     base_fields = {
         "artifact_class", "empirical", "scientific_status", "evidence_eligible", "expert_validated", "claim_ids",
         "pair_binding", "authorization_chain", "read_counter", "admission_status", "binary", "resource", "admission",
-        "resource_raw_path", "resource_raw_sha256", "resource_raw_bytes", "admission_raw_path",
-        "admission_raw_sha256", "admission_raw_bytes",
+        "resource_raw_sha256", "resource_raw_bytes", "admission_raw_sha256", "admission_raw_bytes",
     }
     pre_guard_fields = base_fields | {
         "source_head", "material_contract_raw_sha256", "policy_raw_sha256", "ccp_trace",
-        "dry_run_reviewed", "claim_identity", "claim_sha256",
+        "dry_run_reviewed", "claim_locator", "claim_sha256",
         "guard_exec_argv_commitment", "run_count",
     }
     observed_fields = frozenset(observation) if isinstance(observation, Mapping) else frozenset()
@@ -534,51 +608,55 @@ def _verify_ccp_observation(
     admission = observation.get("admission")
     if not isinstance(binary, Mapping) or not isinstance(resource, Mapping) or not isinstance(admission, Mapping):
         raise A0XPreflightError("CCP observation payload is invalid")
-    _validate_binary_binding({**binary, "expected_path": binary.get("path"), "expected_source_commit": binary.get("source_commit"), "expected_sha256": binary.get("sha256"), "expected_version_output": binary.get("version_output")})
+    _validate_public_binary_identity(binary)
     _validate_resource(resource)
     _validate_admission(admission)
     for label in ("resource", "admission"):
         if not _sha(observation.get(f"{label}_raw_sha256")) or not _positive_int(observation.get(f"{label}_raw_bytes"), f"{label} raw bytes"):
             raise A0XPreflightError("CCP observation raw binding is invalid")
     if set(observation) == pre_guard_fields:
-        expected_commands = [
-            "admission status --json", "resource status --json", "plan --json",
-            "doctor --json", "dry-run --json",
-        ]
-        # These are execution boundaries, not merely descriptive labels.
-        expected_argv = [
-            ["admission", "status", "--json"],
-            ["resource", "status", "--json"],
-            ["plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", _CCP_LEGACY_PROFILE, "--json"],
-            ["doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", _CCP_LEGACY_PROFILE, "--json"],
-            ["dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", _CCP_LEGACY_PROFILE, "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"],
-        ]
+        expected_roles = ["admission_status", "resource_status", "plan", "doctor", "dry_run"]
         trace = observation.get("ccp_trace")
         if (
             not _REVISION.fullmatch(str(observation.get("source_head")))
             or not _sha(observation.get("material_contract_raw_sha256"))
             or not _sha(observation.get("policy_raw_sha256"))
             or observation.get("dry_run_reviewed") is not True
-            or not isinstance(observation.get("claim_identity"), str)
-            or not observation["claim_identity"]
+            or not isinstance(observation.get("claim_locator"), str)
+            or not _safe_relative(observation["claim_locator"])
             or not _sha(observation.get("claim_sha256"))
             or not _sha(observation.get("guard_exec_argv_commitment"))
             or observation.get("run_count") != 0
             or not isinstance(trace, list)
-            or [item.get("command") for item in trace if isinstance(item, Mapping)] != expected_commands
-            or [item.get("argv") for item in trace if isinstance(item, Mapping)] != expected_argv
+            or [item.get("command_role") for item in trace if isinstance(item, Mapping)] != expected_roles
         ):
             raise A0XPreflightError("pre-guard CCP observation binding is invalid")
 
 
 def _validate_binary_binding(binary: Mapping[str, str]) -> None:
-    fields = {"path", "source_commit", "sha256", "version_output", "expected_path", "expected_source_commit", "expected_sha256", "expected_version_output"}
+    """Validate a private runtime role map without serializing its host path."""
+    fields = {"role", "source_commit", "source_tree", "sha256", "version", "resolved_path", "expected_role", "expected_source_commit", "expected_source_tree", "expected_sha256", "expected_version"}
     if set(binary) != fields:
         raise A0XPreflightError("CCP binary binding fields are incomplete")
-    for actual, expected in (("path", "expected_path"), ("source_commit", "expected_source_commit"), ("sha256", "expected_sha256"), ("version_output", "expected_version_output")):
+    for actual, expected in (("role", "expected_role"), ("source_commit", "expected_source_commit"), ("source_tree", "expected_source_tree"), ("sha256", "expected_sha256"), ("version", "expected_version")):
         if not isinstance(binary[actual], str) or binary[actual] != binary[expected]:
             raise A0XPreflightError("CCP binary binding does not match dossier")
-    if not Path(binary["path"]).is_absolute() or binary["source_commit"] != _CCP_SOURCE_COMMIT or binary["sha256"] != _CCP_BINARY_SHA256 or not binary["version_output"]:
+    if not isinstance(binary["resolved_path"], str) or not Path(binary["resolved_path"]).is_absolute():
+        raise A0XPreflightError("CCP binary binding local runtime path is invalid")
+    _validate_public_binary_identity(binary)
+
+
+def _validate_public_binary_identity(binary: Mapping[str, Any]) -> None:
+    fields = {"role", "source_commit", "source_tree", "sha256", "version"}
+    if not fields.issubset(binary):
+        raise A0XPreflightError("CCP binary public identity is incomplete")
+    if (
+        binary["role"] != _CCP_ROLE
+        or binary["source_commit"] != _CCP_SOURCE_COMMIT
+        or binary["source_tree"] != _CCP_SOURCE_TREE
+        or binary["sha256"] != _CCP_BINARY_SHA256
+        or binary["version"] != _CCP_VERSION
+    ):
         raise A0XPreflightError("CCP binary binding is invalid")
 
 

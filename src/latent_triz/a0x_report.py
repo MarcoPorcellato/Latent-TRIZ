@@ -24,6 +24,12 @@ from .a0x_contract import (
     assert_leg_freeze_binding,
     assert_pair_binding,
 )
+from .a0x_material_contract import (
+    CLEANUP_MARGIN_SECONDS,
+    INTERNAL_BUDGET_SECONDS,
+    OUTER_TIMEOUT_SECONDS,
+    validate_qualification_evidence,
+)
 
 
 class A0XReportError(ValueError):
@@ -37,6 +43,7 @@ _COMMON = {
 }
 _ROLE_FILES = {
     "authorization_record": "execution-authorization.json",
+    "qualification_evidence": "qualification-evidence.json",
     "model_identity_receipt": "model-identity-receipt.json",
     "ccp_observation": "ccp-observation.json",
     "preflight_receipt": "preflight-receipt.json",
@@ -49,6 +56,7 @@ _ROLE_FILES = {
 }
 _ROLE_SCHEMAS = {
     "authorization_record": "a0x-execution-authorization.schema.json",
+    "qualification_evidence": "a0x-qualification-evidence.schema.json",
     "model_identity_receipt": "a0x-model-identity-receipt.schema.json",
     "ccp_observation": "a0x-ccp-observation.schema.json",
     "preflight_receipt": "a0x-preflight-receipt.schema.json",
@@ -88,7 +96,11 @@ def render_a0x_report(*, terminal_result: Mapping[str, Any]) -> bytes:
         f"- Frozen primary thresholds: {thresholds}",
         f"- Descriptive final-block status: {descriptive}",
         f"- Target content reads: `{reads}`",
-        f"- Runtime limit: `1800` seconds; peak RSS limit: `8589934592` bytes",
+        (
+            f"- Outer runtime limit: `{OUTER_TIMEOUT_SECONDS}` seconds; internal analysis budget: "
+            f"`{INTERNAL_BUDGET_SECONDS}` seconds; reserved sealing/cleanup margin: "
+            f"`{CLEANUP_MARGIN_SECONDS}` seconds; peak RSS limit: `8589934592` bytes"
+        ),
         f"- New dense/index cap: `{pair.dense_bound.cap_bytes}` bytes",
         "",
         "This exploratory automated-proxy result is not a general TRIZ, causal, mechanism, emergence, or training-data claim.",
@@ -151,12 +163,22 @@ def build_terminal_package(
         bound_raw: dict[str, bytes] = {}
         _write_package_bytes(stage, "authorization_record", authorization_raw, ledger)
         _validate_mapping(authorization, _ROLE_SCHEMAS["authorization_record"], "authorization record")
+        try:
+            qualification_evidence = validate_qualification_evidence(
+                authorization["qualification_evidence"],
+            )
+        except (KeyError, A0XContractError) as error:
+            raise A0XReportError("authorization qualification evidence is invalid") from error
+        qualification_raw = _stable_json_bytes(qualification_evidence)
+        bound_documents["qualification_evidence"] = qualification_evidence
+        bound_raw["qualification_evidence"] = qualification_raw
+        _write_package_bytes(stage, "qualification_evidence", qualification_raw, ledger)
         for role, path in artifacts.items():
             if role not in _ROLE_FILES or role in {"authorization_record", "terminal_result", "external_assets_locator", "report"}:
                 raise A0XReportError("unknown or builder-owned package artifact role")
             raw, document = _read_json_file(Path(path), role)
             _validate_mapping(document, _ROLE_SCHEMAS[role], role)
-            _require_pair_chain(document, pair)
+            _require_pair_chain(document, pair, requires_authorization_chain=role != "ccp_observation")
             bound_documents[role] = document
             bound_raw[role] = raw
             _write_package_bytes(stage, role, raw, ledger)
@@ -164,8 +186,12 @@ def build_terminal_package(
         external_entries = _external_entries(root, external_assets)
         _validate_completed_links(terminal_result, bound_documents, bound_raw, external_entries, leg_freeze)
         try:
-            assert_authorization_chain(dossier, authorization, [terminal_result, *bound_documents.values()])
-            assert_pair_binding(pair, [terminal_result, *bound_documents.values()])
+            pair_bound = [
+                document for role, document in bound_documents.items()
+                if role not in {"qualification_evidence", "ccp_observation"}
+            ]
+            assert_authorization_chain(dossier, authorization, [terminal_result, *pair_bound])
+            assert_pair_binding(pair, [terminal_result, *pair_bound])
         except A0XContractError as error:
             raise A0XReportError("package artifact authorization chain differs") from error
         if external_entries:
@@ -398,11 +424,13 @@ def _pair(value: Mapping[str, Any]) -> PairBinding:
         raise A0XReportError("terminal pair binding is invalid") from error
 
 
-def _require_pair_chain(value: Mapping[str, Any], pair: PairBinding) -> None:
+def _require_pair_chain(
+    value: Mapping[str, Any], pair: PairBinding, *, requires_authorization_chain: bool = True,
+) -> None:
     try:
         if PairBinding.from_mapping(value["pair_binding"]).as_mapping() != pair.as_mapping():
             raise ValueError("pair drift")
-        if value.get("authorization_chain") is None:
+        if requires_authorization_chain and value.get("authorization_chain") is None:
             raise ValueError("missing chain")
     except Exception as error:
         raise A0XReportError("package artifact pair or authorization chain differs") from error

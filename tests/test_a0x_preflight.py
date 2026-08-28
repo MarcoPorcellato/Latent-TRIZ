@@ -17,14 +17,13 @@ from latent_triz.a0x_preflight import (
     A0XPreflightError,
     load_model_card,
     load_registry,
-    parse_ccp_observation,
     require_empty_output,
     verify_snapshot_files,
     verify_static_preflight,
     verify_card_sources,
     verify_static_endpoint_availability,
 )
-from tests.a0x_test_support import A0XTempTestCase, authorization_documents, pair_binding
+from tests.a0x_test_support import A0XTempTestCase, artifact, authorization_documents, pair_binding
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,14 +78,17 @@ def valid_ccp_raw_observations() -> tuple[dict[str, object], dict[str, object]]:
 
 def valid_ccp_binary_binding() -> dict[str, str]:
     return {
-        "path": "/private/tmp/commit-ci-preflight",
-        "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
-        "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
-        "version_output": "commit-ci-preflight 0.1.0\n",
-        "expected_path": "/private/tmp/commit-ci-preflight",
-        "expected_source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
-        "expected_sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
-        "expected_version_output": "commit-ci-preflight 0.1.0\n",
+        "role": "ccp_executable",
+        "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c",
+        "source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225",
+        "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f",
+        "version": "commit-ci-preflight 0.1.0",
+        "resolved_path": "/private/tmp/commit-ci-preflight",
+        "expected_role": "ccp_executable",
+        "expected_source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c",
+        "expected_source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225",
+        "expected_sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f",
+        "expected_version": "commit-ci-preflight 0.1.0",
     }
 
 
@@ -115,11 +117,9 @@ class A0XPreflightTests(A0XTempTestCase):
             "expected_dossier_raw_sha256": hashlib.sha256(dossier_path.read_bytes()).hexdigest(),
             "authorization_path": authorization_path,
             "expected_authorization_raw_sha256": hashlib.sha256(authorization_path.read_bytes()).hexdigest(),
-            "ccp_observation": {
-                "pair_binding": binding.as_mapping(), "authorization_chain": chain,
-            },
+            "ccp_observation": artifact("a0x-ccp-observation.schema.json"),
             "material_contract_raw_sha256": "c" * 64,
-            "ccp_observation_path": "a0x-ccp-observation.json",
+            "ccp_observation_path": "ccp-observation.json",
             "ccp_observation_raw_sha256": "d" * 64,
             "authorization_chain": chain,
         }
@@ -130,7 +130,6 @@ class A0XPreflightTests(A0XTempTestCase):
         with (
             patch("latent_triz.a0x_preflight.verify_snapshot_files"),
             patch("latent_triz.a0x_preflight.verify_static_endpoint_availability", return_value={}),
-            patch("latent_triz.a0x_preflight._verify_ccp_observation"),
         ):
             receipt = verify_static_preflight(**arguments)
         self.assertEqual(arguments["authorization_chain"], receipt["authorization_chain"])
@@ -147,18 +146,12 @@ class A0XPreflightTests(A0XTempTestCase):
 
         unrelated_chain = dict(arguments)
         unrelated_chain["authorization_chain"] = alternate_chain
-        unrelated_chain["ccp_observation"] = {
-            **arguments["ccp_observation"], "authorization_chain": alternate_chain,
-        }
         swapped_source = dict(arguments)
         swapped_source["authorization_path"] = alternate_authorization_path
         swapped_source["expected_authorization_raw_sha256"] = hashlib.sha256(
             alternate_authorization_path.read_bytes(),
         ).hexdigest()
         swapped_source["authorization_chain"] = alternate_chain
-        swapped_source["ccp_observation"] = {
-            **arguments["ccp_observation"], "authorization_chain": alternate_chain,
-        }
         del alternate_dossier
 
         for label, candidate in (("unrelated-chain", unrelated_chain), ("swapped-source", swapped_source)):
@@ -166,7 +159,6 @@ class A0XPreflightTests(A0XTempTestCase):
                 with (
                     patch("latent_triz.a0x_preflight.verify_snapshot_files"),
                     patch("latent_triz.a0x_preflight.verify_static_endpoint_availability", return_value={}),
-                    patch("latent_triz.a0x_preflight._verify_ccp_observation"),
                 ):
                     verify_static_preflight(**candidate)
 
@@ -306,103 +298,83 @@ class A0XPreflightTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XPreflightError, "identity"):
             verify_static_endpoint_availability(card=card.__class__(**{**card.__dict__, "final_transformer_block_tuple_index": 11}), leg=Leg.R1)
 
-    def test_unknown_or_busy_ccp_fails_closed(self) -> None:
-        resource, admission = valid_ccp_raw_observations()
-        for mutator in (
-            lambda r, a: r.update(decision="unknown"),
-            lambda r, a: a.update(active=True),
-            lambda r, a: a.update(queue_count=1),
-            lambda r, a: a["slot"].update(state="unknown"),
-        ):
-            changed_resource, changed_admission = copy.deepcopy(resource), copy.deepcopy(admission)
-            mutator(changed_resource, changed_admission)
-            with self.subTest(mutator=mutator), self.assertRaises(A0XPreflightError):
-                parse_ccp_observation(
-                    resource_raw=stable_json_bytes(changed_resource),
-                    admission_raw=stable_json_bytes(changed_admission),
-                    binary=valid_ccp_binary_binding(),
-                    pair_binding=PairBinding.from_mapping(pair_binding()),
-                    authorization_chain=authorization_documents(pair_binding())[2],
-                    output_dir=self.temp_path / f"ccp-{len(str(mutator))}",
-                )
-
-    def test_ccp_requires_exact_fields_types_binary_and_visibility_binding(self) -> None:
-        resource, admission = valid_ccp_raw_observations()
-        mutations = (
-            lambda r, a, b: r.__setitem__("extra", True),
-            lambda r, a, b: r.__setitem__("available_percent", True),
-            lambda r, a, b: r.__setitem__("policy_version", "macos-v3"),
-            lambda r, a, b: a["slot"].__setitem__("owner_run_id", "opaque"),
-            lambda r, a, b: a.__setitem__("process_visibility_note", "wrong"),
-            lambda r, a, b: b.__setitem__("sha256", "b" * 64),
+    def test_public_ccp_contract_schemas_expose_only_roles_and_hash_bound_identity(self) -> None:
+        schemas = (
+            ROOT / "schemas/a0x-material-execution-contract.schema.json",
+            ROOT / "schemas/a0x-qualification-authorization.schema.json",
         )
-        for index, mutate in enumerate(mutations):
-            changed_resource, changed_admission, changed_binary = copy.deepcopy(resource), copy.deepcopy(admission), valid_ccp_binary_binding()
-            mutate(changed_resource, changed_admission, changed_binary)
-            with self.subTest(index=index), self.assertRaises(A0XPreflightError):
-                parse_ccp_observation(
-                    resource_raw=stable_json_bytes(changed_resource),
-                    admission_raw=stable_json_bytes(changed_admission),
-                    binary=changed_binary,
-                    pair_binding=PairBinding.from_mapping(pair_binding()),
-                    authorization_chain=authorization_documents(pair_binding())[2],
-                    output_dir=self.temp_path / f"invalid-{index}",
-                )
+        for path in schemas:
+            with self.subTest(path=path.name):
+                serialized = path.read_text(encoding="utf-8")
+                # The schemas deliberately mention ``file://`` only in a
+                # negative validator pattern; no host-derived value may occur.
+                for forbidden in ("/Users/", "/private/", "/tmp/", "commit-ci-preflight-build-v1"):
+                    self.assertNotIn(forbidden, serialized)
+                self.assertIn("ccp_executable", serialized)
+                self.assertIn("a73ebed945d9d9e9744c4aff987589f3478a7f3c", serialized)
+                self.assertIn("b12ff9ac9daa67d52e28c6793e14f646c5e37225", serialized)
+                self.assertIn("2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f", serialized)
 
-    def test_ccp_persists_raw_bytes_exclusively_and_receipt_binds_hashes(self) -> None:
-        resource, admission = valid_ccp_raw_observations()
-        out = self.temp_path / "observation"
-        observed = parse_ccp_observation(
-            resource_raw=stable_json_bytes(resource),
-            admission_raw=stable_json_bytes(admission),
-            binary=valid_ccp_binary_binding(),
-            pair_binding=PairBinding.from_mapping(pair_binding()),
-            authorization_chain=authorization_documents(pair_binding())[2],
-            output_dir=out,
-        )
-        self.assertEqual("a0x-ccp-observation", observed["artifact_class"])
-        self.assertEqual(hashlib.sha256(stable_json_bytes(resource)).hexdigest(), observed["resource_raw_sha256"])
-        self.assertEqual(len(stable_json_bytes(admission)), observed["admission_raw_bytes"])
-        with self.assertRaisesRegex(A0XPreflightError, "empty"):
-            parse_ccp_observation(
-                resource_raw=stable_json_bytes(resource),
-                admission_raw=stable_json_bytes(admission),
-                binary=valid_ccp_binary_binding(),
-                pair_binding=PairBinding.from_mapping(pair_binding()),
-                authorization_chain=authorization_documents(pair_binding())[2],
-                output_dir=out,
-            )
+    def test_public_contract_schemas_reject_host_locators_and_producer_drift(self) -> None:
+        from latent_triz.validator import validate
 
-    def test_ccp_observation_requires_and_copies_the_exact_caller_authorization_chain(self) -> None:
-        resource, admission = valid_ccp_raw_observations()
-        pair = pair_binding()
-        chain = authorization_documents(pair)[2]
+        ccp = {
+            "producer_role": "ccp_executable",
+            "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c",
+            "source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225",
+            "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f",
+            "version": "commit-ci-preflight 0.1.0",
+            "qualification_status": "static_prepared_not_heavy_qualified",
+            "command_roles": ["admission_status", "resource_status", "plan", "doctor", "dry_run", "repository_run", "guard_exec"],
+            "hash_before_command": True,
+            "matrix_plan_profile": "matrix-v2-legacy-v1",
+            "matrix_config_binding": {"locator": ".commit-ci-preflight.toml", "raw_sha256": "a" * 64},
+            "matrix_policy_binding": {"locator": ".commit-ci-policy-v2.toml", "raw_sha256": "b" * 64},
+            "location_roles": {"repository_root": "repository_root", "managed_cache_root": "managed_cache_root"},
+            "matrix_plan_binding": {
+                "plan_output_sha256": "4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e",
+                "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
+                "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
+                "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
+            },
+        }
+        contract = {
+            "artifact_class": "a0x-material-execution-contract",
+            "contract_version": "a0x-material-execution-contract-v2",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "ccp": ccp,
+            "offline": {"network": False, "generation": False, "local_cpu_float32": True},
+            "max_run_count": 1,
+            "stop_boundaries": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"],
+        }
+        contract_schema = json.loads((ROOT / "schemas/a0x-material-execution-contract.schema.json").read_text())
+        self.assertEqual([], validate(contract, contract_schema))
+        for locator in ("/Users/marco1/.cargo/bin/commit-ci-preflight", "file:///private/tmp/x", "../cache", "results/marco1/private.json"):
+            mutated = copy.deepcopy(contract)
+            mutated["ccp"]["matrix_config_binding"]["locator"] = locator
+            with self.subTest(locator=locator):
+                self.assertTrue(validate(mutated, contract_schema))
+        mutated = copy.deepcopy(contract)
+        mutated["ccp"]["source_tree"] = "0" * 40
+        self.assertTrue(validate(mutated, contract_schema))
 
-        observed = parse_ccp_observation(
-            resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
-            binary=valid_ccp_binary_binding(), pair_binding=PairBinding.from_mapping(pair),
-            authorization_chain=chain, output_dir=self.temp_path / "chain-observation",
-        )
-
-        self.assertEqual(chain, observed["authorization_chain"])
-        malformed = {**chain, "unexpected": True}
-        with self.assertRaisesRegex(A0XPreflightError, "authorization chain"):
-            parse_ccp_observation(
-                resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
-                binary=valid_ccp_binary_binding(), pair_binding=PairBinding.from_mapping(pair),
-                authorization_chain=malformed, output_dir=self.temp_path / "malformed-chain-observation",
-            )
-
-    def test_ccp_accepts_a_precreated_empty_destination_but_not_reuse(self) -> None:
-        resource, admission = valid_ccp_raw_observations()
-        out = self.temp_path / "empty-observation"
-        out.mkdir()
-        parse_ccp_observation(
-            resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
-            binary=valid_ccp_binary_binding(), pair_binding=PairBinding.from_mapping(pair_binding()),
-            authorization_chain=authorization_documents(pair_binding())[2], output_dir=out,
-        )
-        self.assertTrue((out / "a0x-ccp-observation.json").is_file())
+        qualification_ccp = {name: ccp[name] for name in ("producer_role", "source_commit", "source_tree", "sha256", "version", "matrix_plan_profile")}
+        qualification_ccp.update(ccp["matrix_plan_binding"])
+        qualification = {
+            "artifact_class": "a0x-qualification-authorization", "claim_ids": [],
+            "commitment_profile": "a0x-qualification-authorization-json-v2", "qualification_status": "authorized",
+            "empirical": True, "evidence_eligible": False, "expert_validated": False, "scientific_status": "exploratory",
+            "repository": "MarcoPorcellato/Latent-TRIZ", "source_head": "c" * 40,
+            "material_contract_raw_sha256": "d" * 64, "ccp": qualification_ccp,
+            "generation": 1, "max_qualification_run_count": 1,
+            "stop_boundary": "after_repository_qualification_receipt", "authorization_id": "qualified-once",
+        }
+        qualification_schema = json.loads((ROOT / "schemas/a0x-qualification-authorization.schema.json").read_text())
+        self.assertEqual([], validate(qualification, qualification_schema))
+        for identifier in ("file:///private/tmp/leak", "marco1-local-authorization"):
+            qualification["authorization_id"] = identifier
+            with self.subTest(identifier=identifier):
+                self.assertTrue(validate(qualification, qualification_schema))
 
     def test_empty_output_rejects_files_and_nonempty_directories(self) -> None:
         absent = self.temp_path / "absent"
@@ -447,13 +419,8 @@ class A0XPreflightTests(A0XTempTestCase):
         binding_data = pair_binding()
         binding_data.update(model_id=card.model_id, revision=card.revision)
         binding = PairBinding.from_mapping(binding_data)
-        resource, admission = valid_ccp_raw_observations()
-        observation = parse_ccp_observation(
-            resource_raw=stable_json_bytes(resource), admission_raw=stable_json_bytes(admission),
-            binary=valid_ccp_binary_binding(), pair_binding=binding,
-            authorization_chain=authorization_documents(binding.as_mapping())[2],
-            output_dir=self.temp_path / "ccp",
-        )
+        observation = artifact("a0x-ccp-observation.schema.json")
+        observation["pair_binding"] = binding.as_mapping()
         dossier, authorization = self.temp_path / "dossier.json", self.temp_path / "authorization.json"
         dossier.write_bytes(b"dossier")
         authorization.write_bytes(b"authorization")

@@ -296,6 +296,47 @@ def assert_authorization_chain(
     authorization_pair = PairBinding.from_mapping(_mapping(authorization_value, "pair_binding"))
     if authorization_pair.as_mapping() != dossier_pair.as_mapping():
         raise A0XContractError("pair binding differs across authorization documents")
+    dossier_implementation_source_head = _revision(
+        dossier_value, "implementation_source_head",
+    )
+    if authorization_value.get("implementation_source_head") != dossier_implementation_source_head:
+        raise A0XContractError("implementation source head differs across authorization documents")
+    _revision(authorization_value, "source_head")
+
+    # Runtime inlets are intentionally outside immutable result directories.
+    # Keep their derivation and all public-safe execution bindings semantic, not
+    # merely schema-shaped, before any commitment comparison can mask drift.
+    from latent_triz.a0x_material_contract import (
+        A0XGuardLaunch,
+        validate_dossier_authorization_path,
+        validate_guard_launch_pair_binding,
+        validate_qualification_evidence,
+    )
+
+    dossier_inlet = validate_dossier_authorization_path(
+        dossier_pair, _nonempty_string(authorization_value, "authorization_inlet_path"),
+    )
+    if authorization_value.get("authorization_inlet_path") != dossier_inlet:
+        raise A0XContractError("authorization inlet is not pair-derived")
+    launch = A0XGuardLaunch.from_mapping(_mapping(authorization_value, "guard_launch"))
+    validate_guard_launch_pair_binding(authorization_pair, launch)
+    if launch.source_head != authorization_value.get("source_head"):
+        raise A0XContractError("guard launch source head differs from execution authorization")
+    qualification_evidence = validate_qualification_evidence(
+        _mapping(authorization_value, "qualification_evidence"),
+    )
+    if qualification_evidence["qualified_source_head"] != authorization_value.get("source_head"):
+        raise A0XContractError("qualification evidence source head differs from execution authorization")
+    authorization_ccp = _mapping(authorization_value, "ccp")
+    evidence_ccp = _mapping(qualification_evidence, "ccp")
+    if (
+        authorization_ccp.get("sha256") != launch.ccp_sha256
+        or authorization_ccp.get("sha256") != evidence_ccp.get("binary_sha256")
+        or authorization_ccp.get("source_commit") != evidence_ccp.get("source_commit")
+        or authorization_ccp.get("qualified_source_tree") != evidence_ccp.get("qualified_source_tree")
+        or authorization_ccp.get("version") != evidence_ccp.get("version")
+    ):
+        raise A0XContractError("qualification evidence CCP identity differs from execution authorization")
 
     expected_dossier = canonical_commitment(dossier_value, APPROVAL_DOSSIER_PROFILE)
     approved_dossier = Commitment.from_mapping(_mapping(authorization_value, "approved_dossier_commitment"))

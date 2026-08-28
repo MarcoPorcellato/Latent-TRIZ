@@ -57,13 +57,19 @@ def common() -> dict[str, object]:
 
 
 def authorization_documents(pair: dict[str, object]) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    from latent_triz.a0x_material_contract import derive_runtime_paths
+
+    binding = PairBinding.from_mapping(pair)
+    implementation_source_head = "b" * 40
+    source_head = "a" * 40
+    runtime_paths = derive_runtime_paths(binding, source_head=source_head)
     dossier = {
         **common(),
         "artifact_class": "a0x-authorization-dossier",
         "commitment_profile": APPROVAL_DOSSIER_PROFILE,
         "pair_binding": pair,
         "dossier_status": "approval_requested",
-        "future_authorization_path": "results/a0x/synthetic/execution-authorization.json",
+        "implementation_source_head": implementation_source_head,
         "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
         "material_contract_raw_sha256": sha(900),
     }
@@ -76,17 +82,41 @@ def authorization_documents(pair: dict[str, object]) -> tuple[dict[str, object],
         "authorization_status": "authorized",
         "approved_dossier_commitment": dossier_commitment,
         "repository": "MarcoPorcellato/Latent-TRIZ",
-        "source_head": "a" * 40,
+        "implementation_source_head": implementation_source_head,
+        "source_head": source_head,
         "material_contract_raw_sha256": sha(900),
         "ccp": {
-            "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
-            "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
-            "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7",
-            "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
+            "executable_name": "commit-ci-preflight",
+            "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c",
+            "qualified_source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225",
+            "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f",
             "version": "commit-ci-preflight 0.1.0",
         },
-        "qualification_receipt_raw_sha256": sha(901),
-        "guard_exec_argv_commitment": sha(902),
+        "authorization_inlet_path": runtime_paths.authorization_path,
+        "guard_launch": {
+            "launch_profile": "a0x-guard-launch-v2",
+            "ccp": {"role": "ccp", "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f"},
+            "python": {"role": "python", "sha256": sha(903)},
+            "cwd_kind": "repository_root",
+            "source_head": source_head,
+            "child_script": {"role": "child", "path": "scripts/a0x_material_child.py", "sha256": sha(904)},
+            "launch_descriptor": {"role": "descriptor", "path": runtime_paths.launch_descriptor_path, "sha256": sha(905)},
+            "environment_template": ["HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1"],
+            "resource": {"profile": "a0x-material", "workload_family": "latent-triz-a0x-v1", "executor": "native", "cache_state": "warm", "execution_mode": "native", "target_platform": "macos-arm64", "memory_limit_bytes": 8589934592},
+            "timeouts": {"outer_timeout_seconds": 3600, "internal_budget_seconds": 3300, "cleanup_margin_seconds": 300, "admission_timeout_seconds": 300},
+            "argv_template": ["{CCP}", "guard", "exec", "--admission-timeout-seconds", "300", "--timeout-seconds", "3600", "--resource-profile", "a0x-material", "--resource-workload-family", "latent-triz-a0x-v1", "--resource-executor", "native", "--resource-cache-state", "warm", "--resource-execution-mode", "native", "--resource-target-platform", "macos-arm64", "--resource-memory-limit-bytes", "8589934592", "--", "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}"],
+        },
+        "guard_preflight_observation": {"profile": "a0x-guard-preflight-observation-v1", "path": runtime_paths.observation_directory + "guard-preflight-observation.json"},
+        "qualification_evidence": {
+            "artifact_class": "a0x-qualification-evidence",
+            "evidence_profile": "a0x-qualification-evidence-v1",
+            "qualification_receipt_id": f"sha256:{sha(906)}",
+            "qualification_receipt_raw_sha256": sha(907),
+            "qualified_source_head": source_head,
+            "generation": 1,
+            "ccp": {"executable_name": "commit-ci-preflight", "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c", "qualified_source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225", "binary_sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f", "version": "commit-ci-preflight 0.1.0"},
+            "public_evidence": {"branch": f"ccp-evidence/{source_head}", "path": ".ccp/receipt.json", "commit": "e" * 40},
+        },
         "max_guard_exec_count": 1,
         "stop_boundary": "after_one_sealed_target_read",
         "authorization_id": "synthetic-authorization",
@@ -322,30 +352,15 @@ def artifact(name: str) -> dict[str, object]:
         }
     pair_artifacts = {
         "a0x-model-identity-receipt.schema.json": ("a0x-model-identity-receipt", {"identity_status": "verified"}),
-        "a0x-ccp-observation.schema.json": ("a0x-ccp-observation", {
-            "read_counter": 0,
-            "admission_status": "not_requested",
-            "binary": {
-                "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
-                "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
-                "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
-                "version_output": "commit-ci-preflight 0.1.0\n",
-            },
-            "resource": {
-                "schema_version": "1.0", "policy_version": "macos-v4", "platform": "macos",
-                "capability": "supported_enforced", "decision": "admit", "available_percent": 50,
-                "reclaimable_uncompressed_bytes": 1, "compressor_occupied_bytes": 0,
-                "total_memory_bytes": 1, "swap_used_bytes": 0, "swap_total_bytes": 1,
-                "consecutive_soft_samples": 0,
-            },
-            "admission": {
-                "schema_version": "2.0", "active": False, "queue_count": 0, "ticket_ids": [],
-                "slot": {"kind": "slot_lock", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None, "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"},
-                "queue_lock": {"kind": "queue_lock", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None, "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"},
-                "process_visibility_note": "No process visible in the local shell does not prove global inactivity.",
-            },
-            "resource_raw_path": "resource-status.raw.json", "resource_raw_sha256": sha(301), "resource_raw_bytes": 1,
-            "admission_raw_path": "admission-status.raw.json", "admission_raw_sha256": sha(302), "admission_raw_bytes": 1,
+        "a0x-ccp-observation.schema.json": ("a0x-guard-preflight-observation", {
+            "observation_profile": "a0x-guard-preflight-observation-v1",
+            "source_head": "a" * 40,
+            "ccp": {"role": "ccp", "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c", "qualified_source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225", "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f", "version": "commit-ci-preflight 0.1.0"},
+            "source": {"head": "a" * 40, "clean": True},
+            "resource": {"decision": "admit"},
+            "admission": {"active": False, "queue_count": 0, "slot_state": "free"},
+            "runtime": {"intended_runtime_responsive": True, "active_container_count": 0},
+            "commands": [{"role": role, "exit_code": 0, "output_sha256": sha(index), "output_bytes": index} for index, role in enumerate(("ccp_version", "resource_status", "admission_status", "git_source_state", "docker_context", "docker_active_count"), 1)],
         }),
         "a0x-preflight-receipt.schema.json": ("a0x-preflight-receipt", {"preflight_status": "passed", "model_key": "gpt2", "origin": "a" * 40, "endpoint_availability": {}, "source_head": "a" * 40, "material_contract_raw_sha256": sha(303), "ccp_observation_path": "a0x-ccp-observation.json", "ccp_observation_raw_sha256": sha(304)}),
         "a0x-activation-receipt.schema.json": ("a0x-activation-receipt", {"activation_status": "not_started"}),
@@ -367,13 +382,17 @@ def artifact(name: str) -> dict[str, object]:
         return dossier
     if name == "a0x-execution-authorization.schema.json":
         return authorization
+    if name == "a0x-guard-launch.schema.json":
+        return authorization["guard_launch"]
+    if name == "a0x-qualification-evidence.schema.json":
+        return authorization["qualification_evidence"]
     if name == "a0x-qualification-authorization.schema.json":
         return {
             **common_fields, "artifact_class": "a0x-qualification-authorization",
-            "commitment_profile": "a0x-qualification-authorization-json-v1",
+            "commitment_profile": "a0x-qualification-authorization-json-v2",
             "qualification_status": "authorized", "repository": "MarcoPorcellato/Latent-TRIZ",
             "source_head": "a" * 40, "material_contract_raw_sha256": sha(900),
-            "ccp": {"path": "/Users/marco1/.cargo/bin/commit-ci-preflight", "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb", "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7", "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be", "version": "commit-ci-preflight 0.1.0"},
+            "ccp": {"producer_role": "ccp_executable", "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c", "source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225", "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f", "version": "commit-ci-preflight 0.1.0", "matrix_plan_profile": "matrix-v2-legacy-v1", "plan_output_sha256": "4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e", "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178", "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562", "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"},
             "generation": 1, "max_qualification_run_count": 1,
             "stop_boundary": "after_repository_qualification_receipt",
             "authorization_id": "synthetic-qualification",
@@ -381,21 +400,22 @@ def artifact(name: str) -> dict[str, object]:
     if name == "a0x-material-execution-contract.schema.json":
         return {
             "artifact_class": "a0x-material-execution-contract",
-            "contract_version": "a0x-material-execution-contract-v1",
+            "contract_version": "a0x-material-execution-contract-v2",
             "repository": "MarcoPorcellato/Latent-TRIZ",
             "ccp": {
-                "path": "/Users/marco1/.cargo/bin/commit-ci-preflight",
-                "source_commit": "c91915adcb8706898574c0c74d033b9ff991eefb",
-                "qualified_source_tree": "687fcaaa3643d35a66ba748409e5621d13e25dd7",
-                "sha256": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be",
+                "producer_role": "ccp_executable",
+                "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c",
+                "source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225",
+                "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f",
                 "version": "commit-ci-preflight 0.1.0",
-                "commands": [["admission", "status", "--json"], ["resource", "status", "--json"], ["plan", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"], ["doctor", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--json"], ["dry-run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--json"], ["run", "--config", ".commit-ci-preflight.toml", "--matrix-plan-profile", "matrix-v2-legacy-v1", "--repository", ".", "--cache-dir", "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1", "--generation", "<authorized-u64>", "--json"], ["guard", "exec"]],
+                "qualification_status": "static_prepared_not_heavy_qualified",
+                "command_roles": ["admission_status", "resource_status", "plan", "doctor", "dry_run", "repository_run", "guard_exec"],
                 "hash_before_command": True,
                 "matrix_plan_profile": "matrix-v2-legacy-v1",
-                "matrix_config_binding": {"path": ".commit-ci-preflight.toml", "raw_sha256": "3dc320e11a22cd0774a64b4a3773fd7568e389b1092b165da17b073685832a9b"},
-                "matrix_policy_binding": {"path": ".commit-ci-policy-v2.toml", "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce"},
-                "location_binding": {"repository": ".", "cache_dir": "/Users/marco1/Library/Caches/commit-ci-preflight-build-v1"},
-                "matrix_plan_binding": {"outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178", "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562", "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"},
+                "matrix_config_binding": {"locator": ".commit-ci-preflight.toml", "raw_sha256": "3dc320e11a22cd0774a64b4a3773fd7568e389b1092b165da17b073685832a9b"},
+                "matrix_policy_binding": {"locator": ".commit-ci-policy-v2.toml", "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce"},
+                "location_roles": {"repository_root": "repository_root", "managed_cache_root": "managed_cache_root"},
+                "matrix_plan_binding": {"plan_output_sha256": "4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e", "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178", "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562", "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"},
             },
             "offline": {"network": False, "generation": False, "local_cpu_float32": True},
             "max_run_count": 1,
@@ -419,6 +439,9 @@ def artifact(name: str) -> dict[str, object]:
             "actual_total_bytes": 1,
             "cap_bytes": 33554432,
         }
+    if name == "a0x-ccp-observation.schema.json":
+        artifact_class, fields = pair_artifacts[name]
+        return {"artifact_class": artifact_class, "pair_binding": pair, **fields}
     if name in pair_artifacts:
         artifact_class, fields = pair_artifacts[name]
         return {**common_fields, "artifact_class": artifact_class, "pair_binding": pair, "authorization_chain": chain, **fields}

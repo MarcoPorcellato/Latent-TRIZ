@@ -12,7 +12,7 @@
     "expert_validated",
     "pair_binding",
     "scientific_status",
-    "future_authorization_path",
+    "implementation_source_head",
     "material_contract_path",
     "material_contract_raw_sha256"
   ],
@@ -39,14 +39,14 @@
     "pair_binding": {
       "$ref": "#/$defs/pair"
     },
+    "implementation_source_head": {
+      "$ref": "#/$defs/rev"
+    },
     "dossier_status": {
       "const": "approval_requested"
     },
     "commitment_profile": {
       "const": "a0x-approval-dossier-json-v2"
-    },
-    "future_authorization_path": {
-      "$ref": "#/$defs/path"
     },
     "material_contract_path": {
       "const": "experiments/a0x-six-model/material-execution-contract.json"
@@ -154,6 +154,10 @@
           ]
         }
       }
+    },
+    "runtime_authorization_path": {
+      "type": "string",
+      "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))authorizations/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\\.json$"
     },
     "pair": {
       "type": "object",

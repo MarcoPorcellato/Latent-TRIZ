@@ -25,6 +25,8 @@ SCHEMA_FILES = (
     "a0x-attempt-claim.schema.json",
     "a0x-authorization-dossier.schema.json",
     "a0x-execution-authorization.schema.json",
+    "a0x-guard-launch.schema.json",
+    "a0x-qualification-evidence.schema.json",
     "a0x-qualification-authorization.schema.json",
     "a0x-model-identity-receipt.schema.json",
     "a0x-ccp-observation.schema.json",
@@ -66,6 +68,8 @@ class A0XSchemasTests(unittest.TestCase):
             "a0x-attempt-claim.schema.json": lambda value: value.__setitem__("state", "reused"),
             "a0x-authorization-dossier.schema.json": lambda value: value["pair_binding"].__setitem__("model_key", ""),
             "a0x-execution-authorization.schema.json": lambda value: value["pair_binding"].__setitem__("revision", "short"),
+            "a0x-guard-launch.schema.json": lambda value: value["timeouts"].__setitem__("outer_timeout_seconds", 3599),
+            "a0x-qualification-evidence.schema.json": lambda value: value.__setitem__("qualification_receipt_raw_sha256", "short"),
             "a0x-qualification-authorization.schema.json": lambda value: value.__setitem__("generation", 0),
             "a0x-model-identity-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("run_id", ""),
             "a0x-ccp-observation.schema.json": lambda value: value.__setitem__("read_counter", -1),
@@ -239,10 +243,10 @@ class A0XSchemasTests(unittest.TestCase):
         wrong_profile["approved_dossier_commitment"]["profile"] = "a0x-execution-authorization-json-v1"
         self.assertTrue(validate(wrong_profile, authorization_schema))
         missing_qualification = copy.deepcopy(authorization)
-        missing_qualification.pop("qualification_receipt_raw_sha256")
+        missing_qualification["qualification_evidence"].pop("qualification_receipt_raw_sha256")
         self.assertTrue(validate(missing_qualification, authorization_schema))
         missing_guard = copy.deepcopy(authorization)
-        missing_guard.pop("guard_exec_argv_commitment")
+        missing_guard["guard_launch"].pop("argv_template")
         self.assertTrue(validate(missing_guard, authorization_schema))
 
         downstream_schema = self.schemas["a0x-model-identity-receipt.schema.json"]

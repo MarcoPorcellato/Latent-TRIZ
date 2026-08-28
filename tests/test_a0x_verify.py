@@ -10,6 +10,10 @@ from pathlib import Path
 
 from tests.a0x_test_support import A0XTempTestCase
 import tests.test_a0x_report as report_tests
+from latent_triz.a0x_contract import (
+    EXECUTION_AUTHORIZATION_PROFILE,
+    canonical_commitment,
+)
 
 
 def _json_bytes(value: object) -> bytes:
@@ -68,10 +72,79 @@ def _reanchor_after_json_mutation(package: Path, role: str, mutate) -> str:
 
 
 class A0XVerifyTests(A0XTempTestCase):
-    _completed_fixture = report_tests.A0XReportTests._completed_fixture
-    _completed_activation_frontier_fixture = (
-        report_tests.A0XReportTests._completed_activation_frontier_fixture
-    )
+    def _completed_fixture(self, **kwargs: object) -> dict[str, object]:
+        fixture = report_tests.A0XReportTests._completed_fixture(self, **kwargs)
+        return self._bind_public_qualification_receipt(fixture)
+
+    def _completed_activation_frontier_fixture(self) -> dict[str, object]:
+        fixture = report_tests.A0XReportTests._completed_activation_frontier_fixture(self)
+        return self._bind_public_qualification_receipt(fixture)
+
+    def _bind_public_qualification_receipt(
+        self, fixture: dict[str, object],
+    ) -> dict[str, object]:
+        """Bind synthetic public bytes without network or CCP execution."""
+        from tests.test_a0x_runner import matrix_receipt_envelope
+
+        receipt_raw = _json_bytes(
+            matrix_receipt_envelope(source_head="a" * 40, generation=1)
+        )
+        authorization_path = Path(fixture["authorization_path"])
+        authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+        evidence = authorization["qualification_evidence"]
+        evidence["qualification_receipt_id"] = json.loads(receipt_raw)["receipt_id"]
+        evidence["qualification_receipt_raw_sha256"] = hashlib.sha256(receipt_raw).hexdigest()
+        authorization_commitment = canonical_commitment(
+            authorization, EXECUTION_AUTHORIZATION_PROFILE,
+        ).as_mapping()
+        authorization_path.write_bytes(_json_bytes(authorization))
+
+        def bind_chain(value: object) -> None:
+            if isinstance(value, dict):
+                if isinstance(value.get("authorization_chain"), dict):
+                    value["authorization_chain"]["authorization_commitment"] = authorization_commitment
+                for child in value.values():
+                    bind_chain(child)
+            elif isinstance(value, list):
+                for child in value:
+                    bind_chain(child)
+
+        artifact_paths = dict(fixture["artifacts"])
+        activation_path = Path(artifact_paths["activation_receipt"])
+        for role, raw_path in artifact_paths.items():
+            if role == "target_read_receipt":
+                continue
+            path = Path(raw_path)
+            value = json.loads(path.read_text(encoding="utf-8"))
+            bind_chain(value)
+            if role == "activation_receipt":
+                occupancy = value.get("activation_stage_occupancy")
+                if isinstance(occupancy, dict):
+                    value["activation_stage_occupancy_sha256"] = hashlib.sha256(
+                        _json_bytes(occupancy) + b"\n",
+                    ).hexdigest()
+            path.write_bytes(_json_bytes(value))
+        target_path = None
+        if "target_read_receipt" in artifact_paths:
+            target_path = Path(artifact_paths["target_read_receipt"])
+            target = json.loads(target_path.read_text(encoding="utf-8"))
+            bind_chain(target)
+            target["activation_receipt_sha256"] = hashlib.sha256(activation_path.read_bytes()).hexdigest()
+            target_path.write_bytes(_json_bytes(target))
+        terminal_path = Path(fixture["terminal_result_path"])
+        terminal = json.loads(terminal_path.read_text(encoding="utf-8"))
+        bind_chain(terminal)
+        if target_path is not None:
+            terminal["target_read_receipt_sha256"] = hashlib.sha256(target_path.read_bytes()).hexdigest()
+        terminal_path.write_bytes(_json_bytes(terminal))
+        if not hasattr(self, "_qualification_receipts"):
+            self._qualification_receipts = {}
+        self._qualification_receipts[Path(fixture["repository_root"])] = receipt_raw
+        return fixture
+
+    def _qualification_receipt(self, fixture: dict[str, object]) -> bytes:
+        return self._qualification_receipts[Path(fixture["repository_root"])]
+
     def _verify(self, fixture: dict[str, object], package) -> None:
         from latent_triz.a0x_verify import verify_a0x_package
         root = package / "output-occupancy-receipt.json"
@@ -82,6 +155,7 @@ class A0XVerifyTests(A0XTempTestCase):
             expected_root_receipt_sha256=hashlib.sha256(root.read_bytes()).hexdigest(),
             root_receipt_path=root, protected_trees=fixture["protected_trees"],
             protected_tree_verifier=fixture["protected_tree_verifier"],
+            qualification_receipt_loader=lambda _: self._qualification_receipt(fixture),
         )
 
     def test_verifies_complete_package_from_external_root_anchor(self) -> None:
@@ -101,6 +175,88 @@ class A0XVerifyTests(A0XTempTestCase):
         }
         self.assertEqual(2, len(expected_hashes))
         self.assertEqual(expected_hashes, {call[1] for call in calls})
+
+    def test_campaign_verifier_recursively_rejects_public_host_details(self) -> None:
+        from latent_triz.a0x_verify import A0XVerificationError, verify_a0x_campaign_separation
+        from tests.a0x_test_support import pair_binding
+
+        for key, value in (
+            ("argv", ["guard", "exec"]),
+            ("environment", {"TOKEN": "private"}),
+            ("container_id", "abc123"),
+            ("username", "operator"),
+            ("raw_log", "unredacted"),
+            ("local_path", "relative-but-private"),
+            ("locator", "/Users/operator/private"),
+            ("locator", "file:///private/tmp/trace"),
+            ("locator", "~/private/trace"),
+        ):
+            with self.subTest(key=key, value=value):
+                manifest = {"pair_binding": pair_binding(), "nested": {"again": {key: value}}}
+                with self.assertRaises(A0XVerificationError):
+                    verify_a0x_campaign_separation([manifest])
+
+    def test_fails_closed_for_missing_or_mutated_public_qualification_receipt(self) -> None:
+        from latent_triz.a0x_report import build_terminal_package
+        from latent_triz.a0x_verify import A0XVerificationError, verify_a0x_package
+
+        fixture = self._completed_fixture()
+        package = build_terminal_package(**fixture)
+        root = package / "output-occupancy-receipt.json"
+        kwargs = {
+            "package_root": package,
+            "repository_root": fixture["repository_root"],
+            "leg_freeze": fixture["leg_freeze"],
+            "dossier_path": fixture["dossier_path"],
+            "authorization_path": fixture["authorization_path"],
+            "expected_root_receipt_sha256": hashlib.sha256(root.read_bytes()).hexdigest(),
+            "root_receipt_path": root,
+            "protected_trees": fixture["protected_trees"],
+            "protected_tree_verifier": fixture["protected_tree_verifier"],
+        }
+        with self.assertRaises(A0XVerificationError):
+            verify_a0x_package(**kwargs)
+        with self.assertRaises(A0XVerificationError):
+            verify_a0x_package(
+                **kwargs,
+                qualification_receipt_loader=lambda _: b"mutated",
+            )
+        verify_a0x_package(
+            **kwargs,
+            qualification_receipt_loader=lambda _: self._qualification_receipt(fixture),
+        )
+
+    def test_rejects_reanchored_qualification_locator_identity_and_source_mutations(self) -> None:
+        from latent_triz.a0x_report import build_terminal_package
+        from latent_triz.a0x_verify import A0XVerificationError
+
+        mutations = {
+            "receipt-id": lambda value: value.__setitem__(
+                "qualification_receipt_id", "sha256:" + "0" * 64,
+            ),
+            "receipt-raw": lambda value: value.__setitem__(
+                "qualification_receipt_raw_sha256", "0" * 64,
+            ),
+            "branch": lambda value: value["public_evidence"].__setitem__(
+                "branch", "ccp-evidence/" + "f" * 40,
+            ),
+            "commit": lambda value: value["public_evidence"].__setitem__(
+                "commit", "f" * 40,
+            ),
+            "source": lambda value: value.__setitem__(
+                "qualified_source_head", "f" * 40,
+            ),
+            "producer": lambda value: value["ccp"].__setitem__(
+                "binary_sha256", "0" * 64,
+            ),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(mutation=label):
+                fixture = self._completed_fixture()
+                package = build_terminal_package(**fixture)
+                _reanchor_after_json_mutation(package, "qualification_evidence", mutate)
+                with self.assertRaises(A0XVerificationError):
+                    self._verify(fixture, package)
 
     def test_rejects_mutated_external_dense_report_and_root_anchor(self) -> None:
         from latent_triz.a0x_report import build_terminal_package
@@ -126,6 +282,7 @@ class A0XVerifyTests(A0XTempTestCase):
                         authorization_path=fixture["authorization_path"], expected_root_receipt_sha256=expected,
                         root_receipt_path=root, protected_trees=fixture["protected_trees"],
                         protected_tree_verifier=fixture["protected_tree_verifier"],
+                        qualification_receipt_loader=lambda _: self._qualification_receipt(fixture),
                     )
 
     def test_rejects_undeclared_package_member_and_campaign_pooling_fields(self) -> None:
@@ -190,7 +347,7 @@ class A0XVerifyTests(A0XTempTestCase):
         with self.assertRaises(A0XVerificationError):
             self._verify(fixture, package)
         with self.assertRaises(A0XVerificationError):
-            verify_a0x_package(package_root=package, repository_root=fixture["repository_root"], leg_freeze=fixture["leg_freeze"], dossier_path=fixture["dossier_path"], authorization_path=fixture["authorization_path"], expected_root_receipt_sha256=hashlib.sha256(root.read_bytes()).hexdigest(), root_receipt_path=package / "publication-manifest.json", protected_trees=fixture["protected_trees"], protected_tree_verifier=fixture["protected_tree_verifier"])
+            verify_a0x_package(package_root=package, repository_root=fixture["repository_root"], leg_freeze=fixture["leg_freeze"], dossier_path=fixture["dossier_path"], authorization_path=fixture["authorization_path"], expected_root_receipt_sha256=hashlib.sha256(root.read_bytes()).hexdigest(), root_receipt_path=package / "publication-manifest.json", protected_trees=fixture["protected_trees"], protected_tree_verifier=fixture["protected_tree_verifier"], qualification_receipt_loader=lambda _: self._qualification_receipt(fixture))
 
     def test_rejects_protected_tree_substitution(self) -> None:
         from latent_triz.a0x_report import build_terminal_package
@@ -203,7 +360,7 @@ class A0XVerifyTests(A0XTempTestCase):
         trees[relevant] = dict(trees[relevant])
         trees[relevant]["protected_tree_sha256"] = "0" * 64
         with self.assertRaises(A0XVerificationError):
-            verify_a0x_package(package_root=package, repository_root=fixture["repository_root"], leg_freeze=fixture["leg_freeze"], dossier_path=fixture["dossier_path"], authorization_path=fixture["authorization_path"], expected_root_receipt_sha256=hashlib.sha256(root.read_bytes()).hexdigest(), protected_trees=trees, protected_tree_verifier=fixture["protected_tree_verifier"])
+            verify_a0x_package(package_root=package, repository_root=fixture["repository_root"], leg_freeze=fixture["leg_freeze"], dossier_path=fixture["dossier_path"], authorization_path=fixture["authorization_path"], expected_root_receipt_sha256=hashlib.sha256(root.read_bytes()).hexdigest(), protected_trees=trees, protected_tree_verifier=fixture["protected_tree_verifier"], qualification_receipt_loader=lambda _: self._qualification_receipt(fixture))
 
     def test_rejects_reanchored_completed_activation_mutations(self) -> None:
         from latent_triz.a0x_report import build_terminal_package
@@ -306,6 +463,7 @@ class A0XVerifyTests(A0XTempTestCase):
             "root_receipt_path": root_receipt,
             "protected_trees": fixture["protected_trees"],
             "protected_tree_verifier": verify_from_copy,
+            "qualification_receipt_loader": lambda _: self._qualification_receipt(fixture),
         }
         verify_a0x_package(**kwargs)
         self.assertEqual([copied_root.resolve(strict=True)] * 2, calls)

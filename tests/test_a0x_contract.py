@@ -164,7 +164,7 @@ class A0XContractTests(A0XTempTestCase):
         self.assertEqual([], validate(authorization, self._schema("a0x-execution-authorization.schema.json")))
         first = canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE)
         self.assertEqual(
-            "235bda6fd32b35189f99f4c1b9f6954fafd00d232d622437a4e13dda8d925d38",
+            "5c7f9cb20974f97173013573f4e1489ceac8d3e61c19e82e96b1eac7cf4b5bcd",
             first.commitment_sha256,
         )
         compact_variant = strict_json_object(
@@ -185,7 +185,7 @@ class A0XContractTests(A0XTempTestCase):
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE), first,
         )
         self.assertEqual(
-            "f8a9f5f644800150b9924ec1711803aaea2bc62d09809412c8e6ad987fd2b629",
+            "79664e8ad100cb155f8ee9b2774c3c02851e1687cc3d97b60d6d21e0c797a99b",
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256,
         )
         for invalid_document, profile in (
@@ -240,6 +240,38 @@ class A0XContractTests(A0XTempTestCase):
         self_committing["authorization_commitment"] = sha(99)
         with self.assertRaisesRegex(A0XContractError, "schema|own commitment"):
             assert_authorization_chain(dossier, self_committing, [downstream])
+
+    def test_dossier_uses_a_committed_implementation_anchor_not_its_future_live_head(self) -> None:
+        dossier, authorization, downstream = self._authorization_documents()
+        implementation_source_head = "b" * 40
+        live_source_head = authorization["source_head"]
+        dossier["implementation_source_head"] = implementation_source_head
+        authorization["implementation_source_head"] = implementation_source_head
+        authorization["approved_dossier_commitment"] = canonical_commitment(
+            dossier, APPROVAL_DOSSIER_PROFILE,
+        ).as_mapping()
+        downstream["dossier_commitment"] = authorization["approved_dossier_commitment"]
+        downstream["authorization_commitment"] = canonical_commitment(
+            authorization, EXECUTION_AUTHORIZATION_PROFILE,
+        ).as_mapping()
+
+        self.assertNotEqual(implementation_source_head, live_source_head)
+        assert_authorization_chain(dossier, authorization, [downstream])
+
+    def test_authorization_rejects_an_implementation_anchor_mutation(self) -> None:
+        dossier, authorization, downstream = self._authorization_documents()
+        dossier["implementation_source_head"] = "b" * 40
+        authorization["implementation_source_head"] = "c" * 40
+        authorization["approved_dossier_commitment"] = canonical_commitment(
+            dossier, APPROVAL_DOSSIER_PROFILE,
+        ).as_mapping()
+        downstream["dossier_commitment"] = authorization["approved_dossier_commitment"]
+        downstream["authorization_commitment"] = canonical_commitment(
+            authorization, EXECUTION_AUTHORIZATION_PROFILE,
+        ).as_mapping()
+
+        with self.assertRaisesRegex(A0XContractError, "implementation source head"):
+            assert_authorization_chain(dossier, authorization, [downstream])
 
     def test_authorization_chain_rejects_empty_masked_and_schema_invalid_documents(self) -> None:
         dossier, authorization, downstream = self._authorization_documents()

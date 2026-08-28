@@ -5,13 +5,14 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from latent_triz.validator import validate
 from .a0x_contract import A0XContractError, LegFreezeBinding, PairBinding, assert_authorization_chain, assert_leg_freeze_binding, assert_pair_binding
+from .a0x_material_contract import validate_qualification_evidence
 
 class A0XVerificationError(ValueError): pass
 _ROOT=Path(__file__).resolve().parents[2]
-_SCHEMAS={"authorization_record":"a0x-execution-authorization.schema.json","model_identity_receipt":"a0x-model-identity-receipt.schema.json","ccp_observation":"a0x-ccp-observation.schema.json","preflight_receipt":"a0x-preflight-receipt.schema.json","activation_receipt":"a0x-activation-receipt.schema.json","target_read_receipt":"a0x-target-read-receipt.schema.json","statistical_result":"a0x-statistical-result.schema.json","terminal_result":"a0x-terminal-result.schema.json","external_assets_locator":"a0x-external-assets-locator.schema.json"}
+_SCHEMAS={"authorization_record":"a0x-execution-authorization.schema.json","qualification_evidence":"a0x-qualification-evidence.schema.json","model_identity_receipt":"a0x-model-identity-receipt.schema.json","ccp_observation":"a0x-ccp-observation.schema.json","preflight_receipt":"a0x-preflight-receipt.schema.json","activation_receipt":"a0x-activation-receipt.schema.json","target_read_receipt":"a0x-target-read-receipt.schema.json","statistical_result":"a0x-statistical-result.schema.json","terminal_result":"a0x-terminal-result.schema.json","external_assets_locator":"a0x-external-assets-locator.schema.json"}
 _NO_CLAIM="This exploratory automated-proxy result is not a general TRIZ, causal, mechanism, emergence, or training-data claim."
 
-def verify_a0x_package(*, package_root:str|Path, repository_root:str|Path, leg_freeze:LegFreezeBinding, dossier_path:str|Path, authorization_path:str|Path, expected_root_receipt_sha256:str, root_receipt_path:str|Path|None=None, protected_trees:Mapping[str,Mapping[str,Any]] | None=None, protected_tree_verifier:Callable[...,Any]|None=None)->None:
+def verify_a0x_package(*, package_root:str|Path, repository_root:str|Path, leg_freeze:LegFreezeBinding, dossier_path:str|Path, authorization_path:str|Path, expected_root_receipt_sha256:str, root_receipt_path:str|Path|None=None, protected_trees:Mapping[str,Mapping[str,Any]] | None=None, protected_tree_verifier:Callable[...,Any]|None=None, qualification_receipt_loader:Callable[[Mapping[str,Any]],bytes]|None=None)->None:
     pkg=_directory(Path(package_root),"package root"); repo=_directory(Path(repository_root),"repository root")
     manifest_path=_safe(pkg,"publication-manifest.json","manifest"); root_path=_safe(pkg,"output-occupancy-receipt.json","root")
     if root_receipt_path is not None and Path(root_receipt_path).resolve(strict=True)!=root_path.resolve(strict=True): raise A0XVerificationError("manifest root receipt path does not bind supplied root")
@@ -35,19 +36,23 @@ def verify_a0x_package(*, package_root:str|Path, repository_root:str|Path, leg_f
             schema=_SCHEMAS.get(role)
             if schema is None: raise A0XVerificationError("unknown artifact role")
             _validate(value,schema,role)
-            if _pair(value).as_mapping()!=pair.as_mapping() or (role!="authorization_record" and not isinstance(value.get("authorization_chain"),Mapping)): raise A0XVerificationError("artifact pair/chain differs")
+            if role=="qualification_evidence":
+                try: validate_qualification_evidence(value)
+                except A0XContractError as error: raise A0XVerificationError("qualification evidence is invalid") from error
+            elif _pair(value).as_mapping()!=pair.as_mapping() or (role not in {"authorization_record","ccp_observation"} and not isinstance(value.get("authorization_chain"),Mapping)): raise A0XVerificationError("artifact pair/chain differs")
         values[role]=value; raws[role]=raw
     _sources(repo,ledgers["source_inputs"],dossier_path,dossier_raw,authorization_path,auth_raw,raws,seen)
-    _ccp_preflight_link(values, raws)
+    _qualification_evidence(values, auth, qualification_receipt_loader)
+    _ccp_preflight_link(values, raws, auth)
     _external(repo,ledgers["external_outputs"],values,pair,seen); _residue(repo,ledgers["retained_residue"],seen)
     _matrix(manifest,values,raws,leg_freeze); _root(root,root_raw,manifest_raw,ledgers,pair)
     try:
-        graph=[manifest,root,*[v for k,v in values.items() if k not in {"authorization_record","report"}]]
+        graph=[manifest,root,*[v for k,v in values.items() if k not in {"authorization_record","qualification_evidence","ccp_observation","report"}]]
         assert_authorization_chain(dossier,auth,graph)
         # The complete root is pair-scoped but has a different occupancy profile
         # from the reservation receipt recognized by the legacy contract helper.
         root_pair_view=dict(root); root_pair_view["artifact_class"]="a0x-complete-attempt-root-binding"
-        assert_pair_binding(pair,[manifest,root_pair_view,*[v for k,v in values.items() if k not in {"authorization_record","report"}]])
+        assert_pair_binding(pair,[manifest,root_pair_view,*[v for k,v in values.items() if k not in {"authorization_record","qualification_evidence","ccp_observation","report"}]])
     except A0XContractError as error: raise A0XVerificationError("recursive pair/authorization chain differs") from error
     if not isinstance(protected_trees,Mapping) or set(protected_trees)!={"a0","r1"} or protected_tree_verifier is None: raise A0XVerificationError("named a0/r1 protected-tree postflight checks required")
     verified_repository_root=repo.resolve(strict=True)
@@ -58,6 +63,32 @@ def verify_a0x_package(*, package_root:str|Path, repository_root:str|Path, leg_f
         try: protected_tree_verifier(verified_repository_root,tree_manifest,phase="postflight")
         except Exception as error: raise A0XVerificationError("protected-tree postflight verification failed") from error
     _report(raws.get("report",b""), values["terminal_result"]); _forbidden([manifest,root,*values.values()])
+
+def _qualification_evidence(values:Mapping[str,Mapping[str,Any]], authorization:Mapping[str,Any], loader:Callable[[Mapping[str,Any]],bytes]|None)->None:
+    """Verify public receipt semantics and raw bytes as distinct commitments."""
+    packaged=values.get("qualification_evidence")
+    if not isinstance(packaged,Mapping) or packaged!=authorization.get("qualification_evidence"):
+        raise A0XVerificationError("package qualification evidence differs from authorization")
+    try: evidence=validate_qualification_evidence(packaged)
+    except A0XContractError as error: raise A0XVerificationError("qualification evidence is invalid") from error
+    authorization_ccp=authorization.get("ccp")
+    evidence_ccp=evidence["ccp"]
+    if not isinstance(authorization_ccp,Mapping) or evidence["qualified_source_head"]!=authorization.get("source_head") or any((authorization_ccp.get(left)!=evidence_ccp.get(right)) for left,right in (("sha256","binary_sha256"),("source_commit","source_commit"),("qualified_source_tree","qualified_source_tree"),("version","version"))):
+        raise A0XVerificationError("qualification evidence CCP/source identity differs")
+    if loader is None: raise A0XVerificationError("public qualification receipt loader is required")
+    try: raw=loader(dict(evidence["public_evidence"]))
+    except Exception as error: raise A0XVerificationError("public qualification receipt is unavailable") from error
+    if not isinstance(raw,bytes): raise A0XVerificationError("public qualification receipt loader returned non-bytes")
+    if _sha(raw)!=evidence["qualification_receipt_raw_sha256"]: raise A0XVerificationError("public qualification receipt raw SHA-256 differs")
+    envelope=_parse(raw,"public qualification receipt")
+    if set(envelope)!={"receipt_id","receipt"} or not isinstance(envelope["receipt_id"],str) or not isinstance(envelope["receipt"],Mapping): raise A0XVerificationError("public qualification receipt envelope is invalid")
+    canonical=json.dumps(envelope["receipt"],sort_keys=True,separators=(",",":"),ensure_ascii=False,allow_nan=False).encode()
+    if envelope["receipt_id"]!="sha256:"+_sha(canonical) or envelope["receipt_id"]!=evidence["qualification_receipt_id"]: raise A0XVerificationError("public qualification semantic receipt ID differs")
+    receipt=envelope["receipt"]
+    producer=receipt.get("producer"); repository=receipt.get("repository"); run=receipt.get("run")
+    expected_version=str(evidence_ccp["version"]).removeprefix("commit-ci-preflight ")+"+matrix-v2-legacy-v1"
+    if receipt.get("schema_version")!="2.0" or receipt.get("overall_status")!="PASS" or receipt.get("incomplete_reason") is not None or producer!={"name":"commit-ci-preflight","version":expected_version} or not isinstance(repository,Mapping) or repository.get("commit_sha")!=evidence["qualified_source_head"] or repository.get("dirty") is not False or not isinstance(run,Mapping) or run.get("generation")!=evidence["generation"]:
+        raise A0XVerificationError("public qualification receipt source, producer, or status differs")
 
 def verify_a0x_campaign_separation(manifests:Sequence[Mapping[str,Any]])->None:
     seen:set[tuple[str,str,str]]=set()
@@ -94,38 +125,30 @@ def _external(repo:Path,ledger:Sequence[Mapping[str,Any]],values:Mapping[str,Map
         p=_safe(repo,e["repository_relative_path"],e["role"]); _unique(p,seen,e["role"]); raw=_read(p,e["role"])
         if len(raw)!=e["bytes"] or _sha(raw)!=e["raw_sha256"]: raise A0XVerificationError("external raw differs")
 
-def _ccp_preflight_link(values:Mapping[str,Mapping[str,Any]],raws:Mapping[str,bytes])->None:
-    """When a final guarded observation is packaged, bind preflight to its immutable pre-run bytes."""
+def _ccp_preflight_link(values:Mapping[str,Mapping[str,Any]],raws:Mapping[str,bytes],authorization:Mapping[str,Any])->None:
+    """Bind the public guard preflight projection to authorization and receipt."""
     observation, receipt = values.get("ccp_observation"), values.get("preflight_receipt")
-    if not isinstance(observation,Mapping) or not isinstance(receipt,Mapping) or "pre_run_observation" not in observation:
+    if observation is None and receipt is None:
+        # A terminal preflight failure occurs before a passed guard preflight
+        # can exist; the terminal role matrix already forbids partial evidence.
         return
-    pre=observation["pre_run_observation"]
-    if not isinstance(pre,Mapping): raise A0XVerificationError("guarded pre-run observation is malformed")
-    try: schema=json.loads((_ROOT/"schemas/a0x-ccp-observation.schema.json").read_text())
-    except (OSError,json.JSONDecodeError) as error: raise A0XVerificationError("pre-run observation schema unavailable") from error
-    pre_guard=schema.get("$defs",{}).get("pre_guard_observation")
-    if not isinstance(pre_guard,Mapping): raise A0XVerificationError("pre-run observation shape schema unavailable")
-    wrapper={"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":schema["$defs"],"$ref":"#/$defs/pre_guard_observation"}
-    issues=validate(pre,wrapper)
-    if issues: raise A0XVerificationError(f"pre-run observation shape rejected: {issues[0].message}")
-    expected_argv=[
-        ["admission","status","--json"], ["resource","status","--json"],
-        ["plan","--config",".commit-ci-preflight.toml","--matrix-plan-profile","matrix-v2-legacy-v1","--json"],
-        ["doctor","--config",".commit-ci-preflight.toml","--matrix-plan-profile","matrix-v2-legacy-v1","--json"],
-        ["dry-run","--config",".commit-ci-preflight.toml","--matrix-plan-profile","matrix-v2-legacy-v1","--repository",".","--cache-dir","/Users/marco1/Library/Caches/commit-ci-preflight-build-v1","--json"],
-    ]
-    trace=pre.get("ccp_trace")
-    if not isinstance(trace,list) or [item.get("argv") for item in trace if isinstance(item,Mapping)]!=expected_argv:
-        raise A0XVerificationError("pre-run observation argv differs")
-    for key,value in pre.items():
-        if key!="run_count" and observation.get(key)!=value: raise A0XVerificationError("final observation pre-run projection differs")
-    run_record=observation.get("run_record")
-    state=run_record.get("state") if isinstance(run_record,Mapping) else None
-    if not isinstance(state,Mapping) or state.get("argv_commitment")!=pre.get("guard_exec_argv_commitment"):
-        raise A0XVerificationError("final observation guard commitment differs")
-    raw=(json.dumps(pre,sort_keys=True,separators=(",",":"),ensure_ascii=False)).encode()
-    if observation.get("pre_run_observation_sha256")!=_sha(raw): raise A0XVerificationError("final observation pre-run hash differs")
-    if receipt.get("ccp_observation_raw_sha256")!=_sha(raw) or receipt.get("ccp_observation_path")!="pre-run-observation.json": raise A0XVerificationError("preflight CCP observation binding differs")
+    if not isinstance(observation,Mapping) or not isinstance(receipt,Mapping):
+        raise A0XVerificationError("guard preflight evidence is absent")
+    roles=["ccp_version","resource_status","admission_status","git_source_state","docker_context","docker_active_count"]
+    commands=observation.get("commands")
+    if not isinstance(commands,list) or [item.get("role") for item in commands if isinstance(item,Mapping)]!=roles:
+        raise A0XVerificationError("guard preflight command roles differ")
+    if observation.get("source")!={"head":observation.get("source_head"),"clean":True} or observation.get("resource")!={"decision":"admit"} or observation.get("admission")!={"active":False,"queue_count":0,"slot_state":"free"} or observation.get("runtime")!={"intended_runtime_responsive":True,"active_container_count":0}:
+        raise A0XVerificationError("guard preflight safe state differs")
+    ccp=observation.get("ccp"); auth_ccp=authorization.get("ccp")
+    if not isinstance(ccp,Mapping) or not isinstance(auth_ccp,Mapping) or any((ccp.get(left)!=auth_ccp.get(right)) for left,right in (("sha256","sha256"),("source_commit","source_commit"),("qualified_source_tree","qualified_source_tree"),("version","version"))):
+        raise A0XVerificationError("guard preflight CCP identity differs")
+    binding=authorization.get("guard_preflight_observation")
+    if not isinstance(binding,Mapping) or binding.get("profile")!="a0x-guard-preflight-observation-v1" or not isinstance(binding.get("path"),str):
+        raise A0XVerificationError("authorization guard preflight binding differs")
+    raw=raws.get("ccp_observation",b"")
+    if receipt.get("ccp_observation_raw_sha256")!=_sha(raw) or receipt.get("ccp_observation_path")!="ccp-observation.json":
+        raise A0XVerificationError("preflight CCP observation binding differs")
 
 def _residue(repo:Path,ledger:Sequence[Mapping[str,Any]],seen:set[tuple[str,int,int]])->None:
     roles:set[str]=set()
@@ -135,7 +158,7 @@ def _residue(repo:Path,ledger:Sequence[Mapping[str,Any]],seen:set[tuple[str,int,
         if len(raw)!=e["bytes"] or _sha(raw)!=e["raw_sha256"]: raise A0XVerificationError("residue raw differs")
 
 def _matrix(manifest:Mapping[str,Any],a:Mapping[str,Mapping[str,Any]],raws:Mapping[str,bytes],freeze:LegFreezeBinding)->None:
-    t=a.get("terminal_result"); roles=set(a); outputs={x["role"] for x in manifest["external_outputs"]}; residue=manifest["retained_residue"]; base={"authorization_record","terminal_result","report"}
+    t=a.get("terminal_result"); roles=set(a); outputs={x["role"] for x in manifest["external_outputs"]}; residue=manifest["retained_residue"]; base={"authorization_record","qualification_evidence","terminal_result","report"}
     if t is None or t.get("status")!=manifest.get("terminal_status"): raise A0XVerificationError("terminal differs")
     state,status=t.get("sealed_from_state"),t.get("status")
     if state=="preflight":
@@ -245,9 +268,15 @@ def _forbidden(values:Sequence[Any])->None:
         if isinstance(v,Mapping):
             for k,x in v.items():
                 if k in {"aggregate","ranking","combined_p"}:raise A0XVerificationError("pooling field")
+                if k in {"argv","environment","container_id","username","raw_log","raw_logs","local_path","resolved_path"}:
+                    raise A0XVerificationError("public host-detail field")
                 walk(x)
         elif isinstance(v,list):
             for x in v:walk(x)
-        elif isinstance(v,str) and ("exp002" in v.lower() or "exp-002" in v.lower() or "r5" in v.lower()):raise A0XVerificationError("excluded campaign")
+        elif isinstance(v,str):
+            if "exp002" in v.lower() or "exp-002" in v.lower() or "r5" in v.lower():raise A0XVerificationError("excluded campaign")
+            if any(token in v for token in ("/Users/","/private/","/tmp/","file://")) or v.startswith("~"):
+                raise A0XVerificationError("public host path")
     for v in values:walk(v)
+
 __all__=["A0XVerificationError","verify_a0x_campaign_separation","verify_a0x_package"]

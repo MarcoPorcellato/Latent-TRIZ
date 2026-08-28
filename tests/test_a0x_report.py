@@ -40,7 +40,6 @@ class A0XReportTests(A0XTempTestCase):
         artifact_paths: dict[str, Path] = {}
         for role, schema_name in (
             ("model_identity_receipt", "a0x-model-identity-receipt.schema.json"),
-            ("ccp_observation", "a0x-ccp-observation.schema.json"),
             ("preflight_receipt", "a0x-preflight-receipt.schema.json"),
         ):
             value = artifact(schema_name)
@@ -49,6 +48,26 @@ class A0XReportTests(A0XTempTestCase):
             path = source / f"{role}.json"
             path.write_bytes(_json_bytes(value))
             artifact_paths[role] = path
+        ccp_observation = {
+            "artifact_class": "a0x-guard-preflight-observation",
+            "observation_profile": "a0x-guard-preflight-observation-v1",
+            "pair_binding": pair, "source_head": "a" * 40,
+            "ccp": {"role": "ccp", "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c", "qualified_source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225", "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f", "version": "commit-ci-preflight 0.1.0"},
+            "source": {"head": "a" * 40, "clean": True},
+            "resource": {"decision": "admit"},
+            "admission": {"active": False, "queue_count": 0, "slot_state": "free"},
+            "runtime": {"intended_runtime_responsive": True, "active_container_count": 0},
+            "commands": [{"role": role, "exit_code": 0, "output_sha256": f"{index:064x}", "output_bytes": index} for index, role in enumerate(("ccp_version", "resource_status", "admission_status", "git_source_state", "docker_context", "docker_active_count"), 1)],
+        }
+        ccp_path = source / "ccp_observation.json"
+        ccp_raw = _json_bytes(ccp_observation)
+        ccp_path.write_bytes(ccp_raw)
+        artifact_paths["ccp_observation"] = ccp_path
+        preflight_path = artifact_paths["preflight_receipt"]
+        preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+        preflight["ccp_observation_path"] = "ccp-observation.json"
+        preflight["ccp_observation_raw_sha256"] = hashlib.sha256(ccp_raw).hexdigest()
+        preflight_path.write_bytes(_json_bytes(preflight))
         activation_path = source / "activation-receipt.json"
         activation = json.loads(inputs["activation_receipt_bytes"].decode("utf-8"))
         occupancy_raw = _json_bytes(activation["activation_stage_occupancy"]) + b"\n"
@@ -155,6 +174,18 @@ class A0XReportTests(A0XTempTestCase):
         self.assertTrue((package / "publication-manifest.json").is_file())
         self.assertTrue((package / "output-occupancy-receipt.json").is_file())
         self.assertTrue((package / "report.md").is_file())
+        self.assertTrue((package / "qualification-evidence.json").is_file())
+        self.assertEqual(
+            Path(fixture["authorization_path"]).read_bytes(),
+            (package / "execution-authorization.json").read_bytes(),
+        )
+        authorization = json.loads(
+            Path(fixture["authorization_path"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            authorization["qualification_evidence"],
+            json.loads((package / "qualification-evidence.json").read_text(encoding="utf-8")),
+        )
         self.assertFalse((package / "activations.safetensors").exists())
         report = (package / "report.md").read_text(encoding="utf-8")
         self.assertIn("This exploratory automated-proxy result is not a general TRIZ, causal, mechanism, emergence, or training-data claim.", report)

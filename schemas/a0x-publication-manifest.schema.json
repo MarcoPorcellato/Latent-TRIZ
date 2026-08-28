@@ -92,7 +92,7 @@
       "additionalProperties": false,
       "required": ["role", "path", "bytes", "raw_sha256"],
       "properties": {
-        "role": {"enum": ["authorization_record", "model_identity_receipt", "ccp_observation", "preflight_receipt", "activation_receipt", "target_read_receipt", "statistical_result", "terminal_result", "external_assets_locator", "report"]},
+        "role": {"enum": ["authorization_record", "qualification_evidence", "model_identity_receipt", "ccp_observation", "preflight_receipt", "activation_receipt", "target_read_receipt", "statistical_result", "terminal_result", "external_assets_locator", "report"]},
         "path": {"$ref": "#/$defs/path"},
         "bytes": {"type": "integer", "minimum": 0},
         "raw_sha256": {"$ref": "#/$defs/sha"}

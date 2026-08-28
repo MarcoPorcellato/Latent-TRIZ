@@ -14,11 +14,14 @@
     "pair_binding",
     "scientific_status",
     "repository",
+    "implementation_source_head",
     "source_head",
     "material_contract_raw_sha256",
     "ccp",
-    "qualification_receipt_raw_sha256",
-    "guard_exec_argv_commitment",
+    "authorization_inlet_path",
+    "guard_launch",
+    "guard_preflight_observation",
+    "qualification_evidence",
     "max_guard_exec_count",
     "stop_boundary",
     "authorization_id",
@@ -62,26 +65,35 @@
     "source_head": {
       "$ref": "#/$defs/rev"
     },
+    "implementation_source_head": {
+      "$ref": "#/$defs/rev"
+    },
     "material_contract_raw_sha256": {
       "$ref": "#/$defs/sha"
     },
     "ccp": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "source_commit", "qualified_source_tree", "sha256", "version"],
+      "required": ["executable_name", "source_commit", "qualified_source_tree", "sha256", "version"],
       "properties": {
-        "path": {"const": "/Users/marco1/.cargo/bin/commit-ci-preflight"},
-        "source_commit": {"const": "c91915adcb8706898574c0c74d033b9ff991eefb"},
-        "qualified_source_tree": {"const": "687fcaaa3643d35a66ba748409e5621d13e25dd7"},
-        "sha256": {"const": "72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be"},
-        "version": {"const": "commit-ci-preflight 0.1.0"}
+        "executable_name": {"const": "commit-ci-preflight"},
+        "source_commit": {"$ref": "#/$defs/rev"},
+        "qualified_source_tree": {"$ref": "#/$defs/rev"},
+        "sha256": {"$ref": "#/$defs/sha"},
+        "version": {"type": "string", "pattern": "^commit-ci-preflight [^\\s]+$"}
       }
     },
-    "qualification_receipt_raw_sha256": {
-      "$ref": "#/$defs/sha"
+    "authorization_inlet_path": {
+      "$ref": "#/$defs/runtime_authorization_path"
     },
-    "guard_exec_argv_commitment": {
-      "$ref": "#/$defs/sha"
+    "guard_launch": {
+      "$ref": "#/$defs/guard_launch"
+    },
+    "guard_preflight_observation": {
+      "$ref": "#/$defs/guard_preflight_observation"
+    },
+    "qualification_evidence": {
+      "$ref": "#/$defs/qualification_evidence"
     },
     "max_guard_exec_count": {
       "const": 1
@@ -240,6 +252,10 @@
         }
       }
     },
+    "runtime_authorization_path": {
+      "type": "string",
+      "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))authorizations/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\\.json$"
+    },
     "dossier_commitment": {
       "type": "object",
       "additionalProperties": false,
@@ -255,6 +271,76 @@
           "$ref": "#/$defs/sha"
         }
       }
+    },
+    "guard_launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["launch_profile", "ccp", "python", "cwd_kind", "source_head", "child_script", "launch_descriptor", "environment_template", "resource", "timeouts", "argv_template"],
+      "properties": {
+        "launch_profile": {"const": "a0x-guard-launch-v2"},
+        "ccp": {"$ref": "#/$defs/runtime_role_ccp"},
+        "python": {"$ref": "#/$defs/runtime_role_python"},
+        "cwd_kind": {"const": "repository_root"},
+        "source_head": {"$ref": "#/$defs/rev"},
+        "child_script": {"$ref": "#/$defs/child_script"},
+        "launch_descriptor": {"$ref": "#/$defs/runtime_file"},
+        "environment_template": {"const": ["HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1"]},
+        "resource": {"$ref": "#/$defs/guard_resource"},
+        "timeouts": {"$ref": "#/$defs/timeouts"},
+        "argv_template": {"type": "array", "minItems": 26, "maxItems": 26, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "runtime_role_ccp": {
+      "type": "object", "additionalProperties": false, "required": ["role", "sha256"],
+      "properties": {"role": {"const": "ccp"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "guard_preflight_observation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profile", "path"],
+      "properties": {
+        "profile": {"const": "a0x-guard-preflight-observation-v1"},
+        "path": {"type": "string", "pattern": "^\\.a0x-runtime/observations/[A-Za-z0-9._/-]+/guard-preflight-observation\\.json$"}
+      }
+    },
+    "runtime_role_python": {
+      "type": "object", "additionalProperties": false, "required": ["role", "sha256"],
+      "properties": {"role": {"const": "python"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "child_script": {
+      "type": "object", "additionalProperties": false, "required": ["role", "path", "sha256"],
+      "properties": {"role": {"const": "child"}, "path": {"const": "scripts/a0x_material_child.py"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "runtime_file": {
+      "type": "object", "additionalProperties": false, "required": ["role", "path", "sha256"],
+      "properties": {"role": {"const": "descriptor"}, "path": {"type": "string", "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))(?:authorizations|launches|claims|observations|qualification|bin)/[A-Za-z0-9._/-]+$"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "guard_resource": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profile", "workload_family", "executor", "cache_state", "execution_mode", "target_platform", "memory_limit_bytes"],
+      "properties": {
+        "profile": {"const": "a0x-material"}, "workload_family": {"const": "latent-triz-a0x-v1"}, "executor": {"const": "native"}, "cache_state": {"const": "warm"}, "execution_mode": {"const": "native"}, "target_platform": {"const": "macos-arm64"}, "memory_limit_bytes": {"const": 8589934592}
+      }
+    },
+    "timeouts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["outer_timeout_seconds", "internal_budget_seconds", "cleanup_margin_seconds", "admission_timeout_seconds"],
+      "properties": {"outer_timeout_seconds": {"const": 3600}, "internal_budget_seconds": {"const": 3300}, "cleanup_margin_seconds": {"const": 300}, "admission_timeout_seconds": {"const": 300}}
+    },
+    "qualification_evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact_class", "evidence_profile", "qualification_receipt_id", "qualification_receipt_raw_sha256", "qualified_source_head", "generation", "ccp", "public_evidence"],
+      "properties": {
+        "artifact_class": {"const": "a0x-qualification-evidence"}, "evidence_profile": {"const": "a0x-qualification-evidence-v1"}, "qualification_receipt_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, "qualification_receipt_raw_sha256": {"$ref": "#/$defs/sha"}, "qualified_source_head": {"$ref": "#/$defs/rev"}, "generation": {"type": "integer", "minimum": 1},
+        "ccp": {"$ref": "#/$defs/evidence_ccp"}, "public_evidence": {"$ref": "#/$defs/public_evidence"}
+      }
+    },
+    "evidence_ccp": {
+      "type": "object", "additionalProperties": false, "required": ["executable_name", "source_commit", "qualified_source_tree", "binary_sha256", "version"],
+      "properties": {"executable_name": {"const": "commit-ci-preflight"}, "source_commit": {"$ref": "#/$defs/rev"}, "qualified_source_tree": {"$ref": "#/$defs/rev"}, "binary_sha256": {"$ref": "#/$defs/sha"}, "version": {"type": "string", "pattern": "^commit-ci-preflight [^\\s]+$"}}
+    },
+    "public_evidence": {
+      "type": "object", "additionalProperties": false, "required": ["branch", "path", "commit"],
+      "properties": {"branch": {"type": "string", "pattern": "^ccp-evidence/[a-f0-9]{40}$"}, "path": {"const": ".ccp/receipt.json"}, "commit": {"$ref": "#/$defs/rev"}}
     }
   }
 }
