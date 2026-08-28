@@ -51,9 +51,9 @@ _ADMISSION_FIELDS = frozenset((
     "process_visibility_note",
 ))
 _VISIBILITY_NOTE = "No process visible in the local shell does not prove global inactivity."
-_CCP_SOURCE_COMMIT = "a73ebed945d9d9e9744c4aff987589f3478a7f3c"
-_CCP_SOURCE_TREE = "b12ff9ac9daa67d52e28c6793e14f646c5e37225"
-_CCP_BINARY_SHA256 = "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f"
+_CCP_SOURCE_COMMIT = "faf587890e4f899803f027660bc66452623f405e"
+_CCP_SOURCE_TREE = "4615028176f3d594fbce0554f5e5edecfb802af1"
+_CCP_BINARY_SHA256 = "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8"
 _CCP_ROLE = "ccp_executable"
 _CCP_VERSION = "commit-ci-preflight 0.1.0"
 _CCP_LEGACY_PROFILE = "matrix-v2-legacy-v1"

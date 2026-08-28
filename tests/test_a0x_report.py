@@ -52,7 +52,7 @@ class A0XReportTests(A0XTempTestCase):
             "artifact_class": "a0x-guard-preflight-observation",
             "observation_profile": "a0x-guard-preflight-observation-v1",
             "pair_binding": pair, "source_head": "a" * 40,
-            "ccp": {"role": "ccp", "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c", "qualified_source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225", "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f", "version": "commit-ci-preflight 0.1.0"},
+            "ccp": {"role": "ccp", "source_commit": "faf587890e4f899803f027660bc66452623f405e", "qualified_source_tree": "4615028176f3d594fbce0554f5e5edecfb802af1", "sha256": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8", "version": "commit-ci-preflight 0.1.0"},
             "source": {"head": "a" * 40, "clean": True},
             "resource": {"decision": "admit"},
             "admission": {"active": False, "queue_count": 0, "slot_state": "free"},

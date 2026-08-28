@@ -24,9 +24,9 @@
       "required": ["producer_role", "source_commit", "source_tree", "sha256", "version", "matrix_plan_profile", "plan_output_sha256", "outer_digest", "python311_digest", "python312_digest"],
       "properties": {
         "producer_role": {"const": "ccp_executable"},
-        "source_commit": {"const": "a73ebed945d9d9e9744c4aff987589f3478a7f3c"},
-        "source_tree": {"const": "b12ff9ac9daa67d52e28c6793e14f646c5e37225"},
-        "sha256": {"const": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f"},
+        "source_commit": {"const": "faf587890e4f899803f027660bc66452623f405e"},
+        "source_tree": {"const": "4615028176f3d594fbce0554f5e5edecfb802af1"},
+        "sha256": {"const": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8"},
         "version": {"const": "commit-ci-preflight 0.1.0"},
         "matrix_plan_profile": {"const": "matrix-v2-legacy-v1"},
         "plan_output_sha256": {"const": "4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e"},

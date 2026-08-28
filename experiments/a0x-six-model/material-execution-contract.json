@@ -31,10 +31,10 @@
       "raw_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce"
     },
     "producer_role": "ccp_executable",
-    "qualification_status": "static_prepared_not_heavy_qualified",
-    "sha256": "2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f",
-    "source_commit": "a73ebed945d9d9e9744c4aff987589f3478a7f3c",
-    "source_tree": "b12ff9ac9daa67d52e28c6793e14f646c5e37225",
+    "qualification_status": "terminal_heavy_qualified",
+    "sha256": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8",
+    "source_commit": "faf587890e4f899803f027660bc66452623f405e",
+    "source_tree": "4615028176f3d594fbce0554f5e5edecfb802af1",
     "version": "commit-ci-preflight 0.1.0"
   },
   "contract_version": "a0x-material-execution-contract-v2",
