@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +19,10 @@ from tests.a0x_test_support import artifact, authorization_documents, pair_bindi
 
 def _raw(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _model_module_state() -> dict[str, object | None]:
+    return {name: sys.modules.get(name) for name in ("torch", "transformers")}
 
 
 class A0XProductionAdapterTests(unittest.TestCase):
@@ -111,12 +116,10 @@ class A0XProductionAdapterTests(unittest.TestCase):
                 executor(descriptor, model_key="gpt2")  # type: ignore[call-arg]
 
     def test_default_assembly_exposes_distinct_leg_callbacks_without_material_imports(self) -> None:
-        import sys
         from latent_triz.a0x_production_adapter import _default_dependencies, _bind_context
 
         for root, descriptor, _pair in self._descriptor_root(leg=Leg.R1):
-            self.assertNotIn("torch", sys.modules)
-            self.assertNotIn("transformers", sys.modules)
+            before = _model_module_state()
             dependencies = _default_dependencies(_bind_context(root=root, descriptor=descriptor))
             self.assertIsNot(
                 dependencies.activation_by_leg[Leg.A0], dependencies.activation_by_leg[Leg.R1],
@@ -124,8 +127,7 @@ class A0XProductionAdapterTests(unittest.TestCase):
             self.assertIsNot(
                 dependencies.analysis_by_leg[Leg.A0], dependencies.analysis_by_leg[Leg.R1],
             )
-            self.assertNotIn("torch", sys.modules)
-            self.assertNotIn("transformers", sys.modules)
+            self.assertEqual(before, _model_module_state())
 
     def test_default_assembly_installs_real_terminal_package_callbacks(self) -> None:
         from latent_triz.a0x_production_adapter import _default_dependencies, _bind_context
@@ -137,7 +139,6 @@ class A0XProductionAdapterTests(unittest.TestCase):
             self.assertNotEqual("no_package_verifier", dependencies.protected_tree_postflight.__name__)
 
     def test_release_helper_clears_loaded_adapter_references_without_model_imports(self) -> None:
-        import sys
         from latent_triz.a0x_production_adapter import _release_model_references
 
         class Adapter:
@@ -148,6 +149,7 @@ class A0XProductionAdapterTests(unittest.TestCase):
                 self.model_loaded = True
 
         adapter = Adapter()
+        before = _model_module_state()
         stages: list[str] = []
         _release_model_references(adapter, stages.append)
         self.assertEqual(["model-release-before-clear", "model-release-after-clear"], stages)
@@ -155,8 +157,7 @@ class A0XProductionAdapterTests(unittest.TestCase):
         self.assertIsNone(adapter.tokenizer)
         self.assertIsNone(adapter.torch)
         self.assertFalse(adapter.model_loaded)
-        self.assertNotIn("torch", sys.modules)
-        self.assertNotIn("transformers", sys.modules)
+        self.assertEqual(before, _model_module_state())
 
 
 if __name__ == "__main__":

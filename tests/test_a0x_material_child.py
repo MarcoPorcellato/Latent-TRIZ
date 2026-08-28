@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import unittest
@@ -269,13 +270,32 @@ class A0XMaterialChildTests(unittest.TestCase):
         root, _descriptor, child, python = self._fixture()
         before_child = child.read_bytes()
         before_python = python.read_bytes()
-        module = load_child_module()
-        self.assertNotIn("torch", sys.modules)
-        self.assertNotIn("transformers", sys.modules)
-        stream = io.StringIO()
-        code = module.run_child(["--help"], stdout=stream)
-        self.assertEqual(0, code)
-        self.assertIn("--launch-descriptor", stream.getvalue())
+        probe = "\n".join(
+            (
+                "import importlib.util",
+                "import io",
+                "import pathlib",
+                "import sys",
+                f"script = pathlib.Path({str(CHILD)!r})",
+                "spec = importlib.util.spec_from_file_location('a0x_material_child_probe', script)",
+                "assert spec is not None and spec.loader is not None",
+                "module = importlib.util.module_from_spec(spec)",
+                "spec.loader.exec_module(module)",
+                "assert 'torch' not in sys.modules",
+                "assert 'transformers' not in sys.modules",
+                "stream = io.StringIO()",
+                "assert module.run_child(['--help'], stdout=stream) == 0",
+                "assert '--launch-descriptor' in stream.getvalue()",
+            )
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual(before_child, child.read_bytes())
         self.assertEqual(before_python, python.read_bytes())
 
