@@ -62,6 +62,19 @@ the selected CCP producer and does not authorize or report a material run.
 - No-model verification receipt:
   `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`
 
+### Production and schema files
+
+- Guard-launch schema: `89620d854d38311600f8a6c18a0211dfd5da3eea86c382eb083dc34eb97ee49f`
+- Qualification-evidence schema: `0a7b26f195178878936e52bf68e6708fe6d36a38fb45f0384ee6ff29443cc6b3`
+- CCP-observation schema: `04405cfac1a601c56f01f687cb9185c4f4f40306c4421597700fb29f328e5500`
+- Material-execution-contract schema: `eb30d1218f93055d8ff6c017017b8e865c9145469de8bb3cf542a410402811e2`
+- Outer launcher: `effbed080b734311c962a2940c00c01ab9a5721f7fe1a7d9da4e6fc64be6f000`
+- Fixed child: `ba826f29a3221e7780432581fadfff308b747f30bb2ed88a2d016876b0dedd31`
+- Material contract module: `9794e1fba0df4c2e2cad979c1b7d5d075849b3a815513d2055baccb3edc4f2d0`
+- Material runtime module: `277f863a0c5dcb52faee9d9a32e9b331391f4fc5f41e7ef00ce58f8f2473f9b1`
+- CCP executor module: `d290ad5dccf7afc7bb564f04af22028f2feb85e62a5cfb81bb9add0910b666f0`
+- Production adapter module: `b4b22bc3857a054589fb206602031bc25c4562d7bd5b2b14b95eb6da38212665`
+
 ### A0 approval dossiers
 
 - GPT-2: `526e3f86dcf6a0749afb578ad18ecd3f728c49c044f2b2a01408adc9534acf26`
