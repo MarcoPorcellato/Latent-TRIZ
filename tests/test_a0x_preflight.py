@@ -79,15 +79,15 @@ def valid_ccp_raw_observations() -> tuple[dict[str, object], dict[str, object]]:
 def valid_ccp_binary_binding() -> dict[str, str]:
     return {
         "role": "ccp_executable",
-        "source_commit": "faf587890e4f899803f027660bc66452623f405e",
-        "source_tree": "4615028176f3d594fbce0554f5e5edecfb802af1",
-        "sha256": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8",
+        "source_commit": "27adf8d0820b3cd96f9c5e149de9b580ae41f639",
+        "source_tree": "d8e0364d1313fde0898a44517ae6d233d9e10763",
+        "sha256": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4",
         "version": "commit-ci-preflight 0.1.0",
         "resolved_path": "/private/tmp/commit-ci-preflight",
         "expected_role": "ccp_executable",
-        "expected_source_commit": "faf587890e4f899803f027660bc66452623f405e",
-        "expected_source_tree": "4615028176f3d594fbce0554f5e5edecfb802af1",
-        "expected_sha256": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8",
+        "expected_source_commit": "27adf8d0820b3cd96f9c5e149de9b580ae41f639",
+        "expected_source_tree": "d8e0364d1313fde0898a44517ae6d233d9e10763",
+        "expected_sha256": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4",
         "expected_version": "commit-ci-preflight 0.1.0",
     }
 
@@ -311,9 +311,9 @@ class A0XPreflightTests(A0XTempTestCase):
                 for forbidden in ("/Users/", "/private/", "/tmp/", "commit-ci-preflight-build-v1"):
                     self.assertNotIn(forbidden, serialized)
                 self.assertIn("ccp_executable", serialized)
-                self.assertIn("faf587890e4f899803f027660bc66452623f405e", serialized)
-                self.assertIn("4615028176f3d594fbce0554f5e5edecfb802af1", serialized)
-                self.assertIn("7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8", serialized)
+                self.assertIn("27adf8d0820b3cd96f9c5e149de9b580ae41f639", serialized)
+                self.assertIn("d8e0364d1313fde0898a44517ae6d233d9e10763", serialized)
+                self.assertIn("c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4", serialized)
 
     def test_material_contract_selects_the_terminally_qualified_corrected_producer(self) -> None:
         contract = json.loads(
@@ -323,9 +323,9 @@ class A0XPreflightTests(A0XTempTestCase):
         )
         self.assertEqual(
             {
-                "source_commit": "faf587890e4f899803f027660bc66452623f405e",
-                "source_tree": "4615028176f3d594fbce0554f5e5edecfb802af1",
-                "sha256": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8",
+                "source_commit": "27adf8d0820b3cd96f9c5e149de9b580ae41f639",
+                "source_tree": "d8e0364d1313fde0898a44517ae6d233d9e10763",
+                "sha256": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4",
                 "qualification_status": "terminal_heavy_qualified",
             },
             {
@@ -339,9 +339,9 @@ class A0XPreflightTests(A0XTempTestCase):
 
         ccp = {
             "producer_role": "ccp_executable",
-            "source_commit": "faf587890e4f899803f027660bc66452623f405e",
-            "source_tree": "4615028176f3d594fbce0554f5e5edecfb802af1",
-            "sha256": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8",
+            "source_commit": "27adf8d0820b3cd96f9c5e149de9b580ae41f639",
+            "source_tree": "d8e0364d1313fde0898a44517ae6d233d9e10763",
+            "sha256": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4",
             "version": "commit-ci-preflight 0.1.0",
             "qualification_status": "terminal_heavy_qualified",
             "command_roles": ["admission_status", "resource_status", "plan", "doctor", "dry_run", "repository_run", "guard_exec"],

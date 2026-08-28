@@ -32,9 +32,9 @@
     },
     "producer_role": "ccp_executable",
     "qualification_status": "terminal_heavy_qualified",
-    "sha256": "7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8",
-    "source_commit": "faf587890e4f899803f027660bc66452623f405e",
-    "source_tree": "4615028176f3d594fbce0554f5e5edecfb802af1",
+    "sha256": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4",
+    "source_commit": "27adf8d0820b3cd96f9c5e149de9b580ae41f639",
+    "source_tree": "d8e0364d1313fde0898a44517ae6d233d9e10763",
     "version": "commit-ci-preflight 0.1.0"
   },
   "contract_version": "a0x-material-execution-contract-v2",

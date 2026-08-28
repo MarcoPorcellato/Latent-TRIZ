@@ -19,7 +19,7 @@
     "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "rev": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
     "locator": {"type":"string","pattern":"^(?!/)(?!.*\\.\\.)(?!.*file://)[A-Za-z0-9._/-]+$"},
-    "ccp": {"type":"object","additionalProperties":false,"required":["role","source_commit","qualified_source_tree","sha256","version"],"properties":{"role":{"const":"ccp"},"source_commit":{"const":"faf587890e4f899803f027660bc66452623f405e"},"qualified_source_tree":{"const":"4615028176f3d594fbce0554f5e5edecfb802af1"},"sha256":{"const":"7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8"},"version":{"const":"commit-ci-preflight 0.1.0"}}},
+    "ccp": {"type":"object","additionalProperties":false,"required":["role","source_commit","qualified_source_tree","sha256","version"],"properties":{"role":{"const":"ccp"},"source_commit":{"const":"27adf8d0820b3cd96f9c5e149de9b580ae41f639"},"qualified_source_tree":{"const":"d8e0364d1313fde0898a44517ae6d233d9e10763"},"sha256":{"const":"c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4"},"version":{"const":"commit-ci-preflight 0.1.0"}}},
     "source": {"type":"object","additionalProperties":false,"required":["head","clean"],"properties":{"head":{"$ref":"#/$defs/rev"},"clean":{"const":true}}},
     "resource": {"type":"object","additionalProperties":false,"required":["decision"],"properties":{"decision":{"const":"admit"}}},
     "admission": {"type":"object","additionalProperties":false,"required":["active","queue_count","slot_state"],"properties":{"active":{"const":false},"queue_count":{"const":0},"slot_state":{"const":"free"}}},
