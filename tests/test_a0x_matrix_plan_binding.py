@@ -43,7 +43,14 @@ class A0XMatrixPlanBindingTests(unittest.TestCase):
             {"plan_only": True, "doctor_executed": False, "dry_run_executed": False, "ccp_run_executed": False},
             observation["execution_boundary"],
         )
-        self.assertEqual(expected_binding, contract["ccp"]["matrix_plan_binding"])
+        contract_binding = contract["ccp"]["matrix_plan_binding"]
+        self.assertEqual(expected_binding, {
+            name: contract_binding[name] for name in expected_binding
+        })
+        self.assertEqual(
+            "4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e",
+            contract_binding["plan_output_sha256"],
+        )
         self.assertEqual(expected_binding["outer_digest"], policy["configuration_digest"])
         self.assertEqual(
             {runtime["id"]: runtime["configuration_digest"] for runtime in policy["runtimes"]},
