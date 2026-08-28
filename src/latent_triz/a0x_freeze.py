@@ -765,6 +765,9 @@ def freeze_a0x_campaign(
                     "implementation_source_head": implementation_source_head,
                     "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
                     "material_contract_raw_sha256": material_sha256,
+                    "runtime_authorization_path": (
+                        f".a0x-runtime/authorizations/{leg.value}/{model_key}/{run_id}.json"
+                    ),
                 }
                 dossier_path = output_campaign / "approval-dossiers" / leg.value / filename
                 _write_json(dossier_path, dossier)

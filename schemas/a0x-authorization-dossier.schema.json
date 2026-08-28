@@ -14,7 +14,8 @@
     "scientific_status",
     "implementation_source_head",
     "material_contract_path",
-    "material_contract_raw_sha256"
+    "material_contract_raw_sha256",
+    "runtime_authorization_path"
   ],
   "properties": {
     "artifact_class": {
@@ -53,6 +54,9 @@
     },
     "material_contract_raw_sha256": {
       "$ref": "#/$defs/sha"
+    },
+    "runtime_authorization_path": {
+      "$ref": "#/$defs/runtime_authorization_path"
     }
   },
   "$defs": {

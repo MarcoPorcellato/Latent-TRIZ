@@ -1329,7 +1329,10 @@ def verify_a0x_no_model(root: str | Path) -> dict[str, Any]:
         expected_output = f"results/a0x/{leg.value}/{model_key}/{pair.run_id}"
         if pair.output_path != expected_output:
             raise A0XRunnerError("A0X dossier output path is not pair-isolated")
-        if dossier.get("future_authorization_path") != f"{expected_output}/execution-authorization.json":
+        expected_authorization = (
+            f".a0x-runtime/authorizations/{leg.value}/{model_key}/{pair.run_id}.json"
+        )
+        if dossier.get("runtime_authorization_path") != expected_authorization:
             raise A0XRunnerError("A0X dossier authorization path is not pair-isolated")
         observed_pairs.add((leg.value, model_key))
         dossiers_by_leg[leg].append(dossier)

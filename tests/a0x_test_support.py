@@ -72,6 +72,7 @@ def authorization_documents(pair: dict[str, object]) -> tuple[dict[str, object],
         "implementation_source_head": implementation_source_head,
         "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
         "material_contract_raw_sha256": sha(900),
+        "runtime_authorization_path": runtime_paths.authorization_path,
     }
     dossier_commitment = canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE).as_mapping()
     authorization = {
