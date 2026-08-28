@@ -5,6 +5,8 @@ import importlib.util
 import io
 from contextlib import redirect_stderr
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 
@@ -39,9 +41,25 @@ class A0XMaterialEntrypointTests(unittest.TestCase):
         self.assertIn("traversal", stderr.getvalue())
 
     def test_entrypoint_import_does_not_import_model_libraries(self) -> None:
-        import sys
-
-        _load_module()
-        self.assertNotIn("torch", sys.modules)
-        self.assertNotIn("transformers", sys.modules)
-
+        probe = "\n".join(
+            (
+                "import importlib.util",
+                "import pathlib",
+                "import sys",
+                f"script = pathlib.Path({str(SCRIPT)!r})",
+                "spec = importlib.util.spec_from_file_location('a0x_material_entrypoint_probe', script)",
+                "assert spec is not None and spec.loader is not None",
+                "module = importlib.util.module_from_spec(spec)",
+                "spec.loader.exec_module(module)",
+                "assert 'torch' not in sys.modules",
+                "assert 'transformers' not in sys.modules",
+            )
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
