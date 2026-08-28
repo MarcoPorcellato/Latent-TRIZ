@@ -933,13 +933,17 @@ qualification, and independent review. The two frozen legs and twelve
 pair-isolated dossiers are recorded with exact hashes; the next consolidation
 commit becomes the live source anchor for `sealed_gate_pending`. The current
 offline corrective tranche binds a non-tautological observation of the exact
-`matrix-v2-legacy-v1` plan produced by reviewed CCP candidate `c91915a...` and
-regenerates every dependent freeze and dossier. The candidate is based on the
-fetched official CCP `origin/main` plus an unreleased compatibility profile; it
-is not installed, published, or terminally qualified. A future candidate
-qualification therefore requires a new exact authorization, followed by
-separate installation and Latent-TRIZ exact-head gates. Task 12 is not
-authorized. The authoritative operator-facing contract is
+`matrix-v2-legacy-v1` plan and regenerates every dependent freeze and dossier.
+Its originally bound producer is now superseded. The TDD-corrected successor at
+commit `faf587890e4f899803f027660bc66452623f405e`, tree
+`4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
+`7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`
+has passed one exact Matrix qualification with all five checks terminally
+green. That producer is still local, uninstalled, unpublished, and not bound
+into the frozen A0X artifacts. Durable CCP integration, deliberate producer
+selection, zero-access regeneration, and a separate Latent-TRIZ exact-head gate
+remain required. Task 12 is not authorized. The authoritative operator-facing
+contract is
 [`A0X_SIX_MODEL_CAMPAIGN.md`](./A0X_SIX_MODEL_CAMPAIGN.md).
 
 A0X acceptance criteria are:

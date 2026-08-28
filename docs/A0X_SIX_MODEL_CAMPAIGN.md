@@ -255,9 +255,22 @@ mutations.
 | A0-R1 / GPT-Neo-125M dossier | `5691cdadc19c14c17fe699c73c43433bb14e84299b49ed9512e7e0f49ef893d8` |
 | A0-R1 / Qwen2.5-0.5B dossier | `af2ed0739dfc144d6629753efc26c8e29cab6edc9334f39f79463cf99daf348a` |
 
-These are approval-request artifacts only. The reconciled CCP candidate still
-requires its own terminal heavy qualification and deliberate installation or
-an exact authorized candidate path. Each scientific pair then needs a new
+These are approval-request artifacts only. The currently frozen contract still
+reflects the superseded `a73ebed…` producer identity. A TDD-corrected successor,
+commit `faf587890e4f899803f027660bc66452623f405e`, tree
+`4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
+`7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`,
+has now passed one exact generation-1 Matrix qualification. Its receipt ID is
+`sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`
+and its receipt-file SHA-256 is
+`12f6d8988be5dc119eaa469cd3617a0f74e3416f7f66b5155d6cf3e1c1219670`.
+This evidence makes that exact local producer eligible for deliberate
+selection; it does not silently rebind these frozen artifacts.
+
+Before any scientific attempt, preserve and review the corrected CCP branch,
+select its exact producer identity, and regenerate the material contract, both
+freezes, all twelve dossiers, and the zero-access receipt. Each scientific pair
+then needs a new
 execution authorization bound to its exact dossier, live source HEAD,
 qualification receipt, authorization ID, and attempt ID. No CCP heavy run,
 Docker action, model/tokenizer construction, target read, publication, or retry

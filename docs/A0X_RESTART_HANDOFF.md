@@ -15,6 +15,43 @@ authorization.
 This section supersedes older status statements below when they conflict. The
 older chronology remains in this file as historical context.
 
+### CCP Matrix-fixture correction qualification closure (2026-08-28)
+
+This subsection supersedes only the candidate qualification status and next
+CCP gate recorded below. It does not alter the frozen A0X scientific protocol,
+authorize installation or publication, or rebind any material artifact.
+
+- The reconciled candidate at `a73ebed…` reached the Matrix test stage but
+  failed because two tests attempted to create fixture directories below the
+  read-only container root. Its terminal failure remains historical evidence
+  and was not retried or reinterpreted.
+- The TDD correction is source commit
+  `faf587890e4f899803f027660bc66452623f405e`, tree
+  `4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
+  `7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`.
+- Its authorized generation-1 qualification used plan digest
+  `bc348df299ee58ecc8f7cfc7f2dc743b5c03f1a90f7e5dbff45754017955e901`
+  and passed formatting, all-target/all-feature tests, strict Clippy,
+  documentation, and release-metadata checks.
+- Receipt ID:
+  `sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`;
+  receipt-file SHA-256:
+  `12f6d8988be5dc119eaa469cd3617a0f74e3416f7f66b5155d6cf3e1c1219670`.
+  Candidate and installed-stable verification both returned PASS.
+- Terminal cleanup was observed: admission inactive, queue and slot free, no
+  active container, resource decision still `Admit`, and source checkout clean.
+- The corrected commit currently exists only on a local isolated branch. It is
+  not installed, published, merged, or referenced by the current A0X material
+  contract. Public CCP `main` remains `46426f2a…` when checked live, and
+  Latent-TRIZ PR #105 remains open and blocked at head `34b52c42…` over base
+  `188eb65b…`.
+
+Next gate: preserve the corrected CCP source durably and review its complete
+32-commit delta from public CCP `main`. After deliberate selection of the exact
+qualified producer, regenerate every producer-bound A0X artifact with zero
+material access. A new Latent-TRIZ exact-head qualification and every scientific
+pair remain separately authorized actions.
+
 ### A0X material-composition closure (2026-08-28)
 
 This subsection is the current resume authority and supersedes every older A0X

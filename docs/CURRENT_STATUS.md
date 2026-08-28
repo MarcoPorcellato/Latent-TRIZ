@@ -135,6 +135,18 @@ offline correction now has a non-tautological real-plan fixture and regenerated
 freeze/dossier hashes; it does not reuse the obsolete qualification
 authorization. See [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
 
+The later CCP compatibility producer has now completed its own exact
+qualification after a TDD fixture-path correction. Qualified source commit
+`faf587890e4f899803f027660bc66452623f405e`, tree
+`4615028176f3d594fbce0554f5e5edecfb802af1`, and executable SHA-256
+`7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`
+passed all five Matrix checks; receipt ID
+`sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`.
+This qualifies that exact local producer only. It is not installed or
+published, and the current A0X contract still binds its superseded predecessor.
+The remaining preparatory gate is therefore durable CCP integration followed by
+zero-access regeneration and a new Latent-TRIZ exact-head qualification.
+
 The next scientific priority is human construct validation: three independent
 TRIZ experts, blinded cases, agreement and abstention receipts, and an explicit
 keep/amend decision. After that gate, the priority is one preregistered causal

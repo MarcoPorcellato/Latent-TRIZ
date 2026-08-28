@@ -142,12 +142,25 @@ non-terminal evidence.
   `2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f`.
 - Offline formatting, strict Clippy, 413 tests with four documented ignores,
   doctests, independent review, and an exact plan-digest comparison passed.
+- That candidate's single heavy qualification later exposed a container-only
+  fixture-path defect. The failure is preserved and was not retried.
+- The corrected successor is commit
+  `faf587890e4f899803f027660bc66452623f405e`, tree
+  `4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
+  `7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`.
+  Its one authorized generation-1 qualification passed every required check.
+  Receipt ID
+  `sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`
+  and receipt-file SHA-256
+  `12f6d8988be5dc119eaa469cd3617a0f74e3416f7f66b5155d6cf3e1c1219670`
+  were independently verified by candidate and stable producers.
 
-**Residual gate.** The reconciled candidate is not installed and has no
-terminal heavy qualification receipt. A future exact authorization is required
-before either action.
+**Residual gate.** The corrected candidate is terminally qualified but exists
+only on a local isolated branch. Durable source preservation, full branch
+review, installation or exact-path selection, publication, and A0X artifact
+rebinding remain separate gates.
 
-**Status.** External gate pending.
+**Status.** Qualification resolved; durable integration gate pending.
 
 ## 6. A CCP qualification ended under host resource pressure
 
@@ -349,6 +362,36 @@ and final cleanup. This is not additional scientific runtime and cannot rescue
 an internal 3,300-second deadline.
 
 **Status.** Resolved.
+
+## 19. Matrix tests wrote fixtures below a read-only container root
+
+**Symptom.** The first exact qualification of the reconciled CCP candidate
+passed formatting but failed two Matrix tests with filesystem errors. The same
+suite had passed on the writable macOS host.
+
+**Root cause.** Two tests derived their temporary fixture directory from the
+process working-directory parent. Under the read-only `/workspace` repository
+mount this resolved to `/`, so the tests attempted to create directories at the
+container root. The production Matrix implementation was not the failing path.
+
+**Consequence.** The authorized `a73ebed…` qualification ended FAIL and its
+single attempt was consumed. Static host evidence could not qualify the
+container execution contract.
+
+**Correction.** Add a test-only root resolver that honors the fixed
+`CCP_TEST_ROOT` runtime binding, use it only for the two affected fixtures, and
+keep the repository source mount read-only. The Matrix plan now supplies
+`CCP_TEST_ROOT=/workspace/.ccp-mounts/test-work`, backed by the dedicated
+writable CCP cache binding.
+
+**Regression evidence.** The new helper test failed before implementation and
+passed after it. The corrected source completed all static gates and then one
+exact Matrix qualification: formatting, all-target/all-feature tests, strict
+Clippy, documentation, and release metadata all passed. Candidate and stable
+verification accepted the same terminal receipt.
+
+**Status.** Resolved in qualified commit `faf587890e4f899803f027660bc66452623f405e`;
+durable source integration remains pending.
 
 ## Current stop boundary
 

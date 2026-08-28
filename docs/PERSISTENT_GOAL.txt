@@ -2,12 +2,23 @@ A0X checkpoint (2026-08-28): preparatory work remains on branch
 `agent/a0x-six-model-design` at `sealed_gate_pending`. The current
 implementation anchor is `3dc40aa104358a83855cd59a40df30319131ea1e`, tree
 `4de3f2f704935d388d0b806dbf9a71cfa7d398e3`. The regenerated public material
-contract is bound to the reconciled CCP candidate source
+contract remains bound to the superseded CCP candidate source
 `a73ebed945d9d9e9744c4aff987589f3478a7f3c`, tree
 `b12ff9ac9daa67d52e28c6793e14f646c5e37225`, executable SHA-256
 `2f7fe3fce7d44cdd8350c0248f1c3b5b5c9fc4d023c05adcdb320d41785fa45f`.
-This candidate is statically prepared but is not installed and has no terminal
-heavy qualification for A0X.
+That producer failed its first qualification because two tests wrote fixtures
+below the read-only container root. The TDD correction is commit
+`faf587890e4f899803f027660bc66452623f405e`, tree
+`4615028176f3d594fbce0554f5e5edecfb802af1`, executable SHA-256
+`7cde4c2888721d72fbb8c86b4fdcc75f992050979c5175a5bf10b0cecfa7c6f8`.
+Its one authorized Matrix qualification passed all five required checks. The
+receipt ID is
+`sha256:65ff7b62fa949b549c87c1d599e76d67ebfa3edb3cc15d0cfae3972fdde236d9`
+and the receipt-file SHA-256 is
+`12f6d8988be5dc119eaa469cd3617a0f74e3416f7f66b5155d6cf3e1c1219670`.
+Both candidate and installed-stable verifiers returned PASS. The corrected
+candidate remains local, uninstalled, unpublished, and not yet bound into the
+A0X material artifacts.
 
 The fixed material envelope is 3,600 seconds outer, 3,300 seconds internal,
 300 seconds reserved for sealing/cleanup, and 300 seconds for admission. The
@@ -28,14 +39,16 @@ reads, CCP invocations, and remote mutations. Resume through
 `docs/A0X_ENGINEERING_PROBLEM_SOLUTION_LOG.md`, and the canonical A0X
 design/plan.
 
-Next gate: obtain a new exact authorization for one terminal qualification of
-the reconciled CCP candidate. Installation or exact candidate-path selection,
-Latent-TRIZ exact-head qualification, each of the twelve dossier-bound
-scientific attempts, publication, and merge remain separate decisions. No
+Next gate: preserve and review the corrected CCP source on a durable branch,
+then deliberately select its exact qualified producer identity for A0X and
+regenerate the material contract, both freezes, all twelve dossiers, and the
+zero-access receipt. Installation, CCP publication, Latent-TRIZ exact-head
+qualification, each of the twelve dossier-bound scientific attempts,
+publication, and merge remain separate decisions. No
 model, material tokenizer, historical or sealed target, CCP heavy command,
 Docker, network, GitHub action, retry, tuning, pooling, or claim promotion is
 authorized by this checkpoint. The earlier `c91915a…` PENDING receipt and all
-older producer identities remain historical evidence only.
+failed `a73ebed…` receipt remain historical evidence only.
 
 EXP-002 checkpoint (2026-08-20): branch `exp002-qwen3-followup` is the active
 implementation branch at implementation checkpoint `e47937c` (followed by
