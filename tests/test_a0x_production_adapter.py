@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 from latent_triz.a0x_contract import Leg
 from tests.a0x_test_support import artifact, authorization_documents, pair_binding
 
