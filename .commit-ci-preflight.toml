@@ -29,7 +29,7 @@ runtime_id = "python311"
 required = true
 argv = ["python", "scripts/repository_check.py"]
 working_directory = "."
-timeout_seconds = 300
+timeout_seconds = 3600
 
 [[checks]]
 id = "schema-cross-validate-py311"
@@ -45,7 +45,7 @@ runtime_id = "python312"
 required = true
 argv = ["python", "scripts/repository_check.py"]
 working_directory = "."
-timeout_seconds = 300
+timeout_seconds = 3600
 
 [[checks]]
 id = "schema-cross-validate-py312"

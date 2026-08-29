@@ -77,7 +77,7 @@ def matrix_plan_envelope() -> dict[str, object]:
             "id": runtime_id,
             "configuration_digest": binding[f"{runtime_id}_digest"],
             "runtime": {"kind": "docker_compatible", "image": _RUNTIME_IMAGES[runtime_id], "cpu_count": 1, "memory_mib": 1024, "pids_limit": 256, "network": False},
-            "checks": [{"id": check_id, "required": True, "argv": ["python", "scripts/repository_check.py" if check_id.startswith("repository-check-") else "scripts/schema_cross_validate.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []} for check_id in check_ids],
+            "checks": [{"id": check_id, "required": True, "argv": ["python", "scripts/repository_check.py" if check_id.startswith("repository-check-") else "scripts/schema_cross_validate.py"], "working_directory": ".", "timeout_seconds": 3600 if check_id.startswith("repository-check-") else 300, "depends_on": [], "artifacts": []} for check_id in check_ids],
         })
     plan = {"schema_version": "2.0", "project": "MarcoPorcellato/Latent-TRIZ", "receipt": {"output": ".ccp/receipt.json", "freshness_seconds": 3600}, "environment": {"inherit": [], "fixed": [], "runtime_internal": [], "remote_secret_only": []}, "caches": [], "runtimes": runtimes}
     legacy_basis = {
@@ -235,9 +235,9 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
         contract = json.loads(path.read_text())
         contract["ccp"]["matrix_plan_profile"] = "matrix-v2-legacy-v1"
         binding = contract["ccp"]["matrix_plan_binding"] = {
-            "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
-            "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
-            "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
+            "outer_digest": "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331",
+            "python311_digest": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943",
+            "python312_digest": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510",
         }
         envelope = matrix_plan_envelope()
         envelope["plan_digest"] = binding["outer_digest"]

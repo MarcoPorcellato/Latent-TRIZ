@@ -351,10 +351,10 @@ class A0XPreflightTests(A0XTempTestCase):
             "matrix_policy_binding": {"locator": ".commit-ci-policy-v2.toml", "raw_sha256": "b" * 64},
             "location_roles": {"repository_root": "repository_root", "managed_cache_root": "managed_cache_root"},
             "matrix_plan_binding": {
-                "plan_output_sha256": "4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e",
-                "outer_digest": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
-                "python311_digest": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
-                "python312_digest": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8",
+                "plan_output_sha256": "0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad",
+                "outer_digest": "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331",
+                "python311_digest": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943",
+                "python312_digest": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510",
             },
         }
         contract = {

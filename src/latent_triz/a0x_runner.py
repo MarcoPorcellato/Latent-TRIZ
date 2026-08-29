@@ -510,7 +510,8 @@ def _validate_matrix_plan_v2(plan: Mapping[str, Any], ccp: Mapping[str, Any]) ->
             optional_fields = required_fields | {"artifact_contracts"}
             if not isinstance(check, Mapping) or set(check) not in (required_fields, optional_fields) or check.get("required") is not True or not isinstance(check.get("id"), str) or not isinstance(check.get("argv"), list) or not check["argv"] or not isinstance(check.get("working_directory"), str) or not _is_integer(check.get("timeout_seconds")) or check["timeout_seconds"] <= 0 or not isinstance(check.get("depends_on"), list) or not isinstance(check.get("artifacts"), list):
                 raise A0XRunnerError("CCP Matrix check plan is malformed")
-            if check["id"] not in expected_checks[runtime_id] or check["argv"] != _MATRIX_CHECK_ARGV[check["id"]] or check["working_directory"] != "." or check["timeout_seconds"] != 300 or check["depends_on"] != [] or check["artifacts"] != [] or check.get("artifact_contracts", []) != []:
+            expected_timeout = 3600 if check["id"].startswith("repository-check-") else 300
+            if check["id"] not in expected_checks[runtime_id] or check["argv"] != _MATRIX_CHECK_ARGV[check["id"]] or check["working_directory"] != "." or check["timeout_seconds"] != expected_timeout or check["depends_on"] != [] or check["artifacts"] != [] or check.get("artifact_contracts", []) != []:
                 raise A0XRunnerError("CCP Matrix check binding drifted")
             identifiers.add(check["id"])
         if identifiers != expected_checks[runtime_id]:

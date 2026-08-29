@@ -340,16 +340,16 @@ preflight-status:
 	docker ps -q
 
 preflight-plan:
-	commit-ci-preflight plan --config .commit-ci-preflight.toml --json
+	commit-ci-preflight plan --config .commit-ci-preflight.toml --matrix-plan-profile matrix-v2-legacy-v1 --json
 
 preflight-doctor:
-	commit-ci-preflight doctor --config .commit-ci-preflight.toml --json
+	commit-ci-preflight doctor --config .commit-ci-preflight.toml --matrix-plan-profile matrix-v2-legacy-v1 --json
 
 preflight-dry-run:
-	commit-ci-preflight dry-run --config .commit-ci-preflight.toml --repository . --json
+	commit-ci-preflight dry-run --config .commit-ci-preflight.toml --repository . --matrix-plan-profile matrix-v2-legacy-v1 --json
 
 preflight-run:
-	commit-ci-preflight run --config .commit-ci-preflight.toml --repository . --generation 1 --json
+	commit-ci-preflight run --config .commit-ci-preflight.toml --repository . --generation 1 --matrix-plan-profile matrix-v2-legacy-v1 --json
 
 preflight-verify:
 	commit-ci-preflight verify --receipt .ccp/receipt.json --policy .commit-ci-policy-v2.toml --expected-commit "$$(git rev-parse HEAD)"
