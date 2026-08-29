@@ -9,15 +9,28 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import exp002_publication_verify as publication_verify  # noqa: E402
 from exp002_publication_verify import PublicationVerificationError, verify_publication_manifest  # noqa: E402
 
 
 class Exp002PublicationVerifyTests(unittest.TestCase):
-    def test_published_manifest_passes(self):
-        result = verify_publication_manifest("results/exp002/preexecution/publication-manifest.json", root=ROOT)
-        self.assertEqual(result["status"], "pass")
+    def test_published_manifest_tracked_bindings_are_source_snapshot_safe(self):
+        verify_bindings = getattr(
+            publication_verify, "verify_publication_manifest_bindings", None
+        )
+        self.assertIsNotNone(
+            verify_bindings,
+            "a tracked-bindings verifier is required for source-snapshot CI",
+        )
+        if verify_bindings is None:
+            return
+        result = verify_bindings(
+            "results/exp002/preexecution/publication-manifest.json", root=ROOT
+        )
+        self.assertEqual(result["status"], "bindings_only")
         self.assertEqual(result["packages"], 7)
-        self.assertEqual(len(result["verified_external_assets"]), 7)
+        self.assertEqual(result["declared_external_assets"], 7)
+        self.assertEqual(result["verified_external_assets"], [])
 
     def test_missing_and_mutated_external_assets_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:

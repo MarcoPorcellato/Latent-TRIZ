@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DOSSIER = ROOT / "docs/qualification/a0x-current-v2-policy-migration-dossier.json"
+DOSSIER = ROOT / "docs/qualification/a0x-legacy-policy-migration-dossier.json"
 
 LEGACY_OUTER_DIGEST = (
     "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331"
@@ -93,7 +93,8 @@ class A0XPolicyMigrationTests(unittest.TestCase):
             hashlib.sha256(policy_bytes).hexdigest(),
         )
         self.assertEqual(
-            dossier["qualification"]["matrix_plan_profile"], "current-v2"
+            dossier["qualification"]["matrix_plan_profile"],
+            "matrix-v2-legacy-v1",
         )
         self.assertEqual(
             dossier["qualification"]["expected_plan_digests"],
@@ -114,6 +115,15 @@ class A0XPolicyMigrationTests(unittest.TestCase):
         self.assertFalse(dossier["authorization"]["granted"])
         self.assertFalse(dossier["execution_state"]["ccp_run_performed"])
         self.assertTrue(dossier["trust_bootstrap"]["candidate_cannot_self_authorize"])
+
+    def test_qualification_plan_is_accepted_by_the_trusted_base(self) -> None:
+        dossier = json.loads(DOSSIER.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            dossier["qualification"]["expected_plan_digests"],
+            dossier["trusted_base"]["accepted_plan_digests"],
+            "the selected qualification plan must be accepted by the trusted base",
+        )
 
 
 if __name__ == "__main__":

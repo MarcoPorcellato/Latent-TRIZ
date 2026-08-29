@@ -80,8 +80,9 @@ def _verify_package(repo: Path, package_entry: dict[str, Any]) -> None:
             raise PublicationVerificationError(f"package artifact binding mismatch: {name}")
 
 
-def verify_publication_manifest(manifest_path: str | Path, *, root: str | Path = ROOT) -> dict[str, Any]:
-    """Verify tracked manifest and every declared external dense asset."""
+def _verify_tracked_bindings(
+    manifest_path: str | Path, *, root: str | Path
+) -> tuple[Path, dict[str, Any]]:
     repo = Path(root).resolve()
     manifest_file = Path(manifest_path)
     if not manifest_file.is_absolute():
@@ -94,6 +95,30 @@ def verify_publication_manifest(manifest_path: str | Path, *, root: str | Path =
         raise PublicationVerificationError(errors[0].message)
     for package in manifest["packages"]:
         _verify_package(repo, package)
+    for asset in manifest["external_dense_assets"]:
+        _relative_asset(repo, asset["locator"])
+    return repo, manifest
+
+
+def verify_publication_manifest_bindings(
+    manifest_path: str | Path, *, root: str | Path = ROOT
+) -> dict[str, Any]:
+    """Verify tracked package bindings without reading external dense assets."""
+    _repo, manifest = _verify_tracked_bindings(manifest_path, root=root)
+    return {
+        "status": "bindings_only",
+        "packages": len(manifest["packages"]),
+        "verified_package_bindings": len(manifest["packages"]),
+        "declared_external_assets": len(manifest["external_dense_assets"]),
+        "verified_external_assets": [],
+        "model_access": False,
+        "sealed_target_access": False,
+    }
+
+
+def verify_publication_manifest(manifest_path: str | Path, *, root: str | Path = ROOT) -> dict[str, Any]:
+    """Verify tracked manifest and every declared external dense asset."""
+    repo, manifest = _verify_tracked_bindings(manifest_path, root=root)
     verified_assets = []
     for asset in manifest["external_dense_assets"]:
         asset_path = _relative_asset(repo, asset["locator"])
