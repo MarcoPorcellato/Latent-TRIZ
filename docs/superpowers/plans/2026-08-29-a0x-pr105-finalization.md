@@ -13,7 +13,9 @@
 ## Global Constraints
 
 - Preserve the dirty primary checkout and all unrelated user work.
-- Work only in a clean, isolated, no-hardlink clone under `/private/tmp`.
+- Work only in a clean, isolated, no-hardlink clone under
+  `$ISOLATED_TEMP_ROOT`, an operator-selected isolated temporary root outside
+  the primary checkout.
 - All shell commands begin with `rtk`.
 - Do not invoke CCP `run`, `benchmark`, or `guard exec`; do not use Docker.
 - Do not load models or tokenizers and do not read sealed targets.
@@ -239,7 +241,7 @@ Expected: one local documentation commit; no push.
 
 - [ ] **Step 1: Recreate a fresh no-hardlink clone of the final candidate**
 
-Use `rtk git clone --no-local --no-hardlinks` from the isolated source repository into a new explicit `/private/tmp` path, then detach at the final candidate commit.
+Use `rtk git clone --no-local --no-hardlinks` from the isolated source repository into a new explicit `$ISOLATED_TEMP_ROOT` path, then detach at the final candidate commit.
 
 Expected: clean checkout and exact commit match.
 
@@ -294,10 +296,13 @@ Expected: zero protected-path differences. Any difference is a hard stop; do not
 
 - [ ] **Step 7: Verify policy, plan fixture, and producer bindings**
 
+`$CCP_CANDIDATE_BIN` is the exact hash-bound candidate executable named by
+the surrounding receipt.
+
 Run:
 
 ```bash
-rtk shasum -a 256 /Users/marco1/.cargo/bin/commit-ci-preflight.candidate-27adf8d0820b3cd96f9c5e149de9b580ae41f639-c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4
+rtk shasum -a 256 $CCP_CANDIDATE_BIN
 rtk git hash-object .commit-ci-policy-v2.toml
 rtk env PYTHONPATH=src python3 -m unittest tests.test_a0x_matrix_plan_binding -v
 ```

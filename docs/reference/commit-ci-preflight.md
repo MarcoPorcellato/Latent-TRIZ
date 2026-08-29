@@ -52,7 +52,8 @@ The installed producer is the separately qualified build of official CCP
 `origin/main` at commit `3fccc197e5055a2759ee7afe51b91133938ec904`,
 tree `9e478c1489a9926772e8ab8bea21bd57470494b6`, executable
 SHA-256 `b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c`.
-The executable path is `/Users/marco1/.cargo/bin/commit-ci-preflight`. Verify
+The executable path is `$CCP_BIN`, the exact hash-verified stable Commit CI
+Preflight executable. Verify
 that complete hash immediately before every `plan`, `doctor`, `dry-run`,
 `run`, or `verify`; the version string alone is not a producer identity.
 

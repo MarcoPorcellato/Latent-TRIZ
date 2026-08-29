@@ -344,8 +344,9 @@ The legacy Matrix profile remains only on local candidate
 `c91915adcb8706898574c0c74d033b9ff991eefb`. That candidate was exercised once
 under its exact authorization. The run terminated `PENDING` with exit code 5
 after the format stage passed and before later stages ran because the host
-resource watchdog tripped. Its receipt is preserved at
-`/private/tmp/ccp-qualification-c91915a/.ccp/receipt.json`, file SHA-256
+resource watchdog tripped. Here `$ISOLATED_TEMP_ROOT` is an operator-selected
+isolated temporary root outside the primary checkout. Its receipt is preserved at
+`$ISOLATED_TEMP_ROOT/ccp-qualification-c91915a/.ccp/receipt.json`, file SHA-256
 `dae63a016d6ddc2396ed1d27b01c6f6b447353f0f3b87d834b183d8720114ce8`,
 receipt ID
 `sha256:78103241a5c0a0d887cb1d261398fa6c8a950187fe40468870aa6aff7ad89b83`.
@@ -375,7 +376,7 @@ no model, tokenizer, target, CCP run, installation, or publication is implied.
   `c91915adcb8706898574c0c74d033b9ff991eefb`, tree
   `687fcaaa3643d35a66ba748409e5621d13e25dd7`.
 - Its isolated candidate is
-  `/private/tmp/ccp-final-review-candidate-c91915a/release/commit-ci-preflight`,
+  `$ISOLATED_TEMP_ROOT/ccp-final-review-candidate-c91915a/release/commit-ci-preflight`,
   SHA-256
   `72a3458987e18313ceacfc97d8e7902d2d5338eb8eb609320fd37ca58aedd4be`.
   The static suite completed with 394 passes and four documented ignores; an
@@ -430,7 +431,10 @@ material command is runnable yet, even if host admission is free.
 
 ### Exact local and remote anchors
 
-- Repository: `/Users/marco1/Documents/CODICE con VS CODE/Emergent-AI-TRIZ`.
+`$LATENT_TRIZ_CHECKOUT` is the operator-selected clean checkout of this
+repository.
+
+- Repository: `$LATENT_TRIZ_CHECKOUT`.
 - Branch: `agent/a0x-six-model-design`.
 - A0X compatibility implementation anchor:
   `7983e4ab5587f3f2c241ddb88e81219ffcf2a6e9`, tree
@@ -465,14 +469,16 @@ material command is runnable yet, even if host admission is free.
 
 ### Exact local qualification evidence
 
+`$CCP_BIN` is the exact hash-verified stable Commit CI Preflight executable.
+
 The one authorized Matrix V2 qualification for this HEAD ran in the isolated
-clone `/private/tmp/latent-triz-a0x-qualification-34b52c42` and completed all
+clone `$ISOLATED_TEMP_ROOT/latent-triz-a0x-qualification-34b52c42` and completed all
 four checks successfully with the then-installed producer:
 
 - producer source commit:
   `3fccc197e5055a2759ee7afe51b91133938ec904`;
 - producer tree: `9e478c1489a9926772e8ab8bea21bd57470494b6`;
-- executable: `/Users/marco1/.cargo/bin/commit-ci-preflight`;
+- executable: `$CCP_BIN`;
 - executable SHA-256:
   `b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c`;
 - generation: `1`, with no retry;
@@ -515,7 +521,7 @@ completed without a CCP run:
 - source commit: `044697dee9a0d678d30a4847d62ddf9b4970505b`;
 - source tree: `5220164edf17831ce0c42dae1c14300ed1045015`;
 - candidate path:
-  `/private/tmp/ccp-candidate-044697dee/target/release/commit-ci-preflight`;
+  `$ISOLATED_TEMP_ROOT/ccp-candidate-044697dee/target/release/commit-ci-preflight`;
 - candidate SHA-256:
   `71d64cdbb1bb509bb459aebd6c53e06d819150de42be4fe3715c35bd73426af7`;
 - version: `commit-ci-preflight 0.1.0`;
@@ -563,7 +569,7 @@ authorized documentation or recovery change.
 
 ## Safe resume point
 
-- Repository: `/Users/marco1/Documents/CODICE con VS CODE/Emergent-AI-TRIZ`
+- Repository: `$LATENT_TRIZ_CHECKOUT`
 - Worktree: none; the user explicitly requested work in the existing checkout
   to avoid additional disk use.
 - Branch: `agent/a0x-six-model-design`

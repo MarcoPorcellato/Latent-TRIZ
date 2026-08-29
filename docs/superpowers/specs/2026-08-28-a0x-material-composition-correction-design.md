@@ -1,7 +1,7 @@
 # A0X Material Composition Correction Design
 
-**Status:** approved for offline implementation on 2026-08-28  
-**Scope:** A0X infrastructure only; frozen A0 and A0-R1 science is unchanged  
+**Status:** approved for offline implementation on 2026-08-28
+**Scope:** A0X infrastructure only; frozen A0 and A0-R1 science is unchanged
 **Material boundary:** no CCP heavy command, Docker, model or tokenizer construction, sealed-target access, network access, or remote publication is authorized by this design
 
 ## Purpose
