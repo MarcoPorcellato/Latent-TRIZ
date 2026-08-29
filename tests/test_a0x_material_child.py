@@ -222,12 +222,17 @@ class A0XMaterialChildTests(unittest.TestCase):
                 self.assertEqual([], received)
 
     def test_valid_descriptor_is_verified_before_injected_executor(self) -> None:
-        root, descriptor, child, python = self._fixture()
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        bundle = prepare_constructible_runtime_bundle()
+        self.addCleanup(bundle.close)
+        root = bundle.root
+        descriptor = json.loads((root / bundle.receipt["descriptor_path"]).read_text())
         code, terminal, received = self._run(
             root=root,
-            child=child,
-            python=python,
-            argv=["--launch-descriptor", ".a0x-runtime/launches/a0/gpt2/a0x-a0-gpt2-run-1.json"],
+            child=root / "scripts/a0x_material_child.py",
+            python=bundle.request.python_executable,
+            argv=["--launch-descriptor", bundle.receipt["descriptor_path"]],
         )
         self.assertEqual(0, code)
         self.assertEqual("completed", terminal["exit_class"])

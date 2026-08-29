@@ -78,31 +78,36 @@ class A0XProductionAdapterTests(unittest.TestCase):
 
     def test_builder_is_inert_then_runs_only_the_descriptor_bound_pair(self) -> None:
         from latent_triz.a0x_production_adapter import ProductionFactories, build_production_executor
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
 
-        for root, descriptor, pair in self._descriptor_root():
-            calls: list[object] = []
+        bundle = prepare_constructible_runtime_bundle()
+        self.addCleanup(bundle.close)
+        root = bundle.root
+        descriptor = json.loads((root / bundle.receipt["descriptor_path"]).read_text())
+        pair = descriptor["pair_binding"]
+        calls: list[object] = []
 
-            def build_dependencies(context):
-                calls.append(("dependencies", context.pair.model_key, context.pair.leg.value))
-                return object()
+        def build_dependencies(context):
+            calls.append(("dependencies", context.pair.model_key, context.pair.leg.value))
+            return object()
 
-            def lifecycle_runner(*, pair, preflight_context, dependencies):
-                calls.append(("run", pair.model_key, pair.leg.value, dependencies, preflight_context["outer_timeout_seconds"]))
-                return {"terminal_outcome": {"status": "null"}}
+        def lifecycle_runner(*, pair, preflight_context, dependencies):
+            calls.append(("run", pair.model_key, pair.leg.value, dependencies, preflight_context["outer_timeout_seconds"]))
+            return {"terminal_outcome": {"status": "null"}}
 
-            executor = build_production_executor(
-                root=root, descriptor=descriptor,
-                factories=ProductionFactories(
-                    dependency_builder=build_dependencies,
-                    lifecycle_runner=lifecycle_runner,
-                ),
-            )
-            self.assertEqual([], calls, "build must not construct a tokenizer/model or open a target")
-            self.assertEqual({"status": "null"}, executor(descriptor))
-            self.assertEqual(("dependencies", pair["model_key"], pair["leg"]), calls[0])
-            self.assertEqual(("run", pair["model_key"], pair["leg"]), calls[1][:3])
-            self.assertIsNotNone(calls[1][3])
-            self.assertEqual(3600, calls[1][4])
+        executor = build_production_executor(
+            root=root, descriptor=descriptor,
+            factories=ProductionFactories(
+                dependency_builder=build_dependencies,
+                lifecycle_runner=lifecycle_runner,
+            ),
+        )
+        self.assertEqual([], calls, "build must not construct a tokenizer/model or open a target")
+        self.assertEqual({"status": "null"}, executor(descriptor))
+        self.assertEqual(("dependencies", pair["model_key"], pair["leg"]), calls[0])
+        self.assertEqual(("run", pair["model_key"], pair["leg"]), calls[1][:3])
+        self.assertIsNotNone(calls[1][3])
+        self.assertEqual(3600, calls[1][4])
 
     def test_descriptor_v2_binds_authorization_to_exact_descriptor(self) -> None:
         from latent_triz.a0x_material_contract import derive_runtime_paths

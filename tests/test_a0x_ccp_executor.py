@@ -164,9 +164,33 @@ class A0XCcpExecutorTests(unittest.TestCase):
             )
 
     def test_exact_template_launches_once_with_sanitized_environment(self) -> None:
-        root, pair, runtime, _authorization, _mapping, fake = self._fixture()
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        bundle = prepare_constructible_runtime_bundle()
+        self.addCleanup(bundle.close)
+        root = bundle.root
+        pair = PairBinding.from_mapping(bundle.receipt["pair_binding"])
+        runtime = derive_runtime_paths(pair, source_head=bundle.receipt["source_head"])
+        terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+        fake = _FakeProcess(ProcessResult(
+            returncode=0,
+            stdout_sha256=_sha(terminal),
+            stdout_bytes=len(terminal),
+            stderr_sha256=_sha(b""),
+            stderr_bytes=0,
+            stdout_prefix=terminal,
+        ))
         preflight = _FakeGuardPreflight()
-        result = self._launch(root, fake, preflight=preflight)
+        expected_ccp_sha256 = json.loads(
+            (root / "experiments/a0x-six-model/material-execution-contract.json").read_text(),
+        )["ccp"]["sha256"]
+        actual_sha256_file = __import__("latent_triz.a0x_ccp_executor", fromlist=["sha256_file"]).sha256_file
+        with patch(
+            "latent_triz.a0x_ccp_executor.sha256_file",
+            side_effect=lambda path: expected_ccp_sha256 if Path(path).resolve() == bundle.request.ccp_executable.resolve()
+            else actual_sha256_file(path),
+        ):
+            result = self._launch(root, fake, preflight=preflight)
         self.assertEqual("completed", result["status"])
         self.assertEqual(pair.as_mapping(), result["pair_binding"])
         self.assertEqual(runtime.claim_path, result["claim_path"])
