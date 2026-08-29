@@ -201,10 +201,22 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         }
 
         child_received: list[dict[str, object]] = []
+        child_contexts: list[object] = []
+        def child_production_factory(*, root, descriptor):
+            child_received.append(dict(descriptor))
+            return build_production_executor(
+                root=root,
+                descriptor=descriptor,
+                factories=ProductionFactories(
+                    dependency_builder=lambda context: child_contexts.append(context) or object(),
+                    lifecycle_runner=lambda **_kwargs: {"terminal_outcome": {"status": "null"}},
+                ),
+            )
+
         child_code = load_child_module().run_child(
             ["--launch-descriptor", receipt["descriptor_path"]],
             root=root,
-            execute_descriptor=lambda value: child_received.append(dict(value)) or {"status": "null"},
+            production_executor_factory=child_production_factory,
             source_head_probe=lambda: expected["source_head"],
             environment={
                 "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1",
@@ -217,6 +229,13 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         )
         self.assertEqual(0, child_code)
         self.assertEqual([descriptor], child_received)
+        self.assertEqual(1, len(child_contexts))
+        child_context = child_contexts[0]
+        self.assertEqual(expected["source_head"], child_context.source_head)
+        self.assertEqual(expected["pair_binding"], child_context.pair.as_mapping())
+        self.assertEqual(expected["authorization_raw_sha256"], child_context.authorization_raw_sha256)
+        self.assertEqual(expected["descriptor_raw_sha256"], child_context.descriptor_commitment)
+        self.assertEqual(expected["material_contract_raw_sha256"], child_context.material_contract_raw_sha256)
 
         production_contexts: list[object] = []
         production = build_production_executor(
@@ -233,6 +252,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         self.assertEqual(expected["source_head"], production_context.source_head)
         self.assertEqual(expected["pair_binding"], production_context.pair.as_mapping())
         self.assertEqual(expected["authorization_raw_sha256"], production_context.authorization_raw_sha256)
+        self.assertEqual(expected["descriptor_raw_sha256"], production_context.descriptor_commitment)
         self.assertEqual(expected["material_contract_raw_sha256"], production_context.material_contract_raw_sha256)
 
         terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
@@ -246,6 +266,26 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         ))
         ccp_sha256 = json.loads(contract_raw)["ccp"]["sha256"]
         executor_sha256_file = __import__("latent_triz.a0x_ccp_executor", fromlist=["sha256_file"]).sha256_file
+        ccp_module = __import__("latent_triz.a0x_ccp_executor", fromlist=["_validate_authorization"])
+        real_validate_authorization = ccp_module._validate_authorization
+        real_validate_file_hash = ccp_module._validate_file_hash
+        outer_contract_hashes: list[str] = []
+        outer_descriptor_hashes: list[tuple[str, str]] = []
+
+        def validate_authorization_spy(**kwargs):
+            launch = real_validate_authorization(**kwargs)
+            outer_contract_hashes.append(kwargs["authorization"]["material_contract_raw_sha256"])
+            return launch
+
+        def validate_file_hash_spy(path, expected_hash, label):
+            result = real_validate_file_hash(path, expected_hash, label)
+            if label == "launch descriptor":
+                outer_descriptor_hashes.append((
+                    expected_hash,
+                    hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+                ))
+            return result
+
         with (
             patch(
                 "latent_triz.a0x_ccp_executor.planned_material_dossiers",
@@ -256,6 +296,8 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 side_effect=lambda path: ccp_sha256 if Path(path).resolve() == request.ccp_executable.resolve()
                 else executor_sha256_file(path),
             ),
+            patch("latent_triz.a0x_ccp_executor._validate_authorization", side_effect=validate_authorization_spy),
+            patch("latent_triz.a0x_ccp_executor._validate_file_hash", side_effect=validate_file_hash_spy),
         ):
             outer = launch_fixed_dossier(
                 repository_root=root,
@@ -266,12 +308,14 @@ class A0XRuntimeBundleTests(unittest.TestCase):
             )
         self.assertEqual(expected["source_head"], outer["source_head"])
         self.assertEqual(expected["pair_binding"], outer["pair_binding"])
+        self.assertTrue((root / outer["claim_path"]).is_file())
         runtime = derive_runtime_paths(expected["pair_binding"], source_head=expected["source_head"])
         pre_run = json.loads((root / runtime.observation_directory / "pre-run-observation.json").read_text())
         self.assertEqual(expected["authorization_raw_sha256"], pre_run["authorization_raw_sha256"])
-        authorization = json.loads(authorization_raw)
-        self.assertEqual(expected["descriptor_raw_sha256"], authorization["guard_launch"]["launch_descriptor"]["sha256"])
-        self.assertEqual(expected["material_contract_raw_sha256"], authorization["material_contract_raw_sha256"])
+        self.assertTrue(outer_descriptor_hashes)
+        self.assertTrue(all(pair == (expected["descriptor_raw_sha256"], expected["descriptor_raw_sha256"])
+                            for pair in outer_descriptor_hashes))
+        self.assertEqual([expected["material_contract_raw_sha256"]], outer_contract_hashes)
 
     def test_tamper_matrix_refuses_before_process_or_lifecycle_seams(self) -> None:
         """Every independently prepared bundle fails closed for one altered binding."""
