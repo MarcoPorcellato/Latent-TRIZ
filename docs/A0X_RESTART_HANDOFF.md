@@ -10,6 +10,29 @@ date: 2026-08-25
 This is a reboot checkpoint, not a validation receipt or material-run
 authorization.
 
+## Final integration continuation (2026-08-29)
+
+This section supersedes older current-gate wording below without rewriting its
+historical receipts.
+
+- The exact A0X source `4aee4698f5c59101b1f3292519f10ae802629bf7` completed a
+  local CCP qualification with terminal `PASS`; its receipt-file SHA-256 is
+  `08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447`.
+- That receipt is historical after public main advanced through the policy-only
+  prerequisite PR #106 to `4ba3c36a0f6b7a50d34bc87bb34bafc79687eb08`.
+  A receipt cannot attest a later integration commit.
+- The integration is limited to the trusted-base migration and two known
+  conflicts: laboratory chronology and the separation of source-snapshot
+  bindings from full external-asset verification. It must not alter the A0X
+  protected implementation set, material contract, freezes, dossiers, or
+  no-model receipt.
+- Before any new CCP action, complete the target-free verification sequence,
+  compare the complete protected path set against `4aee4698...`, and record the
+  final clean commit and tree. Then request one new exact-head authorization.
+
+No model, tokenizer, target, Docker, CCP heavy command, publication, or remote
+mutation is authorized by this handoff.
+
 ## Current continuation checkpoint (2026-08-25)
 
 This section supersedes older status statements below when they conflict. The

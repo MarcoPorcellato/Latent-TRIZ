@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-08-25
+last_verified: 2026-08-29
 ---
 
 # Current laboratory status
@@ -120,6 +120,22 @@ missing or mutated external dense asset; it must never silently substitute an
 asset or recompute a scientific result.
 
 ## Next evidence gate
+
+### A0X final integration boundary
+
+The local exact-head qualification of
+`4aee4698f5c59101b1f3292519f10ae802629bf7` passed, with receipt-file
+SHA-256 `08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447`.
+It is historical after the policy-only prerequisite advanced public main to
+`4ba3c36a0f6b7a50d34bc87bb34bafc79687eb08`: an integrated source commit
+requires its own receipt. The only permitted preparatory work is to merge that
+trusted base, retain source-snapshot and full-asset verification separately,
+and prove the complete A0X protected set remains byte-identical. No model,
+target, tokenizer, CCP heavy command, publication, or scientific retry is
+authorized until a new exact-head CCP authorization is granted.
+
+The historical detail below remains evidence, but this continuation statement
+governs the current gate.
 
 The A0X six-model campaign is now at its frozen no-model checkpoint. Two
 independent legs preserve the historical A0 and A0-R1 rules, and twelve

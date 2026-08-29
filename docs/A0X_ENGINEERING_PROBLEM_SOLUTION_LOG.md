@@ -562,17 +562,98 @@ negative engineering evidence. Fresh verification passed the no-`make`
 regression 3/3, frozen package 10/10, A0X aggregate 248/248, schema
 cross-validation 155 agreements with 19 rejected mutations, repository suite
 1,075 tests with one documented skip, documentation audit, and diff check.
-Independent Luna review returned `APPROVE` with no P0--P3 findings. A local
-package commit remains required before a new exact-head qualification can be
-requested.
+Independent Luna review returned `APPROVE` with no P0--P3 findings. The later
+exact-head qualification of `4aee4698f5c59101b1f3292519f10ae802629bf7` passed;
+its receipt is historical after the final base integration described below.
+
+## 24. Source-snapshot CI confused tracked bindings with external dense assets
+
+**Symptom.** A prior exact-head qualification mounted only the committed source
+snapshot, while a positive EXP-002 publication test called the full verifier
+and required seven intentionally ignored dense assets.
+
+**Root cause.** The test conflated two valid but distinct claims: that tracked
+package bindings and declared locators are internally consistent, and that the
+external dense bytes exist and match their hashes.
+
+**Consequence.** The source-snapshot repository check failed before it could
+test the A0X candidate, even though the production verifier correctly rejected
+missing or mutated dense assets.
+
+**Correction.** Retain the full fail-closed verifier for publication evidence.
+Add a separate `bindings_only` verification surface for committed schemas,
+package bindings, and safe asset declarations. The positive full-verification
+test materializes deterministic synthetic assets; negative tests retain both
+missing-asset and one-byte-mutation rejection.
+
+**Regression evidence.** The integrated test module must pass all four cases:
+tracked bindings only, complete synthetic assets, missing or mutated assets,
+and a mutated package binding.
+
+**Status.** Resolved in the final integration candidate; final no-material
+repository verification remains pending.
+
+## 25. A candidate policy cannot authorize its own legacy-profile receipt
+
+**Symptom.** PR #105's local receipt was integrity-valid but the hosted gate
+rejected it when the trusted public base still accepted the preceding Matrix
+plan digests.
+
+**Root cause.** The GitHub verifier intentionally reads the policy from the PR
+base, not from untrusted candidate code. The `matrix-v2-legacy-v1` profile
+changes the receipt's outer and per-runtime digest commitments, so the new
+candidate policy cannot authorize that new receipt before it is merged.
+
+**Consequence.** A local PASS on `4aee4698f5c59101b1f3292519f10ae802629bf7`
+could not satisfy the old hosted trusted-base policy. Treating that policy
+rejection as a repository-test failure would be incorrect.
+
+**Correction.** Merge the policy-only prerequisite PR #106 first. Public
+`main@4ba3c36a0f6b7a50d34bc87bb34bafc79687eb08` now accepts the exact legacy
+profile digests while preserving checks, images, platforms, and freshness.
+
+**Regression evidence.** The policy-migration tests prove that the trusted
+base reads only its policy, the candidate does not self-authorize, and the
+selected legacy plan equals the preceding trusted digest map.
+
+**Status.** Resolved on public main. A source-head change still requires a new
+receipt; historical receipts are never relabelled.
+
+## 26. Final base integration invalidates an old receipt without changing science
+
+**Symptom.** Integrating public main into PR #105 creates a new source commit,
+even when the policy blob already matches and only non-A0X conflicts require
+resolution.
+
+**Root cause.** CCP receipts attest one exact commit. The receipt for
+`4aee4698f5c59101b1f3292519f10ae802629bf7` cannot be reused for the integrated
+commit. Conversely, an arbitrary A0X freeze regeneration would alter frozen
+scientific commitments without a corresponding scientific change.
+
+**Consequence.** The integration needs one fresh exact-head qualification, but
+does not justify a model retry, sealed-target read, protocol change, or dossier
+regeneration.
+
+**Correction.** Use a normal feature-branch merge, preserve the migrated policy
+blob byte-for-byte, combine the two independent EXP-002 verification surfaces,
+and compare the complete A0X protected path set against `4aee4698...` before
+requesting the new qualification.
+
+**Regression evidence.** The final no-material verification must show zero
+protected-path differences, a clean checkout, passing A0X and repository
+suites, schema cross-validation, documentation audit, and the expected policy,
+plan, and producer bindings.
+
+**Status.** Implementation in progress. Stop before CCP until the final
+integrated commit, tree, and verification ledger are recorded.
 
 ## Current stop boundary
 
-The timeout/profile- and dependency-corrected package may be committed locally only after all
-no-material gates, independent review, and exact hash records pass. It must
-then stop for a new Latent-TRIZ exact-head qualification authorization bound to
-the final commit, the selected producer, `matrix-v2-legacy-v1`, and the three
-reviewed plan digests.
+The final integration candidate must first complete all no-material gates and
+the protected-path comparison against `4aee4698f5c59101b1f3292519f10ae802629bf7`.
+It must then stop for a new Latent-TRIZ exact-head qualification authorization
+bound to the final commit, selected producer, `matrix-v2-legacy-v1`, and the
+three reviewed plan digests.
 
 It does **not** authorize CCP heavy execution, Docker, model/tokenizer
 construction, protected-target access, installation, Latent-TRIZ publication,
