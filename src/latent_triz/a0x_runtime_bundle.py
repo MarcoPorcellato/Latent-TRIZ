@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from .a0x_ccp_executor import qualification_evidence_from_receipt, runtime_mapping_path
+from .a0x_ccp_executor import (
+    A0XCcpExecutorError,
+    qualification_evidence_from_receipt,
+    runtime_mapping_path,
+)
 from .a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
@@ -36,12 +40,15 @@ from .a0x_material_contract import (
     derive_runtime_paths,
 )
 from .a0x_runner import planned_material_dossiers
+from .validator import validate
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9._-]+$")
 _MAPPING_PROFILE = "a0x-runtime-role-mapping-v1"
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_MATERIAL_CONTRACT_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-material-execution-contract.schema.json"
 _ENVIRONMENT = (
     "HF_HUB_OFFLINE=1",
     "TRANSFORMERS_OFFLINE=1",
@@ -165,6 +172,7 @@ def _validate_preparation_inputs(
         contract = strict_json_object(contract_raw)
     except A0XContractError as error:
         raise A0XRuntimeBundleError("material contract bytes are not strict JSON") from error
+    _validate_material_contract_schema(contract)
     ccp_identity = _ccp_identity(contract)
     ccp_path = _external_executable(request.ccp_executable, "CCP executable")
     ccp_sha256 = sha256_file(ccp_path)
@@ -178,12 +186,15 @@ def _validate_preparation_inputs(
     if expected_receipt is None or _external_file(request.qualification_receipt, "qualification receipt") != _repository_file(root, expected_receipt):
         raise A0XRuntimeBundleError("qualification receipt path is not source-derived")
     qualification_raw = _repository_file(root, expected_receipt).read_bytes()
-    qualification = qualification_evidence_from_receipt(
-        qualification_raw,
-        source_head=source_head,
-        ccp_identity=ccp_identity,
-        public_evidence_commit=request.public_evidence_commit,
-    )
+    try:
+        qualification = qualification_evidence_from_receipt(
+            qualification_raw,
+            source_head=source_head,
+            ccp_identity=ccp_identity,
+            public_evidence_commit=request.public_evidence_commit,
+        )
+    except A0XCcpExecutorError as error:
+        raise A0XRuntimeBundleError("qualification receipt is invalid") from error
     descriptor_path = derive_runtime_paths(pair).launch_descriptor_path
     _preflight_output_paths(root, pair, source_head)
     return _ValidatedPreparationInputs(
@@ -418,6 +429,19 @@ def _ccp_identity(contract: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(identity["version"], str) or not re.fullmatch(r"commit-ci-preflight [^\s]+", identity["version"]):
         raise A0XRuntimeBundleError("material contract CCP version is invalid")
     return identity
+
+
+def _validate_material_contract_schema(contract: Mapping[str, Any]) -> None:
+    """Require the complete frozen material contract before executable checks."""
+    try:
+        schema = json.loads(_MATERIAL_CONTRACT_SCHEMA.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XRuntimeBundleError("material contract schema is unavailable") from error
+    if not isinstance(schema, dict):
+        raise A0XRuntimeBundleError("material contract schema is malformed")
+    issues = validate(dict(contract), schema)
+    if issues:
+        raise A0XRuntimeBundleError("material contract fails the frozen schema")
 
 
 def _preflight_output_paths(root: Path, pair: PairBinding, source_head: str) -> None:

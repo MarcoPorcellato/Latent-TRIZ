@@ -6,6 +6,7 @@ import io
 import json
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -33,17 +34,11 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         pair = PairBinding.from_mapping(pair_binding())
         source_head = "a" * 40
         paths = derive_runtime_paths(pair, source_head=source_head)
-        contract = {
-            "artifact_class": "a0x-material-execution-contract",
-            "contract_version": "a0x-material-execution-contract-v2",
-            "repository": "MarcoPorcellato/Latent-TRIZ",
-            "ccp": {
-                "source_commit": "b" * 40,
-                "source_tree": "c" * 40,
-                "sha256": hashlib.sha256(b"synthetic ccp").hexdigest(),
-                "version": "commit-ci-preflight 0.1.0",
-            },
-        }
+        contract = json.loads(
+            (Path(__file__).parents[1] / "experiments/a0x-six-model/material-execution-contract.json").read_text(
+                encoding="utf-8",
+            ),
+        )
         contract_path = root / "experiments/a0x-six-model/material-execution-contract.json"
         contract_path.parent.mkdir(parents=True)
         contract_path.write_bytes(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode())
@@ -79,12 +74,30 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         )
         return temporary, root, request
 
+    @contextmanager
+    def _synthetic_ccp_hash(self, request):
+        """Keep the fixture target-free while preserving a schema-valid contract."""
+        from latent_triz import a0x_runtime_bundle
+
+        expected = json.loads(
+            (Path(__file__).parents[1] / "experiments/a0x-six-model/material-execution-contract.json").read_text(
+                encoding="utf-8",
+            ),
+        )["ccp"]["sha256"]
+        actual = a0x_runtime_bundle.sha256_file
+        ccp = request.ccp_executable.resolve()
+        with patch(
+            "latent_triz.a0x_runtime_bundle.sha256_file",
+            side_effect=lambda path: expected if Path(path).resolve() == ccp else actual(path),
+        ):
+            yield
+
     def test_prepares_one_acyclic_bundle_in_dependency_order(self) -> None:
         from latent_triz.a0x_runtime_bundle import prepare_runtime_bundle
 
         temporary, root, request = self._fixture()
         self.addCleanup(temporary.cleanup)
-        with patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}):
+        with self._synthetic_ccp_hash(request), patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}):
             receipt = prepare_runtime_bundle(
                 root,
                 request,
@@ -112,7 +125,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         temporary, root, request = self._fixture()
         self.addCleanup(temporary.cleanup)
         patch_target = "latent_triz.a0x_runtime_bundle.planned_material_dossiers"
-        with patch(patch_target, return_value={("a0", "gpt2"): request.fixed_dossier}):
+        with self._synthetic_ccp_hash(request), patch(patch_target, return_value={("a0", "gpt2"): request.fixed_dossier}):
             receipt = prepare_runtime_bundle(root, request, source_state_probe=lambda: ("a" * 40, True), ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0")
             first_bytes = {name: (root / receipt[f"{name}_path"]).read_bytes() for name in ("descriptor", "authorization", "mapping")}
             with self.assertRaises(A0XRuntimeBundleError):
@@ -126,6 +139,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         patch_target = "latent_triz.a0x_runtime_bundle.planned_material_dossiers"
         with (
+            self._synthetic_ccp_hash(request),
             patch(patch_target, return_value={("a0", "gpt2"): request.fixed_dossier}),
             patch("subprocess.run", side_effect=AssertionError("subprocess.run reached")) as process_run,
             patch("subprocess.Popen", side_effect=AssertionError("subprocess.Popen reached")) as process_open,
@@ -194,6 +208,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
             "--attempt-id", request.attempt_id,
         ]
         with (
+            self._synthetic_ccp_hash(request),
             patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
             patch.object(cli.subprocess, "run", side_effect=probe),
         ):
@@ -202,3 +217,67 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         receipt = json.loads(output.getvalue())
         self.assertEqual("prepared", receipt["status"])
         self.assertEqual(sorted(receipt), list(receipt))
+
+    def test_malformed_contract_refuses_before_creating_any_runtime_document(self) -> None:
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        contract_path = root / "experiments/a0x-six-model/material-execution-contract.json"
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        del contract["offline"]
+        contract_path.write_bytes(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode())
+        dossier_path = root / request.fixed_dossier
+        dossier = json.loads(dossier_path.read_text(encoding="utf-8"))
+        dossier["material_contract_raw_sha256"] = hashlib.sha256(contract_path.read_bytes()).hexdigest()
+        dossier_path.write_bytes(json.dumps(dossier, sort_keys=True, separators=(",", ":")).encode())
+        with self._synthetic_ccp_hash(request), patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}):
+            with self.assertRaises(A0XRuntimeBundleError):
+                prepare_runtime_bundle(
+                    root,
+                    request,
+                    source_state_probe=lambda: ("a" * 40, True),
+                    ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                )
+        self.assertFalse((root / ".a0x-runtime/launches").exists())
+        self.assertFalse((root / ".a0x-runtime/authorizations").exists())
+        self.assertFalse((root / ".a0x-runtime/bin").exists())
+
+    def test_cli_malformed_qualification_receipt_returns_refusal_code_two(self) -> None:
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        request.qualification_receipt.write_bytes(b"{not-json")
+        cli = self._cli_module()
+        output = io.StringIO()
+
+        class Result:
+            def __init__(self, stdout: str) -> None:
+                self.returncode = 0
+                self.stdout = stdout
+
+        def probe(argv, **_kwargs):
+            if argv == ["git", "rev-parse", "HEAD"]:
+                return Result("a" * 40 + "\n")
+            if argv == ["git", "status", "--porcelain", "--untracked-files=all"]:
+                return Result("")
+            if argv == [str(request.ccp_executable.resolve()), "--version"]:
+                return Result("commit-ci-preflight 0.1.0\n")
+            raise AssertionError(f"unexpected probe argv: {argv}")
+
+        argv = [
+            "--fixed-dossier", request.fixed_dossier,
+            "--qualification-receipt", str(request.qualification_receipt),
+            "--ccp", str(request.ccp_executable),
+            "--python", str(request.python_executable),
+            "--public-evidence-commit", request.public_evidence_commit,
+            "--authorization-id", request.authorization_id,
+            "--attempt-id", request.attempt_id,
+        ]
+        with (
+            self._synthetic_ccp_hash(request),
+            patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
+            patch.object(cli.subprocess, "run", side_effect=probe),
+        ):
+            code = cli.main(argv, root=root, stdout=output)
+        self.assertEqual(2, code)
+        self.assertEqual({"status": "refused"}, json.loads(output.getvalue()))
