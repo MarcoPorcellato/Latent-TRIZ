@@ -195,7 +195,17 @@ class A0XCcpExecutorTests(unittest.TestCase):
         self.assertEqual(pair.as_mapping(), result["pair_binding"])
         self.assertEqual(runtime.claim_path, result["claim_path"])
         self.assertTrue((root / runtime.claim_path).is_file())
+        authorization_raw = (root / bundle.receipt["authorization_path"]).read_bytes()
+        authorization_commitment = canonical_commitment(
+            json.loads(authorization_raw), EXECUTION_AUTHORIZATION_PROFILE,
+        ).as_mapping()
+        claim = json.loads((root / runtime.claim_path).read_text())
+        pre_run = json.loads((root / runtime.observation_directory / "pre-run-observation.json").read_text())
         observation = json.loads((root / result["terminal_observation_path"]).read_text())
+        for document in (claim, pre_run, observation, result):
+            self.assertEqual(_sha(authorization_raw), document["authorization_raw_sha256"])
+            self.assertEqual(authorization_commitment, document["authorization_commitment"])
+            self.assertNotIn(authorization_raw.decode("utf-8"), json.dumps(document, sort_keys=True))
         self.assertEqual("completed", observation["outer_exit_classification"])
         self.assertFalse(observation["recovery_required"])
         self.assertEqual("null", observation["child_terminal_status"])
@@ -246,6 +256,80 @@ class A0XCcpExecutorTests(unittest.TestCase):
             self._launch(root, fake, preflight=_FakeGuardPreflight(outputs=tuple(outputs)))
         self.assertFalse((root / runtime.claim_path).exists())
         self.assertEqual([], fake.calls)
+
+    def test_authorization_replacement_during_guard_preflight_refuses_before_claim(self) -> None:
+        root, _pair, runtime, _authorization, _mapping, fake = self._fixture()
+        authorization_path = root / runtime.authorization_path
+
+        class ReplacingPreflight(_FakeGuardPreflight):
+            def produce(self, *, ccp_path: Path, repository_root: Path):
+                rows = super().produce(ccp_path=ccp_path, repository_root=repository_root)
+                authorization_path.write_bytes(b'{"replacement":true}')
+                return rows
+
+        with self.assertRaisesRegex(A0XCcpExecutorError, "authorization"):
+            self._launch(root, fake, preflight=ReplacingPreflight())
+        self.assertFalse((root / runtime.claim_path).exists())
+        self.assertEqual([], fake.calls)
+
+    def test_authorization_replacement_after_claim_seals_attempt_without_process(self) -> None:
+        root, _pair, runtime, authorization, _mapping, fake = self._fixture()
+        authorization_path = root / runtime.authorization_path
+        authorization_raw = authorization_path.read_bytes()
+        authorization_commitment = canonical_commitment(
+            authorization, EXECUTION_AUTHORIZATION_PROFILE,
+        ).as_mapping()
+        module = __import__("latent_triz.a0x_ccp_executor", fromlist=["_write_pre_run_observation"])
+        write_pre_run = module._write_pre_run_observation
+
+        def replace_after_pre_run(*args, **kwargs):
+            path = write_pre_run(*args, **kwargs)
+            authorization_path.write_bytes(b'{"replacement":true}')
+            return path
+
+        with patch("latent_triz.a0x_ccp_executor._write_pre_run_observation", side_effect=replace_after_pre_run):
+            with self.assertRaisesRegex(A0XCcpExecutorError, "terminal result"):
+                self._launch(root, fake)
+        self.assertEqual([], fake.calls)
+        self.assertTrue((root / runtime.claim_path).is_file())
+        claim = json.loads((root / runtime.claim_path).read_text())
+        pre_run = json.loads((root / runtime.observation_directory / "pre-run-observation.json").read_text())
+        terminal = json.loads((root / runtime.observation_directory / "terminal-observation.json").read_text())
+        for document in (claim, pre_run, terminal):
+            self.assertEqual(_sha(authorization_raw), document["authorization_raw_sha256"])
+            self.assertEqual(authorization_commitment, document["authorization_commitment"])
+        self.assertEqual("launcher_internal_error", terminal["outer_exit_classification"])
+        self.assertTrue(terminal["recovery_required"])
+
+    def test_material_contract_replacement_is_checked_at_both_authorization_boundaries(self) -> None:
+        for timing in ("pre_claim", "post_claim"):
+            with self.subTest(timing=timing):
+                root, _pair, runtime, _authorization, _mapping, fake = self._fixture()
+                contract_path = root / "experiments/a0x-six-model/material-execution-contract.json"
+                if timing == "pre_claim":
+                    class ReplacingPreflight(_FakeGuardPreflight):
+                        def produce(self, *, ccp_path: Path, repository_root: Path):
+                            rows = super().produce(ccp_path=ccp_path, repository_root=repository_root)
+                            contract_path.write_bytes(b'{"replacement":true}')
+                            return rows
+
+                    with self.assertRaisesRegex(A0XCcpExecutorError, "material contract"):
+                        self._launch(root, fake, preflight=ReplacingPreflight())
+                    self.assertFalse((root / runtime.claim_path).exists())
+                else:
+                    module = __import__("latent_triz.a0x_ccp_executor", fromlist=["_write_pre_run_observation"])
+                    write_pre_run = module._write_pre_run_observation
+
+                    def replace_after_pre_run(*args, **kwargs):
+                        path = write_pre_run(*args, **kwargs)
+                        contract_path.write_bytes(b'{"replacement":true}')
+                        return path
+
+                    with patch("latent_triz.a0x_ccp_executor._write_pre_run_observation", side_effect=replace_after_pre_run):
+                        with self.assertRaisesRegex(A0XCcpExecutorError, "terminal result"):
+                            self._launch(root, fake)
+                    self.assertTrue((root / runtime.claim_path).is_file())
+                self.assertEqual([], fake.calls)
 
     def test_public_guard_preflight_rejects_private_locator_and_raw_log_fields(self) -> None:
         from latent_triz.a0x_ccp_executor import _assert_public_safe_preflight
@@ -449,10 +533,17 @@ class A0XCcpExecutorTests(unittest.TestCase):
         self.assertTrue(pre_run.is_file())
         self.assertTrue(terminal.is_file())
         pre_run_value = json.loads(pre_run.read_text())
+        authorization_raw = (root / runtime.authorization_path).read_bytes()
+        authorization_commitment = canonical_commitment(
+            authorization, EXECUTION_AUTHORIZATION_PROFILE,
+        ).as_mapping()
         self.assertEqual(runtime.claim_path, pre_run_value["claim_path"])
         self.assertEqual(authorization["qualification_evidence"]["qualification_receipt_id"], pre_run_value["qualification_receipt_id"])
         self.assertEqual(authorization["qualification_evidence"]["qualification_receipt_raw_sha256"], pre_run_value["qualification_receipt_raw_sha256"])
         terminal_value = json.loads(terminal.read_text())
+        for document in (pre_run_value, terminal_value):
+            self.assertEqual(_sha(authorization_raw), document["authorization_raw_sha256"])
+            self.assertEqual(authorization_commitment, document["authorization_commitment"])
         self.assertEqual(_sha(pre_run.read_bytes()), terminal_value["pre_run_observation_raw_sha256"])
         self.assertEqual("launcher_internal_error", terminal_value["outer_exit_classification"])
 
