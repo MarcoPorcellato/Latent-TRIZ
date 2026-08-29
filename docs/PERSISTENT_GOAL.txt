@@ -28,19 +28,20 @@ target, CCP heavy command, Docker, network, publication, scientific retry, or
 claim promotion is authorized before its respective stop.
 
 **Current A0X runtime-binding correction state (2026-08-29).** The exact
-implementation anchor is `2bf6c57d19e071c248481223f697099a05ef3e88`. The
+implementation anchor is `e2f557909c9f816eb40ae5aae7be54cb523c97cd`. The
 generated package commit is
-`40f959a879d0cc21ee74c2a8ab1e7c0acfafffbf`; it precedes this
+`a52a621d67a379937475fa066639cedd215c4c27`; it precedes this
 documentation-only clarification. The current A0 freeze SHA-256 is
-`363a0c3e96f6a4279c295e842863b8fa81a49e0222554b178cca122c5bcd8be6`, and
+`a8ca1889f91cd965399eaa9f3ac066d1f5b7bc9beea26ee2ceca517ebb358353`, and
 the current A0-R1 freeze SHA-256 is
-`3417d0515483bc7c7b4b29d5cbd5fb6684f813a247278226202e19ddbbc0035d`.
+`b8c470d45b098233f3497cb75d7fc95a41edd9f7772539b55db71aa803355c64`.
 This documentation-only commit is not in either implementation inventory, so
 it does not alter that anchor or authorize regeneration. The stop boundary is
-unchanged: stop for one new explicit exact-head repository qualification, then
-require a separate exact pair/attempt bundle-preparation authorization, then a
-later one-shot material authorization bound to the prepared authorization raw
-SHA-256. `sealed_gate_pending` remains the only current A0X execution state.
+unchanged: **A** is one new explicit exact-head repository qualification; **B**
+is a separate exact pair/attempt bundle-preparation authorization; and **C** is
+a later one-shot material authorization bound to the prepared authorization raw
+SHA-256. The current work stops before **A**; `sealed_gate_pending` remains the
+only current A0X execution state.
 
 **Historical A0X checkpoint (superseded; not the current runtime-binding
 state).** Preparatory work previously remained on branch
