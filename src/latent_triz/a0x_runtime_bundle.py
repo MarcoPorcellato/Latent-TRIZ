@@ -160,6 +160,7 @@ def _validate_preparation_inputs(
 ) -> _ValidatedPreparationInputs:
     """Bind every input byte before any runtime output can be created."""
     _revision(source_head, "source HEAD")
+    _preflight_output_paths(root, pair, source_head)
     _revision(request.public_evidence_commit, "public evidence commit")
     _identifier(request.authorization_id, "authorization ID")
     _identifier(request.attempt_id, "attempt ID")
@@ -196,7 +197,6 @@ def _validate_preparation_inputs(
     except A0XCcpExecutorError as error:
         raise A0XRuntimeBundleError("qualification receipt is invalid") from error
     descriptor_path = derive_runtime_paths(pair).launch_descriptor_path
-    _preflight_output_paths(root, pair, source_head)
     return _ValidatedPreparationInputs(
         ccp_path=ccp_path,
         python_path=python_path,

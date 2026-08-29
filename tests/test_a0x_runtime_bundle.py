@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from latent_triz.a0x_contract import PairBinding
 from latent_triz.a0x_material_contract import derive_runtime_paths
@@ -672,6 +672,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                     occupied.parent.mkdir(parents=True, exist_ok=True)
                     occupied.write_bytes(b"occupied")
                     original = occupied.read_bytes()
+                version_probe = Mock(side_effect=AssertionError("CCP version probe reached"))
                 with (
                     self._synthetic_ccp_hash(request),
                     patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
@@ -686,7 +687,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                             root,
                             request,
                             source_state_probe=lambda: ("a" * 40, True),
-                            ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                            ccp_version_probe=version_probe,
                         )
                 self.assertTrue(os.path.lexists(occupied))
                 if original is not None:
@@ -699,6 +700,64 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                     candidate = root / bundle_path
                     if candidate != occupied:
                         self.assertFalse(os.path.lexists(candidate))
+                process_run.assert_not_called()
+                process_open.assert_not_called()
+                version_probe.assert_not_called()
+                launch.assert_not_called()
+                target_reader.assert_not_called()
+                model_factory.assert_not_called()
+
+    def test_symlink_occupancy_refuses_before_ccp_version_or_material_access(self) -> None:
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle
+
+        for category in ("destination", "parent"):
+            with self.subTest(category=category):
+                temporary, root, request = self._fixture()
+                self.addCleanup(temporary.cleanup)
+                dossier = json.loads((root / request.fixed_dossier).read_text(encoding="utf-8"))
+                pair = PairBinding.from_mapping(dossier["pair_binding"])
+                runtime = derive_runtime_paths(pair, source_head="a" * 40)
+                link_target = root / f"{category}-link-target"
+                link_target.mkdir()
+                marker = link_target / "preserved"
+                marker.write_bytes(b"preserved")
+                if category == "destination":
+                    occupied = root / runtime.claim_path
+                    occupied.parent.mkdir(parents=True, exist_ok=True)
+                    occupied.symlink_to(marker)
+                    parent_link = None
+                else:
+                    parent_link = root / f".a0x-runtime/material/{pair.leg.value}/{pair.model_key}"
+                    parent_link.parent.mkdir(parents=True, exist_ok=True)
+                    parent_link.symlink_to(link_target, target_is_directory=True)
+                    occupied = parent_link / pair.run_id
+                version_probe = Mock(side_effect=AssertionError("CCP version probe reached"))
+                with (
+                    self._synthetic_ccp_hash(request),
+                    patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
+                    patch("subprocess.run", side_effect=AssertionError("subprocess.run reached")) as process_run,
+                    patch("subprocess.Popen", side_effect=AssertionError("subprocess.Popen reached")) as process_open,
+                    patch("latent_triz.a0x_ccp_executor.launch_fixed_dossier", side_effect=AssertionError("guard launch reached")) as launch,
+                    patch("latent_triz.a0x_execution.OneShotTargetReader", side_effect=AssertionError("target reader reached")) as target_reader,
+                    patch("latent_triz.a0x_production_adapter._default_dependencies", side_effect=AssertionError("model factory reached")) as model_factory,
+                ):
+                    with self.assertRaises(A0XRuntimeBundleError):
+                        prepare_runtime_bundle(
+                            root,
+                            request,
+                            source_state_probe=lambda: ("a" * 40, True),
+                            ccp_version_probe=version_probe,
+                        )
+                self.assertEqual(b"preserved", marker.read_bytes())
+                if category == "destination":
+                    self.assertTrue(occupied.is_symlink())
+                    self.assertEqual(marker.resolve(), occupied.resolve())
+                else:
+                    self.assertIsNotNone(parent_link)
+                    self.assertTrue(parent_link.is_symlink())
+                    self.assertFalse(os.path.lexists(occupied))
+                    self.assertFalse((link_target / pair.run_id).exists())
+                version_probe.assert_not_called()
                 process_run.assert_not_called()
                 process_open.assert_not_called()
                 launch.assert_not_called()
