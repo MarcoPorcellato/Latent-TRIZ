@@ -264,6 +264,17 @@ def _bound_runtime_documents(
     }
 
 
+def _load_model_after_live_readiness(
+    *, context: ProductionContext, card: Any, identity: Any, expected_card: Any,
+    loader: Callable[..., Any],
+) -> Any:
+    """Reopen every runtime binding immediately before model construction."""
+    if card is not identity or card is not expected_card:
+        raise A0XProductionAdapterError("model construction identity drifted")
+    _bound_runtime_documents(context.root, context.descriptor, context.pair)
+    return loader(context.root / card.runtime_root, card=card)
+
+
 def _read_repository_file(root: Path, relative: str) -> bytes:
     path = Path(relative)
     if path.is_absolute() or not relative or any(part in {"", ".", ".."} for part in path.parts):
@@ -412,9 +423,13 @@ def _default_dependencies(context: ProductionContext) -> MaterialLifecycleDepend
         return card
 
     def model_factory(card: Any, identity: Any, _check: Callable[[str], None]) -> Any:
-        if card is not identity or card is not state.get("card"):
-            raise A0XProductionAdapterError("model construction identity drifted")
-        return A0XHiddenStateAdapter.load(context.root / card.runtime_root, card=card)
+        return _load_model_after_live_readiness(
+            context=context,
+            card=card,
+            identity=identity,
+            expected_card=state.get("card"),
+            loader=A0XHiddenStateAdapter.load,
+        )
 
     def activation_for(leg: Leg) -> Callable[[Any, Callable[[str], None]], Any]:
         def activation(adapter: Any, check: Callable[[str], None]) -> Any:

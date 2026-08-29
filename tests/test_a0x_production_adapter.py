@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -209,6 +210,31 @@ class A0XProductionAdapterTests(unittest.TestCase):
             self.assertNotEqual("unavailable_package", dependencies.package_builder.__name__)
             self.assertNotEqual("no_package_verifier", dependencies.package_verifier.__name__)
             self.assertNotEqual("no_package_verifier", dependencies.protected_tree_postflight.__name__)
+
+    def test_model_load_revalidates_live_readiness_after_binding(self) -> None:
+        from latent_triz.a0x_production_adapter import (
+            _bind_context,
+            _load_model_after_live_readiness,
+        )
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        bundle = prepare_constructible_runtime_bundle()
+        self.addCleanup(bundle.close)
+        descriptor = json.loads((bundle.root / bundle.receipt["descriptor_path"]).read_text())
+        context = _bind_context(root=bundle.root, descriptor=descriptor)
+        runtime_file = bundle.root / "artifacts/models/gpt2-synthetic/config.json"
+        os.link(runtime_file, bundle.root / "config-hardlink")
+        load_calls: list[object] = []
+        card = object()
+        with self.assertRaisesRegex(Exception, "runtime documents"):
+            _load_model_after_live_readiness(
+                context=context,
+                card=card,
+                identity=card,
+                expected_card=card,
+                loader=lambda *_args, **_kwargs: load_calls.append(object()),
+            )
+        self.assertEqual([], load_calls, "model loader must not run after live alias drift")
 
     def test_release_helper_clears_loaded_adapter_references_without_model_imports(self) -> None:
         from latent_triz.a0x_production_adapter import _release_model_references

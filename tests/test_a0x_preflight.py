@@ -262,6 +262,32 @@ class A0XPreflightTests(A0XTempTestCase):
         verified = verify_snapshot_files(snapshot, synthetic)
         self.assertEqual(card.model_key, verified.model_key)
 
+    def test_snapshot_verifier_rejects_same_byte_hardlink_outside_snapshot(self) -> None:
+        card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
+        snapshot = self.temp_path / "gpt2-hardlink"
+        snapshot.mkdir()
+        config = {
+            "model_type": card.model_type,
+            "architectures": [card.architecture],
+            "n_layer": card.num_hidden_layers,
+            "n_embd": card.hidden_size,
+            "vocab_size": card.vocab_size,
+            "n_positions": card.effective_context,
+        }
+        for file in card.runtime_files:
+            payload = stable_json_bytes(config) if file.path == "config.json" else (file.path + "\n").encode()
+            (snapshot / file.path).write_bytes(payload)
+        synthetic = card.with_runtime_files(tuple(
+            item.with_integrity(
+                size_bytes=(snapshot / item.path).stat().st_size,
+                sha256=hashlib.sha256((snapshot / item.path).read_bytes()).hexdigest(),
+            )
+            for item in card.runtime_files
+        ))
+        os.link(snapshot / "config.json", self.temp_path / "config-hardlink")
+        with self.assertRaisesRegex(A0XPreflightError, "hardlink"):
+            verify_snapshot_files(snapshot, synthetic)
+
     def test_snapshot_verifier_rejects_extra_missing_hash_and_config_drift(self) -> None:
         card = load_model_card(ROOT / "experiments/a0x-six-model/model-cards/gpt2.json")
         snapshot = self.temp_path / "gpt2"
