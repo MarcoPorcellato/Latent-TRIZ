@@ -100,6 +100,11 @@ class A0XFrozenPackageTests(unittest.TestCase):
                 self.assertEqual(paths, [row["path"] for row in bindings])
                 self.assertIn("tests/test_a0x_frozen_package.py", paths)
                 self.assertIn("src/latent_triz/a0x_runner.py", paths)
+                self.assertTrue({
+                    "scripts/a0x_prepare_runtime.py",
+                    "src/latent_triz/a0x_runtime_bundle.py",
+                    "tests/test_a0x_runtime_bundle.py",
+                }.issubset(paths))
                 for row in bindings:
                     path = ROOT / row["path"]
                     self.assertEqual(path.stat().st_size, row["bytes"])
@@ -231,6 +236,38 @@ class A0XFrozenPackageTests(unittest.TestCase):
         self.assertEqual(0, receipt["sealed_target_content_reads"])
         self.assertEqual(0, receipt["model_loads"])
         self.assertEqual(0, receipt["ccp_invocations"])
+
+    def test_regeneration_is_byte_identical_for_same_implementation_head(self) -> None:
+        """The committed implementation anchor regenerates the tracked package byte-for-byte."""
+        current_implementation_head = json.loads((
+            CAMPAIGN / "approval-dossiers/a0/gpt2.json"
+        ).read_text(encoding="utf-8"))["implementation_source_head"]
+        with tempfile.TemporaryDirectory() as directory:
+            generated_root = Path(directory)
+            freeze_a0x_campaign(
+                ROOT,
+                prepare_dossiers=True,
+                implementation_source_head=current_implementation_head,
+                output_root=generated_root,
+            )
+            tracked_paths = [
+                CAMPAIGN / leg / filename
+                for leg in ("a0", "r1")
+                for filename in ("protocol.json", "implementation.json")
+            ] + [
+                CAMPAIGN / "freeze" / f"{leg}-freeze.json"
+                for leg in ("a0", "r1")
+            ] + [
+                ROOT / relative for relative in frozen_pair_dossiers().values()
+            ]
+            tracked = {
+                path.relative_to(ROOT): path.read_bytes() for path in sorted(tracked_paths)
+            }
+            regenerated = {
+                path.relative_to(generated_root): path.read_bytes()
+                for path in sorted((generated_root / "experiments/a0x-six-model").glob("**/*.json"))
+            }
+        self.assertEqual(tracked, regenerated)
 
     def test_freeze_generator_requires_an_explicit_implementation_anchor(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -658,6 +658,41 @@ unchanged.
 **Status.** Implementation in progress. Stop before CCP until the final
 integrated commit, tree, and verification ledger are recorded.
 
+## 27. Private runtime binding was cyclic and a frozen mismatch was misattributed
+
+**Symptom.** The original private descriptor required a future authorization
+binding while the authorization required the descriptor's raw SHA-256. No
+single descriptor/authorization pair could satisfy both commitments. The
+initial Task-3 narrative also attributed the resulting stale frozen inventory
+to `tests/test_a0x_runtime_bundle.py`.
+
+**Root cause.** The private descriptor was treated as an equal hash peer of the
+operator authorization rather than as a dependent document. The stale-inventory
+diagnosis relied on an outdated report instead of the live implementation
+bindings.
+
+**Correction.** Descriptor-v2 has a path-only pair-derived authorization
+reference and a byte-bound material-contract reference. The authorization is
+the operator-rooted document that binds exact descriptor bytes; the local role
+mapping repeats that descriptor path/hash. The target-free preparer constructs
+the descriptor, authorization, and mapping in that order and refuses every
+overwrite. Live evidence identifies the stale file as
+`scripts/a0x_material_child.py` (21,582 bytes, SHA-256
+`fda405fbe6a3000f7de9b597aeea23300b5ecb107394411bddd21c3d3ba93955`), not
+`tests/test_a0x_runtime_bundle.py`.
+
+**Regression evidence.** Both leg implementation inventories bind the preparer
+CLI, module, and test. A deterministic test regenerates every protocol,
+implementation, freeze, and dossier from the committed implementation anchor
+and byte-compares them with the tracked package. No test loads a model or
+tokenizer, reads a target, invokes CCP/Docker, or uses the network.
+
+**Status.** Resolved locally only after the two frozen legs and twelve
+approval-request dossiers are regenerated from the exact post-inventory HEAD.
+That new source HEAD invalidates every earlier exact-head qualification for
+future material action; the campaign remains `sealed_gate_pending` pending the
+two explicit operator gates.
+
 ## Current stop boundary
 
 The final integration candidate must first complete all no-material gates and

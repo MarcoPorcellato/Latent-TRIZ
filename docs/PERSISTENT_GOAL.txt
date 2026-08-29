@@ -1,14 +1,21 @@
-A0X final integration checkpoint (2026-08-29): the local exact-head
-qualification of `4aee4698f5c59101b1f3292519f10ae802629bf7` passed with
-receipt-file SHA-256
-`08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447`.
-That receipt is historical after policy-only PR #106 advanced public main to
-`4ba3c36a0f6b7a50d34bc87bb34bafc79687eb08`; it cannot attest the future
-integrated source commit. Complete only the target-free integration and verify
-that every A0X protected file remains byte-identical. Then stop for one new
-authorization bound to the final commit, tree, legacy profile, plan digests,
-and qualified producer. No model, tokenizer, target, CCP heavy command,
-publication, scientific retry, or claim promotion is authorized before then.
+A0X runtime-binding correction checkpoint (2026-08-29): the campaign is
+`sealed_gate_pending`. Descriptor-v2 is acyclic: the operator-rooted
+authorization binds exact descriptor bytes, while the descriptor carries only
+the pair-derived authorization path and byte-bound material contract. The
+target-free preparer writes descriptor, authorization, and mapping in that
+order and refuses every overwrite. Its implementation inventory must be frozen
+before the two leg freezes and twelve approval-request dossiers are regenerated
+from the resulting exact implementation HEAD.
+
+The old local qualification of `4aee4698f5c59101b1f3292519f10ae802629bf7`
+and its receipt-file SHA-256
+`08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447` are
+historical only. They cannot attest this corrected source. Stop after the
+target-free package regeneration and no-model verification for one new,
+explicit exact-head repository-qualification authorization; only a subsequent
+separate per-pair authorization may name a private runtime bundle. No model,
+tokenizer, target, CCP heavy command, Docker, network, publication, scientific
+retry, or claim promotion is authorized before those two gates.
 
 A0X checkpoint (2026-08-29): preparatory work remains on branch
 `agent/a0x-six-model-design` at `sealed_gate_pending`. The current correction

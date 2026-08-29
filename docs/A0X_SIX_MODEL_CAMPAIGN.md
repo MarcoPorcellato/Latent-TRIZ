@@ -183,14 +183,38 @@ hypothesis. Human TRIZ construct validation, stronger controls,
 generalization, compositionality, and causal intervention remain separate
 gates.
 
+## Runtime-binding correction checkpoint
+
+The earlier private runtime descriptor had an unmaterializable reciprocal hash
+dependency. Descriptor-v2 removes that cycle: the operator-rooted execution
+authorization binds the exact raw descriptor bytes; the descriptor refers only
+to its pair-derived authorization path and byte-bound material contract; and
+the local role mapping repeats the descriptor path and hash. The offline
+preparer writes descriptor, authorization, and mapping only in that dependency
+order and refuses every existing output path.
+
+This is still a two-gate design. First, one new exact-head repository
+qualification must be explicitly authorized and complete. Second, a separate
+one-pair authorization must bind the resulting dossier, qualification receipt,
+authorization ID, and attempt ID before any private runtime bundle may be
+prepared or a material action considered. Neither gate is opened by the
+preparer, its synthetic tests, nor its regenerated approval-request artifacts.
+
+The frozen-inventory defect discovered during this correction was
+`scripts/a0x_material_child.py`: its live bytes are 21,582 and its SHA-256 is
+`fda405fbe6a3000f7de9b597aeea23300b5ecb107394411bddd21c3d3ba93955`.
+It was not `tests/test_a0x_runtime_bundle.py`. Both leg inventories now bind
+the preparer CLI, preparer module, and its regression suite, and the canonical
+package is regenerated only from the post-inventory implementation commit.
+
 ## Current checkpoint
 
 The campaign remains `sealed_gate_pending`. The material composition is no
-longer a refusal stub: it now has a fixed outer launcher, an exact child
-descriptor, a pair-scoped private runtime inlet, a one-shot target reader,
-terminal sealing, package verification, protected-tree postflight, and model
-release. All of those paths have been exercised only with synthetic injected
-dependencies.
+longer a refusal stub: it now has a fixed outer launcher, an acyclic
+descriptor-v2 chain, a deterministic overwrite-refusing private runtime inlet,
+a one-shot target reader, terminal sealing, package verification,
+protected-tree postflight, and model release. All of those paths have been
+exercised only with synthetic injected dependencies.
 
 Every pair uses the same execution envelope:
 
