@@ -347,3 +347,19 @@ host suite passed, and the failure reproduced under a no-`make` `PATH`. The
 dependency-free Python recipe verifier is the only behavioral correction; the
 protocol, plan profile, timeouts, policies, and scientific rules are unchanged.
 This attempt is consumed and does not authorize a retry.
+
+The later one authorized Gate A qualification at
+`e340e142fcd745d47dec1df386eb9fdb1b2e15f7` is likewise preserved as terminal
+`FAIL`. Both schema checks passed; both repository checks returned exit code 1
+without timeout. Receipt-file SHA-256:
+`6e354744099921f240108698258a184b2bdfbe170e9b29975bb305a88cfb99ac`.
+One separately authorized Python 3.11 diagnostic reproduced 24 errors and one
+derived failure across 1,099 tests. The shared runtime-bundle fixture created
+inert synthetic executables on writable `/dev/shm`, while that container temp
+mount did not grant executable access. The production executable check remains
+unchanged. A test-only seam now recognizes only the fixture's two exact inert
+files and delegates all other access checks to the operating system. Because
+that fixture is frozen implementation input, both implementations, both
+freezes, and all twelve dossiers require deterministic regeneration from the
+new corrective implementation anchor before another explicit Gate A
+authorization can be requested. No scientific artifact or claim changes.

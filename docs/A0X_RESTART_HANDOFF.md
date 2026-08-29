@@ -10,6 +10,36 @@ date: 2026-08-25
 This is a reboot checkpoint, not a validation receipt or material-run
 authorization.
 
+## Gate A temp-mount correction checkpoint (2026-08-29)
+
+This section supersedes older current-gate wording while preserving every
+historical receipt below.
+
+- The one authorized qualification of `e340e142fcd745d47dec1df386eb9fdb1b2e15f7`
+  ended terminal `FAIL`. Both schema checks passed; both repository checks
+  returned exit code 1 without timeout or cancellation. Receipt-file SHA-256:
+  `6e354744099921f240108698258a184b2bdfbe170e9b29975bb305a88cfb99ac`.
+- One separately authorized, non-qualifying Python 3.11 diagnostic reproduced
+  the repository failure in 195.295 seconds: 1,099 tests, 24 errors, one
+  failure, and 31 skips. All 24 errors originated from the shared A0X runtime
+  fixture rejecting its inert synthetic CCP file as non-executable.
+- `scripts/repository_check.py` had selected writable `/dev/shm`, but the
+  container did not grant executable access on that temporary mount. The
+  production executable validator was correct and remains unchanged.
+- The TDD correction is test-only: the fixture treats only its two exact inert
+  CCP/Python files as executable while delegating every other access decision
+  to the real operating-system probe. The initial regression failed with the
+  diagnosed error and then passed; the four dependent modules passed 54/54.
+
+The changed fixture is part of both frozen implementation inventories.
+Therefore the next safe local sequence is: commit the correction and canonical
+documentation as the implementation anchor; regenerate both implementations,
+both freezes, and all twelve approval-request dossiers from that exact anchor;
+run every no-material gate; commit the regenerated package; and stop for a new
+Gate A exact-head authorization. No CCP retry, Docker diagnostic, model,
+tokenizer, target, private bundle, material execution, network, or publication
+is authorized by this checkpoint.
+
 ## Final integration continuation (2026-08-29)
 
 This section supersedes older current-gate wording below without rewriting its

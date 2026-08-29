@@ -82,7 +82,7 @@ def _runtime_preparation_fixture() -> tuple[tempfile.TemporaryDirectory[str], Pa
 
 @contextmanager
 def _synthetic_ccp_hash(request: Any):
-    """Keep the inert executable target-free while preserving the frozen CCP identity."""
+    """Keep inert test binaries independent of the temporary mount policy."""
     from latent_triz import a0x_runtime_bundle
 
     expected = json.loads(
@@ -92,9 +92,21 @@ def _synthetic_ccp_hash(request: Any):
     )["ccp"]["sha256"]
     actual = a0x_runtime_bundle.sha256_file
     ccp = request.ccp_executable.resolve()
-    with patch(
-        "latent_triz.a0x_runtime_bundle.sha256_file",
-        side_effect=lambda path: expected if Path(path).resolve() == ccp else actual(path),
+    python = request.python_executable.resolve()
+    actual_access = os.access
+
+    def synthetic_access(path: os.PathLike[str] | str, mode: int) -> bool:
+        resolved = Path(path).resolve()
+        if mode & os.X_OK and resolved in {ccp, python}:
+            return True
+        return actual_access(path, mode)
+
+    with (
+        patch(
+            "latent_triz.a0x_runtime_bundle.sha256_file",
+            side_effect=lambda path: expected if Path(path).resolve() == ccp else actual(path),
+        ),
+        patch("latent_triz.a0x_runtime_bundle.os.access", side_effect=synthetic_access),
     ):
         yield
 
@@ -133,6 +145,13 @@ class A0XRuntimeBundleTests(unittest.TestCase):
 
     def _fixture(self) -> tuple[tempfile.TemporaryDirectory[str], Path, object]:
         return _runtime_preparation_fixture()
+
+    def test_constructible_fixture_is_independent_of_temp_mount_exec_policy(self) -> None:
+        """Synthetic executables remain inert on a writable ``noexec`` temp mount."""
+        with patch("latent_triz.a0x_runtime_bundle.os.access", return_value=False):
+            bundle = prepare_constructible_runtime_bundle()
+        self.addCleanup(bundle.close)
+        self.assertEqual("prepared", bundle.receipt["status"])
 
     @contextmanager
     def _synthetic_ccp_hash(self, request):

@@ -1,3 +1,27 @@
+A0X Gate A temp-mount correction checkpoint (2026-08-29): the campaign remains
+`sealed_gate_pending`. The exact-head qualification at
+`e340e142fcd745d47dec1df386eb9fdb1b2e15f7` ended terminal `FAIL`; both schema
+checks passed and both repository checks returned exit code 1 without timeout.
+Receipt-file SHA-256:
+`6e354744099921f240108698258a184b2bdfbe170e9b29975bb305a88cfb99ac`.
+One authorized Python 3.11 diagnostic established a single test-fixture cause:
+the repository check selected writable `/dev/shm`, but inert synthetic CCP and
+Python files created there did not satisfy executable access in the container.
+The production fail-closed executable validator remains unchanged. A TDD
+regression now makes only those two exact synthetic files independent of the
+temporary mount's executable policy and delegates all other access decisions
+to the real operating-system probe.
+
+Because `tests/test_a0x_runtime_bundle.py` belongs to both frozen
+implementation inventories, commit the correction and these canonical notes
+as a new implementation anchor, regenerate both implementation documents,
+both freezes, and all twelve dossiers from that exact anchor, complete all
+no-material verification, commit the package, and stop for a new explicit
+Gate A exact-head authorization. Do not reuse or relabel the failed receipt.
+No CCP heavy command, Docker diagnostic, model, tokenizer, target, runtime
+bundle, material run, network, publication, or retry is authorized by this
+checkpoint.
+
 A0X runtime-binding correction checkpoint (2026-08-29): the campaign is
 `sealed_gate_pending`. Descriptor-v2 is acyclic: the operator-rooted
 authorization binds exact descriptor bytes, while the descriptor carries only

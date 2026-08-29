@@ -696,6 +696,40 @@ repository qualification authorization, **B** separate exact pair/attempt
 runtime-bundle-preparation authorization, and **C** later one-shot material
 authorization bound to the prepared authorization raw SHA-256.
 
+## 28. Synthetic executable fixtures depended on the container temp mount
+
+**Symptom.** The one authorized exact-head qualification of `e340e142...`
+completed both schema checks but both repository checks returned exit code 1.
+The authorized Python 3.11 diagnostic reproduced the failure without timeout:
+1,099 tests ran in 195.295 seconds, with 24 errors and one failure.
+
+**Root cause.** `scripts/repository_check.py` selected `/dev/shm` after proving
+only that it was writable. The A0X runtime-bundle fixture then created inert
+synthetic CCP and Python files there, set mode `0700`, and passed them through
+the production `os.access(..., os.X_OK)` validation. The verification
+container's temporary mount did not grant executable access, so every test
+that depended on the shared constructible fixture failed at the same boundary.
+The final CLI assertion observed only the derived exit code. This was a test
+fixture portability defect, not a timeout, schema, model, target, or scientific
+protocol failure.
+
+**Correction.** Keep the production executable check unchanged and fail-closed.
+The synthetic fixture now scopes a test-only access seam to its two exact inert
+files while delegating every other access decision to the real operating-system
+probe. The fixture still writes private mutable copies, so tamper tests remain
+independent and cannot alter a real interpreter or CCP executable.
+
+**Regression evidence required.** A test must first force the operating-system
+access probe to deny execution for the temporary mount, then prove that the
+synthetic bundle is prepared. The complete runtime-bundle, CCP-executor,
+material-child, and production-adapter surfaces must remain green. A new
+exact-head CCP qualification is still required; the consumed receipt and its
+failed checks are historical evidence and cannot be relabelled.
+
+**Status.** Corrected locally with TDD. Canonical A0X implementations, freezes,
+and twelve dossiers must be regenerated from the corrective implementation
+anchor before requesting another Gate A qualification.
+
 ## Current stop boundary
 
 The final integration candidate must first complete all no-material gates and
