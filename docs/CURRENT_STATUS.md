@@ -128,14 +128,16 @@ dossier remains `approval_requested`; none authorizes material access. The
 complete local no-model qualification and independent architecture/science
 review now pass, and the exact freeze/dossier hashes are recorded. A0X is
 stopped at `sealed_gate_pending`: correction anchor
-`9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd` deterministically regenerated the
+`6b8c8e3491b24fa4717b2f4faa8700b007c48892` deterministically regenerated the
 two freezes and twelve dossiers, but no Latent-TRIZ exact-head qualification
-exists and no pair is authorized for material execution. Final no-material
-verification passed: frozen package 10/10, A0X aggregate 248 tests, schema
-cross-validation 155 agreements with 19 rejected mutations, and the repository
-suite 1,075 tests with one documented skip. Independent review returned
-`APPROVE` with no P0--P3 findings. The package commit is the remaining local
-gate. See
+exists and no pair is authorized for material execution. The correction
+removes an unintended test-only dependency on `make`. Fresh no-material
+verification passed: no-`make` regression 3/3, frozen package 10/10, A0X
+aggregate 248/248, schema cross-validation 155 agreements with 19 rejected
+mutations, repository suite 1,075 tests with one documented skip,
+documentation audit, and diff check. Independent Luna review returned
+`APPROVE` with no P0--P3 findings. The local package commit is the remaining
+local gate. See
 [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
 
 The later CCP compatibility producer has now completed its own exact
@@ -167,6 +169,21 @@ pins every operator target to the legacy profile, and uses the V2 verification
 policy. After the final package commit, the remaining
 preparatory gate is a new exact-head authorization bound to that commit and
 the corrected plan digests.
+
+The subsequent one authorized attempt at
+`fb9484a89549fbbbfc5395932954b2d9565d91d6` ended terminal `FAIL` without
+timeout or cancellation. Both schema checks passed; both repository checks
+returned exit 1. Receipt ID
+`sha256:f5348d82568ba98c6003132534b3a202631f04c42972b965251adaa2ca367dde`;
+receipt-file SHA-256
+`5bb2e49da31381e4c22858556e4c54f373ee69dfcea8f578e050efb6268e4232`.
+V2 verification reported integrity `PASS` and policy `FAIL`. A clean host run
+passed 1,075 tests, and the Matrix module reproduced five missing-`make`
+errors in the lean runtime environment. The verification images remove
+build-only `make`, so the corrected test now parses and compares the five
+operator recipes using only Python while retaining exact profile, policy,
+generation, receipt, and expected-commit assertions. This attempt is consumed;
+no retry or scientific access followed.
 
 The next scientific priority is human construct validation: three independent
 TRIZ experts, blinded cases, agreement and abstention receipts, and an explicit

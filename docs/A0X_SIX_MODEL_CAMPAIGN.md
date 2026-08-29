@@ -236,39 +236,42 @@ context, and active-container count. Each probe has a 30-second timeout and a
 wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
 an active container.
 
-Correction anchor: `9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`
-(tree `23ea89e42bdb1dae71bfa9d23fb858a904f82beb`).
+Correction anchor: `6b8c8e3491b24fa4717b2f4faa8700b007c48892`
+(tree `18b8fdaf9ba00a81e3c90686a2563a23f2436824`).
 The two freezes and twelve dossiers were regenerated from that exact anchor.
-Fresh verification passed: frozen package 10/10, A0X aggregate 248 tests,
-schema cross-validation 155 agreements with 19 rejected mutations, and the
-repository suite 1,075 tests with one documented skip. Independent review
-returned `APPROVE` with no P0--P3 findings. The package commit is the remaining
-local gate. The no-model receipt reports zero model loads,
-tokenizer constructions, sealed-target reads, CCP invocations, and remote
-mutations.
+The correction removes the undeclared `make` runtime dependency from the
+Matrix binding test while preserving exact recipe, legacy-profile, V2-policy,
+generation, receipt, and expected-commit checks. Fresh verification passed the
+no-`make` regression 3/3, frozen package 10/10, A0X aggregate 248/248, schema
+cross-validation 155 agreements with 19 rejected mutations, repository suite
+1,075 tests with one documented skip, documentation audit, and diff check.
+Independent Luna review returned `APPROVE` with no P0--P3 findings. The local
+package commit is the remaining local gate. The no-model receipt reports zero
+model loads, tokenizer constructions, sealed-target reads, CCP invocations,
+and remote mutations.
 
 | Artifact | SHA-256 |
 | --- | --- |
 | Material execution contract | `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8` |
 | A0 protocol | `42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586` |
-| A0 implementation | `f97212eed5601caedef7979cb4d7dff2a3acdb10b05276eabd7a54891b736b88` |
-| A0 freeze | `961b273074ecc0338b36c9da4643c97abd73ed62de01887b5e7f7e4c1c97a95e` |
+| A0 implementation | `7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570` |
+| A0 freeze | `34876ec4ad5ae209bc3ffd49202deb660830fa225caa00831f70dedfa34bf006` |
 | A0-R1 protocol | `32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52` |
-| A0-R1 implementation | `a86a377d24f8ccb01523fc92e9d10eaac47c10e05d3a290ae76c33bdec6e34ae` |
-| A0-R1 freeze | `a028564ffd0bb39015e2e6e1fe3cecc71a04f65c99dc0b79a85f1e01d8b2cda8` |
+| A0-R1 implementation | `d6cc0f6de81d0da4108570559579d76045a7a7a1ea282a84866e3825bcb023bc` |
+| A0-R1 freeze | `1c7425d90be524ba9ab55ec66967b0eee32272addc025948459ea4e3b6383e8a` |
 | No-model verification receipt | `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c` |
-| A0 / SmolLM2-360M dossier | `1e7a734b956b026601568412f8cff7f7c4c138b345eb0145c21754b111c0ae52` |
-| A0 / Qwen3-0.6B-Base dossier | `c4cddc8e5427dab50f84e7b8570f4aef107492e288f7640961f794c7c8030cf3` |
-| A0 / GPT-2 dossier | `f95dad26c6be226b92ab4144ce789576f83c7b7555b16e5914a0356e01efc000` |
-| A0 / SmolLM2-135M dossier | `e21d8c6bc799d79c46bd03b77741663b6da426e8295e1a6d8eab21482f535309` |
-| A0 / GPT-Neo-125M dossier | `a87955120d467e6444415d4a2b0dbb7c58ad474c093cb19c8cc0b272da559ded` |
-| A0 / Qwen2.5-0.5B dossier | `5c3ad79bce2ed12e2028ee65e093e78d2082edcf3373569f9fa4b54f43ec7a04` |
-| A0-R1 / SmolLM2-360M dossier | `53008523132382722af2d15c4d195c21abff6679fe0c1a302c0aa62537fd0739` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `b0d5a258f84236d34bdcfe531f3286bc5a030c2548d902744db1538ac1f5a5fb` |
-| A0-R1 / GPT-2 dossier | `a53687473bfcfccef648d221ee3644f6eea146c48ab8ed1b1cc1d2b04e1d6c0f` |
-| A0-R1 / SmolLM2-135M dossier | `a33ac97ac782acdbda18cd0aa9b97ca891dde1297524f84b2cdfd5a6696d8d71` |
-| A0-R1 / GPT-Neo-125M dossier | `ca6775ff486c7e12f65b79425dec53779beeee0eb3ed05992dc8bfdd60bf733f` |
-| A0-R1 / Qwen2.5-0.5B dossier | `bb623b0d987aa8f563819c34e0503e0b5d79502269c4dacfde8465f2e5c3c40e` |
+| A0 / SmolLM2-360M dossier | `40ccf9623ec93a36718e1f5b565e56022882ede34f769b17e4d70127febbb443` |
+| A0 / Qwen3-0.6B-Base dossier | `0390b7dc1c78562059b2cc78b48d2ee1ed90f50450c0febc960b2f8fd261cb27` |
+| A0 / GPT-2 dossier | `36470af70981826da3995c1c3557dd16871c6e4c8e89a6eeae4f1c90366e0fb1` |
+| A0 / SmolLM2-135M dossier | `0a8637371999da59f6e905e3e9b8d575a1e79efbdf2e54fd921c3d81710ec970` |
+| A0 / GPT-Neo-125M dossier | `25b76445060bb3f9f0b089ee6dadbf02042af0004528988173ae59479fbb6b1d` |
+| A0 / Qwen2.5-0.5B dossier | `b9516adffa3172b2ee030e01c2c9a93c66ab8b343db20aa42e5241001d865f66` |
+| A0-R1 / SmolLM2-360M dossier | `542bc3a21c010bc1d7efe1aa64742f8cd0c66db79b29d63d49bc542480f2064a` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `18cdb5405a496cc5f18b2ca8b08fcd8a9e3484c70172e08bcfa043690a8aeedc` |
+| A0-R1 / GPT-2 dossier | `db9bf0c4a899498fc86bf424768ed787302fc7a3c76cb59e808e1b8cb485ffb5` |
+| A0-R1 / SmolLM2-135M dossier | `d02808ecb9572059f21185b03150bc2cb2eb0deeb6e9c3c7740e7f9df3a7fc90` |
+| A0-R1 / GPT-Neo-125M dossier | `d38b096a65623f1c358362f37757c09dea503a2909f715420e4da1575265fcad` |
+| A0-R1 / Qwen2.5-0.5B dossier | `0b7db4ada1866d4cdd73ef6afe387ec98e8c22f339c1fdedbd2413fe98bd5796` |
 
 These are approval-request artifacts only. They now bind the TDD-corrected
 producer that passed one exact generation-1 Matrix qualification. Its receipt ID is
@@ -293,3 +296,16 @@ execution authorization bound to its exact dossier, live source HEAD,
 qualification receipt, authorization ID, and attempt ID. No CCP heavy run,
 Docker action, model/tokenizer construction, target read, publication, or retry
 occurred in this correction.
+
+The subsequent one authorized exact-head attempt at `fb9484a…` is also
+preserved as terminal `FAIL`. Both schema checks passed, while both repository
+checks returned exit 1 without timeout or cancellation. Receipt ID
+`sha256:f5348d82568ba98c6003132534b3a202631f04c42972b965251adaa2ca367dde`;
+receipt-file SHA-256
+`5bb2e49da31381e4c22858556e4c54f373ee69dfcea8f578e050efb6268e4232`.
+The exact failure was five attempts by the Matrix binding test to execute
+`make -n` in lean verification images that remove build-only `make`. A clean
+host suite passed, and the failure reproduced under a no-`make` `PATH`. The
+dependency-free Python recipe verifier is the only behavioral correction; the
+protocol, plan profile, timeouts, policies, and scientific rules are unchanged.
+This attempt is consumed and does not authorize a retry.

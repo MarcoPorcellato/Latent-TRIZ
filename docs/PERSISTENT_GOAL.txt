@@ -1,7 +1,7 @@
 A0X checkpoint (2026-08-29): preparatory work remains on branch
 `agent/a0x-six-model-design` at `sealed_gate_pending`. The current correction
-anchor is `9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`, tree
-`23ea89e42bdb1dae71bfa9d23fb858a904f82beb`. The public material contract
+anchor is `6b8c8e3491b24fa4717b2f4faa8700b007c48892`, tree
+`18b8fdaf9ba00a81e3c90686a2563a23f2436824`. The public material contract
 deliberately binds the large-blob-qualified CCP producer at commit
 `27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
 `d8e0364d1313fde0898a44517ae6d233d9e10763`, executable SHA-256
@@ -40,6 +40,24 @@ seconds, retains 300 seconds for schema checks, requires
 `--matrix-plan-profile matrix-v2-legacy-v1` on every repository-qualification
 target, and verifies with `.commit-ci-policy-v2.toml`. No retry occurred.
 
+The next single authorized qualification at
+`fb9484a89549fbbbfc5395932954b2d9565d91d6`, tree
+`f0585981d136659df4fec39e8b26aaaf2fab02a3`, also ended terminal `FAIL`.
+Both schema checks passed; both repository checks returned exit 1 without
+timeout or cancellation. Receipt ID
+`sha256:f5348d82568ba98c6003132534b3a202631f04c42972b965251adaa2ca367dde`;
+receipt-file SHA-256
+`5bb2e49da31381e4c22858556e4c54f373ee69dfcea8f578e050efb6268e4232`.
+Correct V2 verification established receipt integrity `PASS` and policy
+qualification `FAIL`. A clean host run passed all 1,075 repository tests,
+while the exact Matrix test reproduced five `FileNotFoundError: 'make'`
+errors with `make` absent. The verification images remove build-only `make`
+during final package cleanup. TDD therefore replaced every `make -n` test
+subprocess with dependency-free Python inspection that requires one exact,
+non-empty recipe for each of `preflight-plan`, `preflight-doctor`,
+`preflight-dry-run`, `preflight-run`, and `preflight-verify`. The attempt is
+consumed and has not been retried.
+
 The generator produced two frozen legs and twelve `approval_requested`
 dossiers with zero material access. The active checkout regenerated the
 package deterministically, and the frozen verifier independently repeated its
@@ -57,10 +75,14 @@ design/plan.
 
 Current hashes: material contract
 `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`,
+A0 implementation
+`7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570`,
 A0 freeze
-`961b273074ecc0338b36c9da4643c97abd73ed62de01887b5e7f7e4c1c97a95e`,
+`34876ec4ad5ae209bc3ffd49202deb660830fa225caa00831f70dedfa34bf006`,
+A0-R1 implementation
+`d6cc0f6de81d0da4108570559579d76045a7a7a1ea282a84866e3825bcb023bc`,
 and A0-R1 freeze
-`a028564ffd0bb39015e2e6e1fe3cecc71a04f65c99dc0b79a85f1e01d8b2cda8`.
+`1c7425d90be524ba9ab55ec66967b0eee32272addc025948459ea4e3b6383e8a`.
 The reviewed legacy plan has stdout SHA-256
 `0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad`,
 outer digest
@@ -70,8 +92,12 @@ Python 3.11 digest
 and Python 3.12 digest
 `sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
 
-Independent review returned `APPROVE` with no P0--P3 findings. Next gate:
-commit the regenerated A0X package and canonical documentation, then request a new
+Fresh dependency-free verification passed: no-`make` regression 3/3, frozen
+package 10/10, A0X aggregate 248/248, schema cross-validation 155 agreements
+with 19 rejected mutations, repository suite 1,075 tests with one documented
+skip, documentation audit, and diff check. Independent Luna review returned
+`APPROVE` with no P0--P3 findings. Next gate: commit the regenerated A0X
+package and canonical documentation, then request a new
 exact-head Latent-TRIZ qualification authorization bound to that final commit,
 the exact selected candidate, the explicit `matrix-v2-legacy-v1` profile, and
 the three plan digests above. Installation, each of the twelve

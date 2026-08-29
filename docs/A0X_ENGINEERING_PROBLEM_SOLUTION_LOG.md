@@ -518,9 +518,57 @@ passed, and independent review returned `APPROVE` with no P0--P3 findings. The
 final local package commit remains pending. A new
 exact-head qualification requires a new authorization; no retry is implied.
 
+## 23. Matrix binding test depended on absent runtime `make`
+
+**Symptom.** The one authorized exact-head qualification of
+`fb9484a89549fbbbfc5395932954b2d9565d91d6`, tree
+`f0585981d136659df4fec39e8b26aaaf2fab02a3`, ended terminal `FAIL`. Both
+schema checks passed. Both repository checks returned exit 1 without timeout
+or cancellation: Python 3.11 after 295,816 ms and Python 3.12 after 195,160 ms.
+Receipt ID:
+`sha256:f5348d82568ba98c6003132534b3a202631f04c42972b965251adaa2ca367dde`;
+receipt-file SHA-256:
+`5bb2e49da31381e4c22858556e4c54f373ee69dfcea8f578e050efb6268e4232`.
+
+**Evidence distinction.** Correct V2 verification reported integrity `PASS`
+and policy `FAIL`. The same clean source passed all 1,075 repository tests in
+the host environment. Running only the Matrix binding module with a `PATH`
+that excluded `make` reproduced five `FileNotFoundError: 'make'` errors. Image
+history showed that both verification images install `make` while compiling
+Python and remove it during final `apt-get purge --auto-remove` cleanup.
+
+**Root cause.** The test used `subprocess.run(["make", "-n", target])` as a
+Makefile parser. This added an undeclared test-runtime dependency even though
+the repository check itself is Python-based and the production Matrix contract
+does not require `make` inside the verification container.
+
+**Correction.** TDD anchor
+`6b8c8e3491b24fa4717b2f4faa8700b007c48892`, tree
+`18b8fdaf9ba00a81e3c90686a2563a23f2436824`, replaces all five subprocesses
+with dependency-free Python inspection. The verifier requires exactly one
+target definition and an exact non-empty recipe for `preflight-plan`,
+`preflight-doctor`, `preflight-dry-run`, `preflight-run`, and
+`preflight-verify`. Exact legacy-profile, V2-policy, generation, receipt, and
+expected-commit arguments remain bound.
+
+**TDD evidence.** The module first failed with five missing-`make` errors under
+the lean `PATH`; after correction, the same no-`make` invocation passed all
+three tests. Regeneration produced two freezes and twelve
+`approval_requested` dossiers with zero CCP invocations, model loads, material
+tokenizer constructions, target reads, or remote mutations.
+
+**Status.** The qualification attempt is consumed and remains historical
+negative engineering evidence. Fresh verification passed the no-`make`
+regression 3/3, frozen package 10/10, A0X aggregate 248/248, schema
+cross-validation 155 agreements with 19 rejected mutations, repository suite
+1,075 tests with one documented skip, documentation audit, and diff check.
+Independent Luna review returned `APPROVE` with no P0--P3 findings. A local
+package commit remains required before a new exact-head qualification can be
+requested.
+
 ## Current stop boundary
 
-The timeout/profile-corrected package may be committed locally only after all
+The timeout/profile- and dependency-corrected package may be committed locally only after all
 no-material gates, independent review, and exact hash records pass. It must
 then stop for a new Latent-TRIZ exact-head qualification authorization bound to
 the final commit, the selected producer, `matrix-v2-legacy-v1`, and the three

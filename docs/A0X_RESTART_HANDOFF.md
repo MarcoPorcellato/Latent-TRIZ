@@ -15,6 +15,62 @@ authorization.
 This section supersedes older status statements below when they conflict. The
 older chronology remains in this file as historical context.
 
+### Dependency-free Matrix test correction (2026-08-29)
+
+This subsection is the current resume authority. It supersedes the active
+implementation-anchor, package-hash, qualification-state, and next-gate
+statements below while preserving both failed qualifications as historical
+evidence.
+
+- The one authorized qualification of
+  `fb9484a89549fbbbfc5395932954b2d9565d91d6`, tree
+  `f0585981d136659df4fec39e8b26aaaf2fab02a3`, ended terminal `FAIL`. Both
+  schema checks passed. Both repository checks ended with exit code 1 without
+  timeout or cancellation: Python 3.11 after 295,816 ms and Python 3.12 after
+  195,160 ms. Receipt ID:
+  `sha256:f5348d82568ba98c6003132534b3a202631f04c42972b965251adaa2ca367dde`;
+  receipt-file SHA-256:
+  `5bb2e49da31381e4c22858556e4c54f373ee69dfcea8f578e050efb6268e4232`.
+  V2 verification reported integrity `PASS` and policy `FAIL`. The attempt is
+  consumed and has not been retried.
+- A clean local clone passed all 1,075 repository tests. The exact Matrix test
+  reproduced five `FileNotFoundError: 'make'` errors when run with a `PATH`
+  that excluded `make`. Image history showed that both verification runtimes
+  install `make` only while compiling Python and remove it during final
+  `apt-get purge --auto-remove`. This establishes an unintended test-runtime
+  dependency, not a timeout, schema, CCP-integrity, or A0X-data defect.
+- TDD correction anchor `6b8c8e3491b24fa4717b2f4faa8700b007c48892`,
+  tree `18b8fdaf9ba00a81e3c90686a2563a23f2436824`, replaces `make -n`
+  subprocesses with exact dependency-free Python inspection of the five
+  operator recipes. It rejects missing, duplicate, empty, or changed recipes
+  and preserves exact legacy-profile, generation, policy, receipt, and
+  expected-commit assertions.
+- Material contract SHA-256 remains
+  `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+  A0 implementation SHA-256 is
+  `7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570`;
+  A0 freeze SHA-256 is
+  `34876ec4ad5ae209bc3ffd49202deb660830fa225caa00831f70dedfa34bf006`.
+  A0-R1 implementation SHA-256 is
+  `d6cc0f6de81d0da4108570559579d76045a7a7a1ea282a84866e3825bcb023bc`;
+  A0-R1 freeze SHA-256 is
+  `1c7425d90be524ba9ab55ec66967b0eee32272addc025948459ea4e3b6383e8a`.
+- Regeneration wrote two freezes and twelve `approval_requested` dossiers with
+  zero CCP invocations, model loads, material tokenizer constructions,
+  sealed-target reads, or remote mutations. The no-model receipt remains
+  byte-identical at SHA-256
+  `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`.
+
+Fresh no-material verification passed: no-`make` regression 3/3, frozen
+package 10/10, A0X aggregate 248/248, schema cross-validation 155 agreements
+with 19 rejected mutations, repository suite 1,075 tests with one documented
+skip, documentation audit, and diff check. Independent Luna review returned
+`APPROVE` with no P0--P3 findings. Current gate: commit the regenerated package
+and canonical documentation locally, then stop for a new exact-head
+qualification authorization. This checkpoint authorizes no CCP heavy run,
+Docker, model, material tokenizer, target, network, publication, or scientific
+execution.
+
 ### One-hour qualification correction and regenerated package (2026-08-29)
 
 This subsection is the current resume authority. It supersedes the current

@@ -208,9 +208,9 @@
       "sha256": "11c7e4a5ea1a54571267af4b6dddb7116f11fe109e66a94d28e25097864d8391"
     },
     {
-      "bytes": 4090,
+      "bytes": 5355,
       "path": "tests/test_a0x_matrix_plan_binding.py",
-      "sha256": "b6e0012574511b18d154e1982bb85ca143677a9466f6c703ab52b73225b95925"
+      "sha256": "bd1dc1443ea83396715a9f7b06a61e9416481d8ab350a71552d75397a1308f7a"
     },
     {
       "bytes": 25617,

@@ -940,7 +940,7 @@ green. Its source and receipt are durably preserved on dedicated public
 branches, and CCP PR #70 is merged as
 `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8` with the exact qualified tree. It
 is not installed, but A0X now deliberately binds that exact identity.
-Correction anchor `9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`
+Correction anchor `6b8c8e3491b24fa4717b2f4faa8700b007c48892`
 regenerated the complete package deterministically in the active checkout;
 the frozen verifier independently repeated its byte-determinism checks in
 disposable source copies before this correction. A later single exact-head
@@ -958,6 +958,21 @@ repository tests with one documented skip. Independent review returned
 followed by a separately authorized Latent-TRIZ exact-head
 qualification. Task 12 is not authorized. The authoritative operator-facing contract is
 [`A0X_SIX_MODEL_CAMPAIGN.md`](./A0X_SIX_MODEL_CAMPAIGN.md).
+
+A second authorized qualification at `fb9484a…` then ended terminal `FAIL`
+without timeout or cancellation: schema passed, but both repository checks
+returned exit 1 because the Matrix binding test invoked `make -n` inside lean
+verification images that deliberately remove build-only `make`. A clean host
+run passed all 1,075 tests, and a no-`make` environment reproduced the five
+missing-executable errors. The dependency-free correction now parses the
+Makefile with Python and requires one exact, non-empty recipe for all five
+Matrix operator targets, preserving the legacy-profile and V2-policy checks.
+The attempt is consumed and was not retried. Fresh verification passed the
+no-`make` regression 3/3, frozen package 10/10, A0X aggregate 248/248, schema
+cross-validation 155 agreements with 19 rejected mutations, repository suite
+1,075 tests with one documented skip, documentation audit, and diff check.
+Independent Luna review returned `APPROVE` with no P0--P3 findings. Only the
+local package commit remains before another exact-head authorization.
 
 A0X acceptance criteria are:
 
