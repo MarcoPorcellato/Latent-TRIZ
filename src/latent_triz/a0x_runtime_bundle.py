@@ -446,10 +446,19 @@ def _validate_material_contract_schema(contract: Mapping[str, Any]) -> None:
 
 def _preflight_output_paths(root: Path, pair: PairBinding, source_head: str) -> None:
     paths = derive_runtime_paths(pair)
-    for relative in (paths.launch_descriptor_path, paths.authorization_path, runtime_mapping_path(pair, source_head=source_head)):
+    material_workspace = f".a0x-runtime/material/{pair.leg.value}/{pair.model_key}/{pair.run_id}"
+    for relative in (
+        paths.launch_descriptor_path,
+        paths.authorization_path,
+        runtime_mapping_path(pair, source_head=source_head),
+        paths.claim_path,
+        paths.observation_directory,
+        material_workspace,
+        pair.output_path,
+    ):
         path = _write_path(root, relative)
         if os.path.lexists(path):
-            raise A0XRuntimeBundleError("runtime bundle output is already occupied")
+            raise A0XRuntimeBundleError("pair-scoped runtime destination is already occupied")
 
 
 def _write_path(root: Path, relative: str) -> Path:

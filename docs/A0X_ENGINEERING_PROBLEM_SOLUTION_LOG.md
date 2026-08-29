@@ -690,8 +690,11 @@ tokenizer, reads a target, invokes CCP/Docker, or uses the network.
 **Status.** Resolved locally only after the two frozen legs and twelve
 approval-request dossiers are regenerated from the exact post-inventory HEAD.
 That new source HEAD invalidates every earlier exact-head qualification for
-future material action; the campaign remains `sealed_gate_pending` pending the
-two explicit operator gates.
+future material action; the campaign remains `sealed_gate_pending` and stops
+before **A**, the first of three explicit operator stops: **A** exact-head
+repository qualification authorization, **B** separate exact pair/attempt
+runtime-bundle-preparation authorization, and **C** later one-shot material
+authorization bound to the prepared authorization raw SHA-256.
 
 ## Current stop boundary
 
@@ -700,6 +703,13 @@ the protected-path comparison against `4aee4698f5c59101b1f3292519f10ae802629bf7`
 It must then stop for a new Latent-TRIZ exact-head qualification authorization
 bound to the final commit, selected producer, `matrix-v2-legacy-v1`, and the
 three reviewed plan digests.
+
+That stop is **A** only. A completed **A** still requires **B**, a separate
+exact pair/attempt authorization to prepare one private runtime bundle. A
+prepared bundle still requires **C**, a later one-shot material authorization
+bound to its prepared authorization raw SHA-256. Current work remains before
+**A** and `sealed_gate_pending`; none of these documents authorizes a later
+stop.
 
 It does **not** authorize CCP heavy execution, Docker, model/tokenizer
 construction, protected-target access, installation, Latent-TRIZ publication,

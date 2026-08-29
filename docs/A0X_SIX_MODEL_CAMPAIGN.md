@@ -135,16 +135,31 @@ Make-target mapping. It must report:
 Material execution is outside Task 11. Before one pair may run, all of the
 following must be true at the same exact source HEAD:
 
-1. a separate repository-qualification authorization owns one exact positive
+The following are three separate operator stops, not one reusable approval:
+
+1. **A — repository qualification.** An exact-head authorization names one
+   repository qualification only; it must reach its terminal positive receipt.
+2. **B — runtime-bundle preparation.** A separate exact pair/attempt
+   authorization may prepare descriptor, authorization, and local mapping for
+   exactly one dossier/pair/attempt. It does not start material work.
+3. **C — material attempt.** A later one-shot material authorization must name
+   the prepared authorization raw SHA-256 as well as the pair and attempt. It
+   is the only stop that may permit the material action.
+
+The current campaign is `sealed_gate_pending` and stops before **A**. Neither
+the preparer, synthetic tests, nor regenerated approval-request artifacts
+open **A**, **B**, or **C**.
+
+4. a separate repository-qualification authorization owns one exact positive
    Matrix generation, and the repository has its terminal exact-head receipt;
-2. the installed CCP path and full SHA-256 match the current operator
+5. the installed CCP path and full SHA-256 match the current operator
    contract;
-3. live `resource status` is `Admit`, admission is inactive, and the queue is
+6. live `resource status` is `Admit`, admission is inactive, and the queue is
    empty;
-4. the operator supplies a new per-pair execution authorization bound to
+7. the operator supplies a new per-pair execution authorization bound to
    exactly one dossier SHA-256, one pair, the exact qualification receipt, and
    one attempt ID; this authorization contains no Matrix generation;
-5. a primary reviewer confirms the authorization chain and fixed command.
+8. a primary reviewer confirms the authorization chain and fixed command.
 
 One approval is not reusable for another model, another leg, another source
 HEAD, or a retry. A null, positive, failed, incompatible, interrupted, or
@@ -193,12 +208,13 @@ the local role mapping repeats the descriptor path and hash. The offline
 preparer writes descriptor, authorization, and mapping only in that dependency
 order and refuses every existing output path.
 
-This is still a two-gate design. First, one new exact-head repository
-qualification must be explicitly authorized and complete. Second, a separate
-one-pair authorization must bind the resulting dossier, qualification receipt,
-authorization ID, and attempt ID before any private runtime bundle may be
-prepared or a material action considered. Neither gate is opened by the
-preparer, its synthetic tests, nor its regenerated approval-request artifacts.
+This is a three-stop design. First, **A** explicitly authorizes and completes
+one exact-head repository qualification. Second, **B** separately authorizes
+one exact pair/attempt private runtime bundle, binding the resulting dossier,
+qualification receipt, authorization ID, and attempt ID. Third, **C** is a
+later one-shot material authorization bound to that prepared authorization raw
+SHA-256. No earlier stop opens a later one; the preparer, its synthetic tests,
+and regenerated approval-request artifacts open none of them.
 
 The frozen-inventory defect discovered during this correction was
 `scripts/a0x_material_child.py`: its live bytes are 21,582 and its SHA-256 is

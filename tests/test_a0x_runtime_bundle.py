@@ -4,6 +4,8 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
+import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -136,6 +138,23 @@ class A0XRuntimeBundleTests(unittest.TestCase):
     def _synthetic_ccp_hash(self, request):
         with _synthetic_ccp_hash(request):
             yield
+
+    @contextmanager
+    def _without_model_modules(self):
+        """Make target-free import/execution assertions independent of suite history."""
+        missing = object()
+        saved = {name: sys.modules.get(name, missing) for name in ("torch", "transformers")}
+        for name in saved:
+            sys.modules.pop(name, None)
+        try:
+            yield
+            self.assertNotIn("torch", sys.modules)
+            self.assertNotIn("transformers", sys.modules)
+        finally:
+            for name, module in saved.items():
+                sys.modules.pop(name, None)
+                if module is not missing:
+                    sys.modules[name] = module
 
     def test_prepares_one_acyclic_bundle_in_dependency_order(self) -> None:
         from latent_triz.a0x_runtime_bundle import prepare_runtime_bundle
@@ -598,6 +617,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         patch_target = "latent_triz.a0x_runtime_bundle.planned_material_dossiers"
         with (
+            self._without_model_modules(),
             self._synthetic_ccp_hash(request),
             patch(patch_target, return_value={("a0", "gpt2"): request.fixed_dossier}),
             patch("subprocess.run", side_effect=AssertionError("subprocess.run reached")) as process_run,
@@ -620,6 +640,70 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         target_reader.assert_not_called()
         model_adapter.assert_not_called()
         model_factory.assert_not_called()
+
+    def test_any_pair_scoped_occupancy_refuses_before_bundle_or_material_access(self) -> None:
+        from latent_triz.a0x_ccp_executor import runtime_mapping_path
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle
+
+        categories = (
+            "descriptor", "authorization", "mapping", "claim", "observation", "material_workspace", "result_output",
+        )
+        for category in categories:
+            with self.subTest(category=category):
+                temporary, root, request = self._fixture()
+                self.addCleanup(temporary.cleanup)
+                dossier = json.loads((root / request.fixed_dossier).read_text(encoding="utf-8"))
+                pair = PairBinding.from_mapping(dossier["pair_binding"])
+                runtime = derive_runtime_paths(pair, source_head="a" * 40)
+                relative = {
+                    "descriptor": runtime.launch_descriptor_path,
+                    "authorization": runtime.authorization_path,
+                    "mapping": runtime_mapping_path(pair, source_head="a" * 40),
+                    "claim": runtime.claim_path,
+                    "observation": runtime.observation_directory,
+                    "material_workspace": f".a0x-runtime/material/{pair.leg.value}/{pair.model_key}/{pair.run_id}",
+                    "result_output": pair.output_path,
+                }[category]
+                occupied = root / relative
+                if category in {"observation", "material_workspace", "result_output"}:
+                    occupied.mkdir(parents=True)
+                    original = None
+                else:
+                    occupied.parent.mkdir(parents=True, exist_ok=True)
+                    occupied.write_bytes(b"occupied")
+                    original = occupied.read_bytes()
+                with (
+                    self._synthetic_ccp_hash(request),
+                    patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
+                    patch("subprocess.run", side_effect=AssertionError("subprocess.run reached")) as process_run,
+                    patch("subprocess.Popen", side_effect=AssertionError("subprocess.Popen reached")) as process_open,
+                    patch("latent_triz.a0x_ccp_executor.launch_fixed_dossier", side_effect=AssertionError("guard launch reached")) as launch,
+                    patch("latent_triz.a0x_execution.OneShotTargetReader", side_effect=AssertionError("target reader reached")) as target_reader,
+                    patch("latent_triz.a0x_production_adapter._default_dependencies", side_effect=AssertionError("model factory reached")) as model_factory,
+                ):
+                    with self.assertRaises(A0XRuntimeBundleError):
+                        prepare_runtime_bundle(
+                            root,
+                            request,
+                            source_state_probe=lambda: ("a" * 40, True),
+                            ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                        )
+                self.assertTrue(os.path.lexists(occupied))
+                if original is not None:
+                    self.assertEqual(original, occupied.read_bytes())
+                for bundle_path in (
+                    runtime.launch_descriptor_path,
+                    runtime.authorization_path,
+                    runtime_mapping_path(pair, source_head="a" * 40),
+                ):
+                    candidate = root / bundle_path
+                    if candidate != occupied:
+                        self.assertFalse(os.path.lexists(candidate))
+                process_run.assert_not_called()
+                process_open.assert_not_called()
+                launch.assert_not_called()
+                target_reader.assert_not_called()
+                model_factory.assert_not_called()
 
     def test_dirty_source_refuses_before_any_runtime_output(self) -> None:
         from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle

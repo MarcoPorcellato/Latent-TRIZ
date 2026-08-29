@@ -7,15 +7,25 @@ order and refuses every overwrite. Its implementation inventory must be frozen
 before the two leg freezes and twelve approval-request dossiers are regenerated
 from the resulting exact implementation HEAD.
 
+The campaign has three explicit operator stops, which are not interchangeable:
+**A** authorizes one exact-head repository qualification; **B** separately
+authorizes preparation of one exact pair/attempt private runtime bundle; and
+**C** later authorizes one one-shot material attempt bound to the prepared
+authorization raw SHA-256. The current work stops before **A**. It cannot
+prepare a private bundle under **B**, and no prepared bundle authorizes **C**.
+`sealed_gate_pending` remains the only current execution state.
+
 The old local qualification of `4aee4698f5c59101b1f3292519f10ae802629bf7`
 and its receipt-file SHA-256
 `08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447` are
 historical only. They cannot attest this corrected source. Stop after the
 target-free package regeneration and no-model verification for one new,
-explicit exact-head repository-qualification authorization; only a subsequent
-separate per-pair authorization may name a private runtime bundle. No model,
-tokenizer, target, CCP heavy command, Docker, network, publication, scientific
-retry, or claim promotion is authorized before those two gates.
+explicit exact-head repository-qualification authorization (**A**); only a
+subsequent separate exact pair/attempt bundle-preparation authorization (**B**)
+may name a private runtime bundle. A later one-shot material authorization
+(**C**) must bind the prepared authorization raw SHA-256. No model, tokenizer,
+target, CCP heavy command, Docker, network, publication, scientific retry, or
+claim promotion is authorized before its respective stop.
 
 **Current A0X runtime-binding correction state (2026-08-29).** The exact
 implementation anchor is `2bf6c57d19e071c248481223f697099a05ef3e88`. The
@@ -28,9 +38,9 @@ the current A0-R1 freeze SHA-256 is
 This documentation-only commit is not in either implementation inventory, so
 it does not alter that anchor or authorize regeneration. The stop boundary is
 unchanged: stop for one new explicit exact-head repository qualification, then
-require a separate exact per-pair authorization before any private runtime
-bundle or material action. `sealed_gate_pending` remains the only current
-A0X execution state.
+require a separate exact pair/attempt bundle-preparation authorization, then a
+later one-shot material authorization bound to the prepared authorization raw
+SHA-256. `sealed_gate_pending` remains the only current A0X execution state.
 
 **Historical A0X checkpoint (superseded; not the current runtime-binding
 state).** Preparatory work previously remained on branch
