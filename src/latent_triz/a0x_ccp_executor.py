@@ -439,27 +439,90 @@ def _validate_local_qualification_receipt(
     raw = path.read_bytes()
     if _sha256_bytes(raw) != evidence.get("qualification_receipt_raw_sha256"):
         raise A0XCcpExecutorError("local qualification receipt raw SHA-256 differs")
-    envelope = _strict_object(raw, "local qualification receipt")
+    ccp = evidence.get("ccp")
+    public = evidence.get("public_evidence")
+    if not isinstance(ccp, Mapping) or not isinstance(public, Mapping) or not isinstance(public.get("commit"), str):
+        raise A0XCcpExecutorError("local qualification receipt CCP binding is invalid")
+    try:
+        observed = qualification_evidence_from_receipt(
+            raw,
+            source_head=source_head,
+            ccp_identity=ccp,
+            public_evidence_commit=public["commit"],
+        )
+    except A0XCcpExecutorError:
+        raise
+    if observed != dict(evidence):
+        raise A0XCcpExecutorError("local qualification receipt CCP/source/generation binding differs")
+
+
+def qualification_evidence_from_receipt(
+    receipt_raw: bytes,
+    *,
+    source_head: str,
+    ccp_identity: Mapping[str, Any],
+    public_evidence_commit: str,
+) -> dict[str, Any]:
+    """Extract public-safe qualification evidence without launching anything."""
+    _revision(source_head, "qualification receipt source head")
+    _revision(public_evidence_commit, "qualification public evidence commit")
+    if not isinstance(ccp_identity, Mapping):
+        raise A0XCcpExecutorError("qualification receipt CCP binding is invalid")
+    binary_sha256 = ccp_identity.get("sha256", ccp_identity.get("binary_sha256"))
+    source_commit = ccp_identity.get("source_commit")
+    source_tree = ccp_identity.get("qualified_source_tree", ccp_identity.get("source_tree"))
+    version = ccp_identity.get("version")
+    if (
+        ccp_identity.get("executable_name") != "commit-ci-preflight"
+        or not isinstance(binary_sha256, str) or not _SHA256.fullmatch(binary_sha256)
+        or not isinstance(source_commit, str) or not _REVISION.fullmatch(source_commit)
+        or not isinstance(source_tree, str) or not _REVISION.fullmatch(source_tree)
+        or not isinstance(version, str) or not re.fullmatch(r"commit-ci-preflight [^\s]+", version)
+    ):
+        raise A0XCcpExecutorError("qualification receipt CCP binding is invalid")
+    envelope = _strict_object(receipt_raw, "local qualification receipt")
     if set(envelope) != {"receipt_id", "receipt"} or not isinstance(envelope.get("receipt"), Mapping):
         raise A0XCcpExecutorError("local qualification receipt envelope is invalid")
     receipt = envelope["receipt"]
     semantic_id = "sha256:" + _sha256_bytes(_canonical_json(receipt))
-    if envelope.get("receipt_id") != semantic_id or semantic_id != evidence.get("qualification_receipt_id"):
+    if envelope.get("receipt_id") != semantic_id:
         raise A0XCcpExecutorError("local qualification receipt semantic ID differs")
-    ccp = evidence.get("ccp")
-    if not isinstance(ccp, Mapping):
-        raise A0XCcpExecutorError("local qualification receipt CCP binding is invalid")
     producer, repository, run = receipt.get("producer"), receipt.get("repository"), receipt.get("run")
-    expected_version = str(ccp.get("version", "")).removeprefix("commit-ci-preflight ") + "+matrix-v2-legacy-v1"
+    expected_version = version.removeprefix("commit-ci-preflight ") + "+matrix-v2-legacy-v1"
     if (
         receipt.get("schema_version") != "2.0" or receipt.get("overall_status") != "PASS"
         or receipt.get("incomplete_reason") is not None
         or producer != {"name": "commit-ci-preflight", "version": expected_version}
         or not isinstance(repository, Mapping) or repository.get("commit_sha") != source_head
         or repository.get("dirty") is not False
-        or not isinstance(run, Mapping) or run.get("generation") != evidence.get("generation")
+        or not isinstance(run, Mapping) or not isinstance(run.get("generation"), int)
+        or isinstance(run.get("generation"), bool) or run["generation"] < 1
     ):
         raise A0XCcpExecutorError("local qualification receipt CCP/source/generation binding differs")
+    evidence = {
+        "artifact_class": "a0x-qualification-evidence",
+        "evidence_profile": "a0x-qualification-evidence-v1",
+        "qualification_receipt_id": semantic_id,
+        "qualification_receipt_raw_sha256": _sha256_bytes(receipt_raw),
+        "qualified_source_head": source_head,
+        "generation": run["generation"],
+        "ccp": {
+            "executable_name": "commit-ci-preflight",
+            "source_commit": source_commit,
+            "qualified_source_tree": source_tree,
+            "binary_sha256": binary_sha256,
+            "version": version,
+        },
+        "public_evidence": {
+            "branch": f"ccp-evidence/{source_head}",
+            "path": ".ccp/receipt.json",
+            "commit": public_evidence_commit,
+        },
+    }
+    try:
+        return validate_qualification_evidence(evidence)
+    except A0XContractError as error:
+        raise A0XCcpExecutorError("qualification evidence is invalid") from error
 
 
 _GUARD_PREFLIGHT_ROLES = (
@@ -934,5 +997,5 @@ def _sha256_bytes(value: bytes) -> str:
 __all__ = [
     "A0XCcpExecutorError", "GuardPreflightOutput", "GuardPreflightProducer",
     "ProcessExecutor", "ProcessResult", "SubprocessGuardPreflightProducer",
-    "launch_fixed_dossier", "runtime_mapping_path",
+    "launch_fixed_dossier", "qualification_evidence_from_receipt", "runtime_mapping_path",
 ]
