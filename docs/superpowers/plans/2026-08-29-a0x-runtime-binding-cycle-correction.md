@@ -172,7 +172,7 @@ rtk git commit -m "fix: make A0X runtime binding acyclic"
 
 **Interfaces:**
 - Produces: immutable `RuntimePreparationRequest` with fixed dossier, qualification receipt, CCP, Python, evidence commit, authorization ID, and attempt ID.
-- Produces: `prepare_runtime_bundle(root: Path, request: RuntimePreparationRequest, *, source_head_probe: Callable[[], str], ccp_version_probe: Callable[[Path], str]) -> dict[str, Any]`.
+- Produces: `prepare_runtime_bundle(root: Path, request: RuntimePreparationRequest, *, source_state_probe: Callable[[], tuple[str, bool]], ccp_version_probe: Callable[[Path], str]) -> dict[str, Any]`.
 - Produces: `qualification_evidence_from_receipt(receipt_raw: bytes, *, source_head: str, ccp_identity: Mapping[str, Any], public_evidence_commit: str) -> dict[str, Any]`, a read-only helper extracted from executor receipt validation.
 - Produces: `_load_fixed_dossier(root: Path, relative: str) -> tuple[dict[str, Any], PairBinding]`.
 - Produces: `_build_descriptor(root: Path, pair: PairBinding, source_head: str, python_path: Path, child_path: Path, contract_sha256: str) -> dict[str, Any]`.
@@ -197,7 +197,7 @@ receipt = prepare_runtime_bundle(
         authorization_id="a0x-auth-a0-gpt2-attempt-01",
         attempt_id="a0x-a0-gpt2-attempt-01",
     ),
-    source_head_probe=lambda: "a" * 40,
+    source_state_probe=lambda: ("a" * 40, True),
     ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
 )
 ```
@@ -231,11 +231,13 @@ def prepare_runtime_bundle(
     root: Path,
     request: RuntimePreparationRequest,
     *,
-    source_head_probe: Callable[[], str],
+    source_state_probe: Callable[[], tuple[str, bool]],
     ccp_version_probe: Callable[[Path], str],
 ) -> dict[str, Any]:
     repository = root.resolve(strict=True)
-    source_head = source_head_probe()
+    source_head, source_clean = source_state_probe()
+    if not source_clean:
+        raise A0XRuntimeBundleError("runtime preparation requires a clean checkout")
     dossier, pair = _load_fixed_dossier(repository, request.fixed_dossier)
     inputs = _validate_preparation_inputs(
         repository, request, dossier=dossier, pair=pair,
@@ -261,7 +263,7 @@ def prepare_runtime_bundle(
     )
 ```
 
-Define `_ValidatedPreparationInputs` as an immutable dataclass carrying the resolved CCP/Python/child paths, their hashes, the material-contract hash, CCP identity, qualification evidence, and derived descriptor path. Define `_validate_preparation_inputs(root: Path, request: RuntimePreparationRequest, *, dossier: Mapping[str, Any], pair: PairBinding, source_head: str, ccp_version_probe: Callable[[Path], str]) -> _ValidatedPreparationInputs`, `canonical_json_bytes(value: Mapping[str, Any]) -> bytes`, and `_write_and_verify_bundle(root: Path, pair: PairBinding, source_head: str, descriptor: Mapping[str, Any], authorization: Mapping[str, Any], mapping: Mapping[str, Any]) -> dict[str, Any]` in the same module. Resolve one dossier only through `planned_material_dossiers()`. Validate exact source, contract, CCP, receipt, pair, child, Python, IDs, output emptiness, and every runtime destination before writing. Create descriptor, authorization, and mapping with canonical JSON using `_exclusive_write`. Never delete a partial bundle and never return absolute paths or environment values.
+Define `_ValidatedPreparationInputs` as an immutable dataclass carrying the resolved CCP/Python/child paths, their hashes, the material-contract hash, CCP identity, qualification evidence, and derived descriptor path. Define `_validate_preparation_inputs(root: Path, request: RuntimePreparationRequest, *, dossier: Mapping[str, Any], pair: PairBinding, source_head: str, ccp_version_probe: Callable[[Path], str]) -> _ValidatedPreparationInputs`, `canonical_json_bytes(value: Mapping[str, Any]) -> bytes`, and `_write_and_verify_bundle(root: Path, pair: PairBinding, source_head: str, descriptor: Mapping[str, Any], authorization: Mapping[str, Any], mapping: Mapping[str, Any]) -> dict[str, Any]` in the same module. Resolve one dossier only through `planned_material_dossiers()`. Validate exact clean source state, contract, CCP, receipt, pair, child, Python, IDs, output emptiness, and every runtime destination before writing. Create descriptor, authorization, and mapping with canonical JSON using `_exclusive_write`. Never delete a partial bundle and never return absolute paths or environment values.
 
 - [ ] **Step 5: Extract read-only receipt evidence validation**
 
@@ -269,7 +271,7 @@ Move only the semantic, non-launching receipt parsing needed by preparation from
 
 - [ ] **Step 6: Implement the CLI without a material fallback**
 
-`scripts/a0x_prepare_runtime.py` accepts exactly `--fixed-dossier`, `--qualification-receipt`, `--ccp`, `--python`, `--public-evidence-commit`, `--authorization-id`, and `--attempt-id`. It probes `git rev-parse HEAD` and `<ccp> --version` with shell-free `subprocess.run`, prints one sorted JSON receipt, returns `2` on refusal, and exposes no model, target, overwrite, retry, network, generation, or `guard exec` option.
+`scripts/a0x_prepare_runtime.py` accepts exactly `--fixed-dossier`, `--qualification-receipt`, `--ccp`, `--python`, `--public-evidence-commit`, `--authorization-id`, and `--attempt-id`. It probes `git rev-parse HEAD`, `git status --porcelain --untracked-files=all`, and `<ccp> --version` with shell-free `subprocess.run`, prints one sorted JSON receipt, returns `2` on refusal, and exposes no model, target, overwrite, retry, network, generation, or `guard exec` option.
 
 - [ ] **Step 7: Run preparer tests and observe GREEN**
 
