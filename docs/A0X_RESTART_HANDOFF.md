@@ -27,11 +27,12 @@ failure terminal after claim without child start. No material action occurred.
 
 The new readiness module and regression suite are frozen implementation inputs,
 so the prior Gate A receipt becomes historical after the correction commit.
-Both implementations/freezes and all twelve dossiers have been regenerated.
-Target-free verification and independent Luna review are complete. Commit
-locally and stop for a new exact-head Gate A authorization. Gate B must later
-authorize the regular interpreter and selected snapshot materialization. Gate C
-remains a separate one-shot scientific authorization.
+Both implementations/freezes and all twelve dossiers have been regenerated and
+committed on the current local branch. Target-free verification and independent
+Luna review are complete. Verify the live commit and stop for a new exact-head
+Gate A authorization. Gate B must later authorize the regular interpreter and
+selected snapshot materialization. Gate C remains a separate one-shot
+scientific authorization.
 
 The correction implementation anchor is
 `7e1afaba83def501a2641a036c10aae1b98be7b0`, tree

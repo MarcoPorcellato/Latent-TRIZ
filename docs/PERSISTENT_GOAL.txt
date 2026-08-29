@@ -11,8 +11,9 @@ contract, and independent pair-specific snapshot files; it also enforces card
 padding and terminally seals a post-claim pre-run-observation write failure
 without starting a child. It also revalidates regular-file identity and rejects
 post-readiness symlink/hardlink substitution at every final material boundary.
-Target-free verification and final Luna review are complete; commit locally,
-then stop before a new Gate A.
+Target-free verification and final Luna review are complete; the regenerated
+package is committed on the current local branch. Verify the live commit and
+stop before a new Gate A.
 Do not prepare Gate B assets, run CCP, load models/tokenizers, open targets, or
 publish. The prior receipt is historical once corrected bytes are committed.
 The implementation anchor is `7e1afaba83def501a2641a036c10aae1b98be7b0`;
@@ -22,8 +23,8 @@ regenerated A0/A0-R1 freeze hashes are
 Final target-free verification passed: frozen 11/11, synthetic 278/278, schema
 155 agreements with 19 rejected mutations, and repository 1,110 tests with one
 expected skip. Final security, freeze/package, and documentation reviews
-returned `APPROVE` with no remaining P0--P3 blocker. Commit the regenerated
-package and stop for the new exact-head Gate A authorization.
+returned `APPROVE` with no remaining P0--P3 blocker. Stop for the new exact-head
+Gate A authorization.
 
 A0X Gate A temp-mount correction checkpoint (2026-08-29): the campaign remains
 `sealed_gate_pending`. The exact-head qualification at
