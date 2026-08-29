@@ -17,9 +17,25 @@ separate per-pair authorization may name a private runtime bundle. No model,
 tokenizer, target, CCP heavy command, Docker, network, publication, scientific
 retry, or claim promotion is authorized before those two gates.
 
-A0X checkpoint (2026-08-29): preparatory work remains on branch
-`agent/a0x-six-model-design` at `sealed_gate_pending`. The current correction
-anchor is `6b8c8e3491b24fa4717b2f4faa8700b007c48892`, tree
+**Current A0X runtime-binding correction state (2026-08-29).** The exact
+implementation anchor is `2bf6c57d19e071c248481223f697099a05ef3e88`. The
+generated package commit is
+`40f959a879d0cc21ee74c2a8ab1e7c0acfafffbf`; it precedes this
+documentation-only clarification. The current A0 freeze SHA-256 is
+`363a0c3e96f6a4279c295e842863b8fa81a49e0222554b178cca122c5bcd8be6`, and
+the current A0-R1 freeze SHA-256 is
+`3417d0515483bc7c7b4b29d5cbd5fb6684f813a247278226202e19ddbbc0035d`.
+This documentation-only commit is not in either implementation inventory, so
+it does not alter that anchor or authorize regeneration. The stop boundary is
+unchanged: stop for one new explicit exact-head repository qualification, then
+require a separate exact per-pair authorization before any private runtime
+bundle or material action. `sealed_gate_pending` remains the only current
+A0X execution state.
+
+**Historical A0X checkpoint (superseded; not the current runtime-binding
+state).** Preparatory work previously remained on branch
+`agent/a0x-six-model-design` at `sealed_gate_pending`, with correction anchor
+`6b8c8e3491b24fa4717b2f4faa8700b007c48892`, tree
 `18b8fdaf9ba00a81e3c90686a2563a23f2436824`. The public material contract
 deliberately binds the large-blob-qualified CCP producer at commit
 `27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
@@ -92,7 +108,7 @@ reads, CCP invocations, and remote mutations. Resume through
 `docs/A0X_ENGINEERING_PROBLEM_SOLUTION_LOG.md`, and the canonical A0X
 design/plan.
 
-Current hashes: material contract
+Historical hashes from the superseded checkpoint: material contract
 `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`,
 A0 implementation
 `7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570`,
@@ -111,15 +127,14 @@ Python 3.11 digest
 and Python 3.12 digest
 `sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
 
-Fresh dependency-free verification passed: no-`make` regression 3/3, frozen
+Historical dependency-free verification at that superseded checkpoint passed:
+no-`make` regression 3/3, frozen
 package 10/10, A0X aggregate 248/248, schema cross-validation 155 agreements
 with 19 rejected mutations, repository suite 1,075 tests with one documented
 skip, documentation audit, and diff check. Independent Luna review returned
-`APPROVE` with no P0--P3 findings. Next gate: commit the regenerated A0X
-package and canonical documentation, then request a new
-exact-head Latent-TRIZ qualification authorization bound to that final commit,
-the exact selected candidate, the explicit `matrix-v2-legacy-v1` profile, and
-the three plan digests above. Installation, each of the twelve
+`APPROVE` with no P0--P3 findings. That checkpoint's proposed package commit
+and next gate were superseded by the current correction state above.
+Installation, each of the twelve
 dossier-bound scientific attempts, Latent-TRIZ publication, and merge remain
 separate decisions. No
 model, material tokenizer, historical or sealed target, CCP heavy command,
