@@ -85,7 +85,7 @@ blob; Task 4 uses an exact Git diff over the same path patterns.
 - Modify: `tests/test_exp002_publication_verify.py`
 - Adopt from main: `scripts/exp002_publication_verify.py`
 - Adopt from main: `docs/qualification/a0x-legacy-policy-migration-dossier.json`
-- Adopt from main: `tests/test_a0x_policy_migration.py`
+- Adopt from main: `tests/test_ccp_a0x_policy_migration.py` (operational CCP policy-migration test; deliberately outside the reserved A0X frozen-test namespace)
 - Preserve: `.commit-ci-policy-v2.toml`
 
 **Interfaces:**
@@ -152,7 +152,7 @@ Expected: policy object `8a40d48220723373156f9d99fc4e433ed1beaa70`, clean diff, 
 Run:
 
 ```bash
-rtk env PYTHONPATH=src python3 -m unittest tests.test_exp002_publication_verify tests.test_a0x_policy_migration -v
+rtk env PYTHONPATH=src python3 -m unittest tests.test_exp002_publication_verify tests.test_ccp_a0x_policy_migration -v
 ```
 
 Expected: all tests PASS. The two behavioral surfaces were independently developed test-first; integration adds no new production behavior.
@@ -162,7 +162,7 @@ Expected: all tests PASS. The two behavioral surfaces were independently develop
 Run:
 
 ```bash
-rtk git add docs/log.md tests/test_exp002_publication_verify.py scripts/exp002_publication_verify.py docs/qualification/a0x-legacy-policy-migration-dossier.json tests/test_a0x_policy_migration.py .commit-ci-policy-v2.toml
+rtk git add docs/log.md tests/test_exp002_publication_verify.py scripts/exp002_publication_verify.py docs/qualification/a0x-legacy-policy-migration-dossier.json tests/test_ccp_a0x_policy_migration.py .commit-ci-policy-v2.toml
 rtk git commit -m "merge: integrate A0X trusted-base migration"
 ```
 

@@ -644,6 +644,17 @@ protected-path differences, a clean checkout, passing A0X and repository
 suites, schema cross-validation, documentation audit, and the expected policy,
 plan, and producer bindings.
 
+**Integration namespace correction.** Public `main` also introduced an
+operational CCP-policy test named `test_a0x_policy_migration.py`. The A0X
+no-model verifier reserves the `test_a0x_*.py` namespace for its frozen
+synthetic aggregate, so the operational test was discovered after the merge
+but was correctly absent from the frozen implementation inventory. Sol review
+classified this as a cross-branch namespace collision, not scientific drift.
+The test is therefore byte-preservingly renamed
+`test_ccp_a0x_policy_migration.py`; the Makefile aggregate, A0X runner,
+implementation manifests, freezes, dossiers, and all protected artifacts stay
+unchanged.
+
 **Status.** Implementation in progress. Stop before CCP until the final
 integrated commit, tree, and verification ledger are recorded.
 
