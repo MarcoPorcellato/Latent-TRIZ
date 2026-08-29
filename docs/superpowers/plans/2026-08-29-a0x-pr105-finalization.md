@@ -302,7 +302,7 @@ the surrounding receipt.
 Run:
 
 ```bash
-rtk shasum -a 256 $CCP_CANDIDATE_BIN
+rtk shasum -a 256 "$CCP_CANDIDATE_BIN"
 rtk git hash-object .commit-ci-policy-v2.toml
 rtk env PYTHONPATH=src python3 -m unittest tests.test_a0x_matrix_plan_binding -v
 ```
