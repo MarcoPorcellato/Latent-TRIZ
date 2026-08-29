@@ -31,12 +31,24 @@ historical receipt below.
   to the real operating-system probe. The initial regression failed with the
   diagnosed error and then passed; the four dependent modules passed 54/54.
 
-The changed fixture is part of both frozen implementation inventories.
-Therefore the next safe local sequence is: commit the correction and canonical
-documentation as the implementation anchor; regenerate both implementations,
-both freezes, and all twelve approval-request dossiers from that exact anchor;
-run every no-material gate; commit the regenerated package; and stop for a new
-Gate A exact-head authorization. No CCP retry, Docker diagnostic, model,
+The changed fixture is part of both frozen implementation inventories. It is
+committed at implementation anchor `d4845f0a7b204ba65b9669c05a677fc0560ababd`.
+Deterministic regeneration produced two implementations, two freezes, and all
+twelve approval-request dossiers with zero model loads, tokenizer
+constructions, sealed-target reads, CCP invocations, or remote mutations.
+Current hashes are A0 implementation
+`2398f026dc352be8a11950e0cb0996437d87b4ca1f0db11558d40e16f31c7b57`,
+A0 freeze `cc78b1baf158d0a0c3f9e77cd411d8fff5abd0b579947687c2f53d55aa027ac1`,
+A0-R1 implementation
+`6246c84fc4c7fc48114598406c5fa6a8b457f2fdb973626142bad30e7c68e004`,
+and A0-R1 freeze
+`c4564adcd1e767e339467db953540123017284461abbd8225ed95ab1bb49695a`.
+Frozen verification passed 11/11, the synthetic aggregate passed 268/268, and
+the full repository check passed 1,100 tests with 11 documented skips.
+
+The next safe step is to commit the regenerated package and these final notes,
+then stop for a new Gate A exact-head authorization. No CCP retry, Docker
+diagnostic, model,
 tokenizer, target, private bundle, material execution, network, or publication
 is authorized by this checkpoint.
 

@@ -248,9 +248,9 @@
       "sha256": "0f3968faddc1e9b37bd48282eb6a1bd92923b60d8cdcbf0aa90566c4f6fc9813"
     },
     {
-      "bytes": 47171,
+      "bytes": 48018,
       "path": "tests/test_a0x_runtime_bundle.py",
-      "sha256": "947a259a1aaa251b640980f79546b184d467eda62d0f8d571861e80e27caf3e6"
+      "sha256": "64e2e0b99dacd7599d0297d82bfd2bc71b4fe034d11e29040db98b70d6543dc8"
     },
     {
       "bytes": 20321,

@@ -363,3 +363,16 @@ that fixture is frozen implementation input, both implementations, both
 freezes, and all twelve dossiers require deterministic regeneration from the
 new corrective implementation anchor before another explicit Gate A
 authorization can be requested. No scientific artifact or claim changes.
+
+The corrective implementation anchor is
+`d4845f0a7b204ba65b9669c05a677fc0560ababd`. Deterministic no-material
+regeneration produced A0 implementation/freeze SHA-256
+`2398f026dc352be8a11950e0cb0996437d87b4ca1f0db11558d40e16f31c7b57` /
+`cc78b1baf158d0a0c3f9e77cd411d8fff5abd0b579947687c2f53d55aa027ac1`
+and A0-R1 implementation/freeze SHA-256
+`6246c84fc4c7fc48114598406c5fa6a8b457f2fdb973626142bad30e7c68e004` /
+`c4564adcd1e767e339467db953540123017284461abbd8225ed95ab1bb49695a`.
+Frozen verification passed 11/11, the synthetic aggregate passed 268/268, and
+the repository check passed 1,100 tests with 11 documented skips. The next
+action remains a separately authorized exact-head Gate A qualification after
+the regenerated package is committed.

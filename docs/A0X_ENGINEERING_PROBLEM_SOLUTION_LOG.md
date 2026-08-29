@@ -726,9 +726,11 @@ material-child, and production-adapter surfaces must remain green. A new
 exact-head CCP qualification is still required; the consumed receipt and its
 failed checks are historical evidence and cannot be relabelled.
 
-**Status.** Corrected locally with TDD. Canonical A0X implementations, freezes,
-and twelve dossiers must be regenerated from the corrective implementation
-anchor before requesting another Gate A qualification.
+**Status.** Resolved locally with TDD at implementation anchor
+`d4845f0a7b204ba65b9669c05a677fc0560ababd`. Canonical regeneration completed
+with two frozen legs, twelve dossiers, and zero material or remote access. The
+full repository check passed 1,100 tests with 11 documented skips. Commit the
+regenerated package, then request a new exact-head Gate A qualification.
 
 ## Current stop boundary
 
