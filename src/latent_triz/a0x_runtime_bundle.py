@@ -1,9 +1,9 @@
 """Prepare one immutable, target-free A0X runtime binding bundle.
 
-Preparation is deliberately limited to public documents and executable bytes.
-It never starts a process, imports material libraries, reads a sealed target, or
-opens a model.  Its three documents form an acyclic dependency chain:
-descriptor -> authorization -> local role mapping.
+Preparation is deliberately limited to public documents, executable/package
+metadata, and the acquired runtime-file allowlist. It never constructs a
+tokenizer or model and never reads a sealed target. Its four documents form an
+acyclic dependency chain: readiness -> descriptor -> authorization -> mapping.
 """
 from __future__ import annotations
 
@@ -40,6 +40,11 @@ from .a0x_material_contract import (
     derive_runtime_paths,
 )
 from .a0x_runner import planned_material_dossiers
+from .a0x_runtime_readiness import (
+    A0XRuntimeReadinessError,
+    runtime_readiness_path,
+    validate_runtime_readiness,
+)
 from .validator import validate
 
 
@@ -103,6 +108,7 @@ def prepare_runtime_bundle(
     *,
     source_state_probe: Callable[[], tuple[str, bool]],
     ccp_version_probe: Callable[[Path], str],
+    runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Prepare the exact v2 bundle without accessing material resources."""
     repository = Path(root).resolve(strict=True)
@@ -114,8 +120,14 @@ def prepare_runtime_bundle(
         repository, request, dossier=dossier, pair=pair, source_head=source_head,
         ccp_version_probe=ccp_version_probe,
     )
+    readiness = _runtime_readiness(
+        runtime_readiness_probe, repository, pair, source_head, inputs.python_path,
+    )
+    readiness_raw = canonical_json_bytes(readiness)
+    readiness_sha256 = hashlib.sha256(readiness_raw).hexdigest()
     descriptor = _build_descriptor(
-        repository, pair, source_head, inputs.python_path, inputs.child_path, inputs.contract_sha256,
+        repository, pair, source_head, inputs.python_path, inputs.child_path,
+        inputs.contract_sha256, readiness_sha256,
     )
     descriptor_raw = canonical_json_bytes(descriptor)
     descriptor_sha256 = hashlib.sha256(descriptor_raw).hexdigest()
@@ -130,7 +142,9 @@ def prepare_runtime_bundle(
     )
     if _source_state(source_state_probe) != (source_head, True):
         raise A0XRuntimeBundleError("runtime preparation source state drifted before output")
-    return _write_and_verify_bundle(repository, pair, source_head, descriptor, authorization, mapping)
+    return _write_and_verify_bundle(
+        repository, pair, source_head, readiness, descriptor, authorization, mapping,
+    )
 
 
 def _load_fixed_dossier(root: Path, relative: str) -> tuple[dict[str, Any], PairBinding]:
@@ -218,6 +232,7 @@ def _build_descriptor(
     python_path: Path,
     child_path: Path,
     contract_sha256: str,
+    readiness_sha256: str,
 ) -> dict[str, Any]:
     """Construct a descriptor that has no authorization-byte dependency."""
     if child_path != _repository_file(root, "scripts/a0x_material_child.py"):
@@ -231,6 +246,10 @@ def _build_descriptor(
             "role": "child", "path": "scripts/a0x_material_child.py", "sha256": sha256_file(child_path),
         },
         "python": {"role": "python", "path": str(python_path), "sha256": sha256_file(python_path)},
+        "runtime_readiness": {
+            "role": "readiness", "path": runtime_readiness_path(pair),
+            "sha256": readiness_sha256,
+        },
         "environment_template": list(_ENVIRONMENT),
         "authorization_reference": {
             "role": "authorization", "path": derive_runtime_paths(pair).authorization_path,
@@ -351,21 +370,26 @@ def _write_and_verify_bundle(
     root: Path,
     pair: PairBinding,
     source_head: str,
+    readiness: Mapping[str, Any],
     descriptor: Mapping[str, Any],
     authorization: Mapping[str, Any],
     mapping: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Write descriptor, authorization, then mapping using exclusive creates."""
+    """Write readiness, descriptor, authorization, and mapping exclusively."""
     paths = derive_runtime_paths(pair)
     relative_paths = {
+        "readiness": runtime_readiness_path(pair),
         "descriptor": paths.launch_descriptor_path,
         "authorization": paths.authorization_path,
         "mapping": runtime_mapping_path(pair, source_head=source_head),
     }
     _preflight_output_paths(root, pair, source_head)
-    documents = {"descriptor": descriptor, "authorization": authorization, "mapping": mapping}
+    documents = {
+        "readiness": readiness, "descriptor": descriptor,
+        "authorization": authorization, "mapping": mapping,
+    }
     raw_documents = {name: canonical_json_bytes(document) for name, document in documents.items()}
-    for name in ("descriptor", "authorization", "mapping"):
+    for name in ("readiness", "descriptor", "authorization", "mapping"):
         path = _write_path(root, relative_paths[name])
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         _exclusive_write(path, raw_documents[name])
@@ -376,6 +400,8 @@ def _write_and_verify_bundle(
         "status": "prepared",
         "source_head": source_head,
         "pair_binding": pair.as_mapping(),
+        "readiness_path": relative_paths["readiness"],
+        "readiness_sha256": hashlib.sha256(raw_documents["readiness"]).hexdigest(),
         "descriptor_path": relative_paths["descriptor"],
         "descriptor_sha256": hashlib.sha256(raw_documents["descriptor"]).hexdigest(),
         "authorization_path": relative_paths["authorization"],
@@ -407,6 +433,22 @@ def _source_state(probe: Callable[[], tuple[str, bool]]) -> tuple[str, bool]:
     if not isinstance(clean, bool):
         raise A0XRuntimeBundleError("runtime preparation source cleanliness is invalid")
     return source_head, clean
+
+
+def _runtime_readiness(
+    probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+    root: Path,
+    pair: PairBinding,
+    source_head: str,
+    python_path: Path,
+) -> dict[str, Any]:
+    try:
+        value = probe(root, pair, source_head, python_path)
+        return validate_runtime_readiness(
+            value, source_head=source_head, pair=pair, python_path=python_path,
+        )
+    except (A0XRuntimeReadinessError, OSError, TypeError, ValueError) as error:
+        raise A0XRuntimeBundleError("runtime readiness probe refused") from error
 
 
 def _ccp_identity(contract: Mapping[str, Any]) -> dict[str, Any]:
@@ -448,6 +490,7 @@ def _preflight_output_paths(root: Path, pair: PairBinding, source_head: str) -> 
     paths = derive_runtime_paths(pair)
     material_workspace = f".a0x-runtime/material/{pair.leg.value}/{pair.model_key}/{pair.run_id}"
     for relative in (
+        runtime_readiness_path(pair),
         paths.launch_descriptor_path,
         paths.authorization_path,
         runtime_mapping_path(pair, source_head=source_head),

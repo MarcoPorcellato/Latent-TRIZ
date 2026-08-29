@@ -80,6 +80,40 @@ def _runtime_preparation_fixture() -> tuple[tempfile.TemporaryDirectory[str], Pa
     )
 
 
+def _synthetic_runtime_readiness(root: Path, pair: PairBinding, source_head: str, python_path: Path):
+    """Return closed target-free metadata for the inert runtime fixture."""
+    from latent_triz.a0x_contract import sha256_file
+    from latent_triz.a0x_runtime_readiness import EXPECTED_API_SYMBOLS, EXPECTED_PACKAGES
+
+    return {
+        "artifact_class": "a0x-runtime-readiness",
+        "readiness_profile": "a0x-runtime-readiness-v1",
+        "source_head": source_head,
+        "pair_binding": pair.as_mapping(),
+        "python": {
+            "path": str(python_path),
+            "sha256": sha256_file(python_path),
+            "version": "3.11.13",
+            "major_minor": [3, 11],
+            "environment_root": str(python_path.parent.parent),
+            "base_prefix": "/synthetic/base-python",
+            "packages": dict(EXPECTED_PACKAGES),
+            "api_symbols": dict(EXPECTED_API_SYMBOLS),
+        },
+        "model_runtime": {
+            "model_key": pair.model_key,
+            "model_id": pair.model_id,
+            "revision": pair.revision,
+            "card_path": "experiments/a0x-six-model/model-cards/gpt2.json",
+            "card_sha256": "1" * 64,
+            "runtime_root": "artifacts/models/gpt2-synthetic",
+            "runtime_file_count": 1,
+            "runtime_total_bytes": 1,
+            "runtime_files_commitment_sha256": "2" * 64,
+        },
+    }
+
+
 @contextmanager
 def _synthetic_ccp_hash(request: Any):
     """Keep inert test binaries independent of the temporary mount policy."""
@@ -128,6 +162,7 @@ def prepare_constructible_runtime_bundle() -> ConstructibleRuntimeBundle:
             request,
             source_state_probe=lambda: ("a" * 40, True),
             ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+            runtime_readiness_probe=_synthetic_runtime_readiness,
         )
     return ConstructibleRuntimeBundle(temporary=temporary, root=root, request=request, receipt=receipt)
 
@@ -186,10 +221,13 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 request,
                 source_state_probe=lambda: ("a" * 40, True),
                 ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=_synthetic_runtime_readiness,
             )
+        readiness = root / receipt["readiness_path"]
         descriptor = root / receipt["descriptor_path"]
         authorization = root / receipt["authorization_path"]
         mapping = root / receipt["mapping_path"]
+        self.assertTrue(readiness.is_file())
         self.assertTrue(descriptor.is_file())
         self.assertTrue(authorization.is_file())
         self.assertTrue(mapping.is_file())
@@ -197,6 +235,11 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         authorization_document = json.loads(authorization.read_text(encoding="utf-8"))
         mapping_document = json.loads(mapping.read_text(encoding="utf-8"))
         self.assertNotIn("authorization", descriptor_document)
+        self.assertEqual(receipt["readiness_path"], descriptor_document["runtime_readiness"]["path"])
+        self.assertEqual(
+            hashlib.sha256(readiness.read_bytes()).hexdigest(),
+            descriptor_document["runtime_readiness"]["sha256"],
+        )
         descriptor_sha256 = hashlib.sha256(descriptor.read_bytes()).hexdigest()
         self.assertEqual(descriptor_sha256, authorization_document["guard_launch"]["launch_descriptor"]["sha256"])
         self.assertEqual(receipt["descriptor_path"], mapping_document["descriptor"]["path"])
@@ -221,6 +264,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 request,
                 source_state_probe=lambda: ("a" * 40, True),
                 ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=_synthetic_runtime_readiness,
             )
 
         descriptor_path = root / receipt["descriptor_path"]
@@ -375,6 +419,15 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         def mutate_descriptor_bytes(bundle: ConstructibleRuntimeBundle) -> None:
             (bundle.root / bundle.receipt["descriptor_path"]).write_bytes(b"{}")
 
+        def mutate_readiness_bytes(bundle: ConstructibleRuntimeBundle) -> None:
+            (bundle.root / bundle.receipt["readiness_path"]).write_bytes(b"{}")
+
+        def mutate_descriptor_readiness_hash(bundle: ConstructibleRuntimeBundle) -> None:
+            path = bundle.root / bundle.receipt["descriptor_path"]
+            document = json.loads(path.read_text())
+            document["runtime_readiness"]["sha256"] = "0" * 64
+            rewrite(path, document)
+
         def mutate_authorization_descriptor_hash(bundle: ConstructibleRuntimeBundle) -> None:
             path = bundle.root / bundle.receipt["authorization_path"]
             document = json.loads(path.read_text())
@@ -448,6 +501,8 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         cases = {
             "authorization_bytes": mutate_authorization_bytes,
             "descriptor_bytes": mutate_descriptor_bytes,
+            "readiness_bytes": mutate_readiness_bytes,
+            "descriptor_readiness_hash": mutate_descriptor_readiness_hash,
             "authorization_descriptor_hash": mutate_authorization_descriptor_hash,
             "descriptor_authorization_path": mutate_descriptor_authorization_path,
             "contract_bytes": mutate_contract_bytes,
@@ -464,12 +519,14 @@ class A0XRuntimeBundleTests(unittest.TestCase):
             "pair": mutate_pair,
         }
         child_checked = {
-            "authorization_bytes", "descriptor_bytes", "authorization_descriptor_hash",
+            "authorization_bytes", "descriptor_bytes", "readiness_bytes",
+            "descriptor_readiness_hash", "authorization_descriptor_hash",
             "descriptor_authorization_path", "contract_bytes", "python_bytes", "child_bytes",
             "source_head", "pair",
         }
         production_checked = {
-            "authorization_bytes", "descriptor_bytes", "authorization_descriptor_hash",
+            "authorization_bytes", "descriptor_bytes", "readiness_bytes",
+            "descriptor_readiness_hash", "authorization_descriptor_hash",
             "descriptor_authorization_path", "contract_bytes", "source_head", "pair",
         }
         terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
@@ -569,6 +626,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 bundle.request,
                 source_state_probe=lambda: ("a" * 40, True),
                 ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=_synthetic_runtime_readiness,
             )
 
         for field in ("authorization_id", "attempt_id"):
@@ -581,6 +639,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                     replace(bundle.request, **{field: "invalid identifier"}),
                     source_state_probe=lambda: ("a" * 40, True),
                     ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                    runtime_readiness_probe=_synthetic_runtime_readiness,
                 )
 
         paths = derive_runtime_paths(bundle.receipt["pair_binding"], source_head=bundle.receipt["source_head"])
@@ -623,10 +682,10 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         patch_target = "latent_triz.a0x_runtime_bundle.planned_material_dossiers"
         with self._synthetic_ccp_hash(request), patch(patch_target, return_value={("a0", "gpt2"): request.fixed_dossier}):
-            receipt = prepare_runtime_bundle(root, request, source_state_probe=lambda: ("a" * 40, True), ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0")
-            first_bytes = {name: (root / receipt[f"{name}_path"]).read_bytes() for name in ("descriptor", "authorization", "mapping")}
+            receipt = prepare_runtime_bundle(root, request, source_state_probe=lambda: ("a" * 40, True), ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0", runtime_readiness_probe=_synthetic_runtime_readiness)
+            first_bytes = {name: (root / receipt[f"{name}_path"]).read_bytes() for name in ("readiness", "descriptor", "authorization", "mapping")}
             with self.assertRaises(A0XRuntimeBundleError):
-                prepare_runtime_bundle(root, request, source_state_probe=lambda: ("a" * 40, True), ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0")
+                prepare_runtime_bundle(root, request, source_state_probe=lambda: ("a" * 40, True), ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0", runtime_readiness_probe=_synthetic_runtime_readiness)
         self.assertEqual(first_bytes, {name: (root / receipt[f"{name}_path"]).read_bytes() for name in first_bytes})
 
     def test_preparation_never_reaches_material_or_process_seams(self) -> None:
@@ -651,6 +710,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 request,
                 source_state_probe=lambda: ("a" * 40, True),
                 ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=_synthetic_runtime_readiness,
             )
         self.assertEqual("prepared", receipt["status"])
         process_run.assert_not_called()
@@ -707,6 +767,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                             request,
                             source_state_probe=lambda: ("a" * 40, True),
                             ccp_version_probe=version_probe,
+                            runtime_readiness_probe=_synthetic_runtime_readiness,
                         )
                 self.assertTrue(os.path.lexists(occupied))
                 if original is not None:
@@ -766,6 +827,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                             request,
                             source_state_probe=lambda: ("a" * 40, True),
                             ccp_version_probe=version_probe,
+                            runtime_readiness_probe=_synthetic_runtime_readiness,
                         )
                 self.assertEqual(b"preserved", marker.read_bytes())
                 if category == "destination":
@@ -794,6 +856,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 request,
                 source_state_probe=lambda: ("a" * 40, False),
                 ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=_synthetic_runtime_readiness,
             )
         self.assertFalse((root / ".a0x-runtime/launches").exists())
         self.assertFalse((root / ".a0x-runtime/authorizations").exists())
@@ -817,6 +880,8 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 return Result("")
             if argv == [str(request.ccp_executable.resolve()), "--version"]:
                 return Result("commit-ci-preflight 0.1.0\n")
+            if len(argv) == 4 and argv[:3] == [str(request.python_executable.resolve()), "-I", "-c"]:
+                return Result("{}\n")
             raise AssertionError(f"unexpected probe argv: {argv}")
 
         argv = [
@@ -831,6 +896,13 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         with (
             self._synthetic_ccp_hash(request),
             patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
+            patch.object(
+                cli, "build_runtime_readiness",
+                side_effect=lambda **kwargs: _synthetic_runtime_readiness(
+                    kwargs["repository_root"], kwargs["pair"],
+                    kwargs["source_head"], kwargs["python_path"],
+                ),
+            ),
             patch.object(cli.subprocess, "run", side_effect=probe),
         ):
             code = cli.main(argv, root=root, stdout=output)
@@ -859,6 +931,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                     request,
                     source_state_probe=lambda: ("a" * 40, True),
                     ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                    runtime_readiness_probe=_synthetic_runtime_readiness,
                 )
         self.assertFalse((root / ".a0x-runtime/launches").exists())
         self.assertFalse((root / ".a0x-runtime/authorizations").exists())

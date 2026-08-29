@@ -732,6 +732,58 @@ with two frozen legs, twelve dossiers, and zero material or remote access. The
 full repository check passed 1,100 tests with 11 documented skips. Commit the
 regenerated package, then request a new exact-head Gate A qualification.
 
+## 29. Gate A did not prove pair-specific Python and snapshot readiness
+
+**Symptom.** Gate A passed at `68f8bfe...`, but the pre-Gate-B inventory showed
+that the available Python path was a virtual-environment symlink which the
+existing external-file normalizer resolved to the Homebrew base interpreter.
+That base interpreter did not expose the five pinned packages. The isolated
+clone also had no `artifacts/models/` snapshot for the selected pair.
+
+**Root cause.** Repository qualification proved source and verification
+images, while runtime-bundle preparation bound executable bytes but not
+virtual-environment identity, package/API compatibility, or pair-specific
+snapshot presence. These are separate evidence layers and Gate A cannot imply
+Gate B readiness.
+
+**Correction.** Add an immutable private `a0x-runtime-readiness-v1` receipt as
+the first node in the runtime chain. It requires an independent regular Python
+3.11 executable inside a non-base environment; exact versions of torch,
+Transformers, tokenizers, NumPy, and safetensors; required API symbols; and the
+exact pair's source/card/allowlist/file commitments. Symlinked or hardlinked
+Python/model files, missing assets, package drift, API drift, and pair drift
+fail before bundle creation. Descriptor, material child, production adapter,
+and outer launcher all validate the binding before an attempt can start.
+
+**Regression evidence.** Synthetic tests cover a valid binding and reject
+symlink/base Python, missing or altered model files, hardlinks, package/API
+drift, wrong pairs, receipt/hash drift, and overwrite attempts. The readiness
+probe never constructs a tokenizer/model or reads a target.
+
+**Status.** Corrected locally; both implementation inventories, freezes, and
+twelve dossiers must be regenerated and a new Gate A qualification requested.
+
+## 30. Padding and post-claim observation persistence were incomplete
+
+**Symptom.** A non-null model-card padding direction was recorded but not
+enforced, and a filesystem failure while writing the pre-run observation
+occurred after the one-shot claim but outside the terminal recovery block.
+
+**Root cause.** The adapter verified tokenizer type/offset behavior without
+comparing `padding_side`, while the launcher assumed its first post-claim write
+could not fail.
+
+**Correction.** Refuse a declared padding-side mismatch before model factory
+construction. Move the pre-run observation write into the post-claim guarded
+section; if it fails, retain the claim, start no child, and persist the first
+possible terminal `launcher_internal_error` recovery observation.
+
+**Regression evidence.** The GPT-Neo synthetic card rejects left padding
+before model construction. An injected observation-write `OSError` produces no
+process call, preserves the claim, and records terminal recovery evidence.
+
+**Status.** Corrected locally; no material attempt was consumed.
+
 ## Current stop boundary
 
 The final integration candidate must first complete all no-material gates and

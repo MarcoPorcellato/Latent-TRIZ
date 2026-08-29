@@ -223,6 +223,44 @@ It was not `tests/test_a0x_runtime_bundle.py`. Both leg inventories now bind
 the preparer CLI, preparer module, and its regression suite, and the canonical
 package is regenerated only from the post-inventory implementation commit.
 
+### Pre-material readiness gate
+
+The successful Gate A qualification of public source
+`68f8bfe75a883054118246101485f71a56a5e82e` is preserved by receipt-file
+SHA-256 `3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`
+and receipt ID
+`sha256:2c82dc5205ad0b0c788fc1e5837ea9a790dfe924c488878b7a73413867103093`.
+Its public evidence branch is rooted at commit
+`fc46c39421ae85713f473ef49a1270beab3aefe6`. This is valid historical Gate A
+evidence for that exact source only; the readiness correction changes frozen
+implementation inputs and therefore requires a new Gate A qualification after
+regeneration.
+
+A target-free audit before Gate B found two independent blockers that the
+earlier bundle contract did not prove:
+
+- the available virtual-environment launcher was a symlink; resolving it
+  selected the Homebrew base interpreter and lost the required package set;
+- the isolated execution clone intentionally contained no model snapshot, so
+  its pair-specific runtime root could not pass the allowlist/hash checks.
+
+Gate B must now create or select one independent regular Python 3.11
+executable in an exact virtual environment and materialize only the selected
+pair's already acquired snapshot inside the isolated execution clone as
+independent regular files. Symlinks and hardlinks are refused. On APFS, a
+copy-on-write copy may avoid duplicating physical blocks, but it remains an
+explicit Gate B action and must be followed by byte/size/SHA-256 verification.
+The preparer records one private readiness receipt binding exact interpreter
+bytes, the five pinned packages, required APIs, card bytes, runtime-file
+commitment, and pair identity. The descriptor binds that receipt before any
+authorization or role mapping is produced.
+
+The same correction also enforces a model card's non-null `pad_side` before
+model construction and makes a post-claim failure to persist the pre-run
+observation terminal recovery evidence without starting the child. No bundle,
+model, tokenizer, target, CCP, Docker, or remote action was used to discover
+or test these corrections.
+
 ## Current checkpoint
 
 The campaign remains `sealed_gate_pending`. The material composition is no

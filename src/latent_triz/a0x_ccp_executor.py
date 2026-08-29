@@ -42,6 +42,11 @@ from .a0x_material_contract import (
     validate_qualification_evidence,
 )
 from .a0x_runner import planned_material_dossiers
+from .a0x_runtime_readiness import (
+    A0XRuntimeReadinessError,
+    runtime_readiness_path,
+    validate_runtime_readiness,
+)
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -235,6 +240,10 @@ def launch_fixed_dossier(
     descriptor_path = _repository_file(root, descriptor_relative)
     if sha256_file(descriptor_path) != launch.launch_descriptor_sha256:
         raise A0XCcpExecutorError("launch descriptor bytes drifted")
+    descriptor = _strict_object(descriptor_path.read_bytes(), "launch descriptor")
+    _validate_runtime_readiness_binding(
+        descriptor, root=root, pair=pair, source_head=source_head,
+    )
     mapping_path = _repository_file(root, runtime_mapping_path(pair, source_head=source_head))
     mapping = _strict_object(mapping_path.read_bytes(), "runtime role mapping")
     ccp_path, python_path = _validate_runtime_mapping(
@@ -301,9 +310,10 @@ def launch_fixed_dossier(
         qualification_evidence=authorization["qualification_evidence"], argv=argv,
         guard_preflight_path=guard_preflight_path, guard_preflight_raw_sha256=guard_preflight_raw_sha256,
     )
-    pre_run_path = _write_pre_run_observation(root, expected_paths.observation_directory, pre_run)
     pre_run_raw_sha256 = _sha256_bytes(_canonical_json(pre_run))
+    pre_run_path = expected_paths.observation_directory + "pre-run-observation.json"
     try:
+        _write_pre_run_observation(root, expected_paths.observation_directory, pre_run)
         # The claim is intentionally before the final recheck: a binding drift
         # in this narrow race window consumes the attempt and receives durable
         # recovery evidence rather than silently enabling a retry.
@@ -460,6 +470,33 @@ def _validate_runtime_mapping(
     _validate_file_hash(ccp_path, launch.ccp_sha256, "CCP executable")
     _validate_file_hash(python_path, launch.python_sha256, "Python executable")
     return ccp_path, python_path
+
+
+def _validate_runtime_readiness_binding(
+    descriptor: Mapping[str, Any], *, root: Path, pair: PairBinding, source_head: str,
+) -> None:
+    binding = descriptor.get("runtime_readiness")
+    python = descriptor.get("python")
+    if (
+        not isinstance(binding, Mapping)
+        or set(binding) != {"role", "path", "sha256"}
+        or binding.get("role") != "readiness"
+        or binding.get("path") != runtime_readiness_path(pair)
+        or not isinstance(python, Mapping)
+        or not isinstance(python.get("path"), str)
+    ):
+        raise A0XCcpExecutorError("runtime readiness binding is invalid")
+    readiness_path = _repository_file(root, str(binding["path"]))
+    raw = readiness_path.read_bytes()
+    if _sha256_bytes(raw) != binding.get("sha256"):
+        raise A0XCcpExecutorError("runtime readiness bytes drifted")
+    try:
+        validate_runtime_readiness(
+            _strict_object(raw, "runtime readiness"), source_head=source_head,
+            pair=pair, python_path=Path(python["path"]),
+        )
+    except A0XRuntimeReadinessError as error:
+        raise A0XCcpExecutorError("runtime readiness is invalid") from error
 
 
 def _validate_local_qualification_receipt(

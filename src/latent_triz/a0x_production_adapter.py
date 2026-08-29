@@ -37,6 +37,11 @@ from .a0x_material_contract import (
 )
 from .a0x_material_runtime import MaterialLifecycleDependencies, run_material_lifecycle
 from .a0x_runner import planned_material_dossiers
+from .a0x_runtime_readiness import (
+    A0XRuntimeReadinessError,
+    runtime_readiness_path,
+    validate_runtime_readiness,
+)
 
 
 class A0XProductionAdapterError(RuntimeError):
@@ -186,7 +191,8 @@ def _bind_context(*, root: Path, descriptor: Mapping[str, Any]) -> ProductionCon
 def _descriptor_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     expected = {
         "descriptor_profile", "source_head", "cwd_kind", "pair_binding", "child_script", "python",
-        "environment_template", "authorization_reference", "material_contract", "execution",
+        "runtime_readiness", "environment_template", "authorization_reference",
+        "material_contract", "execution",
     }
     if not isinstance(value, Mapping) or set(value) != expected:
         raise A0XProductionAdapterError("production descriptor shape is unsupported")
@@ -222,16 +228,36 @@ def _bound_runtime_documents(
     root: Path, descriptor: Mapping[str, Any], pair: PairBinding,
 ) -> dict[str, tuple[bytes, str]]:
     try:
+        readiness_binding = descriptor.get("runtime_readiness")
+        if (
+            not isinstance(readiness_binding, Mapping)
+            or set(readiness_binding) != {"role", "path", "sha256"}
+            or readiness_binding.get("role") != "readiness"
+            or readiness_binding.get("path") != runtime_readiness_path(pair)
+        ):
+            raise A0XRuntimeReadinessError("runtime readiness binding is invalid")
+        readiness_raw = _read_repository_file(root, str(readiness_binding["path"]))
+        if hashlib.sha256(readiness_raw).hexdigest() != readiness_binding.get("sha256"):
+            raise A0XRuntimeReadinessError("runtime readiness bytes drifted")
+        readiness = strict_json_object(readiness_raw)
+        python_binding = descriptor.get("python")
+        if not isinstance(python_binding, Mapping) or not isinstance(python_binding.get("path"), str):
+            raise A0XRuntimeReadinessError("runtime readiness Python binding is invalid")
+        validate_runtime_readiness(
+            readiness, source_head=str(descriptor["source_head"]), pair=pair,
+            python_path=Path(python_binding["path"]),
+        )
         authorization_path = authorization_reference(descriptor.get("authorization_reference"), pair)
         contract_path, contract_sha256 = material_contract_binding(descriptor.get("material_contract"))
         authorization_raw = _read_repository_file(root, authorization_path)
         contract_raw = _read_repository_file(root, contract_path)
-    except (A0XContractError, OSError, TypeError, ValueError) as error:
+    except (A0XContractError, A0XRuntimeReadinessError, OSError, TypeError, ValueError) as error:
         raise A0XProductionAdapterError("production descriptor runtime documents are invalid") from error
     observed_contract_sha256 = hashlib.sha256(contract_raw).hexdigest()
     if observed_contract_sha256 != contract_sha256:
         raise A0XProductionAdapterError("production descriptor material contract bytes drifted")
     return {
+        "runtime_readiness": (readiness_raw, hashlib.sha256(readiness_raw).hexdigest()),
         "authorization": (authorization_raw, hashlib.sha256(authorization_raw).hexdigest()),
         "material_contract": (contract_raw, observed_contract_sha256),
     }

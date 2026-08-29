@@ -108,7 +108,21 @@ class A0XCcpExecutorTests(unittest.TestCase):
         self.assertEqual(runtime.launch_descriptor_path, launch["launch_descriptor"]["path"])
         descriptor = root / runtime.launch_descriptor_path
         descriptor.parent.mkdir(parents=True)
-        descriptor_raw = b'{"synthetic":"child-descriptor"}'
+        from latent_triz.a0x_runtime_readiness import canonical_json_bytes, runtime_readiness_path
+        from tests.test_a0x_runtime_bundle import _synthetic_runtime_readiness
+        readiness = _synthetic_runtime_readiness(root, pair, source_head, python.resolve())
+        readiness_path = root / runtime_readiness_path(pair)
+        readiness_path.parent.mkdir(parents=True, exist_ok=True)
+        readiness_raw = canonical_json_bytes(readiness)
+        readiness_path.write_bytes(readiness_raw)
+        descriptor_raw = json.dumps({
+            "synthetic": "child-descriptor",
+            "python": {"role": "python", "path": str(python.resolve()), "sha256": _sha(python.read_bytes())},
+            "runtime_readiness": {
+                "role": "readiness", "path": readiness_path.relative_to(root).as_posix(),
+                "sha256": _sha(readiness_raw),
+            },
+        }, sort_keys=True, separators=(",", ":")).encode()
         descriptor.write_bytes(descriptor_raw)
         launch["launch_descriptor"]["sha256"] = _sha(descriptor_raw)
         qualification_receipt = {
@@ -247,6 +261,51 @@ class A0XCcpExecutorTests(unittest.TestCase):
                     self._launch(root, fake, preflight=_FakeGuardPreflight(outputs=tuple(baseline)))
                 self.assertFalse((root / runtime.claim_path).exists())
                 self.assertEqual([], fake.calls)
+
+    def test_pre_run_observation_failure_records_recovery_without_starting_guard(self) -> None:
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        bundle = prepare_constructible_runtime_bundle()
+        self.addCleanup(bundle.close)
+        fake = _FakeProcess(ProcessResult(
+            returncode=0, stdout_sha256=_sha(b""), stdout_bytes=0,
+            stderr_sha256=_sha(b""), stderr_bytes=0,
+        ))
+        runtime = derive_runtime_paths(
+            PairBinding.from_mapping(bundle.receipt["pair_binding"]),
+            source_head=bundle.receipt["source_head"],
+        )
+        expected_ccp_sha256 = json.loads(
+            (bundle.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(),
+        )["ccp"]["sha256"]
+        actual_sha256_file = __import__("latent_triz.a0x_ccp_executor", fromlist=["sha256_file"]).sha256_file
+        with (
+            patch(
+                "latent_triz.a0x_ccp_executor.sha256_file",
+                side_effect=lambda path: expected_ccp_sha256
+                if Path(path).resolve() == bundle.request.ccp_executable.resolve()
+                else actual_sha256_file(path),
+            ),
+            patch(
+                "latent_triz.a0x_ccp_executor._write_pre_run_observation",
+                side_effect=OSError("injected pre-run write failure"),
+            ),
+            patch("latent_triz.a0x_ccp_executor.planned_material_dossiers", return_value={("a0", "gpt2"): bundle.request.fixed_dossier}),
+            self.assertRaises(A0XCcpExecutorError),
+        ):
+            launch_fixed_dossier(
+                repository_root=bundle.root,
+                fixed_dossier=bundle.request.fixed_dossier,
+                source_head_probe=lambda: "a" * 40,
+                process_executor=fake,
+                guard_preflight_producer=_FakeGuardPreflight(),
+            )
+        self.assertEqual([], fake.calls)
+        terminal = json.loads((bundle.root / runtime.observation_directory / "terminal-observation.json").read_text())
+        self.assertEqual("launcher_internal_error", terminal["outer_exit_classification"])
+        self.assertTrue(terminal["recovery_required"])
+        self.assertEqual("OSError", terminal["error_type"])
+        self.assertTrue((bundle.root / runtime.claim_path).is_file())
 
     def test_configuration_backed_preflight_roles_are_rejected_before_claim(self) -> None:
         root, _pair, runtime, _authorization, _mapping, fake = self._fixture()

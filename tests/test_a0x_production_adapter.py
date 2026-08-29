@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from latent_triz.a0x_contract import Leg
+from latent_triz.a0x_contract import Leg, PairBinding
 from tests.a0x_test_support import artifact, authorization_documents, pair_binding
 
 
@@ -42,13 +42,32 @@ class A0XProductionAdapterTests(unittest.TestCase):
             authorization_path.parent.mkdir(parents=True)
             contract_path.parent.mkdir(parents=True)
             contract_path.write_bytes(contract_raw)
+            python_path = root / ".a0x-runtime/bin/python"
+            python_path.parent.mkdir(parents=True)
+            python_path.write_bytes(b"synthetic python")
+            pair_object = PairBinding.from_mapping(pair)
+            from latent_triz.a0x_runtime_readiness import canonical_json_bytes, runtime_readiness_path
+            from tests.test_a0x_runtime_bundle import _synthetic_runtime_readiness
+            readiness = _synthetic_runtime_readiness(root, pair_object, source_head, python_path)
+            readiness_path = root / runtime_readiness_path(pair_object)
+            readiness_path.parent.mkdir(parents=True, exist_ok=True)
+            readiness_raw = canonical_json_bytes(readiness)
+            readiness_path.write_bytes(readiness_raw)
             descriptor = {
                 "descriptor_profile": "a0x-material-child-descriptor-v2",
                 "source_head": source_head,
                 "cwd_kind": "repository_root",
                 "pair_binding": pair,
                 "child_script": {"role": "child", "path": "scripts/a0x_material_child.py", "sha256": "a" * 64},
-                "python": {"role": "python", "path": "/synthetic/python", "sha256": "b" * 64},
+                "python": {
+                    "role": "python", "path": str(python_path),
+                    "sha256": hashlib.sha256(python_path.read_bytes()).hexdigest(),
+                },
+                "runtime_readiness": {
+                    "role": "readiness",
+                    "path": readiness_path.relative_to(root).as_posix(),
+                    "sha256": hashlib.sha256(readiness_raw).hexdigest(),
+                },
                 "environment_template": [
                     "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1",
                     "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1",
@@ -72,7 +91,7 @@ class A0XProductionAdapterTests(unittest.TestCase):
             authorization["guard_launch"]["launch_descriptor"]["sha256"] = hashlib.sha256(descriptor_raw).hexdigest()
             authorization_path.write_bytes(_raw(authorization))
             launch_path = root / derive_runtime_paths(pair).launch_descriptor_path
-            launch_path.parent.mkdir(parents=True)
+            launch_path.parent.mkdir(parents=True, exist_ok=True)
             launch_path.write_bytes(descriptor_raw)
             yield root, descriptor, pair
 

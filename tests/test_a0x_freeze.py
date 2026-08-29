@@ -238,7 +238,9 @@ class A0XFreezeTests(unittest.TestCase):
         required = {
             "scripts/a0x_prepare_runtime.py",
             "src/latent_triz/a0x_runtime_bundle.py",
+            "src/latent_triz/a0x_runtime_readiness.py",
             "tests/test_a0x_runtime_bundle.py",
+            "tests/test_a0x_runtime_readiness.py",
         }
         for leg in ("a0", "r1"):
             with self.subTest(leg=leg):

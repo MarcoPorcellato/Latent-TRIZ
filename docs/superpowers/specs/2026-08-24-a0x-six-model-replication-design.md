@@ -113,6 +113,19 @@ architecture cannot stand in for tokenizer identity; the SmolLM2-135M
 exception is an explicit regression case. A missing, non-fast, mismatched, or
 unallowlisted card is terminal `incompatible` before model construction.
 
+Before a private runtime bundle may be prepared, a target-free readiness
+receipt must bind the selected pair to an independent regular Python 3.11
+executable inside a real virtual environment, exact package versions
+(`torch==2.13.0`, `transformers==5.15.0`, `tokenizers==0.22.2`,
+`numpy==2.4.6`, `safetensors==0.8.0`), the required public API symbols, and the
+complete allowlisted model snapshot. Symlinked or multiply linked Python/model
+files, a base interpreter, missing files, or hash drift refuse bundle
+preparation. The receipt is written before the launch descriptor; the
+descriptor binds its raw SHA-256, and every later static boundary revalidates
+the receipt and Python bytes before an attempt claim. This readiness step may
+import package top levels for API inspection, but it must not construct a
+tokenizer or model or read any sealed target.
+
 GPT-2's expected `GPT2TokenizerFast` class is frozen from the pinned
 Transformers AutoTokenizer mapping for `model_type=gpt2`, together with the
 presence of the exact `tokenizer.json`; it is not inferred from the snapshot's
@@ -221,8 +234,13 @@ Each leg has a separate dense-output cap per model run:
 
 | leg | maximum wall time | maximum peak RSS | maximum new dense/index bytes |
 | --- | ---: | ---: | ---: |
-| A0X-A0 | 1,800 seconds | 8,589,934,592 bytes | 33,554,432 bytes (32 MiB) |
-| A0X-R1 | 1,800 seconds | 8,589,934,592 bytes | 4,194,304 bytes (4 MiB) |
+| A0X-A0 | 3,600 seconds outer / 3,300 seconds scientific | 8,589,934,592 bytes | 33,554,432 bytes (32 MiB) |
+| A0X-R1 | 3,600 seconds outer / 3,300 seconds scientific | 8,589,934,592 bytes | 4,194,304 bytes (4 MiB) |
+
+The final 300 seconds are reserved for terminal sealing and cleanup, not extra
+scientific compute. A private supervisor may wait at most 3,900 seconds only
+to avoid racing the outer CCP finalizer; it does not enlarge the authorized
+3,600-second workload.
 
 The cap includes every newly produced dense activation, representation index,
 temporary output that survives a crash, and publication payload; crossing it

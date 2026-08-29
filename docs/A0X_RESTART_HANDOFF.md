@@ -7,6 +7,32 @@ date: 2026-08-25
 
 # A0X restart handoff
 
+## Pre-material readiness correction in progress — 2026-08-30
+
+The public Gate A evidence for exact source
+`68f8bfe75a883054118246101485f71a56a5e82e` is terminal `PASS`: receipt-file
+SHA-256 `3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`,
+receipt ID
+`sha256:2c82dc5205ad0b0c788fc1e5837ea9a790dfe924c488878b7a73413867103093`,
+public evidence commit `fc46c39421ae85713f473ef49a1270beab3aefe6`.
+It remains valid only for those exact bytes.
+
+Before Gate B, a target-free inventory found that the available venv Python
+was a symlink which normalized to a package-incomplete base interpreter and
+that the isolated clone had no pair-specific model snapshot. The current local
+correction adds a hash-bound readiness receipt for an independent Python 3.11
+venv executable, exact packages/APIs, and independent regular snapshot files;
+enforces declared tokenizer padding; and makes pre-run-observation write
+failure terminal after claim without child start. No material action occurred.
+
+The new readiness module and regression suite are frozen implementation inputs,
+so the prior Gate A receipt becomes historical after the correction commit.
+Regenerate both implementations/freezes and all twelve dossiers, complete
+target-free verification and independent Luna review, commit locally, and stop
+for a new exact-head Gate A authorization. Gate B must later authorize the
+regular interpreter and selected snapshot materialization. Gate C remains a
+separate one-shot scientific authorization.
+
 This is a reboot checkpoint, not a validation receipt or material-run
 authorization.
 

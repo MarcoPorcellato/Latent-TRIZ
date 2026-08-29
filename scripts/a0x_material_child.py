@@ -39,6 +39,11 @@ from latent_triz.a0x_material_contract import (  # noqa: E402
     material_contract_binding,
     validate_qualification_evidence,
 )
+from latent_triz.a0x_runtime_readiness import (  # noqa: E402
+    A0XRuntimeReadinessError,
+    runtime_readiness_path,
+    validate_runtime_readiness,
+)
 from latent_triz.validator import validate  # noqa: E402
 
 
@@ -145,7 +150,8 @@ def _validate_descriptor(
 ) -> None:
     expected_keys = {
         "descriptor_profile", "source_head", "cwd_kind", "pair_binding", "child_script",
-        "python", "environment_template", "authorization_reference", "material_contract", "execution",
+        "python", "runtime_readiness", "environment_template", "authorization_reference",
+        "material_contract", "execution",
     }
     if not isinstance(descriptor, Mapping) or set(descriptor) != expected_keys:
         raise A0XMaterialChildError("launch descriptor shape is unsupported")
@@ -208,15 +214,35 @@ def _validate_runtime_documents(
     descriptor: Mapping[str, Any], *, root: Path, pair: PairBinding,
 ) -> dict[str, bytes]:
     try:
+        readiness_binding = descriptor.get("runtime_readiness")
+        if (
+            not isinstance(readiness_binding, Mapping)
+            or set(readiness_binding) != {"role", "path", "sha256"}
+            or readiness_binding.get("role") != "readiness"
+            or readiness_binding.get("path") != runtime_readiness_path(pair)
+        ):
+            raise A0XRuntimeReadinessError("runtime readiness binding is invalid")
+        readiness_raw = _repository_file(root, str(readiness_binding["path"])).read_bytes()
+        if hashlib.sha256(readiness_raw).hexdigest() != _sha256(readiness_binding.get("sha256")):
+            raise A0XRuntimeReadinessError("runtime readiness bytes drifted")
+        readiness = strict_json_object(readiness_raw)
+        validate_runtime_readiness(
+            readiness, source_head=str(descriptor["source_head"]), pair=pair,
+            python_path=Path(str(descriptor["python"]["path"])),
+        )
         authorization_path = authorization_reference(descriptor.get("authorization_reference"), pair)
         contract_path, contract_sha256 = material_contract_binding(descriptor.get("material_contract"))
         authorization_raw = _repository_file(root, authorization_path).read_bytes()
         contract_raw = _repository_file(root, contract_path).read_bytes()
-    except (A0XContractError, OSError, TypeError, ValueError) as error:
+    except (A0XContractError, A0XRuntimeReadinessError, OSError, TypeError, ValueError) as error:
         raise A0XMaterialChildError("launch descriptor runtime documents are invalid") from error
     if hashlib.sha256(contract_raw).hexdigest() != contract_sha256:
         raise A0XMaterialChildError("launch descriptor material contract bytes drifted")
-    return {"authorization": authorization_raw, "material_contract": contract_raw}
+    return {
+        "runtime_readiness": readiness_raw,
+        "authorization": authorization_raw,
+        "material_contract": contract_raw,
+    }
 
 
 def _validate_authorization_contract_chain(

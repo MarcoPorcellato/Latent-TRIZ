@@ -103,7 +103,9 @@ class A0XFrozenPackageTests(unittest.TestCase):
                 self.assertTrue({
                     "scripts/a0x_prepare_runtime.py",
                     "src/latent_triz/a0x_runtime_bundle.py",
+                    "src/latent_triz/a0x_runtime_readiness.py",
                     "tests/test_a0x_runtime_bundle.py",
+                    "tests/test_a0x_runtime_readiness.py",
                 }.issubset(paths))
                 for row in bindings:
                     path = ROOT / row["path"]

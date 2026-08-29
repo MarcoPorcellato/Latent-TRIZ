@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from tests.a0x_test_support import artifact, authorization_documents, pair_binding
-from latent_triz.a0x_contract import Leg
+from latent_triz.a0x_contract import Leg, PairBinding
 
 ROOT = Path(__file__).resolve().parents[1]
 CHILD = ROOT / "scripts" / "a0x_material_child.py"
@@ -55,6 +55,7 @@ class A0XMaterialChildTests(unittest.TestCase):
         authorization = root / ".a0x-runtime" / "authorizations" / "a0" / "gpt2" / "a0x-a0-gpt2-run-1.json"
         authorization.parent.mkdir(parents=True)
         pair = pair_binding(Leg.A0, "gpt2")
+        pair_object = PairBinding.from_mapping(pair)
         contract = root / "experiments" / "a0x-six-model" / "material-execution-contract.json"
         contract.parent.mkdir(parents=True)
         material_contract = self._v2_material_contract()
@@ -79,6 +80,13 @@ class A0XMaterialChildTests(unittest.TestCase):
         authorization_document["material_contract_raw_sha256"] = hashlib.sha256(contract.read_bytes()).hexdigest()
         authorization_document["guard_launch"]["child_script"]["sha256"] = hashlib.sha256(child.read_bytes()).hexdigest()
         authorization_document["guard_launch"]["python"]["sha256"] = hashlib.sha256(python.read_bytes()).hexdigest()
+        from latent_triz.a0x_runtime_readiness import canonical_json_bytes, runtime_readiness_path
+        from tests.test_a0x_runtime_bundle import _synthetic_runtime_readiness
+        readiness = _synthetic_runtime_readiness(root, pair_object, "a" * 40, python.resolve())
+        readiness_path = root / runtime_readiness_path(pair_object)
+        readiness_path.parent.mkdir(parents=True, exist_ok=True)
+        readiness_raw = canonical_json_bytes(readiness)
+        readiness_path.write_bytes(readiness_raw)
         descriptor = {
             "descriptor_profile": "a0x-material-child-descriptor-v2",
             "source_head": "a" * 40,
@@ -93,6 +101,11 @@ class A0XMaterialChildTests(unittest.TestCase):
                 "role": "python",
                 "path": str(python.resolve()),
                 "sha256": hashlib.sha256(python.read_bytes()).hexdigest(),
+            },
+            "runtime_readiness": {
+                "role": "readiness",
+                "path": readiness_path.relative_to(root).as_posix(),
+                "sha256": hashlib.sha256(readiness_raw).hexdigest(),
             },
             "environment_template": [
                 "HF_HUB_OFFLINE=1",
@@ -122,7 +135,7 @@ class A0XMaterialChildTests(unittest.TestCase):
             },
         }
         launch = root / ".a0x-runtime" / "launches" / "a0" / "gpt2" / "a0x-a0-gpt2-run-1.json"
-        launch.parent.mkdir(parents=True)
+        launch.parent.mkdir(parents=True, exist_ok=True)
         descriptor_raw = json.dumps(descriptor, sort_keys=True, separators=(",", ":")).encode("utf-8")
         authorization_document["guard_launch"]["launch_descriptor"]["sha256"] = hashlib.sha256(descriptor_raw).hexdigest()
         authorization.write_bytes(json.dumps(authorization_document, sort_keys=True, separators=(",", ":")).encode("utf-8"))

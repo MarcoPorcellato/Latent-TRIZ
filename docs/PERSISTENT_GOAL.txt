@@ -1,3 +1,19 @@
+A0X pre-material readiness correction (2026-08-30): exact source
+`68f8bfe75a883054118246101485f71a56a5e82e` passed Gate A and its receipt is
+publicly preserved (receipt-file SHA-256
+`3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`,
+evidence commit `fc46c39421ae85713f473ef49a1270beab3aefe6`). A target-free pre-Gate-B
+audit then found that the available venv launcher resolved to a package-
+incomplete base Python and that the isolated clone had no selected model
+snapshot. The local correction adds a private hash-bound readiness receipt for
+an independent regular Python 3.11 venv executable, exact five-package/API
+contract, and independent pair-specific snapshot files; it also enforces card
+padding and terminally seals a post-claim pre-run-observation write failure
+without starting a child. Regenerate both freezes and all twelve dossiers,
+complete target-free/Luna review, commit locally, then stop before a new Gate A.
+Do not prepare Gate B assets, run CCP, load models/tokenizers, open targets, or
+publish. The prior receipt is historical once corrected bytes are committed.
+
 A0X Gate A temp-mount correction checkpoint (2026-08-29): the campaign remains
 `sealed_gate_pending`. The exact-head qualification at
 `e340e142fcd745d47dec1df386eb9fdb1b2e15f7` ended terminal `FAIL`; both schema

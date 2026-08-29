@@ -18,6 +18,30 @@ from latent_triz.a0x_runtime_bundle import (  # noqa: E402
     RuntimePreparationRequest,
     prepare_runtime_bundle,
 )
+from latent_triz.a0x_runtime_readiness import build_runtime_readiness  # noqa: E402
+
+
+_PYTHON_METADATA_PROGRAM = r'''import importlib.metadata as m
+import json
+import sys
+import torch
+import transformers
+names=("numpy","safetensors","tokenizers","torch","transformers")
+value={
+ "sys_executable":sys.executable,
+ "python_version":".".join(str(item) for item in sys.version_info[:3]),
+ "python_major_minor":list(sys.version_info[:2]),
+ "sys_prefix":sys.prefix,
+ "sys_base_prefix":sys.base_prefix,
+ "packages":{name:m.version(name) for name in names},
+ "api_symbols":{
+  "torch.float32":hasattr(torch,"float32"),
+  "transformers.AutoConfig":hasattr(transformers,"AutoConfig"),
+  "transformers.AutoModelForCausalLM":hasattr(transformers,"AutoModelForCausalLM"),
+  "transformers.AutoTokenizer":hasattr(transformers,"AutoTokenizer"),
+ },
+}
+print(json.dumps(value,sort_keys=True,separators=(",",":")))'''
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -48,7 +72,7 @@ def main(
     root: Path | None = None,
     stdout: TextIO | None = None,
 ) -> int:
-    """Run the three shell-free probes and emit one sorted public receipt."""
+    """Run the shell-free readiness probes and emit one sorted public receipt."""
     arguments = _parser().parse_args(argv)
     repository = (ROOT if root is None else Path(root)).resolve(strict=True)
     stream = sys.stdout if stdout is None else stdout
@@ -70,12 +94,28 @@ def main(
     def ccp_version_probe(path: Path) -> str:
         return _probe((str(path), "--version"), repository).strip()
 
+    def runtime_readiness_probe(root: Path, pair, source_head: str, python_path: Path):
+        raw = _probe((str(python_path), "-I", "-c", _PYTHON_METADATA_PROGRAM), repository)
+        try:
+            python_metadata = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise A0XRuntimeBundleError("Python readiness probe returned invalid JSON") from error
+        return build_runtime_readiness(
+            repository_root=root,
+            source_head=source_head,
+            pair=pair,
+            python_path=python_path,
+            environment_root=python_path.parent.parent,
+            python_probe=python_metadata,
+        )
+
     try:
         receipt = prepare_runtime_bundle(
             repository,
             request,
             source_state_probe=source_state_probe,
             ccp_version_probe=ccp_version_probe,
+            runtime_readiness_probe=runtime_readiness_probe,
         )
     except (A0XRuntimeBundleError, OSError, ValueError, subprocess.SubprocessError):
         print(json.dumps({"status": "refused"}, sort_keys=True, separators=(",", ":")), file=stream)

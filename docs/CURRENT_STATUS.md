@@ -121,6 +121,23 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
+### A0X pre-material readiness boundary
+
+Exact source `68f8bfe75a883054118246101485f71a56a5e82e` passed Gate A; the
+receipt-file SHA-256 is
+`3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`
+and its evidence commit is `fc46c39421ae85713f473ef49a1270beab3aefe6`.
+A target-free audit before Gate B nevertheless found two unproven material
+prerequisites: the available venv launcher resolved to a package-incomplete
+base Python, and the isolated clone lacked the pair-specific model snapshot.
+The local readiness correction binds an independent Python 3.11 executable,
+exact package/API facts, and independent regular snapshot files before a
+runtime descriptor can be created. It also closes tokenizer-padding and
+post-claim observation-write gaps. Because these are frozen implementation
+changes, the prior Gate A evidence becomes historical for the corrected HEAD.
+The next stop is deterministic regeneration, full target-free review, and a
+new explicit Gate A authorization; no Gate B or C action is authorized.
+
 ### A0X final integration boundary
 
 The local exact-head qualification of
