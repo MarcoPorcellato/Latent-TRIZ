@@ -97,6 +97,7 @@ class A0XCcpExecutorTests(unittest.TestCase):
         ccp.write_bytes(ccp_raw)
         python = root / ".a0x-runtime/bin/python"
         python.write_bytes(b"synthetic-python\n")
+        python.chmod(0o700)
 
         authorization["ccp"]["sha256"] = _sha(ccp_raw)
         authorization["qualification_evidence"]["ccp"]["binary_sha256"] = _sha(ccp_raw)

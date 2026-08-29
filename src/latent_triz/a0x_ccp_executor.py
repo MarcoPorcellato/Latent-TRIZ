@@ -45,7 +45,7 @@ from .a0x_runner import planned_material_dossiers
 from .a0x_runtime_readiness import (
     A0XRuntimeReadinessError,
     runtime_readiness_path,
-    validate_runtime_readiness,
+    validate_runtime_readiness_live,
 )
 
 
@@ -491,9 +491,9 @@ def _validate_runtime_readiness_binding(
     if _sha256_bytes(raw) != binding.get("sha256"):
         raise A0XCcpExecutorError("runtime readiness bytes drifted")
     try:
-        validate_runtime_readiness(
-            _strict_object(raw, "runtime readiness"), source_head=source_head,
-            pair=pair, python_path=Path(python["path"]),
+        validate_runtime_readiness_live(
+            _strict_object(raw, "runtime readiness"), repository_root=root,
+            source_head=source_head, pair=pair, python_path=Path(python["path"]),
         )
     except A0XRuntimeReadinessError as error:
         raise A0XCcpExecutorError("runtime readiness is invalid") from error

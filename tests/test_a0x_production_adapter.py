@@ -45,6 +45,7 @@ class A0XProductionAdapterTests(unittest.TestCase):
             python_path = root / ".a0x-runtime/bin/python"
             python_path.parent.mkdir(parents=True)
             python_path.write_bytes(b"synthetic python")
+            python_path.chmod(0o700)
             pair_object = PairBinding.from_mapping(pair)
             from latent_triz.a0x_runtime_readiness import canonical_json_bytes, runtime_readiness_path
             from tests.test_a0x_runtime_bundle import _synthetic_runtime_readiness

@@ -85,6 +85,88 @@ def _synthetic_runtime_readiness(root: Path, pair: PairBinding, source_head: str
     from latent_triz.a0x_contract import sha256_file
     from latent_triz.a0x_runtime_readiness import EXPECTED_API_SYMBOLS, EXPECTED_PACKAGES
 
+    runtime_root = "artifacts/models/gpt2-synthetic"
+    runtime = root / runtime_root
+    runtime.mkdir(parents=True, exist_ok=True)
+    config = {
+        "architectures": ["GPT2LMHeadModel"],
+        "model_type": "gpt2",
+        "n_embd": 768,
+        "n_layer": 12,
+        "n_positions": 1024,
+        "vocab_size": 50257,
+    }
+    config_raw = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+    (runtime / "config.json").write_bytes(config_raw)
+    runtime_files = [{
+        "path": "config.json",
+        "sha256": hashlib.sha256(config_raw).hexdigest(),
+        "size_bytes": len(config_raw),
+    }]
+
+    source_receipt_path = "results/synthetic/gpt2-runtime-receipt.json"
+    source_receipt = root / source_receipt_path
+    source_receipt.parent.mkdir(parents=True, exist_ok=True)
+    source_receipt.write_bytes(json.dumps({
+        "license_id": "MIT",
+        "model_id": pair.model_id,
+        "revision": pair.revision,
+        "runtime_files": runtime_files,
+        "runtime_root": runtime_root,
+    }, sort_keys=True, separators=(",", ":")).encode())
+    audit_path = "docs/synthetic-gpt2-audit.md"
+    audit = root / audit_path
+    audit.parent.mkdir(parents=True, exist_ok=True)
+    pointers = {
+        "architecture": "architecture-pointer",
+        "effective_context": "context-pointer",
+        "expected_runtime_tokenizer_class": "runtime-tokenizer-pointer",
+        "fast_offsets_required": "fast-offsets-pointer",
+        "final_transformer_block_tuple_index": "final-block-pointer",
+        "hidden_size": "hidden-size-pointer",
+        "model_type": "model-type-pointer",
+        "num_hidden_layers": "layer-count-pointer",
+        "tokenizer_metadata_class": "metadata-tokenizer-pointer",
+        "vocab_size": "vocab-pointer",
+    }
+    audit.write_text("\n".join(sorted(pointers.values())) + "\n", encoding="utf-8")
+
+    card_path = "experiments/a0x-six-model/model-cards/gpt2.json"
+    card_file = root / card_path
+    card_file.parent.mkdir(parents=True, exist_ok=True)
+    card = json.loads((Path(__file__).parents[1] / card_path).read_text(encoding="utf-8"))
+    audit_sha256 = sha256_file(audit)
+    card.update({
+        "revision": pair.revision,
+        "runtime_root": runtime_root,
+        "runtime_files": runtime_files,
+        "source_receipt_path": source_receipt_path,
+        "source_receipt_sha256": sha256_file(source_receipt),
+        "official_audit_path": audit_path,
+        "official_audit_sha256": audit_sha256,
+        "config_fact_provenance": {
+            "source_path": audit_path,
+            "source_sha256": audit_sha256,
+            "field_pointers": {key: pointers[key] for key in (
+                "model_type", "architecture", "num_hidden_layers", "hidden_size",
+                "vocab_size", "effective_context", "final_transformer_block_tuple_index",
+            )},
+        },
+        "tokenizer_fact_provenance": {
+            "source_path": audit_path,
+            "source_sha256": audit_sha256,
+            "field_pointers": {key: pointers[key] for key in (
+                "tokenizer_metadata_class", "expected_runtime_tokenizer_class",
+                "fast_offsets_required",
+            )},
+        },
+        "card_path": card_path,
+    })
+    card_file.write_bytes(json.dumps(card, sort_keys=True, separators=(",", ":")).encode())
+    runtime_commitment = hashlib.sha256(
+        json.dumps(runtime_files, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
     return {
         "artifact_class": "a0x-runtime-readiness",
         "readiness_profile": "a0x-runtime-readiness-v1",
@@ -104,12 +186,12 @@ def _synthetic_runtime_readiness(root: Path, pair: PairBinding, source_head: str
             "model_key": pair.model_key,
             "model_id": pair.model_id,
             "revision": pair.revision,
-            "card_path": "experiments/a0x-six-model/model-cards/gpt2.json",
-            "card_sha256": "1" * 64,
-            "runtime_root": "artifacts/models/gpt2-synthetic",
+            "card_path": card_path,
+            "card_sha256": sha256_file(card_file),
+            "runtime_root": runtime_root,
             "runtime_file_count": 1,
-            "runtime_total_bytes": 1,
-            "runtime_files_commitment_sha256": "2" * 64,
+            "runtime_total_bytes": len(config_raw),
+            "runtime_files_commitment_sha256": runtime_commitment,
         },
     }
 

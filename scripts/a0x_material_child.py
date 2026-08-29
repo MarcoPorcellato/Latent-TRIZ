@@ -42,7 +42,7 @@ from latent_triz.a0x_material_contract import (  # noqa: E402
 from latent_triz.a0x_runtime_readiness import (  # noqa: E402
     A0XRuntimeReadinessError,
     runtime_readiness_path,
-    validate_runtime_readiness,
+    validate_runtime_readiness_live,
 )
 from latent_triz.validator import validate  # noqa: E402
 
@@ -226,8 +226,9 @@ def _validate_runtime_documents(
         if hashlib.sha256(readiness_raw).hexdigest() != _sha256(readiness_binding.get("sha256")):
             raise A0XRuntimeReadinessError("runtime readiness bytes drifted")
         readiness = strict_json_object(readiness_raw)
-        validate_runtime_readiness(
-            readiness, source_head=str(descriptor["source_head"]), pair=pair,
+        validate_runtime_readiness_live(
+            readiness, repository_root=root,
+            source_head=str(descriptor["source_head"]), pair=pair,
             python_path=Path(str(descriptor["python"]["path"])),
         )
         authorization_path = authorization_reference(descriptor.get("authorization_reference"), pair)

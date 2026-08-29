@@ -16,6 +16,7 @@ from latent_triz.a0x_runtime_readiness import (
     build_runtime_readiness,
     canonical_json_sha256,
     validate_runtime_readiness,
+    validate_runtime_readiness_live,
 )
 from tests.a0x_test_support import pair_binding
 
@@ -147,6 +148,42 @@ class A0XRuntimeReadinessTests(unittest.TestCase):
     def test_rejects_pair_without_one_exact_card(self):
         with self.assertRaisesRegex(A0XRuntimeReadinessError, "exactly one"):
             self.build(cards=())
+
+    def test_live_validation_rejects_post_receipt_python_and_snapshot_aliases(self):
+        receipt = self.build()
+
+        def validate_live():
+            return validate_runtime_readiness_live(
+                receipt,
+                repository_root=self.root,
+                source_head=self.source_head,
+                pair=self.pair,
+                python_path=self.python,
+                card_loader=lambda _path: self.card,
+                card_source_verifier=lambda _root, _card: None,
+                snapshot_verifier=lambda _root, card: card,
+            )
+
+        self.assertEqual(receipt, validate_live())
+        python_alias = self.root / "python-hardlink"
+        os.link(self.python, python_alias)
+        with self.assertRaisesRegex(A0XRuntimeReadinessError, "independent regular"):
+            validate_live()
+        python_alias.unlink()
+
+        runtime_alias = self.root / "runtime-hardlink"
+        os.link(self.runtime_file, runtime_alias)
+        with self.assertRaisesRegex(A0XRuntimeReadinessError, "independent regular"):
+            validate_live()
+        runtime_alias.unlink()
+
+        replacement = self.root / "python-replacement"
+        replacement.write_bytes(self.python.read_bytes())
+        replacement.chmod(0o700)
+        self.python.unlink()
+        self.python.symlink_to(replacement)
+        with self.assertRaisesRegex(A0XRuntimeReadinessError, "symlink"):
+            validate_live()
 
 
 if __name__ == "__main__":

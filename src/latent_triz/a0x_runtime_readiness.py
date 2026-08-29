@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -18,6 +17,7 @@ from .a0x_contract import PairBinding, sha256_file
 from .a0x_preflight import (
     A0XModelCard,
     A0XPreflightError,
+    load_model_card,
     load_registry,
     verify_card_sources,
     verify_snapshot_files,
@@ -91,28 +91,11 @@ def build_runtime_readiness(
     candidate = _regular_environment_executable(python_path, environment)
     probe = _validate_python_probe(python_probe, candidate, environment)
     card = _select_card(root, pair, registry_loader)
-    try:
-        card_source_verifier(root, card)
-        snapshot_verifier(root / card.runtime_root, card)
-    except (A0XPreflightError, OSError, ValueError) as error:
-        raise A0XRuntimeReadinessError("pair runtime snapshot is not ready") from error
-    snapshot = root / card.runtime_root
-    for runtime_file in card.runtime_files:
-        path = snapshot / runtime_file.path
-        try:
-            info = path.stat()
-        except OSError as error:
-            raise A0XRuntimeReadinessError("pair runtime file is unavailable") from error
-        if path.is_symlink() or not path.is_file() or info.st_nlink != 1:
-            raise A0XRuntimeReadinessError("pair runtime file must be an independent regular file")
-    card_path = root / card.card_path
-    runtime_files = [
-        {"path": item.path, "sha256": item.sha256, "size_bytes": item.size_bytes}
-        for item in card.runtime_files
-    ]
-    runtime_commitment = hashlib.sha256(
-        json.dumps(runtime_files, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    model_runtime = _model_runtime_binding(
+        root, card,
+        card_source_verifier=card_source_verifier,
+        snapshot_verifier=snapshot_verifier,
+    )
     return {
         "artifact_class": "a0x-runtime-readiness",
         "readiness_profile": READINESS_PROFILE,
@@ -128,17 +111,7 @@ def build_runtime_readiness(
             "packages": dict(EXPECTED_PACKAGES),
             "api_symbols": dict(EXPECTED_API_SYMBOLS),
         },
-        "model_runtime": {
-            "model_key": card.model_key,
-            "model_id": card.model_id,
-            "revision": card.revision,
-            "card_path": card.card_path,
-            "card_sha256": sha256_file(card_path),
-            "runtime_root": card.runtime_root,
-            "runtime_file_count": len(runtime_files),
-            "runtime_total_bytes": sum(item["size_bytes"] for item in runtime_files),
-            "runtime_files_commitment_sha256": runtime_commitment,
-        },
+        "model_runtime": model_runtime,
     }
 
 
@@ -204,6 +177,51 @@ def validate_runtime_readiness(
     return dict(value)
 
 
+def validate_runtime_readiness_live(
+    value: Mapping[str, Any], *, repository_root: str | Path, source_head: str,
+    pair: PairBinding, python_path: str | Path,
+    card_loader: Callable[[str | Path], A0XModelCard] = load_model_card,
+    card_source_verifier: Callable[[str | Path, A0XModelCard], None] = verify_card_sources,
+    snapshot_verifier: Callable[[str | Path, A0XModelCard], A0XModelCard] = verify_snapshot_files,
+) -> dict[str, Any]:
+    """Reopen all public runtime bytes and re-enforce independent-file facts."""
+    validated = validate_runtime_readiness(
+        value, source_head=source_head, pair=pair,
+    )
+    python = validated["python"]
+    environment_raw = python.get("environment_root")
+    if not isinstance(environment_raw, str) or not Path(environment_raw).is_absolute():
+        raise A0XRuntimeReadinessError("runtime readiness environment root is invalid")
+    environment = Path(environment_raw).absolute()
+    candidate = _regular_environment_executable(python_path, environment)
+    if str(candidate) != python.get("path") or sha256_file(candidate) != python.get("sha256"):
+        raise A0XRuntimeReadinessError("runtime readiness Python bytes differ")
+    root = Path(repository_root).resolve(strict=True)
+    model = validated["model_runtime"]
+    card_path = model.get("card_path")
+    if not isinstance(card_path, str):
+        raise A0XRuntimeReadinessError("runtime readiness card path is invalid")
+    try:
+        card = card_loader(root / card_path)
+    except (A0XPreflightError, OSError, ValueError) as error:
+        raise A0XRuntimeReadinessError("runtime readiness card is unavailable") from error
+    if (
+        card.model_key != pair.model_key
+        or card.model_id != pair.model_id
+        or card.revision != pair.revision
+        or card.card_path != card_path
+    ):
+        raise A0XRuntimeReadinessError("runtime readiness card identity differs")
+    observed_model = _model_runtime_binding(
+        root, card,
+        card_source_verifier=card_source_verifier,
+        snapshot_verifier=snapshot_verifier,
+    )
+    if observed_model != model:
+        raise A0XRuntimeReadinessError("runtime readiness model bytes differ")
+    return validated
+
+
 def _regular_environment_executable(path: str | Path, environment: Path) -> Path:
     candidate = Path(path).absolute()
     try:
@@ -224,7 +242,7 @@ def _regular_environment_executable(path: str | Path, environment: Path) -> Path
         info = candidate.stat()
     except OSError as error:
         raise A0XRuntimeReadinessError("Python executable is unavailable") from error
-    if not candidate.is_file() or info.st_nlink != 1 or not os.access(candidate, os.X_OK):
+    if not candidate.is_file() or info.st_nlink != 1 or not (info.st_mode & 0o111):
         raise A0XRuntimeReadinessError("Python must be an independent regular executable")
     return candidate
 
@@ -271,8 +289,50 @@ def _select_card(
     return selected[0]
 
 
+def _model_runtime_binding(
+    root: Path,
+    card: A0XModelCard,
+    *,
+    card_source_verifier: Callable[[str | Path, A0XModelCard], None],
+    snapshot_verifier: Callable[[str | Path, A0XModelCard], A0XModelCard],
+) -> dict[str, Any]:
+    try:
+        card_source_verifier(root, card)
+        snapshot_verifier(root / card.runtime_root, card)
+    except (A0XPreflightError, OSError, ValueError) as error:
+        raise A0XRuntimeReadinessError("pair runtime snapshot is not ready") from error
+    snapshot = root / card.runtime_root
+    for runtime_file in card.runtime_files:
+        path = snapshot / runtime_file.path
+        try:
+            info = path.stat()
+        except OSError as error:
+            raise A0XRuntimeReadinessError("pair runtime file is unavailable") from error
+        if path.is_symlink() or not path.is_file() or info.st_nlink != 1:
+            raise A0XRuntimeReadinessError("pair runtime file must be an independent regular file")
+    runtime_files = [
+        {"path": item.path, "sha256": item.sha256, "size_bytes": item.size_bytes}
+        for item in card.runtime_files
+    ]
+    runtime_commitment = hashlib.sha256(
+        json.dumps(runtime_files, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "model_key": card.model_key,
+        "model_id": card.model_id,
+        "revision": card.revision,
+        "card_path": card.card_path,
+        "card_sha256": sha256_file(root / card.card_path),
+        "runtime_root": card.runtime_root,
+        "runtime_file_count": len(runtime_files),
+        "runtime_total_bytes": sum(item["size_bytes"] for item in runtime_files),
+        "runtime_files_commitment_sha256": runtime_commitment,
+    }
+
+
 __all__ = [
     "A0XRuntimeReadinessError", "EXPECTED_API_SYMBOLS", "EXPECTED_PACKAGES",
     "READINESS_PROFILE", "build_runtime_readiness", "canonical_json_bytes",
     "canonical_json_sha256", "runtime_readiness_path", "validate_runtime_readiness",
+    "validate_runtime_readiness_live",
 ]

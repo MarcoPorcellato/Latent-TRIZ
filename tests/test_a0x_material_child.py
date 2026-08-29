@@ -52,6 +52,7 @@ class A0XMaterialChildTests(unittest.TestCase):
         python = root / ".a0x-runtime" / "bin" / "python"
         python.parent.mkdir(parents=True)
         python.write_bytes(b"synthetic-python\n")
+        python.chmod(0o700)
         authorization = root / ".a0x-runtime" / "authorizations" / "a0" / "gpt2" / "a0x-a0-gpt2-run-1.json"
         authorization.parent.mkdir(parents=True)
         pair = pair_binding(Leg.A0, "gpt2")

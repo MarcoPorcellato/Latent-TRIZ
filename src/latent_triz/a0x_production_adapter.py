@@ -40,7 +40,7 @@ from .a0x_runner import planned_material_dossiers
 from .a0x_runtime_readiness import (
     A0XRuntimeReadinessError,
     runtime_readiness_path,
-    validate_runtime_readiness,
+    validate_runtime_readiness_live,
 )
 
 
@@ -243,8 +243,9 @@ def _bound_runtime_documents(
         python_binding = descriptor.get("python")
         if not isinstance(python_binding, Mapping) or not isinstance(python_binding.get("path"), str):
             raise A0XRuntimeReadinessError("runtime readiness Python binding is invalid")
-        validate_runtime_readiness(
-            readiness, source_head=str(descriptor["source_head"]), pair=pair,
+        validate_runtime_readiness_live(
+            readiness, repository_root=root,
+            source_head=str(descriptor["source_head"]), pair=pair,
             python_path=Path(python_binding["path"]),
         )
         authorization_path = authorization_reference(descriptor.get("authorization_reference"), pair)
