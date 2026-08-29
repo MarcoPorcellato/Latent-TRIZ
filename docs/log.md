@@ -3,7 +3,52 @@ type: chronology
 title: Laboratory chronology
 description: Event-by-event record of the Latent-TRIZ laboratory.
 status: canonical
-last_verified: 2026-08-20
+last_verified: 2026-08-29
+---
+
+## 2026-08-29 — A0X Matrix V2 policy bootstrap
+
+- **Problem:** PR #105 was qualified locally with the explicit
+  `matrix-v2-legacy-v1` plan, but public `main` still accepts the preceding
+  legacy-plan digests. The hosted verifier correctly reads the policy from the
+  pull request base, so the candidate policy cannot authorize its own updated
+  legacy-profile receipt.
+- **Solution:** prepare a separate policy-only prerequisite from exact public
+  `main` `188eb65b5e249923baddadeba52659f07fcd1609`. It changes only the outer,
+  Python 3.11, and Python 3.12 accepted configuration digests; checks, images,
+  platforms, and the one-hour freshness limit remain unchanged.
+- **Trust bootstrap:** qualify the prerequisite itself with
+  `matrix-v2-legacy-v1`, using the preceding plan digests still accepted by its
+  trusted base. Only after the prerequisite is public may A0X be rebased and
+  qualified with the updated `matrix-v2-legacy-v1` plan.
+- **Gate:** the exact qualification dossier is
+  [`qualification/a0x-legacy-policy-migration-dossier.json`](qualification/a0x-legacy-policy-migration-dossier.json).
+  It remains `approval_requested`; no CCP run, Docker workload, remote
+  mutation, model access, target access, or scientific retry is authorized by
+  this preparation.
+- **Negative qualification evidence:** the first prerequisite candidate at
+  `a281dc72e1dcd1c8a323a0d3fa172a1b6e2858fe` ended `FAIL`. Receipt integrity
+  passed; both schema checks passed; both repository checks exited 1 without
+  timeout or cancellation. Receipt ID
+  `sha256:5577fdbd42aae9f490e01f5b6281810fd773633e0eef03556e3749f19d2c4794`;
+  receipt-file SHA-256
+  `ddc037e1c354b4acc333b2cdc782d9a21d4021c6ce2c8a8d5d20aeab1c1e0064`.
+- **Profile root cause:** the selected `current-v2` plan produced
+  `25b35b94… / b3d8beef… / d446c4ca…`, which the historical trusted base does
+  not accept. CCP's official Matrix compatibility contract requires the
+  explicit `matrix-v2-legacy-v1` profile; on the same source configuration it
+  reproduces exactly `13f4cb39… / eff5b7d5… / 7afb3e6d…`, the three digests
+  accepted by the base policy. The corrected dossier now requires direct
+  equality between the selected-plan and trusted-base digest maps.
+- **Source-snapshot root cause:** the repository suite called the full EXP-002
+  publication verifier on seven intentionally Git-ignored dense assets. A CCP
+  source snapshot contains only committed blobs, so the test was not
+  self-contained. The full verifier remains fail-closed and continues to read
+  and hash every external asset. A separate `bindings_only` API now validates
+  the tracked schema, package bindings, and safe asset declarations without
+  claiming that external assets were verified; synthetic tests retain missing
+  and mutated asset rejection coverage for the full verifier.
+
 ---
 
 ## 2026-08-20 — EXP-002 no-model checkpoint
