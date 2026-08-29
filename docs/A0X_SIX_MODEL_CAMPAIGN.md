@@ -276,44 +276,42 @@ context, and active-container count. Each probe has a 30-second timeout and a
 wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
 an active container.
 
-Correction anchor: `6b8c8e3491b24fa4717b2f4faa8700b007c48892`
-(tree `18b8fdaf9ba00a81e3c90686a2563a23f2436824`).
-The two freezes and twelve dossiers were regenerated from that exact anchor.
-The correction removes the undeclared `make` runtime dependency from the
-Matrix binding test while preserving exact recipe, legacy-profile, V2-policy,
-generation, receipt, and expected-commit checks. Fresh verification passed the
-no-`make` regression 3/3, frozen package 10/10, A0X aggregate 248/248, schema
-cross-validation 155 agreements with 19 rejected mutations, repository suite
-1,075 tests with one documented skip, documentation audit, and diff check.
-Independent Luna review returned `APPROVE` with no P0--P3 findings. The local
-package commit is the remaining local gate. The no-model receipt reports zero
-model loads, tokenizer constructions, sealed-target reads, CCP invocations,
-and remote mutations.
+The current implementation anchor is
+`e2f557909c9f816eb40ae5aae7be54cb523c97cd`; its generated package is commit
+`a52a621d67a379937475fa066639cedd215c4c27`. The package is still
+`sealed_gate_pending`: stop before **A**, one new exact-head repository
+qualification; then require distinct authorization **B** for one exact
+pair/attempt private-bundle preparation; then require distinct one-shot
+material authorization **C** bound to the prepared authorization raw SHA-256.
+Neither the package nor this documentation grants any stop.
 
 | Artifact | SHA-256 |
 | --- | --- |
 | Material execution contract | `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8` |
 | A0 protocol | `42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586` |
-| A0 implementation | `7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570` |
-| A0 freeze | `34876ec4ad5ae209bc3ffd49202deb660830fa225caa00831f70dedfa34bf006` |
+| A0 implementation | `f168ad9cec7cd757c12a711e5c138608bbaa86ec2fe826ed2d9af210a4942e8e` |
+| A0 freeze | `a8ca1889f91cd965399eaa9f3ac066d1f5b7bc9beea26ee2ceca517ebb358353` |
 | A0-R1 protocol | `32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52` |
-| A0-R1 implementation | `d6cc0f6de81d0da4108570559579d76045a7a7a1ea282a84866e3825bcb023bc` |
-| A0-R1 freeze | `1c7425d90be524ba9ab55ec66967b0eee32272addc025948459ea4e3b6383e8a` |
+| A0-R1 implementation | `705de31ef6c8dd8d53cb34c611de49637fed6e51719077e7c63524a5391abfdd` |
+| A0-R1 freeze | `b8c470d45b098233f3497cb75d7fc95a41edd9f7772539b55db71aa803355c64` |
 | No-model verification receipt | `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c` |
-| A0 / SmolLM2-360M dossier | `40ccf9623ec93a36718e1f5b565e56022882ede34f769b17e4d70127febbb443` |
-| A0 / Qwen3-0.6B-Base dossier | `0390b7dc1c78562059b2cc78b48d2ee1ed90f50450c0febc960b2f8fd261cb27` |
-| A0 / GPT-2 dossier | `36470af70981826da3995c1c3557dd16871c6e4c8e89a6eeae4f1c90366e0fb1` |
-| A0 / SmolLM2-135M dossier | `0a8637371999da59f6e905e3e9b8d575a1e79efbdf2e54fd921c3d81710ec970` |
-| A0 / GPT-Neo-125M dossier | `25b76445060bb3f9f0b089ee6dadbf02042af0004528988173ae59479fbb6b1d` |
-| A0 / Qwen2.5-0.5B dossier | `b9516adffa3172b2ee030e01c2c9a93c66ab8b343db20aa42e5241001d865f66` |
-| A0-R1 / SmolLM2-360M dossier | `542bc3a21c010bc1d7efe1aa64742f8cd0c66db79b29d63d49bc542480f2064a` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `18cdb5405a496cc5f18b2ca8b08fcd8a9e3484c70172e08bcfa043690a8aeedc` |
-| A0-R1 / GPT-2 dossier | `db9bf0c4a899498fc86bf424768ed787302fc7a3c76cb59e808e1b8cb485ffb5` |
-| A0-R1 / SmolLM2-135M dossier | `d02808ecb9572059f21185b03150bc2cb2eb0deeb6e9c3c7740e7f9df3a7fc90` |
-| A0-R1 / GPT-Neo-125M dossier | `d38b096a65623f1c358362f37757c09dea503a2909f715420e4da1575265fcad` |
-| A0-R1 / Qwen2.5-0.5B dossier | `0b7db4ada1866d4cdd73ef6afe387ec98e8c22f339c1fdedbd2413fe98bd5796` |
+| A0 / SmolLM2-360M dossier | `f71f57de77d99e7c5e4c3c90cf5975213b0d4cc11f135068ccefa89325cc4ca3` |
+| A0 / Qwen3-0.6B-Base dossier | `873a87a4d5bace562df80b97c2b4138141064202172e94c39a731ba23822e3ec` |
+| A0 / GPT-2 dossier | `26c37f8fc19f59c95cd0c02e071c5b758b6ad43d35cf3409263767f8a9744bae` |
+| A0 / SmolLM2-135M dossier | `857df3060cc71493920a2e170ec3c36d8e37d02238ced879023650a8e24ed450` |
+| A0 / GPT-Neo-125M dossier | `2dd6def8af02343b8ec33bdd553c3ec0f20af5948cfeea7f7f4bddd33cd9bbee` |
+| A0 / Qwen2.5-0.5B dossier | `af475aacd4e947ea30b119e74cff31d15798d5ceefd782ea18b00bfc71d0cc96` |
+| A0-R1 / SmolLM2-360M dossier | `942f73da7528d1c3ba2ae8569a0ab6cd24ba513c9b80068c6244e185d157de0f` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `2f9df9292477a3e967d237d839d5dcaa6c668fd0fb7c8280919c8923a9f23a0c` |
+| A0-R1 / GPT-2 dossier | `9bb38d992bda0fdcc94d825e2e950be8d4ea1d8de75d0ff5d9da90f7f0b26aa3` |
+| A0-R1 / SmolLM2-135M dossier | `c31538a72a253d78b25c0f38baf95c4ec76c3f3f3fdb107f4e39f60d01dbbcb2` |
+| A0-R1 / GPT-Neo-125M dossier | `a94b49a9640977669af38969782095fcc69a8d36155e5b0d4cbd0a1598e4ed4d` |
+| A0-R1 / Qwen2.5-0.5B dossier | `797cf4fd525daae3e5853c5216d5f82ad11e102b4666fcdc23f28e7ff71ec219` |
 
-These are approval-request artifacts only. They now bind the TDD-corrected
+These are current approval-request artifacts only. They bind the final-review
+implementation anchor and do not authorize A, B, or C.
+
+**Historical producer/receipt note.** The former package bound the TDD-corrected
 producer that passed one exact generation-1 Matrix qualification. Its receipt ID is
 `sha256:21d5cf99a9d142b879b37ef8bb2f50573e45fd569a2259fa863a50fe6be08e85`
 and its receipt-file SHA-256 is
