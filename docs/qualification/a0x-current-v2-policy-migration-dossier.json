@@ -1,0 +1,99 @@
+{
+  "artifact_class": "a0x-ccp-policy-migration-qualification-dossier-v1",
+  "status": "approval_requested",
+  "created_on": "2026-08-29",
+  "purpose": "Qualify the policy-only trust bootstrap with the plan still accepted by the public base before activating the legacy Matrix V2 plan in a later pull request.",
+  "repository": "MarcoPorcellato/Latent-TRIZ",
+  "trusted_base": {
+    "head": "188eb65b5e249923baddadeba52659f07fcd1609",
+    "tree": "f6d0c7dac7c35b2c711dcf0ac0b2c1951df41b01",
+    "policy_path": ".commit-ci-policy-v2.toml",
+    "policy_sha256": "3d4c7d5c568fbe85878a52362d66595fc6a9086c0bae0873c582d03e9398a5ce",
+    "accepted_plan_digests": {
+      "outer": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
+      "python311": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
+      "python312": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"
+    }
+  },
+  "candidate_policy": {
+    "path": ".commit-ci-policy-v2.toml",
+    "sha256": "258361889b30ee6c18f3c2cd901672d43827c786cc05c599eb7f9cb09cb65048",
+    "accepted_plan_digests": {
+      "outer": "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331",
+      "python311": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943",
+      "python312": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510"
+    },
+    "preserved_contract": {
+      "required_check_ids": [
+        "repository-check-py311",
+        "schema-cross-validate-py311",
+        "repository-check-py312",
+        "schema-cross-validate-py312"
+      ],
+      "runtime_ids": [
+        "python311",
+        "python312"
+      ],
+      "images_unchanged": true,
+      "platforms_unchanged": true,
+      "max_age_seconds": 3600
+    }
+  },
+  "trust_bootstrap": {
+    "candidate_cannot_self_authorize": true,
+    "hosted_policy_source": "pull_request.base.sha:trusted/.commit-ci-policy-v2.toml",
+    "qualification_receipt_must_match": "final candidate commit containing this dossier",
+    "activation_sequence": [
+      "qualify this policy migration with current-v2",
+      "publish and merge the policy-only prerequisite after exact-head gates",
+      "rebase A0X onto the migrated public base",
+      "qualify A0X with matrix-v2-legacy-v1"
+    ]
+  },
+  "qualification": {
+    "matrix_plan_profile": "current-v2",
+    "expected_plan_digests": {
+      "outer": "sha256:13f4cb39b7e1a8ed31cae64502cc8e4d80d040230d3fb410a6afc3bad3b76178",
+      "python311": "sha256:eff5b7d55bb0220890dbfb050bb68a1e0fbba8f9a30a69e2f66085354fcc8562",
+      "python312": "sha256:7afb3e6dd435d9d5a317e4d9d85e80527431044312bbe299e9a70b6ba9e994c8"
+    },
+    "generation": 1,
+    "maximum_runs": 1,
+    "preconditions": [
+      "exact candidate HEAD and tree are bound by a later operator authorization",
+      "candidate CCP executable path, source identity and SHA-256 are bound by that authorization",
+      "resource decision is Admit",
+      "admission is inactive with an empty queue",
+      "runtime is free and the isolated checkout is clean",
+      "plan, doctor and dry-run are reviewed before the run"
+    ],
+    "stop_after": "terminal local receipt and verification"
+  },
+  "authorization": {
+    "granted": false,
+    "required_binding": [
+      "final candidate HEAD",
+      "final candidate tree",
+      "this dossier SHA-256",
+      "candidate policy SHA-256",
+      "CCP executable path and SHA-256",
+      "current-v2 plan digests",
+      "generation and maximum run count"
+    ]
+  },
+  "execution_state": {
+    "ccp_run_performed": false,
+    "docker_started": false,
+    "receipt_created": false,
+    "remote_mutation_performed": false,
+    "model_or_target_accessed": false
+  },
+  "forbidden_without_new_authorization": [
+    "CCP run or retry",
+    "Docker or OrbStack workload",
+    "receipt publication",
+    "push, pull request or merge",
+    "modification of pull request 105",
+    "model, tokenizer, target or scientific execution"
+  ]
+}

@@ -3,7 +3,29 @@ type: chronology
 title: Laboratory chronology
 description: Event-by-event record of the Latent-TRIZ laboratory.
 status: canonical
-last_verified: 2026-08-20
+last_verified: 2026-08-29
+---
+
+## 2026-08-29 — A0X Matrix V2 policy bootstrap
+
+- **Problem:** PR #105 was qualified locally with the explicit
+  `matrix-v2-legacy-v1` plan, but public `main` still accepts only the
+  `current-v2` plan digests. The hosted verifier correctly reads the policy
+  from the pull request base, so the candidate policy cannot authorize its own
+  legacy-profile receipt.
+- **Solution:** prepare a separate policy-only prerequisite from exact public
+  `main` `188eb65b5e249923baddadeba52659f07fcd1609`. It changes only the outer,
+  Python 3.11, and Python 3.12 accepted configuration digests; checks, images,
+  platforms, and the one-hour freshness limit remain unchanged.
+- **Trust bootstrap:** qualify the prerequisite itself with `current-v2`, the
+  plan still accepted by its trusted base. Only after the prerequisite is
+  public may A0X be rebased and qualified with `matrix-v2-legacy-v1`.
+- **Gate:** the exact qualification dossier is
+  [`qualification/a0x-current-v2-policy-migration-dossier.json`](qualification/a0x-current-v2-policy-migration-dossier.json).
+  It remains `approval_requested`; no CCP run, Docker workload, remote
+  mutation, model access, target access, or scientific retry is authorized by
+  this preparation.
+
 ---
 
 ## 2026-08-20 — EXP-002 no-model checkpoint
