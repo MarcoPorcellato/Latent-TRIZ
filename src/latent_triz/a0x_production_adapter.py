@@ -29,7 +29,10 @@ from .a0x_material_contract import (
     INTERNAL_BUDGET_SECONDS,
     OUTER_TIMEOUT_SECONDS,
     A0XGuardLaunch,
+    DESCRIPTOR_PROFILE,
+    authorization_reference,
     derive_runtime_paths,
+    material_contract_binding,
     validate_guard_launch_pair_binding,
 )
 from .a0x_material_runtime import MaterialLifecycleDependencies, run_material_lifecycle
@@ -157,6 +160,15 @@ def _bind_context(*, root: Path, descriptor: Mapping[str, Any]) -> ProductionCon
         or launch.timeouts.cleanup_margin_seconds != CLEANUP_MARGIN_SECONDS
     ):
         raise A0XProductionAdapterError("production timeout envelope differs from the fixed A0X profile")
+    descriptor_raw = _read_repository_file(repository, derive_runtime_paths(pair).launch_descriptor_path)
+    try:
+        persisted_descriptor = strict_json_object(descriptor_raw)
+    except A0XContractError as error:
+        raise A0XProductionAdapterError("production launch descriptor is invalid") from error
+    if persisted_descriptor != descriptor_mapping:
+        raise A0XProductionAdapterError("production launch descriptor differs from the received descriptor")
+    if hashlib.sha256(descriptor_raw).hexdigest() != launch.launch_descriptor_sha256:
+        raise A0XProductionAdapterError("production authorization does not bind the current launch descriptor")
     authorization_raw_sha256 = runtime_documents["authorization"][1]
     return ProductionContext(
         root=repository,
@@ -174,11 +186,11 @@ def _bind_context(*, root: Path, descriptor: Mapping[str, Any]) -> ProductionCon
 def _descriptor_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     expected = {
         "descriptor_profile", "source_head", "cwd_kind", "pair_binding", "child_script", "python",
-        "environment_template", "runtime_files", "execution",
+        "environment_template", "authorization_reference", "material_contract", "execution",
     }
     if not isinstance(value, Mapping) or set(value) != expected:
         raise A0XProductionAdapterError("production descriptor shape is unsupported")
-    if value.get("descriptor_profile") != "a0x-material-child-descriptor-v1":
+    if value.get("descriptor_profile") != DESCRIPTOR_PROFILE:
         raise A0XProductionAdapterError("production descriptor profile is unsupported")
     source_head = value.get("source_head")
     if not isinstance(source_head, str) or len(source_head) != 40 or any(c not in "0123456789abcdef" for c in source_head):
@@ -209,30 +221,20 @@ def _descriptor_commitment(value: Mapping[str, Any]) -> str:
 def _bound_runtime_documents(
     root: Path, descriptor: Mapping[str, Any], pair: PairBinding,
 ) -> dict[str, tuple[bytes, str]]:
-    expected_paths = {
-        "authorization": derive_runtime_paths(pair).authorization_path,
-        "material_contract": "experiments/a0x-six-model/material-execution-contract.json",
+    try:
+        authorization_path = authorization_reference(descriptor.get("authorization_reference"), pair)
+        contract_path, contract_sha256 = material_contract_binding(descriptor.get("material_contract"))
+        authorization_raw = _read_repository_file(root, authorization_path)
+        contract_raw = _read_repository_file(root, contract_path)
+    except (A0XContractError, OSError, TypeError, ValueError) as error:
+        raise A0XProductionAdapterError("production descriptor runtime documents are invalid") from error
+    observed_contract_sha256 = hashlib.sha256(contract_raw).hexdigest()
+    if observed_contract_sha256 != contract_sha256:
+        raise A0XProductionAdapterError("production descriptor material contract bytes drifted")
+    return {
+        "authorization": (authorization_raw, hashlib.sha256(authorization_raw).hexdigest()),
+        "material_contract": (contract_raw, observed_contract_sha256),
     }
-    files = descriptor.get("runtime_files")
-    if not isinstance(files, list) or len(files) != 2:
-        raise A0XProductionAdapterError("production descriptor runtime documents are incomplete")
-    bound: dict[str, tuple[bytes, str]] = {}
-    for entry in files:
-        if not isinstance(entry, Mapping) or set(entry) != {"role", "path", "sha256"}:
-            raise A0XProductionAdapterError("production descriptor runtime document is invalid")
-        role, relative, expected_sha = entry.get("role"), entry.get("path"), entry.get("sha256")
-        if role not in expected_paths or relative != expected_paths[role] or role in bound:
-            raise A0XProductionAdapterError("production descriptor runtime document role is invalid")
-        if not isinstance(expected_sha, str) or len(expected_sha) != 64 or any(c not in "0123456789abcdef" for c in expected_sha):
-            raise A0XProductionAdapterError("production descriptor runtime document hash is invalid")
-        raw = _read_repository_file(root, str(relative))
-        observed = hashlib.sha256(raw).hexdigest()
-        if observed != expected_sha:
-            raise A0XProductionAdapterError("production descriptor runtime document bytes drifted")
-        bound[str(role)] = (raw, observed)
-    if set(bound) != set(expected_paths):
-        raise A0XProductionAdapterError("production descriptor runtime document set is invalid")
-    return bound
 
 
 def _read_repository_file(root: Path, relative: str) -> bytes:

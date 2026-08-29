@@ -39,11 +39,9 @@ class A0XProductionAdapterTests(unittest.TestCase):
             contract_path = root / "experiments/a0x-six-model/material-execution-contract.json"
             authorization_path.parent.mkdir(parents=True)
             contract_path.parent.mkdir(parents=True)
-            authorization_raw = _raw(authorization)
-            authorization_path.write_bytes(authorization_raw)
             contract_path.write_bytes(contract_raw)
             descriptor = {
-                "descriptor_profile": "a0x-material-child-descriptor-v1",
+                "descriptor_profile": "a0x-material-child-descriptor-v2",
                 "source_head": source_head,
                 "cwd_kind": "repository_root",
                 "pair_binding": pair,
@@ -53,16 +51,27 @@ class A0XProductionAdapterTests(unittest.TestCase):
                     "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1",
                     "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1",
                 ],
-                "runtime_files": [
-                    {"role": "authorization", "path": str(authorization["authorization_inlet_path"]), "sha256": hashlib.sha256(authorization_raw).hexdigest()},
-                    {"role": "material_contract", "path": "experiments/a0x-six-model/material-execution-contract.json", "sha256": hashlib.sha256(contract_raw).hexdigest()},
-                ],
+                "authorization_reference": {
+                    "role": "authorization", "path": str(authorization["authorization_inlet_path"]),
+                },
+                "material_contract": {
+                    "role": "material_contract", "path": "experiments/a0x-six-model/material-execution-contract.json",
+                    "sha256": hashlib.sha256(contract_raw).hexdigest(),
+                },
                 "execution": {
                     "network": "offline", "generation": "forbidden", "trust_remote_code": False,
                     "device": "cpu", "dtype": "float32", "outer_timeout_seconds": 3600,
                     "internal_budget_seconds": 3300, "cleanup_margin_seconds": 300,
                 },
             }
+            from latent_triz.a0x_material_contract import derive_runtime_paths
+
+            descriptor_raw = _raw(descriptor)
+            authorization["guard_launch"]["launch_descriptor"]["sha256"] = hashlib.sha256(descriptor_raw).hexdigest()
+            authorization_path.write_bytes(_raw(authorization))
+            launch_path = root / derive_runtime_paths(pair).launch_descriptor_path
+            launch_path.parent.mkdir(parents=True)
+            launch_path.write_bytes(descriptor_raw)
             yield root, descriptor, pair
 
     def test_builder_is_inert_then_runs_only_the_descriptor_bound_pair(self) -> None:
@@ -92,6 +101,42 @@ class A0XProductionAdapterTests(unittest.TestCase):
             self.assertEqual(("run", pair["model_key"], pair["leg"]), calls[1][:3])
             self.assertIsNotNone(calls[1][3])
             self.assertEqual(3600, calls[1][4])
+
+    def test_descriptor_v2_binds_authorization_to_exact_descriptor(self) -> None:
+        from latent_triz.a0x_material_contract import derive_runtime_paths
+        from latent_triz.a0x_production_adapter import ProductionFactories, build_production_executor
+
+        for root, descriptor, pair in self._descriptor_root():
+            contract = root / "experiments/a0x-six-model/material-execution-contract.json"
+            authorization_path = root / derive_runtime_paths(pair).authorization_path
+            launch_path = root / derive_runtime_paths(pair).launch_descriptor_path
+            v2 = dict(descriptor)
+            v2["descriptor_profile"] = "a0x-material-child-descriptor-v2"
+            v2["authorization_reference"] = {
+                "role": "authorization",
+                "path": derive_runtime_paths(pair).authorization_path,
+            }
+            v2["material_contract"] = {
+                "role": "material_contract",
+                "path": "experiments/a0x-six-model/material-execution-contract.json",
+                "sha256": hashlib.sha256(contract.read_bytes()).hexdigest(),
+            }
+            descriptor_raw = _raw(v2)
+            authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+            authorization["guard_launch"]["launch_descriptor"]["sha256"] = hashlib.sha256(descriptor_raw).hexdigest()
+            authorization_path.write_bytes(_raw(authorization))
+            launch_path.write_bytes(descriptor_raw)
+
+            executor = build_production_executor(
+                root=root,
+                descriptor=v2,
+                factories=ProductionFactories(
+                    dependency_builder=lambda _context: object(),
+                    lifecycle_runner=lambda **_kwargs: {"terminal_outcome": {"status": "null"}},
+                ),
+            )
+
+            self.assertEqual({"status": "null"}, executor(v2))
 
     def test_executor_rejects_any_selector_or_descriptor_override(self) -> None:
         from latent_triz.a0x_production_adapter import (

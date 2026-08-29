@@ -79,9 +79,8 @@ class A0XMaterialChildTests(unittest.TestCase):
         authorization_document["material_contract_raw_sha256"] = hashlib.sha256(contract.read_bytes()).hexdigest()
         authorization_document["guard_launch"]["child_script"]["sha256"] = hashlib.sha256(child.read_bytes()).hexdigest()
         authorization_document["guard_launch"]["python"]["sha256"] = hashlib.sha256(python.read_bytes()).hexdigest()
-        authorization.write_bytes(json.dumps(authorization_document, sort_keys=True, separators=(",", ":")).encode("utf-8"))
         descriptor = {
-            "descriptor_profile": "a0x-material-child-descriptor-v1",
+            "descriptor_profile": "a0x-material-child-descriptor-v2",
             "source_head": "a" * 40,
             "cwd_kind": "repository_root",
             "pair_binding": pair,
@@ -102,18 +101,15 @@ class A0XMaterialChildTests(unittest.TestCase):
                 "TOKENIZERS_PARALLELISM=false",
                 "PYTHONNOUSERSITE=1",
             ],
-            "runtime_files": [
-                {
-                    "role": "authorization",
-                    "path": ".a0x-runtime/authorizations/a0/gpt2/a0x-a0-gpt2-run-1.json",
-                    "sha256": hashlib.sha256(authorization.read_bytes()).hexdigest(),
-                },
-                {
-                    "role": "material_contract",
-                    "path": "experiments/a0x-six-model/material-execution-contract.json",
-                    "sha256": hashlib.sha256(contract.read_bytes()).hexdigest(),
-                },
-            ],
+            "authorization_reference": {
+                "role": "authorization",
+                "path": authorization.relative_to(root).as_posix(),
+            },
+            "material_contract": {
+                "role": "material_contract",
+                "path": "experiments/a0x-six-model/material-execution-contract.json",
+                "sha256": hashlib.sha256(contract.read_bytes()).hexdigest(),
+            },
             "execution": {
                 "network": "offline",
                 "generation": "forbidden",
@@ -127,7 +123,10 @@ class A0XMaterialChildTests(unittest.TestCase):
         }
         launch = root / ".a0x-runtime" / "launches" / "a0" / "gpt2" / "a0x-a0-gpt2-run-1.json"
         launch.parent.mkdir(parents=True)
-        launch.write_bytes(json.dumps(descriptor, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        descriptor_raw = json.dumps(descriptor, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        authorization_document["guard_launch"]["launch_descriptor"]["sha256"] = hashlib.sha256(descriptor_raw).hexdigest()
+        authorization.write_bytes(json.dumps(authorization_document, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        launch.write_bytes(descriptor_raw)
         return root, descriptor, child, python
 
     @staticmethod
@@ -235,6 +234,45 @@ class A0XMaterialChildTests(unittest.TestCase):
         self.assertEqual("null", terminal["terminal_status"])
         self.assertEqual([descriptor], received)
 
+    def test_descriptor_v2_uses_acyclic_authorization_reference(self) -> None:
+        root, descriptor, child, python = self._fixture()
+        launch = root / ".a0x-runtime" / "launches" / "a0" / "gpt2" / "a0x-a0-gpt2-run-1.json"
+        authorization = root / ".a0x-runtime" / "authorizations" / "a0" / "gpt2" / "a0x-a0-gpt2-run-1.json"
+        contract = root / "experiments" / "a0x-six-model" / "material-execution-contract.json"
+        v2 = copy.deepcopy(descriptor)
+        v2["descriptor_profile"] = "a0x-material-child-descriptor-v2"
+        v2["authorization_reference"] = {
+            "role": "authorization",
+            "path": authorization.relative_to(root).as_posix(),
+        }
+        v2["material_contract"] = {
+            "role": "material_contract",
+            "path": "experiments/a0x-six-model/material-execution-contract.json",
+            "sha256": hashlib.sha256(contract.read_bytes()).hexdigest(),
+        }
+        descriptor_raw = json.dumps(v2, sort_keys=True, separators=(",", ":")).encode()
+        authorization_document = json.loads(authorization.read_text(encoding="utf-8"))
+        authorization_document["guard_launch"]["launch_descriptor"]["sha256"] = hashlib.sha256(descriptor_raw).hexdigest()
+        authorization.write_bytes(json.dumps(authorization_document, sort_keys=True, separators=(",", ":")).encode())
+        launch.write_bytes(descriptor_raw)
+        received: list[dict[str, object]] = []
+        module = load_child_module()
+
+        code = module.run_child(
+            ["--launch-descriptor", ".a0x-runtime/launches/a0/gpt2/a0x-a0-gpt2-run-1.json"],
+            root=root,
+            execute_descriptor=lambda value: received.append(dict(value)) or {"status": "null"},
+            source_head_probe=lambda: "a" * 40,
+            environment=self._environment(),
+            cwd=root,
+            child_script_path=child,
+            python_executable=python,
+            stdout=io.StringIO(),
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual([v2], received)
+
     def test_descriptor_drift_refuses_before_executor(self) -> None:
         root, descriptor, child, python = self._fixture()
         launch = root / ".a0x-runtime" / "launches" / "a0" / "gpt2" / "a0x-a0-gpt2-run-1.json"
@@ -245,7 +283,8 @@ class A0XMaterialChildTests(unittest.TestCase):
             "python_role": lambda value: value["python"].__setitem__("role", "other"),
             "python_hash": lambda value: value["python"].__setitem__("sha256", "0" * 64),
             "environment": lambda value: value["environment_template"].pop(),
-            "runtime_hash": lambda value: value["runtime_files"][0].__setitem__("sha256", "0" * 64),
+            "authorization_reference": lambda value: value["authorization_reference"].__setitem__("path", "other.json"),
+            "contract_hash": lambda value: value["material_contract"].__setitem__("sha256", "0" * 64),
             "network": lambda value: value["execution"].__setitem__("network", "enabled"),
             "generation": lambda value: value["execution"].__setitem__("generation", "allowed"),
             "trust_remote_code": lambda value: value["execution"].__setitem__("trust_remote_code", True),
@@ -415,8 +454,14 @@ class A0XMaterialChildTests(unittest.TestCase):
                 mutate(candidate)
                 path.write_bytes(json.dumps(candidate, sort_keys=True, separators=(",", ":")).encode("utf-8"))
                 rewritten = copy.deepcopy(descriptor)
-                rewritten["runtime_files"][0 if name == "authorization" else 1]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
-                launch.write_bytes(json.dumps(rewritten, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+                if name == "contract":
+                    rewritten["material_contract"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+                rewritten_raw = json.dumps(rewritten, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                if name == "contract":
+                    authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+                    authorization["guard_launch"]["launch_descriptor"]["sha256"] = hashlib.sha256(rewritten_raw).hexdigest()
+                    authorization_path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+                launch.write_bytes(rewritten_raw)
                 code, terminal, received = self._run(
                     root=root, child=child, python=python,
                     argv=["--launch-descriptor", ".a0x-runtime/launches/a0/gpt2/a0x-a0-gpt2-run-1.json"],

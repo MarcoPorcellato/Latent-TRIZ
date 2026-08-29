@@ -32,8 +32,11 @@ from latent_triz.a0x_contract import (  # noqa: E402
 from latent_triz.a0x_material_contract import (  # noqa: E402
     A0XGuardLaunch,
     CLEANUP_MARGIN_SECONDS,
+    DESCRIPTOR_PROFILE,
     INTERNAL_BUDGET_SECONDS,
     OUTER_TIMEOUT_SECONDS,
+    authorization_reference,
+    material_contract_binding,
     validate_qualification_evidence,
 )
 from latent_triz.validator import validate  # noqa: E402
@@ -81,7 +84,7 @@ def run_child(
         return 0
     try:
         descriptor_path = _parse_launch_descriptor_argument(raw_argv)
-        descriptor = _read_descriptor(Path(root), descriptor_path)
+        descriptor, descriptor_raw = _read_descriptor(Path(root), descriptor_path)
         effective_probe = source_head_probe or (lambda: _default_source_head_probe(Path(root)))
         _validate_descriptor(
             descriptor,
@@ -91,6 +94,7 @@ def run_child(
             cwd=Path.cwd() if cwd is None else Path(cwd),
             child_script_path=Path(__file__) if child_script_path is None else Path(child_script_path),
             python_executable=Path(sys.executable) if python_executable is None else Path(python_executable),
+            descriptor_raw_sha256=hashlib.sha256(descriptor_raw).hexdigest(),
         )
     except (A0XMaterialChildError, A0XContractError, OSError, ValueError, TypeError):
         _emit_terminal(stream, exit_class="refused")
@@ -126,9 +130,10 @@ def _parse_launch_descriptor_argument(argv: Sequence[str]) -> str:
     return path.as_posix()
 
 
-def _read_descriptor(root: Path, relative_path: str) -> dict[str, Any]:
+def _read_descriptor(root: Path, relative_path: str) -> tuple[dict[str, Any], bytes]:
     try:
-        return strict_json_object(_repository_file(root, relative_path).read_bytes())
+        raw = _repository_file(root, relative_path).read_bytes()
+        return strict_json_object(raw), raw
     except (A0XContractError, OSError) as error:
         raise A0XMaterialChildError("launch descriptor bytes are unavailable or non-strict") from error
 
@@ -136,14 +141,15 @@ def _read_descriptor(root: Path, relative_path: str) -> dict[str, Any]:
 def _validate_descriptor(
     descriptor: Mapping[str, Any], *, root: Path, source_head_probe: Callable[[], str] | None,
     environment: Mapping[str, str], cwd: Path, child_script_path: Path, python_executable: Path,
+    descriptor_raw_sha256: str,
 ) -> None:
     expected_keys = {
         "descriptor_profile", "source_head", "cwd_kind", "pair_binding", "child_script",
-        "python", "environment_template", "runtime_files", "execution",
+        "python", "environment_template", "authorization_reference", "material_contract", "execution",
     }
     if not isinstance(descriptor, Mapping) or set(descriptor) != expected_keys:
         raise A0XMaterialChildError("launch descriptor shape is unsupported")
-    if descriptor.get("descriptor_profile") != "a0x-material-child-descriptor-v1":
+    if descriptor.get("descriptor_profile") != DESCRIPTOR_PROFILE:
         raise A0XMaterialChildError("launch descriptor profile is unsupported")
     source_head = descriptor.get("source_head")
     if not isinstance(source_head, str) or not _REVISION.fullmatch(source_head) or source_head_probe is None or source_head_probe() != source_head:
@@ -158,9 +164,9 @@ def _validate_descriptor(
     _validate_child_script(descriptor.get("child_script"), root=resolved_root, current=child_script_path)
     _validate_python(descriptor.get("python"), current=python_executable)
     _validate_environment(descriptor.get("environment_template"), environment)
-    runtime_documents = _validate_runtime_files(descriptor.get("runtime_files"), root=resolved_root, pair=pair)
+    runtime_documents = _validate_runtime_documents(descriptor, root=resolved_root, pair=pair)
     _validate_authorization_contract_chain(
-        descriptor, pair=pair, runtime_documents=runtime_documents,
+        descriptor, pair=pair, runtime_documents=runtime_documents, descriptor_raw_sha256=descriptor_raw_sha256,
     )
     if not isinstance(descriptor.get("execution"), Mapping) or dict(descriptor["execution"]) != _EXECUTION:
         raise A0XMaterialChildError("launch descriptor execution envelope is invalid")
@@ -198,33 +204,24 @@ def _validate_environment(value: Any, environment: Mapping[str, str]) -> None:
         raise A0XMaterialChildError("child environment differs from the frozen template")
 
 
-def _validate_runtime_files(value: Any, *, root: Path, pair: PairBinding) -> dict[str, bytes]:
-    expected_paths = {
-        "authorization": f".a0x-runtime/authorizations/{pair.leg.value}/{pair.model_key}/{pair.run_id}.json",
-        "material_contract": "experiments/a0x-six-model/material-execution-contract.json",
-    }
-    if not isinstance(value, list) or len(value) != 2:
-        raise A0XMaterialChildError("launch descriptor runtime files are incomplete")
-    roles: list[str] = []
-    documents: dict[str, bytes] = {}
-    for entry in value:
-        if not isinstance(entry, Mapping) or set(entry) != {"role", "path", "sha256"}:
-            raise A0XMaterialChildError("launch descriptor runtime file is invalid")
-        role, path = entry.get("role"), entry.get("path")
-        if not isinstance(role, str) or role not in expected_paths or path != expected_paths[role]:
-            raise A0XMaterialChildError("launch descriptor runtime file role is invalid")
-        raw = _repository_file(root, path).read_bytes()
-        if hashlib.sha256(raw).hexdigest() != _sha256(entry.get("sha256")):
-            raise A0XMaterialChildError("launch descriptor runtime file bytes drifted")
-        roles.append(role)
-        documents[role] = raw
-    if roles != ["authorization", "material_contract"]:
-        raise A0XMaterialChildError("launch descriptor runtime file order is invalid")
-    return documents
+def _validate_runtime_documents(
+    descriptor: Mapping[str, Any], *, root: Path, pair: PairBinding,
+) -> dict[str, bytes]:
+    try:
+        authorization_path = authorization_reference(descriptor.get("authorization_reference"), pair)
+        contract_path, contract_sha256 = material_contract_binding(descriptor.get("material_contract"))
+        authorization_raw = _repository_file(root, authorization_path).read_bytes()
+        contract_raw = _repository_file(root, contract_path).read_bytes()
+    except (A0XContractError, OSError, TypeError, ValueError) as error:
+        raise A0XMaterialChildError("launch descriptor runtime documents are invalid") from error
+    if hashlib.sha256(contract_raw).hexdigest() != contract_sha256:
+        raise A0XMaterialChildError("launch descriptor material contract bytes drifted")
+    return {"authorization": authorization_raw, "material_contract": contract_raw}
 
 
 def _validate_authorization_contract_chain(
     descriptor: Mapping[str, Any], *, pair: PairBinding, runtime_documents: Mapping[str, bytes],
+    descriptor_raw_sha256: str,
 ) -> None:
     """Validate real authorization/contract semantics, not only their hashes."""
     try:
@@ -246,6 +243,8 @@ def _validate_authorization_contract_chain(
         if authorization.get("material_contract_raw_sha256") != hashlib.sha256(contract_raw).hexdigest():
             raise A0XMaterialChildError("authorization contract hash drifted")
         launch = A0XGuardLaunch.from_mapping(authorization["guard_launch"])
+        if launch.launch_descriptor_sha256 != descriptor_raw_sha256:
+            raise A0XMaterialChildError("authorization does not bind the current launch descriptor")
         if (
             launch.source_head != descriptor["source_head"]
             or launch.child_script_sha256 != descriptor["child_script"]["sha256"]
