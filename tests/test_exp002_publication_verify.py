@@ -14,17 +14,42 @@ from exp002_publication_verify import PublicationVerificationError, verify_publi
 
 
 class Exp002PublicationVerifyTests(unittest.TestCase):
+    def test_complete_seven_package_manifest_passes_without_local_asset_dependency(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "schemas").mkdir()
+            (root / "results/exp002/preexecution").mkdir(parents=True)
+            shutil.copy2(
+                ROOT / "schemas/exp002-publication-manifest.schema.json",
+                root / "schemas/exp002-publication-manifest.schema.json",
+            )
+            manifest_path = root / "results/exp002/preexecution/publication-manifest.json"
+            manifest = json.loads(
+                (ROOT / "results/exp002/preexecution/publication-manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            for index, package in enumerate(manifest["packages"]):
+                source_package = ROOT / package["package_locator"]
+                package_path = root / package["package_locator"]
+                shutil.copytree(source_package, package_path)
+
+                asset = manifest["external_dense_assets"][index]
+                asset_path = root / asset["locator"]
+                asset_path.parent.mkdir(parents=True, exist_ok=True)
+                payload = f"synthetic-external-asset-{index}\n".encode()
+                asset_path.write_bytes(payload)
+                asset["sha256"] = hashlib.sha256(payload).hexdigest()
+
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            result = verify_publication_manifest(manifest_path, root=root)
+            self.assertEqual(result["status"], "pass")
+            self.assertEqual(result["packages"], 7)
+            self.assertEqual(len(result["verified_external_assets"]), 7)
+
     def test_published_manifest_tracked_bindings_are_source_snapshot_safe(self):
-        verify_bindings = getattr(
-            publication_verify, "verify_publication_manifest_bindings", None
-        )
-        self.assertIsNotNone(
-            verify_bindings,
-            "a tracked-bindings verifier is required for source-snapshot CI",
-        )
-        if verify_bindings is None:
-            return
-        result = verify_bindings(
+        result = publication_verify.verify_publication_manifest_bindings(
             "results/exp002/preexecution/publication-manifest.json", root=ROOT
         )
         self.assertEqual(result["status"], "bindings_only")

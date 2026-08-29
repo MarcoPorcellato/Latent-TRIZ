@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_class",
+    "authorization_chain",
+    "claim_ids",
+    "empirical",
+    "evidence_eligible",
+    "expert_validated",
+    "pair_binding",
+    "preflight_status",
+    "model_key",
+    "origin",
+    "endpoint_availability",
+    "source_head",
+    "material_contract_raw_sha256",
+    "ccp_observation_raw_sha256",
+    "ccp_observation_path",
+    "scientific_status"
+  ],
+  "properties": {
+    "artifact_class": {
+      "const": "a0x-preflight-receipt"
+    },
+    "empirical": {
+      "const": true
+    },
+    "scientific_status": {
+      "const": "exploratory"
+    },
+    "evidence_eligible": {
+      "const": false
+    },
+    "expert_validated": {
+      "const": false
+    },
+    "claim_ids": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair"
+    },
+    "preflight_status": {
+      "const": "passed"
+    },
+    "authorization_chain": {
+      "$ref": "#/$defs/authorization_chain"
+    },
+    "model_key": {"type": "string", "minLength": 1},
+    "origin": {"$ref": "#/$defs/rev"},
+    "endpoint_availability": {"type": "object"},
+    "source_head": {"$ref": "#/$defs/rev"},
+    "material_contract_raw_sha256": {"$ref": "#/$defs/sha"},
+    "ccp_observation_raw_sha256": {"$ref": "#/$defs/sha"},
+    "ccp_observation_path": {"$ref": "#/$defs/path"}
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "rev": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+    },
+    "dense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg",
+        "cases",
+        "view_site_count",
+        "endpoint_count",
+        "hidden_width",
+        "scalar_bytes",
+        "vector_count",
+        "dense_bytes",
+        "dense_copy_count",
+        "atomic_dense_bytes",
+        "index_copy_count",
+        "index_reservation_bytes",
+        "payload_allowance_bytes",
+        "total_bytes",
+        "cap_bytes"
+      ],
+      "properties": {
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "cases": {
+          "const": 48
+        },
+        "view_site_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hidden_width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scalar_bytes": {
+          "const": 4
+        },
+        "vector_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_copy_count": {
+          "const": 2
+        },
+        "atomic_dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "index_copy_count": {
+          "const": 2
+        },
+        "index_reservation_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "payload_allowance_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cap_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "leg": {
+                "const": "a0"
+              }
+            },
+            "required": [
+              "leg"
+            ]
+          },
+          "then": {
+            "properties": {
+              "view_site_count": {
+                "const": 10
+              },
+              "endpoint_count": {
+                "const": 5
+              },
+              "vector_count": {
+                "const": 2400
+              },
+              "index_reservation_bytes": {
+                "const": 6291456
+              },
+              "payload_allowance_bytes": {
+                "const": 2097152
+              },
+              "cap_bytes": {
+                "const": 33554432
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "view_site_count": {
+                "const": 2
+              },
+              "endpoint_count": {
+                "const": 2
+              },
+              "vector_count": {
+                "const": 192
+              },
+              "index_reservation_bytes": {
+                "const": 1048576
+              },
+              "payload_allowance_bytes": {
+                "const": 524288
+              },
+              "cap_bytes": {
+                "const": 4194304
+              }
+            }
+          }
+        }
+      ]
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
+      ],
+      "properties": {
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "model_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/rev"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_path": {
+          "$ref": "#/$defs/path"
+        },
+        "dense_bound": {
+          "$ref": "#/$defs/dense"
+        },
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "leg": {
+                "const": "a0"
+              }
+            },
+            "required": [
+              "leg"
+            ]
+          },
+          "then": {
+            "properties": {
+              "dense_bound": {
+                "properties": {
+                  "leg": {
+                    "const": "a0"
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "dense_bound": {
+                "properties": {
+                  "leg": {
+                    "const": "r1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "dossier_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "properties": {
+        "profile": {
+          "const": "a0x-approval-dossier-json-v2"
+        },
+        "commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "authorization_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "properties": {
+        "profile": {
+          "const": "a0x-execution-authorization-json-v2"
+        },
+        "commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "authorization_chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dossier_commitment",
+        "authorization_commitment"
+      ],
+      "properties": {
+        "dossier_commitment": {
+          "$ref": "#/$defs/dossier_commitment"
+        },
+        "authorization_commitment": {
+          "$ref": "#/$defs/authorization_commitment"
+        }
+      }
+    }
+  }
+}

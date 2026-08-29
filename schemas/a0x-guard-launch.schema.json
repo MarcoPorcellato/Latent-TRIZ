@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-guard-launch.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["launch_profile", "ccp", "python", "cwd_kind", "source_head", "child_script", "launch_descriptor", "environment_template", "resource", "timeouts", "argv_template"],
+  "properties": {
+    "launch_profile": {"const": "a0x-guard-launch-v2"},
+    "ccp": {"$ref": "#/$defs/runtime_role_ccp"},
+    "python": {"$ref": "#/$defs/runtime_role_python"},
+    "cwd_kind": {"const": "repository_root"},
+    "source_head": {"$ref": "#/$defs/revision"},
+    "child_script": {"$ref": "#/$defs/child_script"},
+    "launch_descriptor": {"$ref": "#/$defs/runtime_file"},
+    "environment_template": {"const": ["HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1"]},
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "workload_family", "executor", "cache_state", "execution_mode", "target_platform", "memory_limit_bytes"],
+      "properties": {
+        "profile": {"const": "a0x-material"},
+        "workload_family": {"const": "latent-triz-a0x-v1"},
+        "executor": {"const": "native"},
+        "cache_state": {"const": "warm"},
+        "execution_mode": {"const": "native"},
+        "target_platform": {"const": "macos-arm64"},
+        "memory_limit_bytes": {"const": 8589934592}
+      }
+    },
+    "timeouts": {"$ref": "#/$defs/timeouts"},
+    "argv_template": {
+      "type": "array",
+      "minItems": 26,
+      "maxItems": 26,
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "runtime_path": {"type": "string", "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))(?:authorizations|launches|claims|observations|qualification|bin)/[A-Za-z0-9._/-]+$"},
+    "runtime_role_ccp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "sha256"],
+      "properties": {"role": {"const": "ccp"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "runtime_role_python": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "sha256"],
+      "properties": {"role": {"const": "python"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "child_script": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "sha256"],
+      "properties": {"role": {"const": "child"}, "path": {"const": "scripts/a0x_material_child.py"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "runtime_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "sha256"],
+      "properties": {"role": {"const": "descriptor"}, "path": {"$ref": "#/$defs/runtime_path"}, "sha256": {"$ref": "#/$defs/sha"}}
+    },
+    "timeouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outer_timeout_seconds", "internal_budget_seconds", "cleanup_margin_seconds", "admission_timeout_seconds"],
+      "properties": {
+        "outer_timeout_seconds": {"const": 3600},
+        "internal_budget_seconds": {"const": 3300},
+        "cleanup_margin_seconds": {"const": 300},
+        "admission_timeout_seconds": {"const": 300}
+      }
+    }
+  }
+}

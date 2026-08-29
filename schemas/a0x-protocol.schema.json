@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "empirical", "scientific_status", "evidence_eligible", "expert_validated", "claim_ids", "identity", "protocol_status", "endpoint_indices", "descriptive_final_block_endpoint", "source_protocol_path", "source_protocol_raw_sha256", "inherited_rules", "sealed_targets_accessed", "model_output_accessed"],
+  "properties": {
+    "artifact_class": {"const": "a0x-leg-protocol"},
+    "empirical": {"const": true},
+    "scientific_status": {"const": "exploratory"},
+    "evidence_eligible": {"const": false},
+    "expert_validated": {"const": false},
+    "claim_ids": {"type": "array", "maxItems": 0},
+    "identity": {"$ref": "#/$defs/identity"},
+    "protocol_status": {"const": "frozen"},
+    "endpoint_indices": {"type": "array", "minItems": 1, "items": {"type": "integer"}},
+    "descriptive_final_block_endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_card_index_field", "required_equal_model_card_field", "role", "rescues_primary"],
+      "properties": {
+        "model_card_index_field": {"const": "final_transformer_block_tuple_index"},
+        "required_equal_model_card_field": {"const": "num_hidden_layers"},
+        "role": {"const": "descriptive_sensitivity"},
+        "rescues_primary": {"const": false}
+      }
+    },
+    "source_protocol_path": {"$ref": "#/$defs/path"},
+    "source_protocol_raw_sha256": {"$ref": "#/$defs/sha"},
+    "inherited_rules": {"type": "object", "minProperties": 1},
+    "sealed_targets_accessed": {"const": false},
+    "model_output_accessed": {"const": false}
+  },
+  "allOf": [{"if": {"properties": {"identity": {"properties": {"leg": {"const": "a0"}}, "required": ["leg"]}}, "required": ["identity"]}, "then": {"properties": {"endpoint_indices": {"const": [0, 2, 4, 6]}}}, "else": {"properties": {"endpoint_indices": {"const": [6]}}}}],
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "path": {"type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"},
+    "identity": {"type": "object", "additionalProperties": false, "required": ["leg", "protocol_id", "protected_tree_sha256", "selection_corpus_sha256", "source_base_commit"], "properties": {"leg": {"enum": ["a0", "r1"]}, "protocol_id": {"type": "string", "minLength": 1}, "protected_tree_sha256": {"$ref": "#/$defs/sha"}, "selection_corpus_sha256": {"$ref": "#/$defs/sha"}, "source_base_commit": {"$ref": "#/$defs/revision"}}}
+  }
+}

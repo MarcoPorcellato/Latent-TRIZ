@@ -1,3 +1,125 @@
+A0X final integration checkpoint (2026-08-29): the local exact-head
+qualification of `4aee4698f5c59101b1f3292519f10ae802629bf7` passed with
+receipt-file SHA-256
+`08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447`.
+That receipt is historical after policy-only PR #106 advanced public main to
+`4ba3c36a0f6b7a50d34bc87bb34bafc79687eb08`; it cannot attest the future
+integrated source commit. Complete only the target-free integration and verify
+that every A0X protected file remains byte-identical. Then stop for one new
+authorization bound to the final commit, tree, legacy profile, plan digests,
+and qualified producer. No model, tokenizer, target, CCP heavy command,
+publication, scientific retry, or claim promotion is authorized before then.
+
+A0X checkpoint (2026-08-29): preparatory work remains on branch
+`agent/a0x-six-model-design` at `sealed_gate_pending`. The current correction
+anchor is `6b8c8e3491b24fa4717b2f4faa8700b007c48892`, tree
+`18b8fdaf9ba00a81e3c90686a2563a23f2436824`. The public material contract
+deliberately binds the large-blob-qualified CCP producer at commit
+`27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
+`d8e0364d1313fde0898a44517ae6d233d9e10763`, executable SHA-256
+`c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`.
+Its authorized Matrix qualification passed all required checks. The
+receipt ID is
+`sha256:21d5cf99a9d142b879b37ef8bb2f50573e45fd569a2259fa863a50fe6be08e85`
+and the receipt-file SHA-256 is
+`14df36450ce982b0c5233651baa4c5f5d0e0c462b1b5f119ec8f93a9ad7465ce`.
+Both candidate and installed-stable verifiers returned PASS. The source is
+preserved on public branch `agent/matrix-v2-legacy-terminal-release-qualified`,
+the receipt only on its exact evidence branch, and CCP PR #70 is merged as
+`1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`, whose tree is byte-identical to
+the qualified source tree. The candidate is not installed and has not replaced
+the stable executable.
+
+The fixed material envelope is 3,600 seconds outer, 3,300 seconds internal,
+300 seconds reserved for sealing/cleanup, and 300 seconds for admission. The
+scientific workload uses one `guard exec`; its fresh six-role preflight does
+not call configuration-backed `plan`, `doctor`, or `dry-run`. Public artifacts
+contain no host paths, argv logs, environment, usernames, cache paths, or
+container IDs. Private runtime inlets are deterministic per leg/model/run and
+remain outside immutable result directories.
+
+The single authorized repository qualification of
+`32e03b5ef34bb1d8f778877514601994df9c3898` ended terminal `FAIL`: both schema
+checks passed, while both repository checks reached their approximately
+300-second configured deadlines. Receipt ID
+`sha256:bbe9173bfe489e34071f71ce6822df26126f1026d939e1693245fd47daa864d9`;
+file SHA-256
+`63a920e8cd97310a857be8465924311389edeb61746945c9219f4c85e2500e01`.
+Correct V2 verification established receipt integrity `PASS` and policy
+qualification `FAIL`; an earlier V1-policy verification was an operator
+invocation error. The correction sets the two repository checks to 3,600
+seconds, retains 300 seconds for schema checks, requires
+`--matrix-plan-profile matrix-v2-legacy-v1` on every repository-qualification
+target, and verifies with `.commit-ci-policy-v2.toml`. No retry occurred.
+
+The next single authorized qualification at
+`fb9484a89549fbbbfc5395932954b2d9565d91d6`, tree
+`f0585981d136659df4fec39e8b26aaaf2fab02a3`, also ended terminal `FAIL`.
+Both schema checks passed; both repository checks returned exit 1 without
+timeout or cancellation. Receipt ID
+`sha256:f5348d82568ba98c6003132534b3a202631f04c42972b965251adaa2ca367dde`;
+receipt-file SHA-256
+`5bb2e49da31381e4c22858556e4c54f373ee69dfcea8f578e050efb6268e4232`.
+Correct V2 verification established receipt integrity `PASS` and policy
+qualification `FAIL`. A clean host run passed all 1,075 repository tests,
+while the exact Matrix test reproduced five `FileNotFoundError: 'make'`
+errors with `make` absent. The verification images remove build-only `make`
+during final package cleanup. TDD therefore replaced every `make -n` test
+subprocess with dependency-free Python inspection that requires one exact,
+non-empty recipe for each of `preflight-plan`, `preflight-doctor`,
+`preflight-dry-run`, `preflight-run`, and `preflight-verify`. The attempt is
+consumed and has not been retried.
+
+The generator produced two frozen legs and twelve `approval_requested`
+dossiers with zero material access. The active checkout regenerated the
+package deterministically, and the frozen verifier independently repeated its
+byte-determinism checks in disposable source copies. Fresh verification passed:
+the A0X aggregate 248 tests, the frozen package 10/10, schema cross-validation
+155 agreements with 19 rejected mutations, and the repository-wide suite
+1,075 tests with one documented skip. The
+no-model receipt SHA-256 is
+`c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`.
+The receipt reports zero model loads, tokenizer constructions, sealed-target
+reads, CCP invocations, and remote mutations. Resume through
+`docs/A0X_SIX_MODEL_CAMPAIGN.md`, `docs/A0X_RESTART_HANDOFF.md`,
+`docs/A0X_ENGINEERING_PROBLEM_SOLUTION_LOG.md`, and the canonical A0X
+design/plan.
+
+Current hashes: material contract
+`b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`,
+A0 implementation
+`7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570`,
+A0 freeze
+`34876ec4ad5ae209bc3ffd49202deb660830fa225caa00831f70dedfa34bf006`,
+A0-R1 implementation
+`d6cc0f6de81d0da4108570559579d76045a7a7a1ea282a84866e3825bcb023bc`,
+and A0-R1 freeze
+`1c7425d90be524ba9ab55ec66967b0eee32272addc025948459ea4e3b6383e8a`.
+The reviewed legacy plan has stdout SHA-256
+`0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad`,
+outer digest
+`sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331`,
+Python 3.11 digest
+`sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943`,
+and Python 3.12 digest
+`sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
+
+Fresh dependency-free verification passed: no-`make` regression 3/3, frozen
+package 10/10, A0X aggregate 248/248, schema cross-validation 155 agreements
+with 19 rejected mutations, repository suite 1,075 tests with one documented
+skip, documentation audit, and diff check. Independent Luna review returned
+`APPROVE` with no P0--P3 findings. Next gate: commit the regenerated A0X
+package and canonical documentation, then request a new
+exact-head Latent-TRIZ qualification authorization bound to that final commit,
+the exact selected candidate, the explicit `matrix-v2-legacy-v1` profile, and
+the three plan digests above. Installation, each of the twelve
+dossier-bound scientific attempts, Latent-TRIZ publication, and merge remain
+separate decisions. No
+model, material tokenizer, historical or sealed target, CCP heavy command,
+Docker, network, GitHub action, retry, tuning, pooling, or claim promotion is
+authorized by this checkpoint. The earlier `c91915a…` PENDING receipt and the
+failed `a73ebed…` receipt remain historical evidence only.
+
 EXP-002 checkpoint (2026-08-20): branch `exp002-qwen3-followup` is the active
 implementation branch at implementation checkpoint `e47937c` (followed by
 documentation-only checkpoint commits). The no-model protocol,
@@ -11,12 +133,13 @@ contract are frozen;
 the seven-model EXP-002A baseline is published with terminal `null` packages.
 The exact seven-model material dossier is operator-authorized at approval hash
 `0c5943ad5a7bf2c598511b8c3ecc29bd566f33140af59c8c6d788f2423483d67`.
-The CCP `origin/main` runbook
-`5f2ef665be4dc47fd354befcba53251a4e51744f` is the current coordination
-contract; the prior baseline used an isolated exact
-binary; all seven runs had Admit/inactive/queue-0 preflights and clean
-post-run handoffs. The installed older binary remains stale and must not be
-used for future material work. The next objective is to freeze and execute the
+The current official CCP source and coordination runbook are anchored at
+`origin/main` `3fccc197e5055a2759ee7afe51b91133938ec904`; the separately qualified
+installed executable SHA-256 is
+`b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c`.
+All future heavy work must use the fresh resource/admission/runtime preflight,
+non-reentrant slot ownership, and explicit terminal handoff documented in
+`docs/reference/commit-ci-preflight.md`. The next objective is to freeze and execute the
 remaining response-surface, direct TRIZ/source-familiarity, and new blinded
 transfer stages; do not rerun the seven baseline packages.
 

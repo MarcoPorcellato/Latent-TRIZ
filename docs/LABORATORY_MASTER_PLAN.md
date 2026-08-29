@@ -909,6 +909,87 @@ Proceed only when the predecessor result justifies the next cost:
 Cost reduction never weakens an evidence gate. `RUNNING`, partial tests, source
 inspection, or a receipt for another commit are not a pass.
 
+## A0X six-model A0/A0-R1 replication tranche
+
+A0X is the bounded model-family replication route for the six exact snapshots
+that were acquired after the original Pythia work. It is not an alternative to
+the human H1 gate and does not pool outcomes across models or legs.
+
+The preparatory dependency chain is:
+
+```text
+historical A0 and A0-R1 rules
+        -> protected trees and public selection identities
+        -> exact source/test implementation bindings
+        -> one freeze per leg
+        -> six approval-requested dossiers per leg
+        -> no-model qualification and independent review
+        -> separate exact-head qualification and approval for one pair
+        -> first terminal outcome and immutable publication
+```
+
+Tasks 10 and 11 have completed offline implementation, final no-model
+qualification, and independent review. The two frozen legs and twelve
+pair-isolated dossiers are recorded with exact hashes. The TDD-corrected
+producer at
+commit `27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
+`d8e0364d1313fde0898a44517ae6d233d9e10763`, executable SHA-256
+`c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`
+has passed one exact Matrix qualification with all five checks terminally
+green. Its source and receipt are durably preserved on dedicated public
+branches, and CCP PR #70 is merged as
+`1a2e081cd3912b0fd63a7226a4564f1d85a51eb8` with the exact qualified tree. It
+is not installed, but A0X now deliberately binds that exact identity.
+Correction anchor `6b8c8e3491b24fa4717b2f4faa8700b007c48892`
+regenerated the complete package deterministically in the active checkout;
+the frozen verifier independently repeated its byte-determinism checks in
+disposable source copies before this correction. A later single exact-head
+attempt at `32e03b5…` preserved terminal `FAIL`: both schema checks passed and
+both repository checks reached their approximately 300-second configured
+timeouts. Correct V2 verification established receipt integrity `PASS` and
+policy status `FAIL`, because the attempt used default `current-v2` rather than
+the frozen `matrix-v2-legacy-v1` profile. TDD now sets the repository checks to
+3,600 seconds, leaves schema checks at 300 seconds, requires the legacy profile
+on every operator target, and verifies against the V2 policy. No retry has
+occurred. Fresh no-material verification passed 10 frozen-package tests, 248
+A0X tests, 155 schema agreements with 19 rejected mutations, and 1,075
+repository tests with one documented skip. Independent review returned
+`APPROVE` with no P0--P3 findings. The next gate is a local package commit,
+followed by a separately authorized Latent-TRIZ exact-head
+qualification. Task 12 is not authorized. The authoritative operator-facing contract is
+[`A0X_SIX_MODEL_CAMPAIGN.md`](./A0X_SIX_MODEL_CAMPAIGN.md).
+
+A second authorized qualification at `fb9484a…` then ended terminal `FAIL`
+without timeout or cancellation: schema passed, but both repository checks
+returned exit 1 because the Matrix binding test invoked `make -n` inside lean
+verification images that deliberately remove build-only `make`. A clean host
+run passed all 1,075 tests, and a no-`make` environment reproduced the five
+missing-executable errors. The dependency-free correction now parses the
+Makefile with Python and requires one exact, non-empty recipe for all five
+Matrix operator targets, preserving the legacy-profile and V2-policy checks.
+The attempt is consumed and was not retried. Fresh verification passed the
+no-`make` regression 3/3, frozen package 10/10, A0X aggregate 248/248, schema
+cross-validation 155 agreements with 19 rejected mutations, repository suite
+1,075 tests with one documented skip, documentation audit, and diff check.
+Independent Luna review returned `APPROVE` with no P0--P3 findings. Only the
+local package commit remains before another exact-head authorization.
+
+A0X acceptance criteria are:
+
+- inherited corpus, split, control, statistic, threshold, and endpoint rules
+  are copied by value while historical model identity is not misrepresented;
+- six exact cards form a complete two-leg by six-model Cartesian product;
+- every dossier binds one and only one leg/model pair, dense cap, output path,
+  material contract, and future authorization path;
+- the verifier rejects cross-leg, cross-model, wrong-freeze, source/test drift,
+  cap overflow, and Make-target mapping drift;
+- no-model qualification proves zero model loads, tokenizer constructions,
+  sealed-target reads, CCP invocations, and remote mutations;
+- each later material pair has a new exact authorization and publishes its
+  first terminal outcome without retry, tuning, substitution, or pooling;
+- interpretation remains E0 exploratory and does not promote a general TRIZ,
+  causal, or training-data claim.
+
 ## Improvement-tranche checklist
 
 - [x] Preserve A0/R1 positives, seven-model comparative nulls, and the R3
@@ -932,6 +1013,10 @@ inspection, or a receipt for another commit are not a pass.
   SmolLM2-135M without conditioning on prior model scores.
 - [ ] Acquire, integrity-verify, feasibility-test, and execute the two new
   candidates under separate exact approvals and one-run limits.
+- [x] Freeze the A0X two-leg, six-model no-material contract and prepare twelve
+  separate `approval_requested` dossiers.
+- [x] Qualify and independently review the complete A0X no-model package, then
+  stop before any Task-12 material execution.
 
 The unchecked items are genuine prerequisites, not missing documentation. A
 future run may not be called WLT or SLT evidence while any applicable item is

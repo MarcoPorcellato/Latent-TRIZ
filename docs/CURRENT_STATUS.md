@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-08-20
+last_verified: 2026-08-29
 ---
 
 # Current laboratory status
@@ -121,6 +121,86 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
+### A0X final integration boundary
+
+The local exact-head qualification of
+`4aee4698f5c59101b1f3292519f10ae802629bf7` passed, with receipt-file
+SHA-256 `08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447`.
+It is historical after the policy-only prerequisite advanced public main to
+`4ba3c36a0f6b7a50d34bc87bb34bafc79687eb08`: an integrated source commit
+requires its own receipt. The only permitted preparatory work is to merge that
+trusted base, retain source-snapshot and full-asset verification separately,
+and prove the complete A0X protected set remains byte-identical. No model,
+target, tokenizer, CCP heavy command, publication, or scientific retry is
+authorized until a new exact-head CCP authorization is granted.
+
+The historical detail below remains evidence, but this continuation statement
+governs the current gate.
+
+The A0X six-model campaign is now at its frozen no-model checkpoint. Two
+independent legs preserve the historical A0 and A0-R1 rules, and twelve
+single-pair dossiers cover six exact model snapshots without pooling. Every
+dossier remains `approval_requested`; none authorizes material access. The
+complete local no-model qualification and independent architecture/science
+review now pass, and the exact freeze/dossier hashes are recorded. A0X is
+stopped at `sealed_gate_pending`: correction anchor
+`6b8c8e3491b24fa4717b2f4faa8700b007c48892` deterministically regenerated the
+two freezes and twelve dossiers, but no Latent-TRIZ exact-head qualification
+exists and no pair is authorized for material execution. The correction
+removes an unintended test-only dependency on `make`. Fresh no-material
+verification passed: no-`make` regression 3/3, frozen package 10/10, A0X
+aggregate 248/248, schema cross-validation 155 agreements with 19 rejected
+mutations, repository suite 1,075 tests with one documented skip,
+documentation audit, and diff check. Independent Luna review returned
+`APPROVE` with no P0--P3 findings. The local package commit is the remaining
+local gate. See
+[A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
+
+The later CCP compatibility producer has now completed its own exact
+qualification after a TDD fixture-path correction. Qualified source commit
+`27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
+`d8e0364d1313fde0898a44517ae6d233d9e10763`, and executable SHA-256
+`c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`
+passed all five Matrix checks; receipt ID
+`sha256:21d5cf99a9d142b879b37ef8bb2f50573e45fd569a2259fa863a50fe6be08e85`.
+This qualifies that exact producer only. It remains uninstalled, but its exact
+source and receipt are durably published on dedicated branches and CCP PR #70
+is merged as `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`, with the exact qualified
+tree. A0X now deliberately binds this producer; its material contract is
+SHA-256
+`b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+
+The later single authorized exact-head attempt at
+`32e03b5ef34bb1d8f778877514601994df9c3898` ended terminal `FAIL`: both schema
+checks passed, while both repository checks reached their approximately
+300-second configured timeouts. Receipt ID
+`sha256:bbe9173bfe489e34071f71ce6822df26126f1026d939e1693245fd47daa864d9`;
+receipt-file SHA-256
+`63a920e8cd97310a857be8465924311389edeb61746945c9219f4c85e2500e01`.
+Correct V2 verification proved receipt integrity `PASS` and policy status
+`FAIL`; the run had used the default `current-v2` plan instead of the frozen
+`matrix-v2-legacy-v1` profile. No retry occurred. The TDD correction gives the
+two repository checks 3,600 seconds, retains 300 seconds for schema checks,
+pins every operator target to the legacy profile, and uses the V2 verification
+policy. After the final package commit, the remaining
+preparatory gate is a new exact-head authorization bound to that commit and
+the corrected plan digests.
+
+The subsequent one authorized attempt at
+`fb9484a89549fbbbfc5395932954b2d9565d91d6` ended terminal `FAIL` without
+timeout or cancellation. Both schema checks passed; both repository checks
+returned exit 1. Receipt ID
+`sha256:f5348d82568ba98c6003132534b3a202631f04c42972b965251adaa2ca367dde`;
+receipt-file SHA-256
+`5bb2e49da31381e4c22858556e4c54f373ee69dfcea8f578e050efb6268e4232`.
+V2 verification reported integrity `PASS` and policy `FAIL`. A clean host run
+passed 1,075 tests, and the Matrix module reproduced five missing-`make`
+errors in the lean runtime environment. The verification images remove
+build-only `make`, so the corrected test now parses and compares the five
+operator recipes using only Python while retaining exact profile, policy,
+generation, receipt, and expected-commit assertions. This attempt is consumed;
+no retry or scientific access followed.
+
 The next scientific priority is human construct validation: three independent
 TRIZ experts, blinded cases, agreement and abstention receipts, and an explicit
 keep/amend decision. After that gate, the priority is one preregistered causal
@@ -132,9 +212,24 @@ See the [Roadmap](./ROADMAP.md) for the short sequence, the [Laboratory Master
 Plan](./LABORATORY_MASTER_PLAN.md) for dependencies and exit evidence, and the
 [Hypotheses and Falsification](./HYPOTHESES_AND_FALSIFICATION.md) contract for
 the normative interpretation rules.
-The current CCP coordination runbook is `commit-ci-preflight` `origin/main`
-`5f2ef66`: admission is host-wide and manual lock/lease quarantine is
-unsupported. The installed CCP preflight is currently fail-closed with an
-unsafe `.../quarantine` layout and an unreadable OrbStack Docker API; no
-material EXP-002 execution is permitted until the CCP owner restores a
-readable Admit/inactive/queue-0 gate.
+The current installed CCP producer is the separately qualified build from
+source commit `3fccc197e5055a2759ee7afe51b91133938ec904`, tree
+`9e478c1489a9926772e8ab8bea21bd57470494b6`, executable SHA-256
+`b8d26013800c99ba806506a0539a9ddc781bfab52f95c8f1dbdff1b65c2fcd4c`.
+Admission remains host-wide and manual lock/lease quarantine is unsupported.
+This installed producer identity does not authorize an A0X run: a fresh live
+Admit/inactive/queue-zero gate, exact-head qualification, and separate
+hash-bound pair authorization are still required.
+
+The single authorized A0X exact-head qualification of
+`0114cdc0f14344a9bceb1f442128c55195e69a71` reached a terminal `FAIL` without
+timeout. Both schema checks passed; both repository checks failed because
+`tests/test_exp002_publication_verify.py` required seven ignored external dense
+assets to exist in the fresh isolated checkout. The terminal receipt ID is
+`sha256:6e462b9c9bcb0389d886b2b2f56d386e8b4cbdc7ebf3865e8c6478ed47fc1352`
+(file SHA-256
+`763c845ef4065945a4057149997f44c652dd2cfccdf590795bdaa5b9da430835`).
+The production verifier remains fail-closed. The local corrective change makes
+the positive test materialize seven deterministic synthetic assets and keeps
+explicit missing/mutated-asset failures. This correction requires a new clean
+commit and new exact-head authorization before any CCP retry.

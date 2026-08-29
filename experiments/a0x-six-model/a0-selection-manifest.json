@@ -1,0 +1,360 @@
+{
+  "artifact_class": "a0x-selection-manifest",
+  "cases": [
+    {
+      "case_content_sha256": "71ddef53219c47d83df74dc06e6caada90b6a97b7befba262f593704d36ff5c5",
+      "case_id": "case_agriculture_001_variant_a",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "6ce356155239a99a026966a1a451e8df02914ae47d002210c578c144e7230422",
+      "case_id": "case_agriculture_001_variant_b",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "9e97d99b720fc3ca6fdbaaa2670467b1cc5ddcb158a96c945ca406eff660ea52",
+      "case_id": "case_agriculture_002_variant_a",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "9d87bbd918da9782ee198e486dbbf84fdb5cc473e446003581594930c74352c6",
+      "case_id": "case_agriculture_002_variant_b",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "7e7023bd611c624bd3ebfe5a492dc909a845fa3016f9573c016c0dc0926021f5",
+      "case_id": "case_agriculture_003_variant_a",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "ad3b5cdbf4e232fdaa7f20a47ac84242ab601973cb164c92cf01d8c099d0bae0",
+      "case_id": "case_agriculture_003_variant_b",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "f62e74aad6f375016311b5d3f7fe2eac7ff8b17f60244aa43299cf9227775275",
+      "case_id": "case_agriculture_004_variant_a",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "2ad8d52863f26520f2e4e737fec824b9f698c0dc4c2757f9c029aeaefe4b641f",
+      "case_id": "case_agriculture_004_variant_b",
+      "domain": "agriculture",
+      "problem_family_id": "agriculture_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "f3e4c2c220991299bb32946d7c572deb735e95e181827aab1db7e68fd388de02",
+      "case_id": "case_energy_001_variant_a",
+      "domain": "energy",
+      "problem_family_id": "energy_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "a786acab538bc3ae5b03b78f01cbb202a2c0912a5d7534cd83b757345a0f9055",
+      "case_id": "case_energy_001_variant_b",
+      "domain": "energy",
+      "problem_family_id": "energy_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "83dc6a2442df01eaf946a75ccbe7efd628906bf8739f1313e8f96e1e6c672566",
+      "case_id": "case_energy_002_variant_a",
+      "domain": "energy",
+      "problem_family_id": "energy_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "695bbd2b652886841bfaffcf052360d771df54c47ce47316300d244256a66bb3",
+      "case_id": "case_energy_002_variant_b",
+      "domain": "energy",
+      "problem_family_id": "energy_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "957f0ed4abc7339836b36c767ac1a63e66c1cb867fa2c964046ba6e9afe09379",
+      "case_id": "case_energy_003_variant_a",
+      "domain": "energy",
+      "problem_family_id": "energy_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "9c01f5560e02b071a2469e99e359af70f112b85b744ee1544a20285b7f6a864f",
+      "case_id": "case_energy_003_variant_b",
+      "domain": "energy",
+      "problem_family_id": "energy_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "d97b691438b936e8bc7fb2b616164031fd84fbcb7aad5c18b4652558c861f781",
+      "case_id": "case_energy_004_variant_a",
+      "domain": "energy",
+      "problem_family_id": "energy_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "b145ea7b24107dc07c388e1b1d19bb263e8b6bab5f1ff9559950699bf0ab9315",
+      "case_id": "case_energy_004_variant_b",
+      "domain": "energy",
+      "problem_family_id": "energy_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "c61ce3b9661c61980711243190220914af5b25ee690278986a9a223f58a5f7c3",
+      "case_id": "case_manufacturing_001_variant_a",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "93eef747e954f66b0745d2750970d1fe7b58ff761f48b5b095f8db5ffbd87860",
+      "case_id": "case_manufacturing_001_variant_b",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "44884af4ced2046f4f6d2510d047d46dad9e09dd9e0cf9c3e84555e0a4efedf8",
+      "case_id": "case_manufacturing_002_variant_a",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "5d89e381ee9b6073cff75019a3af516682968e8e1209ebed6a358b52f1192ba1",
+      "case_id": "case_manufacturing_002_variant_b",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "a18037d31fd09fbdf464aae76dd8543baaf19a4d2128864d57e263c1b6a1b3e4",
+      "case_id": "case_manufacturing_003_variant_a",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "9217607acb1a8e0ae6d64252a3890ab17366f0a5cc595e889727a25a4fe6e721",
+      "case_id": "case_manufacturing_003_variant_b",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "10e088c51b14e32184538a321435fa0018f00269f9d29990a69441ac370abf78",
+      "case_id": "case_manufacturing_004_variant_a",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "3e376582473bbb07c7af546ea4406afd05adffd6d67ece882279a21847cd321c",
+      "case_id": "case_manufacturing_004_variant_b",
+      "domain": "manufacturing",
+      "problem_family_id": "manufacturing_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "46978d9dd857d79979673b8ce9dd7251c4b6cbb40a0504a01ad74d882680789e",
+      "case_id": "case_medicine_001_variant_a",
+      "domain": "medicine",
+      "problem_family_id": "medicine_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "c02d28854a8eed2e56517ca88282adf84cf1a844f13359b560853acf83acd265",
+      "case_id": "case_medicine_001_variant_b",
+      "domain": "medicine",
+      "problem_family_id": "medicine_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "d54874db94792aaf39b831398a0ccf047b468c4f6e07c97c4cbea9e20391ec27",
+      "case_id": "case_medicine_002_variant_a",
+      "domain": "medicine",
+      "problem_family_id": "medicine_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "aac23ed14d30d7156966df38270825884a99186a18819741f0da20d775262822",
+      "case_id": "case_medicine_002_variant_b",
+      "domain": "medicine",
+      "problem_family_id": "medicine_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "8a483df1af7bd2190f82fbed7029d5c6447efe5941fc514ab761de9725d33910",
+      "case_id": "case_medicine_003_variant_a",
+      "domain": "medicine",
+      "problem_family_id": "medicine_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "b575de108025a163c986682220e62a672b5769883df85ac6554647bdcd344c59",
+      "case_id": "case_medicine_003_variant_b",
+      "domain": "medicine",
+      "problem_family_id": "medicine_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "0c5b5a93148f5aee62062527147e8ae0828d9efcf02da4e41a8e39459904e623",
+      "case_id": "case_medicine_004_variant_a",
+      "domain": "medicine",
+      "problem_family_id": "medicine_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "7df47ead758a4ea1e15d50f503aabdb58f3ee2ff9e1b9e7477b3bcff6d3b687a",
+      "case_id": "case_medicine_004_variant_b",
+      "domain": "medicine",
+      "problem_family_id": "medicine_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "2a213d4972c111926487df82407b1222e2d560f9dbc54f763dbe1a80dd5c237d",
+      "case_id": "case_software_001_variant_a",
+      "domain": "software",
+      "problem_family_id": "software_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "35275ec0432ed77ab798376836d96acbe361a5a8188694535f1014f7fff396b9",
+      "case_id": "case_software_001_variant_b",
+      "domain": "software",
+      "problem_family_id": "software_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "3ebcca1d693778f348735c0521511e2e928efece2edf8aac258644fa4e6d807a",
+      "case_id": "case_software_002_variant_a",
+      "domain": "software",
+      "problem_family_id": "software_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "73c363b50ef50005095ec6a400c3cf822feddac31263a5d305f19940b405b974",
+      "case_id": "case_software_002_variant_b",
+      "domain": "software",
+      "problem_family_id": "software_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "50eb734b15c203453a24d72f359534702c35daf17497e8347a49c8d60eab31c0",
+      "case_id": "case_software_003_variant_a",
+      "domain": "software",
+      "problem_family_id": "software_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "4ed10c10e5d4cee82e4740497fede09ec6da944d86042779fb6499b3c702aa83",
+      "case_id": "case_software_003_variant_b",
+      "domain": "software",
+      "problem_family_id": "software_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "a4f065b1f25938efbbdc387f737a7177637127c9f5e688ad8d160481432cb35d",
+      "case_id": "case_software_004_variant_a",
+      "domain": "software",
+      "problem_family_id": "software_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "ed7f5036752f837e77c240ad8667f7a7cc49367301a04057561091b3502e47fb",
+      "case_id": "case_software_004_variant_b",
+      "domain": "software",
+      "problem_family_id": "software_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "658e2c4a20597adbb89bfe3a467095b0f0aabca773b29e276474ecf3d5770d14",
+      "case_id": "case_transport_001_variant_a",
+      "domain": "transport",
+      "problem_family_id": "transport_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "65a6328ee6ac3d4fbf1832b63b2e3c503c60ca509a1d4904dc8c10a68be84a00",
+      "case_id": "case_transport_001_variant_b",
+      "domain": "transport",
+      "problem_family_id": "transport_001",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "2657fa80ee0ebc1cd7a863694b536011a2825afa4181eff119c880647d449ed1",
+      "case_id": "case_transport_002_variant_a",
+      "domain": "transport",
+      "problem_family_id": "transport_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "d4b7d1f0ddf751980f1c70144769ef675150307e570336dd3861af41a30e8118",
+      "case_id": "case_transport_002_variant_b",
+      "domain": "transport",
+      "problem_family_id": "transport_002",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "3d32b0f4ce96762552a734b944789ff9dbd5f0c45220b54d55febd4e4d31916f",
+      "case_id": "case_transport_003_variant_a",
+      "domain": "transport",
+      "problem_family_id": "transport_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "d16cb56974a00f05f67407af049fbc2eafe5e487bf6854475df14e929b840e55",
+      "case_id": "case_transport_003_variant_b",
+      "domain": "transport",
+      "problem_family_id": "transport_003",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "79a203ed6c67613c3fb8eba7f2c4568ddbed563838ebba0bbe082a6c1081e119",
+      "case_id": "case_transport_004_variant_a",
+      "domain": "transport",
+      "problem_family_id": "transport_004",
+      "split": "calibration"
+    },
+    {
+      "case_content_sha256": "cf5f38548f94aa155185a564783c211a8772c70c77e2391a561fc3a549610f8e",
+      "case_id": "case_transport_004_variant_b",
+      "domain": "transport",
+      "problem_family_id": "transport_004",
+      "split": "calibration"
+    }
+  ],
+  "claim_ids": [],
+  "empirical": true,
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "scientific_status": "exploratory",
+  "selected_case_count": 48,
+  "selection_corpus_sha256": "44537bbe2581655283c043fe41624e4233132b71eee90e4d31fbb05b5b44f990",
+  "selection_path": "experiments/a0x-six-model/a0-selection-manifest.json",
+  "selection_rule": {
+    "cases_per_family": 2,
+    "domain_order": "frozen",
+    "families_per_domain": 4,
+    "family_order": "lexicographic"
+  },
+  "source_cases_path": "data/a0/cases.jsonl",
+  "source_cases_sha256": "4d667a5b8e7512ee19feeedc37e2562413ace27fdd1220654ef79edcb8616707",
+  "source_corpus_manifest_path": "data/a0/manifest.json",
+  "source_corpus_manifest_sha256": "68eda0c1082b36b17836cb79684c5696280486ae93596109562853160f25d58f",
+  "target_content_reads": 0
+}

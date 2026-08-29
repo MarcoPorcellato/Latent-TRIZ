@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_class",
+    "claim_ids",
+    "commitment_profile",
+    "dossier_status",
+    "empirical",
+    "evidence_eligible",
+    "expert_validated",
+    "pair_binding",
+    "scientific_status",
+    "implementation_source_head",
+    "material_contract_path",
+    "material_contract_raw_sha256",
+    "runtime_authorization_path"
+  ],
+  "properties": {
+    "artifact_class": {
+      "const": "a0x-authorization-dossier"
+    },
+    "empirical": {
+      "const": true
+    },
+    "scientific_status": {
+      "const": "exploratory"
+    },
+    "evidence_eligible": {
+      "const": false
+    },
+    "expert_validated": {
+      "const": false
+    },
+    "claim_ids": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair"
+    },
+    "implementation_source_head": {
+      "$ref": "#/$defs/rev"
+    },
+    "dossier_status": {
+      "const": "approval_requested"
+    },
+    "commitment_profile": {
+      "const": "a0x-approval-dossier-json-v2"
+    },
+    "material_contract_path": {
+      "const": "experiments/a0x-six-model/material-execution-contract.json"
+    },
+    "material_contract_raw_sha256": {
+      "$ref": "#/$defs/sha"
+    },
+    "runtime_authorization_path": {
+      "$ref": "#/$defs/runtime_authorization_path"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "rev": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+    },
+    "dense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg",
+        "cases",
+        "view_site_count",
+        "endpoint_count",
+        "hidden_width",
+        "scalar_bytes",
+        "vector_count",
+        "dense_bytes",
+        "dense_copy_count",
+        "atomic_dense_bytes",
+        "index_copy_count",
+        "index_reservation_bytes",
+        "payload_allowance_bytes",
+        "total_bytes",
+        "cap_bytes"
+      ],
+      "properties": {
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "cases": {
+          "const": 48
+        },
+        "view_site_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hidden_width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scalar_bytes": {
+          "const": 4
+        },
+        "vector_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_copy_count": {
+          "const": 2
+        },
+        "atomic_dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "index_copy_count": {
+          "const": 2
+        },
+        "index_reservation_bytes": {
+          "enum": [
+            6291456,
+            1048576
+          ]
+        },
+        "payload_allowance_bytes": {
+          "enum": [
+            2097152,
+            524288
+          ]
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cap_bytes": {
+          "enum": [
+            33554432,
+            4194304
+          ]
+        }
+      }
+    },
+    "runtime_authorization_path": {
+      "type": "string",
+      "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))authorizations/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\\.json$"
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
+      ],
+      "properties": {
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "model_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/rev"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_path": {
+          "$ref": "#/$defs/path"
+        },
+        "dense_bound": {
+          "$ref": "#/$defs/dense"
+        },
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        }
+      }
+    }
+  }
+}

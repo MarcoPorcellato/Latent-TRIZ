@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-qualification-evidence.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "evidence_profile", "qualification_receipt_id", "qualification_receipt_raw_sha256", "qualified_source_head", "generation", "ccp", "public_evidence"],
+  "properties": {
+    "artifact_class": {"const": "a0x-qualification-evidence"},
+    "evidence_profile": {"const": "a0x-qualification-evidence-v1"},
+    "qualification_receipt_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "qualification_receipt_raw_sha256": {"$ref": "#/$defs/sha"},
+    "qualified_source_head": {"$ref": "#/$defs/revision"},
+    "generation": {"type": "integer", "minimum": 1},
+    "ccp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable_name", "source_commit", "qualified_source_tree", "binary_sha256", "version"],
+      "properties": {
+        "executable_name": {"const": "commit-ci-preflight"},
+        "source_commit": {"$ref": "#/$defs/revision"},
+        "qualified_source_tree": {"$ref": "#/$defs/revision"},
+        "binary_sha256": {"$ref": "#/$defs/sha"},
+        "version": {"type": "string", "pattern": "^commit-ci-preflight [^\\s]+$"}
+      }
+    },
+    "public_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "path", "commit"],
+      "properties": {
+        "branch": {"type": "string", "pattern": "^ccp-evidence/[a-f0-9]{40}$"},
+        "path": {"const": ".ccp/receipt.json"},
+        "commit": {"$ref": "#/$defs/revision"}
+      }
+    }
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
+  }
+}

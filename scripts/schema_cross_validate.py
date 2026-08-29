@@ -280,6 +280,7 @@ def _instances(path: Path) -> Iterable[tuple[int, Any]]:
 
 def main() -> int:
     errors: list[str] = []
+
     for schema_path in sorted((ROOT / "schemas").glob("*.json")):
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         try:

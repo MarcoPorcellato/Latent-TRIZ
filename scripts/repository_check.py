@@ -69,6 +69,7 @@ def validate(schema: str, data: str) -> None:
 
 def main() -> int:
     _ensure_writable_tempdir()
+    run(PYTHON, "scripts/a0x_contract_check.py", "--phase", "synthetic")
     run(PYTHON, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py")
 
     validation_pairs = (

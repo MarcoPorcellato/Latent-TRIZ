@@ -1,6 +1,6 @@
 PYTHONPATH := src
 
-.PHONY: test validate docs-audit check schema-cross-validate exp002-contract-verify exp002-question-bank-audit exp002-publication-verify exp002-runner-test exp002-stage-preflight exp002-review-packet-verify exp002-auto-verify exp002-auto-stage-preflight no-model-quickstart preflight-plan preflight-run preflight-verify model-preflight dataset-audit dataset-wave1-audit wave1-surface-audit wave1-surface-audit-render wave1-annotation-audit h1-annotation-audit readiness lab00 lab00-render lab01-setup lab01-acquire lab01-bootstrap lab01 lab01-render lab01-representations lab02 lab02-render lab03 lab03-render lab04 lab04-render lab05 lab05-render annotate annotate-serve annotate-wave1 pilot-export-evaluator stage1-pilot-validate stage1-pilot-smoke lab lab-render a0-corpus a0-calibrate a0r1-verify a0r1-execution-verify a0r1-freeze a0r1-run a0r1-run-verify a0r1-publication-verify a0r2-acquisition-verify a0r2-approval-dossier-verify a0r2-authorization-verify a0r2-feasibility-contract-verify a0r2-feasibility-run a0r2-feasibility-verify a0r2-execution-verify a0r2-run a0r2-run-verify a0r2-publication-verify a0r2c1-contract-verify a0r2c1-run a0r2c2-contract-verify a0r2c2-run a0r2c3-contract-verify a0r2c3-run a0
+.PHONY: test validate docs-audit check schema-cross-validate a0x-synthetic-verify a0x-no-model-verify a0x-material-a0-smollm2-360m a0x-material-a0-qwen3-0-6b-base a0x-material-a0-gpt2 a0x-material-a0-smollm2-135m a0x-material-a0-gpt-neo-125m a0x-material-a0-qwen2-5-0-5b a0x-material-r1-smollm2-360m a0x-material-r1-qwen3-0-6b-base a0x-material-r1-gpt2 a0x-material-r1-smollm2-135m a0x-material-r1-gpt-neo-125m a0x-material-r1-qwen2-5-0-5b exp002-contract-verify exp002-question-bank-audit exp002-publication-verify exp002-runner-test exp002-stage-preflight exp002-review-packet-verify exp002-auto-verify exp002-auto-stage-preflight no-model-quickstart preflight-status preflight-plan preflight-doctor preflight-dry-run preflight-run preflight-verify preflight-postflight model-preflight dataset-audit dataset-wave1-audit wave1-surface-audit wave1-surface-audit-render wave1-annotation-audit h1-annotation-audit readiness lab00 lab00-render lab01-setup lab01-acquire lab01-bootstrap lab01 lab01-render lab01-representations lab02 lab02-render lab03 lab03-render lab04 lab04-render lab05 lab05-render annotate annotate-serve annotate-wave1 pilot-export-evaluator stage1-pilot-validate stage1-pilot-smoke lab lab-render a0-corpus a0-calibrate a0r1-verify a0r1-execution-verify a0r1-freeze a0r1-run a0r1-run-verify a0r1-publication-verify a0r2-acquisition-verify a0r2-approval-dossier-verify a0r2-feasibility-contract-verify a0r2-feasibility-run a0r2-feasibility-verify a0r2-execution-verify a0r2-run a0r2-run-verify a0r2-publication-verify a0r2c1-contract-verify a0r2c1-run a0r2c2-contract-verify a0r2c2-run a0r2c3-contract-verify a0r2c3-run a0
 
 LAB01_MODEL_ROOT ?= artifacts/models/pythia-70m-deduped-e93a9faa
 LAB01_PYTHON ?= .venv/bin/python
@@ -72,6 +72,52 @@ check:
 
 schema-cross-validate:
 	PYTHONPATH=$(PYTHONPATH) $(LAB01_PYTHON) scripts/schema_cross_validate.py
+
+a0x-synthetic-verify:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_contract_check.py --phase synthetic
+	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_runner tests.test_a0x_contract_check tests.test_a0x_material tests.test_a0x_material_child tests.test_a0x_material_contract tests.test_a0x_material_runtime tests.test_a0x_production_adapter tests.test_a0x_ccp_executor tests.test_a0x_contract tests.test_a0x_preflight tests.test_a0x_freeze tests.test_a0x_frozen_package tests.test_a0x_schemas tests.test_a0x_activations tests.test_a0x_a0_analysis tests.test_a0x_r1_analysis tests.test_a0x_report tests.test_a0x_verify tests.test_a0x_execution tests.test_a0x_model_adapter tests.test_a0x_matrix_plan_binding
+	@echo "A0X synthetic implementation verified: no model, tokenizer, sealed target, or CCP access."
+
+a0x-no-model-verify:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_contract_check.py --phase frozen
+	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_frozen_package -v
+	@echo "A0X frozen package verified: zero model loads, tokenizer constructions, sealed-target reads, CCP invocations, and remote mutations."
+
+a0x-material-a0-smollm2-360m:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json
+
+a0x-material-a0-qwen3-0-6b-base:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/a0/qwen3_0_6b_base.json
+
+a0x-material-a0-gpt2:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/a0/gpt2.json
+
+a0x-material-a0-smollm2-135m:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/a0/smollm2_135m.json
+
+a0x-material-a0-gpt-neo-125m:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/a0/gpt_neo_125m.json
+
+a0x-material-a0-qwen2-5-0-5b:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/a0/qwen2_5_0_5b.json
+
+a0x-material-r1-smollm2-360m:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/r1/smollm2_360m.json
+
+a0x-material-r1-qwen3-0-6b-base:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/r1/qwen3_0_6b_base.json
+
+a0x-material-r1-gpt2:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/r1/gpt2.json
+
+a0x-material-r1-smollm2-135m:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/r1/smollm2_135m.json
+
+a0x-material-r1-gpt-neo-125m:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/r1/gpt_neo_125m.json
+
+a0x-material-r1-qwen2-5-0-5b:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/r1/qwen2_5_0_5b.json
 
 exp002-contract-verify:
 	PYTHONPATH=$(PYTHONPATH) $(LAB01_PYTHON) scripts/exp002_contract_check.py
@@ -284,14 +330,34 @@ a0:
 	  --stage "$$(if test -f results/a0/a0-v1.0.3-e93a9faa/statistical-result.json; then echo verify; else echo all; fi)"
 	@echo "A0 sealed result: results/a0/a0-v1.0.3-e93a9faa/statistical-result.json"
 
+preflight-status:
+	commit-ci-preflight --version
+	git status --short --branch
+	git rev-parse HEAD
+	commit-ci-preflight resource status --json
+	commit-ci-preflight admission status --json
+	docker context show
+	docker ps -q
+
 preflight-plan:
-	commit-ci-preflight plan --config .commit-ci-preflight.toml
+	commit-ci-preflight plan --config .commit-ci-preflight.toml --matrix-plan-profile matrix-v2-legacy-v1 --json
+
+preflight-doctor:
+	commit-ci-preflight doctor --config .commit-ci-preflight.toml --matrix-plan-profile matrix-v2-legacy-v1 --json
+
+preflight-dry-run:
+	commit-ci-preflight dry-run --config .commit-ci-preflight.toml --repository . --matrix-plan-profile matrix-v2-legacy-v1 --json
 
 preflight-run:
-	commit-ci-preflight run --config .commit-ci-preflight.toml --repository . --generation 1
+	commit-ci-preflight run --config .commit-ci-preflight.toml --repository . --generation 1 --matrix-plan-profile matrix-v2-legacy-v1 --json
 
 preflight-verify:
 	commit-ci-preflight verify --receipt .ccp/receipt.json --policy .commit-ci-policy-v2.toml --expected-commit "$$(git rev-parse HEAD)"
+
+preflight-postflight:
+	commit-ci-preflight admission status --json
+	docker ps -q
+	commit-ci-preflight resource status --json
 
 model-preflight:
 	PYTHONPATH=$(PYTHONPATH) python3 -m latent_triz.cli model-preflight --manifest experiments/001-stage1-pilot/model-candidates.jsonl

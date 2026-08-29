@@ -1,0 +1,41 @@
+{
+  "artifact_class": "a0x-authorization-dossier",
+  "claim_ids": [],
+  "commitment_profile": "a0x-approval-dossier-json-v2",
+  "dossier_status": "approval_requested",
+  "empirical": true,
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "implementation_source_head": "6b8c8e3491b24fa4717b2f4faa8700b007c48892",
+  "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
+  "material_contract_raw_sha256": "b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8",
+  "pair_binding": {
+    "binding_profile": "a0x-pair-scope-v2",
+    "dense_bound": {
+      "atomic_dense_bytes": 1474560,
+      "cap_bytes": 4194304,
+      "cases": 48,
+      "dense_bytes": 737280,
+      "dense_copy_count": 2,
+      "endpoint_count": 2,
+      "hidden_width": 960,
+      "index_copy_count": 2,
+      "index_reservation_bytes": 1048576,
+      "leg": "r1",
+      "payload_allowance_bytes": 524288,
+      "scalar_bytes": 4,
+      "total_bytes": 3047424,
+      "vector_count": 192,
+      "view_site_count": 2
+    },
+    "leg": "r1",
+    "leg_freeze_sha256": "1c7425d90be524ba9ab55ec66967b0eee32272addc025948459ea4e3b6383e8a",
+    "model_id": "HuggingFaceTB/SmolLM2-360M",
+    "model_key": "smollm2_360m",
+    "output_path": "results/a0x/r1/smollm2_360m/a0x-r1-smollm2_360m-f8027fd0-attempt-01",
+    "revision": "f8027fd0eaeea54caa13c31d31b9fdc459c38b49",
+    "run_id": "a0x-r1-smollm2_360m-f8027fd0-attempt-01"
+  },
+  "runtime_authorization_path": ".a0x-runtime/authorizations/r1/smollm2_360m/a0x-r1-smollm2_360m-f8027fd0-attempt-01.json",
+  "scientific_status": "exploratory"
+}

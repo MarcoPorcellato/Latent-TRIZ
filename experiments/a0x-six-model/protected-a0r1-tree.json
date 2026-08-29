@@ -1,0 +1,194 @@
+{
+  "artifact_class": "a0x-protected-tree",
+  "claim_ids": [],
+  "empirical": true,
+  "entries": [
+    {
+      "bytes": 944964,
+      "entry_kind": "external_asset",
+      "path": "artifacts/a0r1/a0r1-v1.0.0-e93a9faa-r1/activations.json",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "c49436ed505cbaea677a4f68e597714ef0dd75119a0640474ac1372fae1d2c20",
+      "verification_phase": "external_declaration"
+    },
+    {
+      "bytes": 114668,
+      "entry_kind": "file",
+      "path": "data/a0r1/cases.jsonl",
+      "provenance_manifest": "data/a0r1/manifest.json",
+      "provenance_manifest_sha256": "46c5cdf796f2abad709deb3066cfadd5fc6e6a30f55a737b3408e0a15b065c06",
+      "sha256": "479caee11dd62a978e8f01e9802db624b1714909264292b53067e97e10002541",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1610,
+      "entry_kind": "file",
+      "path": "data/a0r1/manifest.json",
+      "provenance_manifest": "data/a0r1/manifest.json",
+      "provenance_manifest_sha256": "46c5cdf796f2abad709deb3066cfadd5fc6e6a30f55a737b3408e0a15b065c06",
+      "sha256": "46c5cdf796f2abad709deb3066cfadd5fc6e6a30f55a737b3408e0a15b065c06",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 28320,
+      "entry_kind": "file",
+      "path": "data/a0r1/targets/calibration.jsonl",
+      "provenance_manifest": "data/a0r1/manifest.json",
+      "provenance_manifest_sha256": "46c5cdf796f2abad709deb3066cfadd5fc6e6a30f55a737b3408e0a15b065c06",
+      "sha256": "b8cae1ba5355c6d72d74030e3c1487dcd43dbe50431d9ce071ca386b81df0f19",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 28080,
+      "entry_kind": "sealed_target",
+      "path": "data/a0r1/targets/sealed.jsonl",
+      "provenance_manifest": "data/a0r1/manifest.json",
+      "provenance_manifest_sha256": "46c5cdf796f2abad709deb3066cfadd5fc6e6a30f55a737b3408e0a15b065c06",
+      "sha256": "e911a70279f5b141c35064da29c020557f69ee17dfed5adad6172ed3fe2db0e0",
+      "verification_phase": "declaration_only"
+    },
+    {
+      "bytes": 6227,
+      "entry_kind": "file",
+      "path": "experiments/a0r1-independent-proxy/implementation.json",
+      "provenance_manifest": "experiments/a0r1-independent-proxy/protocol.json",
+      "provenance_manifest_sha256": "ed113d1c0bfdb44b57c879e2995b610d0ecf528fccedb37fc9b89093be083fbf",
+      "sha256": "9fa6a8192546073257670aecdc88ea3840cfbab9dc0c49368fcc131f184c563c",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 3598,
+      "entry_kind": "file",
+      "path": "experiments/a0r1-independent-proxy/protocol.json",
+      "provenance_manifest": "experiments/a0r1-independent-proxy/protocol.json",
+      "provenance_manifest_sha256": "ed113d1c0bfdb44b57c879e2995b610d0ecf528fccedb37fc9b89093be083fbf",
+      "sha256": "ed113d1c0bfdb44b57c879e2995b610d0ecf528fccedb37fc9b89093be083fbf",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 2611,
+      "entry_kind": "file",
+      "path": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/activation-receipt.json",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "8d46e42fcb97511f913e188e098a103e29c811bb3fca6c469be5de4a72899d5f",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1638,
+      "entry_kind": "file",
+      "path": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 857,
+      "entry_kind": "file",
+      "path": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/recovery-receipt.json",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "012255e7e4cae3312bb0cd58d7fc96c387568c0eba671e2da953c264d338d082",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 746,
+      "entry_kind": "file",
+      "path": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/report.md",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "1f5017cd7729715ff33b13271262346a74dcae2a2fb2b0c8bf0a590c3b3e8e08",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 43314,
+      "entry_kind": "file",
+      "path": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/representations-index.jsonl",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "0f78f5ca680957be04f430ced0ca7da3267251c5e544a3cd301b53eb7161657f",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 8564,
+      "entry_kind": "file",
+      "path": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/statistical-result.json",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "a2ad1ed0148a332fe85cb42ee2f3295e042d277d772353ebd84ccd2e255a6738",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 8726,
+      "entry_kind": "file",
+      "path": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/statistical-result.raw.json",
+      "provenance_manifest": "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+      "provenance_manifest_sha256": "dada7b79fe08cf58407bda80c5e48e02fd862f7d2573de9984d9736b14936c91",
+      "sha256": "f25cefa37ddb2fed388622e1507dc92a149d02ac25ca184a8eab418eefa11a86",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1566,
+      "entry_kind": "file",
+      "path": "results/a0r1/freeze/freeze-manifest.json",
+      "provenance_manifest": "results/a0r1/freeze/freeze-manifest.json",
+      "provenance_manifest_sha256": "bedb9df1d6650ab0d4d7f9a255555e4dbe80b07b705b45534eeb290d76fe5fc9",
+      "sha256": "bedb9df1d6650ab0d4d7f9a255555e4dbe80b07b705b45534eeb290d76fe5fc9",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1223,
+      "entry_kind": "file",
+      "path": "results/a0r1/freeze/power.json",
+      "provenance_manifest": "results/a0r1/freeze/freeze-manifest.json",
+      "provenance_manifest_sha256": "bedb9df1d6650ab0d4d7f9a255555e4dbe80b07b705b45534eeb290d76fe5fc9",
+      "sha256": "64bce7cd5482f1a3e5f21e081c957a5e8eb46c998f42ff8b744d335983f5f833",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 3598,
+      "entry_kind": "file",
+      "path": "results/a0r1/freeze/protocol-frozen.json",
+      "provenance_manifest": "results/a0r1/freeze/freeze-manifest.json",
+      "provenance_manifest_sha256": "bedb9df1d6650ab0d4d7f9a255555e4dbe80b07b705b45534eeb290d76fe5fc9",
+      "sha256": "ed113d1c0bfdb44b57c879e2995b610d0ecf528fccedb37fc9b89093be083fbf",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 3546,
+      "entry_kind": "file",
+      "path": "results/a0r1/freeze/protocol-planned.json",
+      "provenance_manifest": "results/a0r1/freeze/freeze-manifest.json",
+      "provenance_manifest_sha256": "bedb9df1d6650ab0d4d7f9a255555e4dbe80b07b705b45534eeb290d76fe5fc9",
+      "sha256": "aa8bf57b5902b38c3179bcaf93201020ba2fb0499ffa1653f354ad792cea0f3a",
+      "verification_phase": "preflight_postflight"
+    }
+  ],
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "protected_paths": [
+    "artifacts/a0r1/a0r1-v1.0.0-e93a9faa-r1/activations.json",
+    "data/a0r1/cases.jsonl",
+    "data/a0r1/manifest.json",
+    "data/a0r1/targets/calibration.jsonl",
+    "data/a0r1/targets/sealed.jsonl",
+    "experiments/a0r1-independent-proxy/implementation.json",
+    "experiments/a0r1-independent-proxy/protocol.json",
+    "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/activation-receipt.json",
+    "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+    "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/recovery-receipt.json",
+    "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/report.md",
+    "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/representations-index.jsonl",
+    "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/statistical-result.json",
+    "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/statistical-result.raw.json",
+    "results/a0r1/freeze/freeze-manifest.json",
+    "results/a0r1/freeze/power.json",
+    "results/a0r1/freeze/protocol-frozen.json",
+    "results/a0r1/freeze/protocol-planned.json"
+  ],
+  "protected_tree_sha256": "ee4a47ec7d8661beaaed5d1baad1e05750c89474aacad4a2e898c4b9782d1413",
+  "scientific_status": "exploratory",
+  "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
+}

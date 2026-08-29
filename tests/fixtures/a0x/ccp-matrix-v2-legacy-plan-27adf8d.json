@@ -1,0 +1,135 @@
+{
+  "artifact_class": "a0x-ccp-matrix-v2-plan-observation",
+  "observation_version": "a0x-ccp-matrix-v2-plan-observation-v1",
+  "observation_source": "authorized_ccp_plan_preflight",
+  "observed_source_head": "32e03b5ef34bb1d8f778877514601994df9c3898",
+  "ccp": {
+    "path": "hash-bound-candidate/commit-ci-preflight",
+    "source_commit": "27adf8d0820b3cd96f9c5e149de9b580ae41f639",
+    "qualified_source_tree": "d8e0364d1313fde0898a44517ae6d233d9e10763",
+    "sha256": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4",
+    "version": "commit-ci-preflight 0.1.0"
+  },
+  "matrix_config_binding": {
+    "path": ".commit-ci-preflight.toml",
+    "raw_sha256": "78d0ce348a864ea99a1a7018bc00403bdd2349b5f7f6e39d6a61ec10714a20fd"
+  },
+  "execution_boundary": {
+    "plan_only": true,
+    "doctor_executed": false,
+    "dry_run_executed": false,
+    "ccp_run_executed": false
+  },
+  "observed_plan": {
+    "matrix_plan_profile": "matrix-v2-legacy-v1",
+    "legacy_digest_basis": {
+      "schema_version": "2.0",
+      "project": "MarcoPorcellato/Latent-TRIZ",
+      "receipt": {"output": ".ccp/receipt.json", "freshness_seconds": 3600},
+      "environment_allow": [],
+      "caches": [],
+      "runtimes": [
+        {
+          "id": "python311",
+          "configuration_digest": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943",
+          "runtime": {"kind": "docker_compatible", "image": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:25de19baba5938c80de18c930342ccdcdf3c6759051196c3c713bd3e434d2f0e", "cpu_count": 1, "memory_mib": 1024, "pids_limit": 256, "network": false},
+          "checks": [
+            {"id": "repository-check-py311", "required": true, "argv": ["python", "scripts/repository_check.py"], "working_directory": ".", "timeout_seconds": 3600, "depends_on": [], "artifacts": []},
+            {"id": "schema-cross-validate-py311", "required": true, "argv": ["python", "scripts/schema_cross_validate.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []}
+          ]
+        },
+        {
+          "id": "python312",
+          "configuration_digest": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510",
+          "runtime": {"kind": "docker_compatible", "image": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:e984457d591121c52517027f49bb55371f68075caace763b8859db136e434dd0", "cpu_count": 1, "memory_mib": 1024, "pids_limit": 256, "network": false},
+          "checks": [
+            {"id": "repository-check-py312", "required": true, "argv": ["python", "scripts/repository_check.py"], "working_directory": ".", "timeout_seconds": 3600, "depends_on": [], "artifacts": []},
+            {"id": "schema-cross-validate-py312", "required": true, "argv": ["python", "scripts/schema_cross_validate.py"], "working_directory": ".", "timeout_seconds": 300, "depends_on": [], "artifacts": []}
+          ]
+        }
+      ]
+    },
+    "plan": {
+      "caches": [],
+      "environment": {
+        "fixed": [],
+        "inherit": [],
+        "remote_secret_only": [],
+        "runtime_internal": []
+      },
+      "project": "MarcoPorcellato/Latent-TRIZ",
+      "receipt": {
+        "freshness_seconds": 3600,
+        "output": ".ccp/receipt.json"
+      },
+      "runtimes": [
+        {
+          "checks": [
+            {
+              "argv": ["python", "scripts/repository_check.py"],
+              "artifacts": [],
+              "depends_on": [],
+              "id": "repository-check-py311",
+              "required": true,
+              "timeout_seconds": 3600,
+              "working_directory": "."
+            },
+            {
+              "argv": ["python", "scripts/schema_cross_validate.py"],
+              "artifacts": [],
+              "depends_on": [],
+              "id": "schema-cross-validate-py311",
+              "required": true,
+              "timeout_seconds": 300,
+              "working_directory": "."
+            }
+          ],
+          "configuration_digest": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943",
+          "id": "python311",
+          "runtime": {
+            "cpu_count": 1,
+            "image": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:25de19baba5938c80de18c930342ccdcdf3c6759051196c3c713bd3e434d2f0e",
+            "kind": "docker_compatible",
+            "memory_mib": 1024,
+            "network": false,
+            "pids_limit": 256
+          }
+        },
+        {
+          "checks": [
+            {
+              "argv": ["python", "scripts/repository_check.py"],
+              "artifacts": [],
+              "depends_on": [],
+              "id": "repository-check-py312",
+              "required": true,
+              "timeout_seconds": 3600,
+              "working_directory": "."
+            },
+            {
+              "argv": ["python", "scripts/schema_cross_validate.py"],
+              "artifacts": [],
+              "depends_on": [],
+              "id": "schema-cross-validate-py312",
+              "required": true,
+              "timeout_seconds": 300,
+              "working_directory": "."
+            }
+          ],
+          "configuration_digest": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510",
+          "id": "python312",
+          "runtime": {
+            "cpu_count": 1,
+            "image": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:e984457d591121c52517027f49bb55371f68075caace763b8859db136e434dd0",
+            "kind": "docker_compatible",
+            "memory_mib": 1024,
+            "network": false,
+            "pids_limit": 256
+          }
+        }
+      ],
+      "schema_version": "2.0"
+    },
+    "plan_digest": "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331"
+  }
+}

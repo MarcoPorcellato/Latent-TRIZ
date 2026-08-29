@@ -1,0 +1,174 @@
+{
+  "artifact_class": "a0x-protected-tree",
+  "claim_ids": [],
+  "empirical": true,
+  "entries": [
+    {
+      "bytes": 223896,
+      "entry_kind": "file",
+      "path": "data/a0/cases.jsonl",
+      "provenance_manifest": "data/a0/manifest.json",
+      "provenance_manifest_sha256": "68eda0c1082b36b17836cb79684c5696280486ae93596109562853160f25d58f",
+      "sha256": "4d667a5b8e7512ee19feeedc37e2562413ace27fdd1220654ef79edcb8616707",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1555,
+      "entry_kind": "file",
+      "path": "data/a0/manifest.json",
+      "provenance_manifest": "data/a0/manifest.json",
+      "provenance_manifest_sha256": "68eda0c1082b36b17836cb79684c5696280486ae93596109562853160f25d58f",
+      "sha256": "68eda0c1082b36b17836cb79684c5696280486ae93596109562853160f25d58f",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 55008,
+      "entry_kind": "file",
+      "path": "data/a0/procedural-targets/calibration-targets.jsonl",
+      "provenance_manifest": "data/a0/manifest.json",
+      "provenance_manifest_sha256": "68eda0c1082b36b17836cb79684c5696280486ae93596109562853160f25d58f",
+      "sha256": "1607a329e83ee77d010a9e839c10a6c5f073b0550256d0305fb5d49af0c26acd",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 54528,
+      "entry_kind": "sealed_target",
+      "path": "data/a0/sealed-targets/targets.jsonl",
+      "provenance_manifest": "data/a0/manifest.json",
+      "provenance_manifest_sha256": "68eda0c1082b36b17836cb79684c5696280486ae93596109562853160f25d58f",
+      "sha256": "8b820294103ce748f65b49aa46e2e85ce584add8c058bb2d4129aadf366e7162",
+      "verification_phase": "declaration_only"
+    },
+    {
+      "bytes": 924,
+      "entry_kind": "file",
+      "path": "experiments/a0-automated-weak-proxy/README.md",
+      "provenance_manifest": "experiments/a0-automated-weak-proxy/protocol.json",
+      "provenance_manifest_sha256": "36d52643d419fd4e8feada63d19a42429940f3559dda72adf342c484411fc244",
+      "sha256": "b17641d5bceb96fc4ea2274f0ed63c43ad5d415d9a15b55b226b0d6f52355a17",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1936,
+      "entry_kind": "file",
+      "path": "experiments/a0-automated-weak-proxy/implementation.json",
+      "provenance_manifest": "experiments/a0-automated-weak-proxy/protocol.json",
+      "provenance_manifest_sha256": "36d52643d419fd4e8feada63d19a42429940f3559dda72adf342c484411fc244",
+      "sha256": "2d08085d8cfc566f62b1b414c6ca09ad23af8df67de0fbd6876a896783721df9",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 4755,
+      "entry_kind": "file",
+      "path": "experiments/a0-automated-weak-proxy/protocol.json",
+      "provenance_manifest": "experiments/a0-automated-weak-proxy/protocol.json",
+      "provenance_manifest_sha256": "36d52643d419fd4e8feada63d19a42429940f3559dda72adf342c484411fc244",
+      "sha256": "36d52643d419fd4e8feada63d19a42429940f3559dda72adf342c484411fc244",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 2712,
+      "entry_kind": "file",
+      "path": "results/a0/a0-v1.0.3-e93a9faa/activation-receipt.json",
+      "provenance_manifest": "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
+      "provenance_manifest_sha256": "b5e97b71ffc24e9e3eb23d86be3e5d75f38cd93ac5dc3f98c523f5e8320d21c2",
+      "sha256": "e539d3bcaa63f130c96f9cfebb4b5d02aedeec989212fa0708b7ccafa115615d",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 676,
+      "entry_kind": "file",
+      "path": "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
+      "provenance_manifest": "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
+      "provenance_manifest_sha256": "b5e97b71ffc24e9e3eb23d86be3e5d75f38cd93ac5dc3f98c523f5e8320d21c2",
+      "sha256": "b5e97b71ffc24e9e3eb23d86be3e5d75f38cd93ac5dc3f98c523f5e8320d21c2",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1246,
+      "entry_kind": "file",
+      "path": "results/a0/a0-v1.0.3-e93a9faa/report.html",
+      "provenance_manifest": "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
+      "provenance_manifest_sha256": "b5e97b71ffc24e9e3eb23d86be3e5d75f38cd93ac5dc3f98c523f5e8320d21c2",
+      "sha256": "8705cc1844ad7b988d4e59108d8c03dbad9c541627090a7eeed734009802a804",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1166064,
+      "entry_kind": "file",
+      "path": "results/a0/a0-v1.0.3-e93a9faa/representations-index.jsonl",
+      "provenance_manifest": "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
+      "provenance_manifest_sha256": "b5e97b71ffc24e9e3eb23d86be3e5d75f38cd93ac5dc3f98c523f5e8320d21c2",
+      "sha256": "cfc53198eda44738b3c468ffb5581c659c025e8c3ebdd7ba57fe27198a60c089",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 7210,
+      "entry_kind": "file",
+      "path": "results/a0/a0-v1.0.3-e93a9faa/statistical-result.json",
+      "provenance_manifest": "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
+      "provenance_manifest_sha256": "b5e97b71ffc24e9e3eb23d86be3e5d75f38cd93ac5dc3f98c523f5e8320d21c2",
+      "sha256": "f03a8de0533cce6a1a99cde647512da1d3bec2bde526518facb5bb9b52e938a3",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 1135,
+      "entry_kind": "file",
+      "path": "results/a0/calibration/freeze-manifest.json",
+      "provenance_manifest": "results/a0/calibration/freeze-manifest.json",
+      "provenance_manifest_sha256": "a15e83c65573f50153f8608c9536e3bc4c60a1505fd939ec98ec97013a9407e1",
+      "sha256": "a15e83c65573f50153f8608c9536e3bc4c60a1505fd939ec98ec97013a9407e1",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 4604,
+      "entry_kind": "file",
+      "path": "results/a0/calibration/power.json",
+      "provenance_manifest": "results/a0/calibration/freeze-manifest.json",
+      "provenance_manifest_sha256": "a15e83c65573f50153f8608c9536e3bc4c60a1505fd939ec98ec97013a9407e1",
+      "sha256": "6979dfb36d8cdc4479caed014e0a894e4ae9b6bd059bb00e6660cda36cd8ea28",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 20057,
+      "entry_kind": "file",
+      "path": "results/a0/calibration/shortcuts.json",
+      "provenance_manifest": "results/a0/calibration/freeze-manifest.json",
+      "provenance_manifest_sha256": "a15e83c65573f50153f8608c9536e3bc4c60a1505fd939ec98ec97013a9407e1",
+      "sha256": "07e37e96de08fe5788ff0e1a84072d481c98f79a9e5b851ef4597918615a3abf",
+      "verification_phase": "preflight_postflight"
+    },
+    {
+      "bytes": 637,
+      "entry_kind": "file",
+      "path": "results/a0/calibration/summary.json",
+      "provenance_manifest": "results/a0/calibration/freeze-manifest.json",
+      "provenance_manifest_sha256": "a15e83c65573f50153f8608c9536e3bc4c60a1505fd939ec98ec97013a9407e1",
+      "sha256": "de14f2965b3c61505158e9a76327f0809d8b9c465f97786abfa501b9a145e682",
+      "verification_phase": "preflight_postflight"
+    }
+  ],
+  "evidence_eligible": false,
+  "expert_validated": false,
+  "protected_paths": [
+    "data/a0/cases.jsonl",
+    "data/a0/manifest.json",
+    "data/a0/procedural-targets/calibration-targets.jsonl",
+    "data/a0/sealed-targets/targets.jsonl",
+    "experiments/a0-automated-weak-proxy/README.md",
+    "experiments/a0-automated-weak-proxy/implementation.json",
+    "experiments/a0-automated-weak-proxy/protocol.json",
+    "results/a0/a0-v1.0.3-e93a9faa/activation-receipt.json",
+    "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
+    "results/a0/a0-v1.0.3-e93a9faa/report.html",
+    "results/a0/a0-v1.0.3-e93a9faa/representations-index.jsonl",
+    "results/a0/a0-v1.0.3-e93a9faa/statistical-result.json",
+    "results/a0/calibration/freeze-manifest.json",
+    "results/a0/calibration/power.json",
+    "results/a0/calibration/shortcuts.json",
+    "results/a0/calibration/summary.json"
+  ],
+  "protected_tree_sha256": "334a24453b3f7449300df25174737ac92fdfd2914f72d7c83550685c8d7524bd",
+  "scientific_status": "exploratory",
+  "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
+}

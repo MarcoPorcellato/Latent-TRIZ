@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "activation_receipt_raw_sha256",
+    "artifact_class",
+    "authorization_chain",
+    "cap_bytes",
+    "claim_ids",
+    "runtime_checkpoints",
+    "component_bytes",
+    "empirical",
+    "evidence_eligible",
+    "expert_validated",
+    "final_bytes_excluding_this_receipt",
+    "manifest_package_relative_path",
+    "manifest_raw_sha256",
+    "occupancy_profile",
+    "occupancy_scope",
+    "pair_binding",
+    "peak_bytes_before_this_receipt",
+    "scientific_status",
+    "self_counting_rule"
+  ],
+  "properties": {
+    "artifact_class": {
+      "const": "a0x-output-occupancy-receipt"
+    },
+    "empirical": {
+      "const": true
+    },
+    "scientific_status": {
+      "const": "exploratory"
+    },
+    "evidence_eligible": {
+      "const": false
+    },
+    "expert_validated": {
+      "const": false
+    },
+    "claim_ids": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair"
+    },
+    "occupancy_profile": {"const": "a0x-complete-attempt-root-v2"},
+    "occupancy_scope": {"const": "complete_attempt"},
+    "manifest_package_relative_path": {"$ref": "#/$defs/path"},
+    "manifest_raw_sha256": {"$ref": "#/$defs/sha"},
+    "activation_receipt_raw_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "component_bytes": {"$ref": "#/$defs/component_bytes"},
+    "final_bytes_excluding_this_receipt": {"type": "integer", "minimum": 0},
+    "peak_bytes_before_this_receipt": {"type": "integer", "minimum": 0},
+    "cap_bytes": {
+      "type": "integer",
+      "enum": [33554432, 4194304]
+    },
+    "runtime_checkpoints": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/checkpoint"},
+      "allOf": [
+        {"contains": {"properties": {"phase": {"const": "pre_manifest_write"}}, "required": ["phase"]}},
+        {"contains": {"properties": {"phase": {"const": "pre_root_receipt_write"}}, "required": ["phase"]}}
+      ]
+    },
+    "self_counting_rule": {"const": "final_bytes_excluding_this_receipt + serialized_root_receipt_bytes <= cap_bytes"},
+    "authorization_chain": {
+      "$ref": "#/$defs/authorization_chain"
+    }
+  },
+  "$defs": {
+    "component_bytes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "package_artifacts", "external_outputs", "source_inputs", "retained_residue"],
+      "properties": {
+        "manifest": {"type": "integer", "minimum": 0},
+        "package_artifacts": {"type": "integer", "minimum": 0},
+        "external_outputs": {"type": "integer", "minimum": 0},
+        "source_inputs": {"type": "integer", "minimum": 0},
+        "retained_residue": {"type": "integer", "minimum": 0}
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "bytes"],
+      "properties": {
+        "phase": {"enum": ["pre_manifest_write", "pre_root_receipt_write"]},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "rev": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+    },
+    "dense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg",
+        "cases",
+        "view_site_count",
+        "endpoint_count",
+        "hidden_width",
+        "scalar_bytes",
+        "vector_count",
+        "dense_bytes",
+        "dense_copy_count",
+        "atomic_dense_bytes",
+        "index_copy_count",
+        "index_reservation_bytes",
+        "payload_allowance_bytes",
+        "total_bytes",
+        "cap_bytes"
+      ],
+      "properties": {
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "cases": {
+          "const": 48
+        },
+        "view_site_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hidden_width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scalar_bytes": {
+          "const": 4
+        },
+        "vector_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_copy_count": {
+          "const": 2
+        },
+        "atomic_dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "index_copy_count": {
+          "const": 2
+        },
+        "index_reservation_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "payload_allowance_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cap_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "leg": {
+                "const": "a0"
+              }
+            },
+            "required": [
+              "leg"
+            ]
+          },
+          "then": {
+            "properties": {
+              "view_site_count": {
+                "const": 10
+              },
+              "endpoint_count": {
+                "const": 5
+              },
+              "vector_count": {
+                "const": 2400
+              },
+              "index_reservation_bytes": {
+                "const": 6291456
+              },
+              "payload_allowance_bytes": {
+                "const": 2097152
+              },
+              "cap_bytes": {
+                "const": 33554432
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "view_site_count": {
+                "const": 2
+              },
+              "endpoint_count": {
+                "const": 2
+              },
+              "vector_count": {
+                "const": 192
+              },
+              "index_reservation_bytes": {
+                "const": 1048576
+              },
+              "payload_allowance_bytes": {
+                "const": 524288
+              },
+              "cap_bytes": {
+                "const": 4194304
+              }
+            }
+          }
+        }
+      ]
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
+      ],
+      "properties": {
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "model_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/rev"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_path": {
+          "$ref": "#/$defs/path"
+        },
+        "dense_bound": {
+          "$ref": "#/$defs/dense"
+        },
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "leg": {
+                "const": "a0"
+              }
+            },
+            "required": [
+              "leg"
+            ]
+          },
+          "then": {
+            "properties": {
+              "dense_bound": {
+                "properties": {
+                  "leg": {
+                    "const": "a0"
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "dense_bound": {
+                "properties": {
+                  "leg": {
+                    "const": "r1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "dossier_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "properties": {
+        "profile": {
+          "const": "a0x-approval-dossier-json-v2"
+        },
+        "commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "authorization_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "properties": {
+        "profile": {
+          "const": "a0x-execution-authorization-json-v2"
+        },
+        "commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "authorization_chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dossier_commitment",
+        "authorization_commitment"
+      ],
+      "properties": {
+        "dossier_commitment": {
+          "$ref": "#/$defs/dossier_commitment"
+        },
+        "authorization_commitment": {
+          "$ref": "#/$defs/authorization_commitment"
+        }
+      }
+    }
+  }
+}

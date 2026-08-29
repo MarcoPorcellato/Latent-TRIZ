@@ -48,8 +48,26 @@ last_verified: 2026-08-29
   the tracked schema, package bindings, and safe asset declarations without
   claiming that external assets were verified; synthetic tests retain missing
   and mutated asset rejection coverage for the full verifier.
-
 ---
+
+## 2026-08-25 — CCP current workflow and A0X diagnostic correction
+
+- Confirmed that the separately qualified installed CCP executable is already
+  built from current official `origin/main`
+  `3fccc197e5055a2759ee7afe51b91133938ec904`; no binary replacement was needed.
+- Adopted the official preflight, Matrix V2 `plan`/`doctor`/`dry-run`,
+  non-reentrant heavy-slot ownership, terminal handoff, recovery, and privacy
+  rules in the repository reference and mirrored local operator contract.
+- Preserved the sole authorized A0X qualification as a terminal `FAIL`. Both
+  schema checks passed; both repository checks failed because a test required
+  ignored external EXP-002 assets in a fresh clone. The run did not time out.
+- Kept the publication verifier fail-closed and changed only the positive test
+  fixture to materialize seven deterministic synthetic dense assets. Missing
+  and mutated external assets remain explicit failures. The targeted verifier
+  tests passed 3/3, documentation audit and diff checks passed, and the complete
+  direct repository check passed 1,021 tests with one expected skip in 188.158
+  seconds. No CCP retry, model, tokenizer, target, network, publication, or
+  remote mutation occurred.
 
 ## 2026-08-20 — EXP-002 no-model checkpoint
 

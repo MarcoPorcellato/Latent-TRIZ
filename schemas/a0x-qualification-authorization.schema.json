@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "claim_ids", "commitment_profile", "qualification_status", "empirical", "evidence_eligible", "expert_validated", "scientific_status", "repository", "source_head", "material_contract_raw_sha256", "ccp", "generation", "max_qualification_run_count", "stop_boundary", "authorization_id"],
+  "properties": {
+    "artifact_class": {"const": "a0x-qualification-authorization"},
+    "claim_ids": {"type": "array", "maxItems": 0},
+    "commitment_profile": {"const": "a0x-qualification-authorization-json-v2"},
+    "qualification_status": {"const": "authorized"},
+    "empirical": {"const": true}, "evidence_eligible": {"const": false}, "expert_validated": {"const": false}, "scientific_status": {"const": "exploratory"},
+    "repository": {"const": "MarcoPorcellato/Latent-TRIZ"},
+    "source_head": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "material_contract_raw_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "ccp": {"$ref": "#/$defs/ccp"},
+    "generation": {"type": "integer", "minimum": 1},
+    "max_qualification_run_count": {"const": 1},
+    "stop_boundary": {"const": "after_repository_qualification_receipt"},
+    "authorization_id": {"type": "string", "minLength": 1, "pattern": "^(?!.*(?:/|\\\\|file:|marco1|Users|private|tmp)).+$"}
+  },
+  "$defs": {
+    "ccp": {
+      "type": "object", "additionalProperties": false,
+      "required": ["producer_role", "source_commit", "source_tree", "sha256", "version", "matrix_plan_profile", "plan_output_sha256", "outer_digest", "python311_digest", "python312_digest"],
+      "properties": {
+        "producer_role": {"const": "ccp_executable"},
+        "source_commit": {"const": "27adf8d0820b3cd96f9c5e149de9b580ae41f639"},
+        "source_tree": {"const": "d8e0364d1313fde0898a44517ae6d233d9e10763"},
+        "sha256": {"const": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4"},
+        "version": {"const": "commit-ci-preflight 0.1.0"},
+        "matrix_plan_profile": {"const": "matrix-v2-legacy-v1"},
+        "plan_output_sha256": {"const": "0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad"},
+        "outer_digest": {"const": "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331"},
+        "python311_digest": {"const": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943"},
+        "python312_digest": {"const": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510"}
+      }
+    }
+  }
+}
