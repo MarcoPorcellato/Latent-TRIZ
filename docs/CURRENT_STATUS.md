@@ -127,11 +127,15 @@ single-pair dossiers cover six exact model snapshots without pooling. Every
 dossier remains `approval_requested`; none authorizes material access. The
 complete local no-model qualification and independent architecture/science
 review now pass, and the exact freeze/dossier hashes are recorded. A0X is
-stopped at `sealed_gate_pending`: implementation anchor
-`9aeb6ef664b0576cb8a1ed58f50791be3bb070cb` deterministically regenerated the
+stopped at `sealed_gate_pending`: correction anchor
+`9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd` deterministically regenerated the
 two freezes and twelve dossiers, but no Latent-TRIZ exact-head qualification
-exists and no pair is authorized for material execution. The repository-wide
-suite passed 1,073 tests with one documented skip. See
+exists and no pair is authorized for material execution. Final no-material
+verification passed: frozen package 10/10, A0X aggregate 248 tests, schema
+cross-validation 155 agreements with 19 rejected mutations, and the repository
+suite 1,075 tests with one documented skip. Independent review returned
+`APPROVE` with no P0--P3 findings. The package commit is the remaining local
+gate. See
 [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md).
 
 The later CCP compatibility producer has now completed its own exact
@@ -146,8 +150,23 @@ source and receipt are durably published on dedicated branches and CCP PR #70
 is merged as `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`, with the exact qualified
 tree. A0X now deliberately binds this producer; its material contract is
 SHA-256
-`626c373dfc231f1f0448772a4a0483f8573b533d12cbe816348a11c83b954ed1`.
-The remaining preparatory gate is a new Latent-TRIZ exact-head qualification.
+`b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+
+The later single authorized exact-head attempt at
+`32e03b5ef34bb1d8f778877514601994df9c3898` ended terminal `FAIL`: both schema
+checks passed, while both repository checks reached their approximately
+300-second configured timeouts. Receipt ID
+`sha256:bbe9173bfe489e34071f71ce6822df26126f1026d939e1693245fd47daa864d9`;
+receipt-file SHA-256
+`63a920e8cd97310a857be8465924311389edeb61746945c9219f4c85e2500e01`.
+Correct V2 verification proved receipt integrity `PASS` and policy status
+`FAIL`; the run had used the default `current-v2` plan instead of the frozen
+`matrix-v2-legacy-v1` profile. No retry occurred. The TDD correction gives the
+two repository checks 3,600 seconds, retains 300 seconds for schema checks,
+pins every operator target to the legacy profile, and uses the V2 verification
+policy. After the final package commit, the remaining
+preparatory gate is a new exact-head authorization bound to that commit and
+the corrected plan digests.
 
 The next scientific priority is human construct validation: three independent
 TRIZ experts, blinded cases, agreement and abstention receipts, and an explicit

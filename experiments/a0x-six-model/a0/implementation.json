@@ -33,9 +33,9 @@
       "sha256": "89620d854d38311600f8a6c18a0211dfd5da3eea86c382eb083dc34eb97ee49f"
     },
     {
-      "bytes": 3138,
+      "bytes": 3139,
       "path": "schemas/a0x-material-execution-contract.schema.json",
-      "sha256": "9bfa9ce5d7491a9a23b7ff581ffea183ddfdf509c329e14d0fb03ac2d974a10f"
+      "sha256": "2ab076bb0c8444cb281ad3bcfec66e8c7a8ee82ac4316be23795a20c00de3984"
     },
     {
       "bytes": 10411,
@@ -43,9 +43,9 @@
       "sha256": "898834e2275b33b7125f8f367f00b6111a0fb26ea8f3137cbc54acb5cd7bbe70"
     },
     {
-      "bytes": 2609,
+      "bytes": 2610,
       "path": "schemas/a0x-qualification-authorization.schema.json",
-      "sha256": "7e112bed9016a205b6ac9e837463a821aeceb4a84341168a67a3d7f809eb03a9"
+      "sha256": "8953626e9008c7677acaeb09c1ca872bdcbcd099d48a2bcf343c4bb615e1be18"
     },
     {
       "bytes": 1843,
@@ -95,7 +95,7 @@
     {
       "bytes": 45137,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "13c12fb9258637d7b03dc643bcefac231a3bc7b3006a2c2e148177e57c8d6f93"
+      "sha256": "4451775fa65daf81e3d9218f2d9454e3632af8911de64e79f7fe29ac9e981d9d"
     },
     {
       "bytes": 17631,
@@ -138,9 +138,9 @@
       "sha256": "f50eb475da2fea68ed36c008bf210461149a7108ca22d44c1e3a931c72935f6f"
     },
     {
-      "bytes": 85776,
+      "bytes": 85881,
       "path": "src/latent_triz/a0x_runner.py",
-      "sha256": "b121b8064205e740cfa5e65b01d05e665fe8adbd1bf453d52fb2b543296cf6f4"
+      "sha256": "dbdb743e3e5fc400fb9199ff323bbcc443a9a6fa75f5cbd3e0f4ffe7fd46a5d1"
     },
     {
       "bytes": 26945,
@@ -208,14 +208,14 @@
       "sha256": "11c7e4a5ea1a54571267af4b6dddb7116f11fe109e66a94d28e25097864d8391"
     },
     {
-      "bytes": 2607,
+      "bytes": 4090,
       "path": "tests/test_a0x_matrix_plan_binding.py",
-      "sha256": "294aeaf29fda92be697f8997abe8c0a7975fd0e1aba292681a15e7d67bf8ad27"
+      "sha256": "b6e0012574511b18d154e1982bb85ca143677a9466f6c703ab52b73225b95925"
     },
     {
-      "bytes": 25616,
+      "bytes": 25617,
       "path": "tests/test_a0x_preflight.py",
-      "sha256": "4c2c58a2658b7df68327692f82fc4691ace07236c091f2d0183fda63be52fe93"
+      "sha256": "4fd69f170f38b97c03f1e5eee8fa07dc0c9de5ad1f05f84cbcd3c6098837c18b"
     },
     {
       "bytes": 8052,
@@ -233,9 +233,9 @@
       "sha256": "40ea5d0e5ba01d3e8b6b6c374e4465113fc0ec2d6c959d7692ebadb0cb6b73f1"
     },
     {
-      "bytes": 40247,
+      "bytes": 40301,
       "path": "tests/test_a0x_runner.py",
-      "sha256": "4243f76bd74323b9f2ea8ccb422fe1ff7c33acbe2fa32aa1fcc72bd04ceea3e2"
+      "sha256": "0f3968faddc1e9b37bd48282eb6a1bd92923b60d8cdcbf0aa90566c4f6fc9813"
     },
     {
       "bytes": 20321,
@@ -249,8 +249,8 @@
     },
     {
       "bytes": 5758,
-      "path": "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-c91915a.json",
-      "sha256": "c15c1ee3341f6703fd8cf482eaa8411390326d762c60d5f4da42d820182ef2dc"
+      "path": "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-27adf8d.json",
+      "sha256": "938ac032b873565a64eaa201cc3783989584efe2ad821fffd8e311af838587c9"
     }
   ],
   "implementation_paths": [
@@ -301,7 +301,7 @@
     "tests/test_a0x_runner.py",
     "tests/test_a0x_schemas.py",
     "tests/test_a0x_verify.py",
-    "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-c91915a.json"
+    "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-27adf8d.json"
   ],
   "implementation_status": "frozen_before_model_output",
   "inherited_rules": {

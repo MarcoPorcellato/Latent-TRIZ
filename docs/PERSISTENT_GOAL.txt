@@ -1,7 +1,7 @@
 A0X checkpoint (2026-08-29): preparatory work remains on branch
-`agent/a0x-six-model-design` at `sealed_gate_pending`. The current
-implementation anchor is `9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`, tree
-`5f11c2323b2657ed202ffa0bd1918037313568ce`. The public material contract
+`agent/a0x-six-model-design` at `sealed_gate_pending`. The current correction
+anchor is `9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`, tree
+`23ea89e42bdb1dae71bfa9d23fb858a904f82beb`. The public material contract
 deliberately binds the large-blob-qualified CCP producer at commit
 `27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
 `d8e0364d1313fde0898a44517ae6d233d9e10763`, executable SHA-256
@@ -26,12 +26,27 @@ contain no host paths, argv logs, environment, usernames, cache paths, or
 container IDs. Private runtime inlets are deterministic per leg/model/run and
 remain outside immutable result directories.
 
+The single authorized repository qualification of
+`32e03b5ef34bb1d8f778877514601994df9c3898` ended terminal `FAIL`: both schema
+checks passed, while both repository checks reached their approximately
+300-second configured deadlines. Receipt ID
+`sha256:bbe9173bfe489e34071f71ce6822df26126f1026d939e1693245fd47daa864d9`;
+file SHA-256
+`63a920e8cd97310a857be8465924311389edeb61746945c9219f4c85e2500e01`.
+Correct V2 verification established receipt integrity `PASS` and policy
+qualification `FAIL`; an earlier V1-policy verification was an operator
+invocation error. The correction sets the two repository checks to 3,600
+seconds, retains 300 seconds for schema checks, requires
+`--matrix-plan-profile matrix-v2-legacy-v1` on every repository-qualification
+target, and verifies with `.commit-ci-policy-v2.toml`. No retry occurred.
+
 The generator produced two frozen legs and twelve `approval_requested`
 dossiers with zero material access. The active checkout regenerated the
 package deterministically, and the frozen verifier independently repeated its
-byte-determinism checks in disposable source copies. The A0X aggregate passed
-246 tests, the frozen package passed 10/10, and the repository-wide suite
-passed 1,073 tests with one documented skip. The
+byte-determinism checks in disposable source copies. Fresh verification passed:
+the A0X aggregate 248 tests, the frozen package 10/10, schema cross-validation
+155 agreements with 19 rejected mutations, and the repository-wide suite
+1,075 tests with one documented skip. The
 no-model receipt SHA-256 is
 `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`.
 The receipt reports zero model loads, tokenizer constructions, sealed-target
@@ -41,15 +56,25 @@ reads, CCP invocations, and remote mutations. Resume through
 design/plan.
 
 Current hashes: material contract
-`626c373dfc231f1f0448772a4a0483f8573b533d12cbe816348a11c83b954ed1`,
+`b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`,
 A0 freeze
-`e32b79866466fd960b4ecc8916bab1ac098a449dac434df8afe224a9b4c68cc9`,
+`961b273074ecc0338b36c9da4643c97abd73ed62de01887b5e7f7e4c1c97a95e`,
 and A0-R1 freeze
-`0d72f58d96455b69268f11ddbf32016c3c06dc18cb3ddfe515c5c63e216d769a`.
+`a028564ffd0bb39015e2e6e1fe3cecc71a04f65c99dc0b79a85f1e01d8b2cda8`.
+The reviewed legacy plan has stdout SHA-256
+`0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad`,
+outer digest
+`sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331`,
+Python 3.11 digest
+`sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943`,
+and Python 3.12 digest
+`sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
 
-Next gate: commit the regenerated A0X package and canonical documentation,
-then request a new exact-head Latent-TRIZ qualification authorization bound to
-that commit and the exact selected candidate. Installation, each of the twelve
+Independent review returned `APPROVE` with no P0--P3 findings. Next gate:
+commit the regenerated A0X package and canonical documentation, then request a new
+exact-head Latent-TRIZ qualification authorization bound to that final commit,
+the exact selected candidate, the explicit `matrix-v2-legacy-v1` profile, and
+the three plan digests above. Installation, each of the twelve
 dossier-bound scientific attempts, Latent-TRIZ publication, and merge remain
 separate decisions. No
 model, material tokenizer, historical or sealed target, CCP heavy command,

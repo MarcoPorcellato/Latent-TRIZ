@@ -464,11 +464,67 @@ the repository suite passed 1,073 tests with one documented skip.
 **Status.** Resolved for offline A0X preparation. A fresh exact-head
 Latent-TRIZ CCP qualification remains a separate authorization gate.
 
+## 22. Repository qualification timed out and used the wrong Matrix profile
+
+**Symptom.** The single authorized exact-head qualification of
+`32e03b5ef34bb1d8f778877514601994df9c3898` ended terminal `FAIL`. Both schema
+checks passed in about two seconds, while the Python 3.11 and 3.12 repository
+checks were each terminated at approximately 300 seconds. Receipt ID:
+`sha256:bbe9173bfe489e34071f71ce6822df26126f1026d939e1693245fd47daa864d9`;
+receipt-file SHA-256:
+`63a920e8cd97310a857be8465924311389edeb61746945c9219f4c85e2500e01`.
+
+**Verification distinction.** The first verification command supplied the
+legacy V1 policy and rejected the Matrix V2 receipt shape. That was an operator
+invocation error, not a receipt-integrity defect. Repeating only the read-only
+verification with `.commit-ci-policy-v2.toml` established
+`integrity_status: PASS` and `policy_status: FAIL`.
+
+**Root causes.** First, both repository checks inherited a 300-second timeout,
+which was not enough for the complete suite in the one-CPU qualification
+containers. Second, the authorization and Make targets did not explicitly
+select `matrix-v2-legacy-v1`, so CCP used its default `current-v2` plan while
+the frozen contract and policy expected the legacy plan. The resulting runtime
+digests correctly failed policy qualification.
+
+**Consequence.** The attempt is consumed and remains negative engineering
+evidence. It does not qualify the source and does not authorize a retry or any
+scientific execution. Passing schema checks do not override the outer terminal
+failure.
+
+**Correction.** TDD at anchor
+`9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`, tree
+`23ea89e42bdb1dae71bfa9d23fb858a904f82beb`, sets the two repository checks to
+3,600 seconds, keeps both schema checks at 300 seconds, adds the explicit
+legacy-profile argument to all four repository-qualification operator targets,
+and binds receipt verification to the V2 policy. The real qualified producer
+then rendered outer digest
+`sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331`,
+Python 3.11
+`sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943`,
+and Python 3.12
+`sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
+The exact plan stdout SHA-256 is
+`0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad`.
+
+**Regression evidence.** The four focused requirements failed before the
+implementation and passed afterward. Related runner, preflight, material-
+contract, and schema tests passed 64/64. Contract, both freezes, and all twelve
+dossiers were regenerated with zero model loads, material tokenizer
+constructions, target reads, CCP invocations, or remote mutations.
+
+**Status.** Offline correction implemented. Fresh no-material verification
+passed, and independent review returned `APPROVE` with no P0--P3 findings. The
+final local package commit remains pending. A new
+exact-head qualification requires a new authorization; no retry is implied.
+
 ## Current stop boundary
 
-The large-blob-qualified producer regeneration may be committed locally after
-all no-material gates, independent review, and exact hash records pass. It must
-then stop for a new Latent-TRIZ exact-head qualification authorization.
+The timeout/profile-corrected package may be committed locally only after all
+no-material gates, independent review, and exact hash records pass. It must
+then stop for a new Latent-TRIZ exact-head qualification authorization bound to
+the final commit, the selected producer, `matrix-v2-legacy-v1`, and the three
+reviewed plan digests.
 
 It does **not** authorize CCP heavy execution, Docker, model/tokenizer
 construction, protected-target access, installation, Latent-TRIZ publication,

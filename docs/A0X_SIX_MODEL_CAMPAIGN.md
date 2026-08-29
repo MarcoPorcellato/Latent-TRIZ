@@ -214,9 +214,20 @@ qualified CCP producer:
 - executable SHA-256
   `c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4`;
 - plan-output SHA-256
-  `4f401a3c13d94c48c722137511515bdb70099b596bbdb9756ec2cb491282e9e`.
+  `0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad`.
 
 Repository qualification remains a separate configuration-backed `run` flow.
+Its two repository checks each have a 3,600-second configured timeout; the two
+schema checks remain at 300 seconds. These qualification limits are distinct
+from the 3,300-second scientific budget above. Every operator target for
+repository qualification passes
+`--matrix-plan-profile matrix-v2-legacy-v1`, and receipt verification uses
+`.commit-ci-policy-v2.toml`. The reviewed plan digests are outer
+`sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331`,
+Python 3.11
+`sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943`,
+and Python 3.12
+`sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
 The scientific workload uses `guard exec`, so its fresh preflight does not call
 `plan`, `doctor`, or `dry-run`. It records six bounded read-only roles instead:
 CCP version, resource status, admission status, Git source state, runtime
@@ -225,36 +236,39 @@ context, and active-container count. Each probe has a 30-second timeout and a
 wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
 an active container.
 
-Implementation anchor: `9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`.
+Correction anchor: `9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`
+(tree `23ea89e42bdb1dae71bfa9d23fb858a904f82beb`).
 The two freezes and twelve dossiers were regenerated from that exact anchor.
-The A0X aggregate passed 246 tests; the frozen package passed 10/10. The
-repository-wide suite passed 1,073 tests with one documented skip. The
-no-model receipt reports zero model loads,
+Fresh verification passed: frozen package 10/10, A0X aggregate 248 tests,
+schema cross-validation 155 agreements with 19 rejected mutations, and the
+repository suite 1,075 tests with one documented skip. Independent review
+returned `APPROVE` with no P0--P3 findings. The package commit is the remaining
+local gate. The no-model receipt reports zero model loads,
 tokenizer constructions, sealed-target reads, CCP invocations, and remote
 mutations.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Material execution contract | `626c373dfc231f1f0448772a4a0483f8573b533d12cbe816348a11c83b954ed1` |
+| Material execution contract | `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8` |
 | A0 protocol | `42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586` |
-| A0 implementation | `58fc058af9db862b90bec64c6891ec960806935c29eb3dda06b9629318db7e14` |
-| A0 freeze | `e32b79866466fd960b4ecc8916bab1ac098a449dac434df8afe224a9b4c68cc9` |
+| A0 implementation | `f97212eed5601caedef7979cb4d7dff2a3acdb10b05276eabd7a54891b736b88` |
+| A0 freeze | `961b273074ecc0338b36c9da4643c97abd73ed62de01887b5e7f7e4c1c97a95e` |
 | A0-R1 protocol | `32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52` |
-| A0-R1 implementation | `989ef95e6a2e77d06c0bb3d2670c9717e744d3ce4ca3c0c228aa37e0d947018e` |
-| A0-R1 freeze | `0d72f58d96455b69268f11ddbf32016c3c06dc18cb3ddfe515c5c63e216d769a` |
+| A0-R1 implementation | `a86a377d24f8ccb01523fc92e9d10eaac47c10e05d3a290ae76c33bdec6e34ae` |
+| A0-R1 freeze | `a028564ffd0bb39015e2e6e1fe3cecc71a04f65c99dc0b79a85f1e01d8b2cda8` |
 | No-model verification receipt | `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c` |
-| A0 / SmolLM2-360M dossier | `a8e564df562ecaedf20380febdfa52cdb55910b6c3207c70c92b5c59baa44941` |
-| A0 / Qwen3-0.6B-Base dossier | `ad1b8028a238be01e58d8b3bf0d0bf5b2caf5aea4057676f05d499ed7f7e443d` |
-| A0 / GPT-2 dossier | `6a0fecb5ec0d1d5a0e60eea16d6b42a7b5f8646353de348d6ea07360e59d143e` |
-| A0 / SmolLM2-135M dossier | `694a9df6bb86076dc06771910dfa79628b64d74225ab2f64dd7daf3b5e982378` |
-| A0 / GPT-Neo-125M dossier | `aa7443c656a3929df355a2f57edbc7946c82bfb18408e6e78fb65ae8ad8b9ad0` |
-| A0 / Qwen2.5-0.5B dossier | `d7265ec1f0fb8369f59d768847d3f016a164af8601f87230c2198cc45be013e8` |
-| A0-R1 / SmolLM2-360M dossier | `9b2b6f3d17577e181992347b9e3a347308741ec0171bb913c2b000039bb4f89c` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `0c751d638c47230a6914a41f839b5bcd395f0865394871ea814ec7e69200d694` |
-| A0-R1 / GPT-2 dossier | `74a32fcdd32d46df1b570b0f3c3abe14470ac2ee7e053ca8c572bc0a5eb6d88a` |
-| A0-R1 / SmolLM2-135M dossier | `57621fc314a5093c53cd8eb5658137191ed7654c074fbfa9c8971e6cae784547` |
-| A0-R1 / GPT-Neo-125M dossier | `6ad25612f23892cc78f809207dad8149f0f55f1896c339000ce8783de182de7d` |
-| A0-R1 / Qwen2.5-0.5B dossier | `348f7385f3c2a764406a559719d190d106ea9115d24de7323e63da14de671053` |
+| A0 / SmolLM2-360M dossier | `1e7a734b956b026601568412f8cff7f7c4c138b345eb0145c21754b111c0ae52` |
+| A0 / Qwen3-0.6B-Base dossier | `c4cddc8e5427dab50f84e7b8570f4aef107492e288f7640961f794c7c8030cf3` |
+| A0 / GPT-2 dossier | `f95dad26c6be226b92ab4144ce789576f83c7b7555b16e5914a0356e01efc000` |
+| A0 / SmolLM2-135M dossier | `e21d8c6bc799d79c46bd03b77741663b6da426e8295e1a6d8eab21482f535309` |
+| A0 / GPT-Neo-125M dossier | `a87955120d467e6444415d4a2b0dbb7c58ad474c093cb19c8cc0b272da559ded` |
+| A0 / Qwen2.5-0.5B dossier | `5c3ad79bce2ed12e2028ee65e093e78d2082edcf3373569f9fa4b54f43ec7a04` |
+| A0-R1 / SmolLM2-360M dossier | `53008523132382722af2d15c4d195c21abff6679fe0c1a302c0aa62537fd0739` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `b0d5a258f84236d34bdcfe531f3286bc5a030c2548d902744db1538ac1f5a5fb` |
+| A0-R1 / GPT-2 dossier | `a53687473bfcfccef648d221ee3644f6eea146c48ab8ed1b1cc1d2b04e1d6c0f` |
+| A0-R1 / SmolLM2-135M dossier | `a33ac97ac782acdbda18cd0aa9b97ca891dde1297524f84b2cdfd5a6696d8d71` |
+| A0-R1 / GPT-Neo-125M dossier | `ca6775ff486c7e12f65b79425dec53779beeee0eb3ed05992dc8bfdd60bf733f` |
+| A0-R1 / Qwen2.5-0.5B dossier | `bb623b0d987aa8f563819c34e0503e0b5d79502269c4dacfde8465f2e5c3c40e` |
 
 These are approval-request artifacts only. They now bind the TDD-corrected
 producer that passed one exact generation-1 Matrix qualification. Its receipt ID is
@@ -269,8 +283,12 @@ is merged as `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8`; that merge has the exac
 qualified tree. The producer is deliberately selected for A0X but is not the
 installed stable executable.
 
-Before any scientific attempt, complete one separate exact-head Latent-TRIZ
-qualification using this selected producer. Each scientific pair then needs a new
+The prior exact-head attempt at `32e03b5…` is preserved as terminal `FAIL`:
+both schema checks passed and both repository checks reached their configured
+approximately 300-second limits. The corrected package does not reinterpret or
+retry that attempt. Before any scientific attempt, complete one newly
+authorized exact-head Latent-TRIZ qualification using this selected producer,
+the explicit legacy profile, and the exact reviewed V2 plan. Each scientific pair then needs a new
 execution authorization bound to its exact dossier, live source HEAD,
 qualification receipt, authorization ID, and attempt ID. No CCP heavy run,
 Docker action, model/tokenizer construction, target read, publication, or retry

@@ -15,6 +15,61 @@ authorization.
 This section supersedes older status statements below when they conflict. The
 older chronology remains in this file as historical context.
 
+### One-hour qualification correction and regenerated package (2026-08-29)
+
+This subsection is the current resume authority. It supersedes the current
+implementation-anchor, qualification-plan, package-hash, and next-gate
+statements below while preserving every earlier run as historical evidence.
+
+- The single authorized Latent-TRIZ qualification of
+  `32e03b5ef34bb1d8f778877514601994df9c3898` ended in terminal `FAIL`.
+  Both 300-second schema checks passed; both repository checks were terminated
+  by their approximately 300-second configured deadlines. Receipt ID:
+  `sha256:bbe9173bfe489e34071f71ce6822df26126f1026d939e1693245fd47daa864d9`;
+  receipt-file SHA-256:
+  `63a920e8cd97310a857be8465924311389edeb61746945c9219f4c85e2500e01`.
+  The attempt is consumed and has not been retried or reinterpreted.
+- The first verification invocation incorrectly supplied the legacy V1 policy
+  file and rejected the receipt shape. Correct verification with
+  `.commit-ci-policy-v2.toml` established `integrity_status: PASS` and
+  `policy_status: FAIL`. The policy failure was expected: the run used CCP's
+  default `current-v2` plan while the frozen A0X contract requires
+  `matrix-v2-legacy-v1`.
+- TDD correction anchor `9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`,
+  tree `23ea89e42bdb1dae71bfa9d23fb858a904f82beb`, sets only the two
+  repository checks to 3,600 seconds, leaves both schema checks at 300 seconds,
+  requires `--matrix-plan-profile matrix-v2-legacy-v1` on every repository
+  qualification operator target, and verifies with the V2 policy.
+- The exact reviewed plan has stdout SHA-256
+  `0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad`,
+  outer digest
+  `sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331`,
+  Python 3.11 digest
+  `sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943`,
+  and Python 3.12 digest
+  `sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
+- Material contract SHA-256:
+  `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+  Freeze SHA-256 values: A0
+  `961b273074ecc0338b36c9da4643c97abd73ed62de01887b5e7f7e4c1c97a95e`;
+  A0-R1
+  `a028564ffd0bb39015e2e6e1fe3cecc71a04f65c99dc0b79a85f1e01d8b2cda8`.
+- Regeneration recorded zero CCP invocations, model loads, material tokenizer
+  constructions, sealed-target reads, and remote mutations. The no-model
+  receipt remains byte-identical at SHA-256
+  `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c`.
+- Fresh verification passed: frozen package 10/10, A0X aggregate 248 tests,
+  schema cross-validation 155 agreements with 19 rejected mutations, and the
+  repository suite 1,075 tests with one documented skip.
+
+Independent review returned `APPROVE` with no P0--P3 findings. Current gate:
+commit the regenerated package and canonical documentation locally, then stop for a
+new exact-head qualification authorization. That authorization must bind the
+final commit and tree, the selected CCP producer, the explicit
+`matrix-v2-legacy-v1` profile, the three plan digests above, generation 1, and
+one maximum run. It does not authorize Docker, CCP heavy work, a model,
+material tokenizer, target access, publication, or scientific execution.
+
 ### Large-blob-qualified producer and regenerated A0X package (2026-08-29)
 
 This subsection is the current resume authority. It supersedes the current

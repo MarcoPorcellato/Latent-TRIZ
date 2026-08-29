@@ -940,12 +940,23 @@ green. Its source and receipt are durably preserved on dedicated public
 branches, and CCP PR #70 is merged as
 `1a2e081cd3912b0fd63a7226a4564f1d85a51eb8` with the exact qualified tree. It
 is not installed, but A0X now deliberately binds that exact identity.
-Implementation anchor `9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`
+Correction anchor `9ce4dc1e342d68bdef0dd5f63c198270a9d6d3cd`
 regenerated the complete package deterministically in the active checkout;
 the frozen verifier independently repeated its byte-determinism checks in
-disposable source copies. The next
-gate is a separate Latent-TRIZ exact-head qualification. Task 12 is not
-authorized. The authoritative operator-facing contract is
+disposable source copies before this correction. A later single exact-head
+attempt at `32e03b5…` preserved terminal `FAIL`: both schema checks passed and
+both repository checks reached their approximately 300-second configured
+timeouts. Correct V2 verification established receipt integrity `PASS` and
+policy status `FAIL`, because the attempt used default `current-v2` rather than
+the frozen `matrix-v2-legacy-v1` profile. TDD now sets the repository checks to
+3,600 seconds, leaves schema checks at 300 seconds, requires the legacy profile
+on every operator target, and verifies against the V2 policy. No retry has
+occurred. Fresh no-material verification passed 10 frozen-package tests, 248
+A0X tests, 155 schema agreements with 19 rejected mutations, and 1,075
+repository tests with one documented skip. Independent review returned
+`APPROVE` with no P0--P3 findings. The next gate is a local package commit,
+followed by a separately authorized Latent-TRIZ exact-head
+qualification. Task 12 is not authorized. The authoritative operator-facing contract is
 [`A0X_SIX_MODEL_CAMPAIGN.md`](./A0X_SIX_MODEL_CAMPAIGN.md).
 
 A0X acceptance criteria are:
