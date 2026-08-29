@@ -150,16 +150,17 @@ The current campaign is `sealed_gate_pending` and stops before **A**. Neither
 the preparer, synthetic tests, nor regenerated approval-request artifacts
 open **A**, **B**, or **C**.
 
-4. a separate repository-qualification authorization owns one exact positive
-   Matrix generation, and the repository has its terminal exact-head receipt;
-5. the installed CCP path and full SHA-256 match the current operator
-   contract;
-6. live `resource status` is `Admit`, admission is inactive, and the queue is
-   empty;
-7. the operator supplies a new per-pair execution authorization bound to
-   exactly one dossier SHA-256, one pair, the exact qualification receipt, and
-   one attempt ID; this authorization contains no Matrix generation;
-8. a primary reviewer confirms the authorization chain and fixed command.
+The following are conditions inside those three stops, not additional stops:
+
+- **A** owns one exact positive Matrix generation and its terminal exact-head
+  receipt; the installed CCP path and full SHA-256 must match the current
+  operator contract, while live resources must be `Admit` with inactive
+  admission and an empty queue.
+- **B** owns preparation for exactly one dossier, pair, and attempt after the
+  Gate A receipt has been bound.
+- **C** owns one material execution authorization bound to exactly one dossier
+  SHA-256, one prepared authorization raw SHA-256, one pair, and one attempt
+  ID. A primary reviewer confirms the complete chain and fixed command.
 
 One approval is not reusable for another model, another leg, another source
 HEAD, or a retry. A null, positive, failed, incompatible, interrupted, or
@@ -205,8 +206,8 @@ dependency. Descriptor-v2 removes that cycle: the operator-rooted execution
 authorization binds the exact raw descriptor bytes; the descriptor refers only
 to its pair-derived authorization path and byte-bound material contract; and
 the local role mapping repeats the descriptor path and hash. The offline
-preparer writes descriptor, authorization, and mapping only in that dependency
-order and refuses every existing output path.
+preparer writes readiness, descriptor, authorization, and mapping only in that
+dependency order and refuses every existing output path.
 
 This is a three-stop design. First, **A** explicitly authorizes and completes
 one exact-head repository qualification. Second, **B** separately authorizes
@@ -261,6 +262,42 @@ observation terminal recovery evidence without starting the child. No bundle,
 model, tokenizer, target, CCP, Docker, or remote action was used to discover
 or test these corrections.
 
+The correction implementation anchor is
+`7e1afaba83def501a2641a036c10aae1b98be7b0`. Canonical regeneration produced
+the following exact approval-request dossier hashes:
+
+| Leg/model | Dossier SHA-256 |
+| --- | --- |
+| A0 / GPT-2 | `13426c45a90fb282ce45093e99b26e4c5b6d5e268cf88432eaf516bb0b9151e9` |
+| A0 / GPT-Neo-125M | `2e51117632b77a50af725a7c507531b648b060c7642caf679f89fbbc422e9d97` |
+| A0 / Qwen2.5-0.5B | `07034dd03ffdf1c24066979d93ba8b50531b714047a1eeb449998a2cb8f6b6eb` |
+| A0 / Qwen3-0.6B Base | `7de97fc2a4dcd232606106d3e99420b75466960c96f6431ed8a8b33195cd8e25` |
+| A0 / SmolLM2-135M | `d3e5950d94516fb96b069ee8812c777475a1b872b7c0afb572e93e47391c9445` |
+| A0 / SmolLM2-360M | `606072d9c12e9dcb4d6427320921c09eecec26b4b9d5919786d5694f3a7b7d81` |
+| A0-R1 / GPT-2 | `3eb2315b2dc8388bc6d84f2da858eb2befec3c864eb3a66f3d4f1ab7db353fc8` |
+| A0-R1 / GPT-Neo-125M | `fd0bc5485e82e4e3af44fb99d386487f4327c71a39880a49ec4b0f5e7efa6000` |
+| A0-R1 / Qwen2.5-0.5B | `18105adb2402a2f9681c05b60a748baf8806d67c477f2e4d21b281586b7da5db` |
+| A0-R1 / Qwen3-0.6B Base | `abe67b5acaf1bcb6079617a27ae8746fda815d49003e365fabdbfba9fb9ae278` |
+| A0-R1 / SmolLM2-135M | `07e055882d1ce62292d5fbe34901df12f005b1aec449acc81cc7066962edf9c7` |
+| A0-R1 / SmolLM2-360M | `db2d8d42a4936bc4be1f7bd690f14364fe3b343b03042543507e085bb3498934` |
+
+The material contract remains byte-identical at
+`b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+The regenerated bindings are A0 implementation/freeze
+`eb74b5375f90a6da948db7b90d46dca7a4c8584a32b974fd6a059f05e572af33` /
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53`
+and A0-R1 implementation/freeze
+`cede3f23c5659bbbedacdfa4ff74f55297b031f374af2cc3d21a65e85f5f7e63` /
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+Final target-free verification after this last regeneration passed: frozen
+11/11, synthetic A0X aggregate 278/278, schema cross-validation 155 agreements
+plus 19 rejected mutations, and the complete repository suite 1,110 tests with
+one documented skip. Final independent Luna audits returned `APPROVE`: the
+security review found no remaining pre-model alias/TOCTOU bypass (focused
+69/69), the freeze/package review found no P0--P3 issue (41/41), and the
+documentation review found no P1/P2 hash, gate, authorization, or timeout
+inconsistency.
+
 ## Current checkpoint
 
 The campaign remains `sealed_gate_pending`. The material composition is no
@@ -314,7 +351,7 @@ context, and active-container count. Each probe has a 30-second timeout and a
 wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
 an active container.
 
-The current implementation anchor is
+**Historical runtime-binding checkpoint.** The former implementation anchor was
 `e2f557909c9f816eb40ae5aae7be54cb523c97cd`; its generated package is commit
 `a52a621d67a379937475fa066639cedd215c4c27`. The package is still
 `sealed_gate_pending`: stop before **A**, one new exact-head repository
@@ -346,8 +383,9 @@ Neither the package nor this documentation grants any stop.
 | A0-R1 / GPT-Neo-125M dossier | `a94b49a9640977669af38969782095fcc69a8d36155e5b0d4cbd0a1598e4ed4d` |
 | A0-R1 / Qwen2.5-0.5B dossier | `797cf4fd525daae3e5853c5216d5f82ad11e102b4666fcdc23f28e7ff71ec219` |
 
-These are current approval-request artifacts only. They bind the final-review
-implementation anchor and do not authorize A, B, or C.
+These are historical approval-request artifacts only. They bind the former
+runtime-binding checkpoint and do not authorize A, B, or C. The current
+approval-request hashes are listed in the pre-material readiness section above.
 
 **Historical producer/receipt note.** The former package bound the TDD-corrected
 producer that passed one exact generation-1 Matrix qualification. Its receipt ID is

@@ -284,7 +284,7 @@ impossible self-reference: committing the dossier changes the commit.
 
 **Correction.** Dossiers bind an `implementation_source_head` containing the
 reviewed implementation. A later execution authorization separately binds the
-exact live `source_head`. The current implementation anchor is
+exact live `source_head`. The implementation anchor recorded at that checkpoint was
 `9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`.
 
 **Status.** Resolved.
@@ -675,7 +675,7 @@ bindings.
 reference and a byte-bound material-contract reference. The authorization is
 the operator-rooted document that binds exact descriptor bytes; the local role
 mapping repeats that descriptor path/hash. The target-free preparer constructs
-the descriptor, authorization, and mapping in that order and refuses every
+readiness, descriptor, authorization, and mapping in that order and refuses every
 overwrite. Live evidence identifies the stale file as
 `scripts/a0x_material_child.py` (21,582 bytes, SHA-256
 `fda405fbe6a3000f7de9b597aeea23300b5ecb107394411bddd21c3d3ba93955`), not
@@ -783,6 +783,37 @@ before model construction. An injected observation-write `OSError` produces no
 process call, preserves the claim, and records terminal recovery evidence.
 
 **Status.** Corrected locally; no material attempt was consumed.
+
+## 31. Independent-file readiness was not revalidated at launch
+
+**Symptom.** The readiness builder rejected symlinked or hardlinked Python and
+snapshot files, but later material boundaries compared paths and SHA-256 values
+without rechecking regular-file type and link count. A file could therefore be
+replaced after readiness with a same-byte hardlink and retain its hash.
+
+**Root cause.** Independent-file identity was treated as a build-time property
+rather than a live precondition at every boundary that could start material
+work.
+
+**Correction.** Add one shared live-readiness validator and call it from the
+outer executor, material child, and production adapter. It reopens and validates
+the readiness receipt, Python executable, card, source receipts, snapshot
+allowlist, every runtime file, and the complete model binding. Python and model
+files must be regular, non-symlink, single-link objects with unchanged bytes;
+the executable must also retain execute mode bits.
+
+**Regression evidence.** After creating a valid readiness receipt, synthetic
+tests replace Python with a hardlink, one model file with a hardlink, and Python
+with a symlink. Every mutation is rejected before any model, tokenizer, target,
+CCP, Docker, or network action.
+
+**Status.** Corrected with TDD at implementation anchor
+`7e1afaba83def501a2641a036c10aae1b98be7b0`. The shared validation now also
+runs immediately before model construction, and the general snapshot verifier
+rejects hardlinks. Final target-free verification passed (frozen 11/11,
+synthetic 278/278, schema 155/19, repository 1,110 with one documented skip).
+Final independent security, freeze/package, and documentation reviews returned
+`APPROVE`; no P0--P3 blocker remains before the regenerated package commit.
 
 ## Current stop boundary
 

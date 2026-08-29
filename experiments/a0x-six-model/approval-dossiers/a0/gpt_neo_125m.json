@@ -6,7 +6,7 @@
   "empirical": true,
   "evidence_eligible": false,
   "expert_validated": false,
-  "implementation_source_head": "d4845f0a7b204ba65b9669c05a677fc0560ababd",
+  "implementation_source_head": "7e1afaba83def501a2641a036c10aae1b98be7b0",
   "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
   "material_contract_raw_sha256": "b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8",
   "pair_binding": {
@@ -29,7 +29,7 @@
       "view_site_count": 10
     },
     "leg": "a0",
-    "leg_freeze_sha256": "cc78b1baf158d0a0c3f9e77cd411d8fff5abd0b579947687c2f53d55aa027ac1",
+    "leg_freeze_sha256": "6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53",
     "model_id": "EleutherAI/gpt-neo-125m",
     "model_key": "gpt_neo_125m",
     "output_path": "results/a0x/a0/gpt_neo_125m/a0x-a0-gpt_neo_125m-21def018-attempt-01",

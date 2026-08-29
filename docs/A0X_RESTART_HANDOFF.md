@@ -7,7 +7,7 @@ date: 2026-08-25
 
 # A0X restart handoff
 
-## Pre-material readiness correction in progress — 2026-08-30
+## Pre-material readiness correction ready for local checkpoint — 2026-08-30
 
 The public Gate A evidence for exact source
 `68f8bfe75a883054118246101485f71a56a5e82e` is terminal `PASS`: receipt-file
@@ -27,11 +27,33 @@ failure terminal after claim without child start. No material action occurred.
 
 The new readiness module and regression suite are frozen implementation inputs,
 so the prior Gate A receipt becomes historical after the correction commit.
-Regenerate both implementations/freezes and all twelve dossiers, complete
-target-free verification and independent Luna review, commit locally, and stop
-for a new exact-head Gate A authorization. Gate B must later authorize the
-regular interpreter and selected snapshot materialization. Gate C remains a
-separate one-shot scientific authorization.
+Both implementations/freezes and all twelve dossiers have been regenerated.
+Target-free verification and independent Luna review are complete. Commit
+locally and stop for a new exact-head Gate A authorization. Gate B must later
+authorize the regular interpreter and selected snapshot materialization. Gate C
+remains a separate one-shot scientific authorization.
+
+The correction implementation anchor is
+`7e1afaba83def501a2641a036c10aae1b98be7b0`, tree
+`b359940f4619aba966ca06f8d575d5bf4227895a`. Deterministic regeneration
+reported two legs, twelve dossiers, and zero model loads, tokenizer
+constructions, sealed-target reads, CCP invocations, or remote mutations. New
+bindings are A0 implementation/freeze
+`eb74b5375f90a6da948db7b90d46dca7a4c8584a32b974fd6a059f05e572af33` /
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53`
+and A0-R1 implementation/freeze
+`cede3f23c5659bbbedacdfa4ff74f55297b031f374af2cc3d21a65e85f5f7e63` /
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+The last security review found and the implementation fixed a post-readiness
+aliasing gap: Python and all snapshot files are now revalidated as independent
+regular files at every final material boundary, so symlink/hardlink
+substitution fails closed even when bytes are unchanged, including a final
+revalidation immediately before model construction. Final target-free
+verification passed: frozen 11/11, synthetic 278/278, schema 155 agreements
+with 19 rejected mutations, and repository 1,110 tests with one documented
+skip. Final Luna security, freeze/package, and documentation reviews returned
+`APPROVE` with no remaining P0--P3 blocker before the regenerated package
+commit.
 
 This is a reboot checkpoint, not a validation receipt or material-run
 authorization.

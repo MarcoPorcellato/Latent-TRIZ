@@ -9,10 +9,21 @@ snapshot. The local correction adds a private hash-bound readiness receipt for
 an independent regular Python 3.11 venv executable, exact five-package/API
 contract, and independent pair-specific snapshot files; it also enforces card
 padding and terminally seals a post-claim pre-run-observation write failure
-without starting a child. Regenerate both freezes and all twelve dossiers,
-complete target-free/Luna review, commit locally, then stop before a new Gate A.
+without starting a child. It also revalidates regular-file identity and rejects
+post-readiness symlink/hardlink substitution at every final material boundary.
+Target-free verification and final Luna review are complete; commit locally,
+then stop before a new Gate A.
 Do not prepare Gate B assets, run CCP, load models/tokenizers, open targets, or
 publish. The prior receipt is historical once corrected bytes are committed.
+The implementation anchor is `7e1afaba83def501a2641a036c10aae1b98be7b0`;
+regenerated A0/A0-R1 freeze hashes are
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53` and
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+Final target-free verification passed: frozen 11/11, synthetic 278/278, schema
+155 agreements with 19 rejected mutations, and repository 1,110 tests with one
+expected skip. Final security, freeze/package, and documentation reviews
+returned `APPROVE` with no remaining P0--P3 blocker. Commit the regenerated
+package and stop for the new exact-head Gate A authorization.
 
 A0X Gate A temp-mount correction checkpoint (2026-08-29): the campaign remains
 `sealed_gate_pending`. The exact-head qualification at
@@ -51,8 +62,8 @@ A0X runtime-binding correction checkpoint (2026-08-29): the campaign is
 `sealed_gate_pending`. Descriptor-v2 is acyclic: the operator-rooted
 authorization binds exact descriptor bytes, while the descriptor carries only
 the pair-derived authorization path and byte-bound material contract. The
-target-free preparer writes descriptor, authorization, and mapping in that
-order and refuses every overwrite. Its implementation inventory must be frozen
+target-free preparer writes readiness, descriptor, authorization, and mapping
+in that order and refuses every overwrite. Its implementation inventory must be frozen
 before the two leg freezes and twelve approval-request dossiers are regenerated
 from the resulting exact implementation HEAD.
 
@@ -76,13 +87,13 @@ may name a private runtime bundle. A later one-shot material authorization
 target, CCP heavy command, Docker, network, publication, scientific retry, or
 claim promotion is authorized before its respective stop.
 
-**Current A0X runtime-binding correction state (2026-08-29).** The exact
+**Historical A0X runtime-binding correction state (2026-08-29; superseded).** The exact
 implementation anchor is `e2f557909c9f816eb40ae5aae7be54cb523c97cd`. The
 generated package commit is
 `a52a621d67a379937475fa066639cedd215c4c27`; it precedes this
-documentation-only clarification. The current A0 freeze SHA-256 is
+documentation-only clarification. The then-current A0 freeze SHA-256 was
 `a8ca1889f91cd965399eaa9f3ac066d1f5b7bc9beea26ee2ceca517ebb358353`, and
-the current A0-R1 freeze SHA-256 is
+the then-current A0-R1 freeze SHA-256 was
 `b8c470d45b098233f3497cb75d7fc95a41edd9f7772539b55db71aa803355c64`.
 This documentation-only commit is not in either implementation inventory, so
 it does not alter that anchor or authorize regeneration. The stop boundary is
@@ -345,7 +356,7 @@ exact-head no-model qualification and merge of this boundary, followed by a
 new final dossier hash and explicit operator approval; only then may the
 seven-model campaign be considered for execution.
 
-Final dossier checkpoint (2026-08-20): PR #102 merged at
+Historical EXP-002 final dossier checkpoint (2026-08-20): PR #102 merged at
 `9a86bedcc30eed63bd76e0b5d516c64347e478bc`. The public main branch now
 contains the exact material-binding dossier and its fail-closed runner. The
 canonical dossier SHA-256 is
@@ -356,5 +367,7 @@ The corresponding CCP exact-head receipt is published on
 Python 3.11 and 3.12. The next and only material gate is explicit operator
 approval of that exact dossier, including the seven frozen model revisions,
 CPU-float32/no-network/no-generation limits, one analysis-boundary sealed-key
-read, and the stated 1,800-second/8-GiB/128-MiB ceilings. Until then, no
+read, and the historical 1,800-second/8-GiB/128-MiB ceilings. This does not
+describe A0X, whose current envelope is 3,600 seconds outer, 3,300 seconds
+scientific work, and 300 seconds reserved for sealing and cleanup. Until then, no
 model, tokenizer, generation, or sealed target access is authorized.
