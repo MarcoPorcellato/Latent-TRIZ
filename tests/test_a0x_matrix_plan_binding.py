@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import subprocess
 import tomllib
 import unittest
 
@@ -13,6 +12,29 @@ OBSERVATION_PATH = ROOT / "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-27adf8d.
 CONTRACT_PATH = ROOT / "experiments/a0x-six-model/material-execution-contract.json"
 POLICY_PATH = ROOT / ".commit-ci-policy-v2.toml"
 CONFIG_PATH = ROOT / ".commit-ci-preflight.toml"
+MAKEFILE_PATH = ROOT / "Makefile"
+
+
+def _exact_make_recipe(target: str) -> tuple[str, ...]:
+    """Return one literal target recipe without invoking an external make."""
+
+    lines = MAKEFILE_PATH.read_text(encoding="utf-8").splitlines()
+    header = f"{target}:"
+    matches = [index for index, line in enumerate(lines) if line == header]
+    if len(matches) != 1:
+        raise AssertionError(
+            f"Makefile target must occur exactly once: {target} (found {len(matches)})"
+        )
+    start = matches[0] + 1
+
+    recipe: list[str] = []
+    for line in lines[start:]:
+        if not line.startswith("\t"):
+            break
+        recipe.append(line.removeprefix("\t"))
+    if not recipe:
+        raise AssertionError(f"Makefile target has no recipe: {target}")
+    return tuple(recipe)
 
 
 class A0XMatrixPlanBindingTests(unittest.TestCase):
@@ -26,28 +48,32 @@ class A0XMatrixPlanBindingTests(unittest.TestCase):
         self.assertEqual(300, timeouts["schema-cross-validate-py312"])
 
     def test_operator_targets_pin_legacy_profile_and_matrix_policy(self) -> None:
-        for target in ("preflight-plan", "preflight-doctor", "preflight-dry-run", "preflight-run"):
+        expected_recipes = {
+            "preflight-plan": (
+                "commit-ci-preflight plan --config .commit-ci-preflight.toml "
+                "--matrix-plan-profile matrix-v2-legacy-v1 --json",
+            ),
+            "preflight-doctor": (
+                "commit-ci-preflight doctor --config .commit-ci-preflight.toml "
+                "--matrix-plan-profile matrix-v2-legacy-v1 --json",
+            ),
+            "preflight-dry-run": (
+                "commit-ci-preflight dry-run --config .commit-ci-preflight.toml "
+                "--repository . --matrix-plan-profile matrix-v2-legacy-v1 --json",
+            ),
+            "preflight-run": (
+                "commit-ci-preflight run --config .commit-ci-preflight.toml "
+                "--repository . --generation 1 "
+                "--matrix-plan-profile matrix-v2-legacy-v1 --json",
+            ),
+            "preflight-verify": (
+                "commit-ci-preflight verify --receipt .ccp/receipt.json "
+                "--policy .commit-ci-policy-v2.toml --expected-commit \"$$(git rev-parse HEAD)\"",
+            ),
+        }
+        for target, expected in expected_recipes.items():
             with self.subTest(target=target):
-                result = subprocess.run(
-                    ["make", "-n", target],
-                    cwd=ROOT,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertIn(
-                    "--matrix-plan-profile matrix-v2-legacy-v1",
-                    result.stdout,
-                )
-
-        verify = subprocess.run(
-            ["make", "-n", "preflight-verify"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        self.assertIn("--policy .commit-ci-policy-v2.toml", verify.stdout)
+                self.assertEqual(expected, _exact_make_recipe(target))
 
     def test_policy_and_material_contract_match_independent_real_plan_observation(self) -> None:
         from latent_triz.a0x_runner import _validate_ccp_response
