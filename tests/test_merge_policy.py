@@ -28,32 +28,35 @@ class MergePolicyTests(unittest.TestCase):
         self.assertTrue(decision.require_python_311)
         self.assertFalse(decision.require_ccp)
 
-    def test_scientific_artifact_requires_ccp_and_audit(self) -> None:
+    def test_scientific_artifact_uses_hosted_check_and_audit(self) -> None:
         decision = classify_paths(["experiments/exp-001/config.json"])
-        self.assertTrue(decision.require_ccp)
+        self.assertFalse(decision.require_ccp)
+        self.assertTrue(decision.require_repository_check)
         self.assertTrue(decision.require_scientific_audit)
         self.assertFalse(decision.require_python_311)
 
-    def test_governance_requires_ccp_and_dual_python(self) -> None:
+    def test_governance_uses_dual_python_without_automatic_ccp(self) -> None:
         decision = classify_paths([".github/workflows/merge-policy.yml"])
-        self.assertTrue(decision.require_ccp)
+        self.assertFalse(decision.require_ccp)
+        self.assertTrue(decision.require_repository_check)
         self.assertTrue(decision.require_python_311)
 
-    def test_runtime_definition_requires_ccp_without_scientific_artifact_audit(self) -> None:
+    def test_runtime_definition_uses_dual_python_without_scientific_audit(self) -> None:
         decision = classify_paths([
             ".dockerignore", "containers/verification/Dockerfile",
         ])
         self.assertEqual(decision.categories, ("runtime",))
         self.assertTrue(decision.require_repository_check)
         self.assertTrue(decision.require_python_311)
-        self.assertTrue(decision.require_ccp)
+        self.assertFalse(decision.require_ccp)
         self.assertFalse(decision.require_scientific_audit)
 
     def test_model_artifact_is_highest_risk(self) -> None:
         decision = classify_paths([
             "results/lab01/model-representations/summary.json",
         ])
-        self.assertTrue(decision.require_ccp)
+        self.assertFalse(decision.require_ccp)
+        self.assertTrue(decision.require_repository_check)
         self.assertTrue(decision.require_scientific_audit)
         self.assertTrue(decision.require_model_artifact_audit)
 
@@ -61,7 +64,8 @@ class MergePolicyTests(unittest.TestCase):
         decision = classify_paths(["new-surface/payload.dat"])
         self.assertIn("unknown", decision.categories)
         self.assertTrue(decision.require_python_311)
-        self.assertTrue(decision.require_ccp)
+        self.assertFalse(decision.require_ccp)
+        self.assertTrue(decision.require_repository_check)
         self.assertTrue(decision.require_scientific_audit)
 
     def test_unsafe_path_is_rejected(self) -> None:

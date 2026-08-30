@@ -68,15 +68,24 @@ class A0XPolicyMigrationTests(unittest.TestCase):
                 ],
             )
 
-    def test_hosted_verifier_uses_base_policy_not_candidate_policy(self) -> None:
+    def test_public_gate_uses_hosted_repository_checks_without_ccp_receipts(self) -> None:
         workflow = (ROOT / ".github/workflows/merge-policy.yml").read_text(
             encoding="utf-8"
         )
 
         self.assertIn("ref: ${{ github.event.pull_request.base.sha }}", workflow)
-        self.assertIn('2.0) policy="trusted/.commit-ci-policy-v2.toml" ;;', workflow)
-        self.assertIn('verify --receipt evidence/.ccp/receipt.json --policy "$policy"', workflow)
-        self.assertNotIn('policy="candidate/.commit-ci-policy-v2.toml"', workflow)
+        self.assertIn("require_repository_check:", workflow)
+        self.assertIn("require_python_311:", workflow)
+        self.assertIn("name: Repository check (Python 3.12)", workflow)
+        self.assertIn("name: Repository check (Python 3.11)", workflow)
+        self.assertEqual(workflow.count("python scripts/repository_check.py"), 2)
+        self.assertGreaterEqual(workflow.count("contents: read"), 5)
+        self.assertIn("name: Scientific artifact audit", workflow)
+        self.assertIn("POLICY_CONTEXT: merge-policy/gate", workflow)
+        self.assertNotIn("Exact-head CCP receipt", workflow)
+        self.assertNotIn("ccp-evidence/", workflow)
+        self.assertNotIn("commit-ci-preflight verify", workflow)
+        self.assertNotIn("secrets.", workflow)
 
     def test_qualification_dossier_binds_the_old_plan_and_stays_unapproved(self) -> None:
         self.assertTrue(DOSSIER.is_file(), "qualification dossier is missing")

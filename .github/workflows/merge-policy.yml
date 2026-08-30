@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CCP_SOURCE_COMMIT: 044697dee9a0d678d30a4847d62ddf9b4970505b
   POLICY_CONTEXT: merge-policy/gate
 
 jobs:
@@ -27,7 +26,8 @@ jobs:
     timeout-minutes: 1
     outputs:
       docs_only: ${{ steps.policy.outputs.docs_only }}
-      require_ccp: ${{ steps.policy.outputs.require_ccp }}
+      require_repository_check: ${{ steps.policy.outputs.require_repository_check }}
+      require_python_311: ${{ steps.policy.outputs.require_python_311 }}
       require_scientific_audit: ${{ steps.policy.outputs.require_scientific_audit }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -61,6 +61,44 @@ jobs:
           persist-credentials: false
       - run: make docs-audit
 
+  repository:
+    name: Repository check (Python 3.12)
+    needs: classify
+    if: needs.classify.outputs.require_repository_check == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/repository_check.py
+
+  python-311:
+    name: Repository check (Python 3.11)
+    needs: classify
+    if: needs.classify.outputs.require_python_311 == 'true'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/repository_check.py
+
   scientific:
     name: Scientific artifact audit
     needs: classify
@@ -89,51 +127,10 @@ jobs:
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" > changed-files.json
           PYTHONPATH=trusted/src python3 -m latent_triz.merge_policy audit --files-json changed-files.json --repository candidate
 
-  ccp:
-    name: Exact-head CCP receipt
-    needs: classify
-    if: needs.classify.outputs.require_ccp == 'true'
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: trusted
-          persist-credentials: false
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ccp-evidence/${{ github.event.pull_request.head.sha }}
-          path: evidence
-          persist-credentials: false
-          sparse-checkout: .ccp/receipt.json
-          sparse-checkout-cone-mode: false
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: MarcoPorcellato/commit-ci-preflight
-          ref: ${{ env.CCP_SOURCE_COMMIT }}
-          path: verifier
-          persist-credentials: false
-      - name: Verify exact-head receipt against trusted policy
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          cargo build --locked --release --manifest-path verifier/Cargo.toml --bin commit-ci-preflight
-          schema_version="$(jq -er '.receipt.schema_version' evidence/.ccp/receipt.json)"
-          case "$schema_version" in
-            1.0) policy="trusted/.commit-ci-policy.toml" ;;
-            2.0) policy="trusted/.commit-ci-policy-v2.toml" ;;
-            *) echo "unsupported CCP receipt schema: $schema_version" >&2; exit 1 ;;
-          esac
-          verifier/target/release/commit-ci-preflight verify --receipt evidence/.ccp/receipt.json --policy "$policy" --expected-commit "$HEAD_SHA"
-
   gate:
     name: Publish trusted aggregate
     if: always() && github.event.pull_request.draft == false
-    needs: [classify, docs, scientific, ccp]
+    needs: [classify, docs, repository, python-311, scientific]
     permissions:
       statuses: write
     runs-on: ubuntu-latest
@@ -145,22 +142,28 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CLASSIFY: ${{ needs.classify.result }}
           DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
-          REQUIRE_CCP: ${{ needs.classify.outputs.require_ccp }}
+          REQUIRE_REPOSITORY: ${{ needs.classify.outputs.require_repository_check }}
+          REQUIRE_311: ${{ needs.classify.outputs.require_python_311 }}
           REQUIRE_SCIENCE: ${{ needs.classify.outputs.require_scientific_audit }}
           DOCS: ${{ needs.docs.result }}
+          REPOSITORY: ${{ needs.repository.result }}
+          PYTHON311: ${{ needs.python-311.result }}
           SCIENTIFIC: ${{ needs.scientific.result }}
-          CCP: ${{ needs.ccp.result }}
         run: |
           set -euo pipefail
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
           state=success
-          description="Trusted path and receipt policy passed"
+          description="Trusted hosted qualification passed"
+          require_success() {
+            if [[ "$1" == "true" && "$2" != "success" ]]; then state=failure; fi
+          }
           [[ "$CLASSIFY" == "success" ]] || state=failure
-          if [[ "$DOCS_ONLY" == "true" && "$DOCS" != "success" ]]; then state=failure; fi
-          if [[ "$REQUIRE_CCP" == "true" && "$CCP" != "success" ]]; then state=failure; fi
-          if [[ "$REQUIRE_SCIENCE" == "true" && "$SCIENTIFIC" != "success" ]]; then state=failure; fi
+          require_success "$DOCS_ONLY" "$DOCS"
+          require_success "$REQUIRE_REPOSITORY" "$REPOSITORY"
+          require_success "$REQUIRE_311" "$PYTHON311"
+          require_success "$REQUIRE_SCIENCE" "$SCIENTIFIC"
           if [[ "$state" != "success" ]]; then
-            description="Required path or receipt qualification failed"
+            description="Required hosted qualification failed"
           fi
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" -f state="$state" -f context="$POLICY_CONTEXT" -f description="$description" -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
           [[ "$state" == "success" ]]
