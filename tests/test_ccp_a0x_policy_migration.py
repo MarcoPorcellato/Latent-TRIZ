@@ -79,6 +79,11 @@ class A0XPolicyMigrationTests(unittest.TestCase):
         self.assertIn("name: Repository check (Python 3.12)", workflow)
         self.assertIn("name: Repository check (Python 3.11)", workflow)
         self.assertEqual(workflow.count("python scripts/repository_check.py"), 2)
+        self.assertEqual(
+            workflow.count("python -m pip install -r requirements-schema.lock"),
+            2,
+            "each hosted repository lane must install the pinned schema oracle",
+        )
         self.assertGreaterEqual(workflow.count("contents: read"), 5)
         self.assertIn("name: Scientific artifact audit", workflow)
         self.assertIn("POLICY_CONTEXT: merge-policy/gate", workflow)

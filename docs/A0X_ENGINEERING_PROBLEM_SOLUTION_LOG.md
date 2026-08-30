@@ -875,22 +875,43 @@ mismatch and the wrong Python contract.
 offline wheelhouse is currently proven, so the verifier does not promote the
 historical copied environment to reproducible-build evidence.
 
+## 34. Hosted repository lanes omitted the pinned schema oracle
+
+**Symptom.** The first hosted qualification of the reconstructed A0X branch
+passed trusted classification and scientific audit but both repository lanes
+failed during test discovery. Python 3.11 reported the failure after 6 minutes
+12 seconds and Python 3.12 after 8 minutes 32 seconds. Every terminal import
+error was `ModuleNotFoundError: No module named 'jsonschema'`.
+
+**Root cause.** PR #108 restored the hosted Python lanes but invoked
+`scripts/repository_check.py` in a pristine `setup-python` environment without
+installing `requirements-schema.lock`. Local verification had that pinned
+oracle already installed, hiding the clean-runner dependency. The canonical
+schema reference already required protected CI to install the pinned set.
+
+**Correction.** Both hosted repository lanes install exactly
+`requirements-schema.lock` before invoking the unchanged repository check. A
+workflow contract test requires two exact install steps, one per runtime.
+
+**Regression evidence.** The new assertion failed 0-versus-2 against the
+published workflow before the correction and passes after the two minimal
+steps are added. The full local target-free suite is rerun before updating the
+PR; GitHub must still prove both clean hosted environments on the new exact
+head.
+
+**Status.** Corrected locally after the terminal PR #109 failure. No workflow
+rerun, model, tokenizer, target, Gate B/C, or scientific execution was used to
+diagnose or correct it.
+
 ## Current stop boundary
 
-The final integration candidate must first complete all no-material gates and
-the protected-path comparison against `4aee4698f5c59101b1f3292519f10ae802629bf7`.
-It must then stop for a new Latent-TRIZ exact-head qualification authorization
-bound to the final commit, selected producer, `matrix-v2-legacy-v1`, and the
-three reviewed plan digests.
+The current integration branch must pass both clean hosted Python environments,
+the scientific audit, and `merge-policy/gate` on one unchanged exact head. Only
+then may the already authorized publication sequence merge and perform a fresh-
+clone target-free verification.
 
-That stop is **A** only. A completed **A** still requires **B**, a separate
-exact pair/attempt authorization to prepare one private runtime bundle. A
-prepared bundle still requires **C**, a later one-shot material authorization
-bound to its prepared authorization raw SHA-256. Current work remains before
-**A** and `sealed_gate_pending`; none of these documents authorizes a later
-stop.
-
-It does **not** authorize CCP heavy execution, Docker, model/tokenizer
-construction, protected-target access, installation, Latent-TRIZ publication,
-merge, or scientific retry. The separately authorized CCP source/evidence
-publication ended with merged PR #70 and grants no further CCP mutation.
+That hosted qualification is repository publication evidence only. The A0X
+campaign remains `sealed_gate_pending`; Gate B bundle preparation and Gate C
+material execution each still require their own later exact authorization. No
+model, tokenizer, protected target, scientific retry, or claim promotion is
+authorized here.
