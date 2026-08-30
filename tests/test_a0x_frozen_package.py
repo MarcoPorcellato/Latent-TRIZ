@@ -102,10 +102,14 @@ class A0XFrozenPackageTests(unittest.TestCase):
                 self.assertIn("src/latent_triz/a0x_runner.py", paths)
                 self.assertTrue({
                     "scripts/a0x_prepare_runtime.py",
+                    "src/latent_triz/a0x_apfs.py",
                     "src/latent_triz/a0x_runtime_bundle.py",
                     "src/latent_triz/a0x_runtime_readiness.py",
+                    "src/latent_triz/a0x_wheelhouse.py",
+                    "tests/test_a0x_apfs.py",
                     "tests/test_a0x_runtime_bundle.py",
                     "tests/test_a0x_runtime_readiness.py",
+                    "tests/test_a0x_wheelhouse.py",
                 }.issubset(paths))
                 for row in bindings:
                     path = ROOT / row["path"]

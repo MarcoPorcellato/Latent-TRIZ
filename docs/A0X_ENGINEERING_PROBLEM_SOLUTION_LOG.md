@@ -815,6 +815,66 @@ synthetic 278/278, schema 155/19, repository 1,110 with one documented skip).
 Final independent security, freeze/package, and documentation reviews returned
 `APPROVE`; no P0--P3 blocker remains before the regenerated package commit.
 
+## 32. Gate B validation occurred only in the writing command
+
+**Symptom.** The first runtime preparation refusal was discovered only when the
+operator invoked the output-producing command. Its public refusal was
+intentionally minimal, so the source-derived qualification-receipt path
+mismatch was not distinguishable from other preparation failures.
+
+**Root cause.** The preparer combined validation, in-memory document
+construction and exclusive writes. It had no no-write rehearsal surface and
+no opt-in stable diagnostic code. This made a predictable binding error consume
+operator time even though no material resource had been accessed.
+
+**Correction.** Extract one shared validation/construction phase and expose it
+through `preflight_runtime_bundle` and `scripts/a0x_prepare_runtime.py
+--preflight`. It constructs the exact readiness, descriptor, authorization and
+mapping bytes in memory, reports their hashes and writes no runtime output.
+Preflight refusals carry stable codes and safe messages; the existing writing
+mode preserves its byte-compatible minimal refusal response.
+
+**Regression evidence.** Synthetic tests prove deterministic repeated output,
+absence of all four runtime documents, non-reachability of the writer and the
+exact receipt-path diagnostic. Existing prepare success and legacy refusal
+tests remain unchanged.
+
+**Status.** Corrected with TDD in an isolated process-hardening clone. It does
+not modify the completed Gate B bundle and requires new exact-head Gate A
+qualification before future operational use.
+
+## 33. Copy-on-write and offline rebuildability were assertions, not tools
+
+**Symptom.** An earlier Gate B action used a copied environment and snapshot,
+but copy-on-write could not be proven retroactively and local package caches did
+not contain a demonstrably complete exact wheelhouse.
+
+**Root cause.** The repository validated the final interpreter and runtime
+files but had no narrow Darwin `clonefile(2)` boundary and no canonical
+offline-wheelhouse verifier. Host copying behavior and package availability
+were therefore external assumptions.
+
+**Correction.** Add two independent target-free modules. The APFS helper has
+no full-copy fallback and verifies unchanged source plus exact independent
+destination bytes after `clonefile(2)`. The wheelhouse verifier binds Python
+3.11, accepted tags and every wheel's normalized name, version, filename,
+size and SHA-256; it rejects aliases, missing/extra files and drift without
+invoking `pip` or network APIs.
+
+The APFS boundary requires explicit trusted source and destination roots,
+rejects every caller-controlled symlink component below them, and cleans up
+only the same regular inode it just created when post-clone verification
+fails.
+
+**Regression evidence.** Synthetic tests cover valid operation and reject
+unsupported platforms, aliasing, collision, post-clone drift, noncanonical
+manifests, missing/extra/changed wheels, duplicate distributions, tag/version
+mismatch and the wrong Python contract.
+
+**Status.** Corrected with TDD as preparatory infrastructure. No complete
+offline wheelhouse is currently proven, so the verifier does not promote the
+historical copied environment to reproducible-build evidence.
+
 ## Current stop boundary
 
 The final integration candidate must first complete all no-material gates and

@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
@@ -802,6 +802,71 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         model_adapter.assert_not_called()
         model_factory.assert_not_called()
 
+    def test_preflight_is_deterministic_and_writes_no_runtime_bundle(self) -> None:
+        from latent_triz.a0x_runtime_bundle import preflight_runtime_bundle
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        patch_target = "latent_triz.a0x_runtime_bundle.planned_material_dossiers"
+        with (
+            self._synthetic_ccp_hash(request),
+            patch(patch_target, return_value={("a0", "gpt2"): request.fixed_dossier}),
+            patch(
+                "latent_triz.a0x_runtime_bundle._write_and_verify_bundle",
+                side_effect=AssertionError("runtime bundle write reached"),
+            ) as writer,
+        ):
+            first = preflight_runtime_bundle(
+                root,
+                request,
+                source_state_probe=lambda: ("a" * 40, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=_synthetic_runtime_readiness,
+            )
+            second = preflight_runtime_bundle(
+                root,
+                request,
+                source_state_probe=lambda: ("a" * 40, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=_synthetic_runtime_readiness,
+            )
+        self.assertEqual(first, second)
+        self.assertEqual("preflight", first["status"])
+        self.assertEqual("a" * 40, first["source_head"])
+        self.assertEqual(request.authorization_id, first["authorization_id"])
+        self.assertEqual(request.attempt_id, first["attempt_id"])
+        writer.assert_not_called()
+        for key in ("readiness_path", "descriptor_path", "authorization_path", "mapping_path"):
+            self.assertFalse(os.path.lexists(root / first[key]))
+
+    def test_preflight_refuses_occupied_pair_path_before_runtime_probes(self) -> None:
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, preflight_runtime_bundle
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        dossier = json.loads((root / request.fixed_dossier).read_text(encoding="utf-8"))
+        pair = PairBinding.from_mapping(dossier["pair_binding"])
+        occupied = root / derive_runtime_paths(pair).claim_path
+        occupied.parent.mkdir(parents=True, exist_ok=True)
+        occupied.write_bytes(b"preserve")
+        version_probe = Mock(side_effect=AssertionError("CCP version probe reached"))
+        readiness_probe = Mock(side_effect=AssertionError("readiness probe reached"))
+        with (
+            self._synthetic_ccp_hash(request),
+            patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
+            self.assertRaisesRegex(A0XRuntimeBundleError, "occupied"),
+        ):
+            preflight_runtime_bundle(
+                root,
+                request,
+                source_state_probe=lambda: ("a" * 40, True),
+                ccp_version_probe=version_probe,
+                runtime_readiness_probe=readiness_probe,
+            )
+        self.assertEqual(b"preserve", occupied.read_bytes())
+        version_probe.assert_not_called()
+        readiness_probe.assert_not_called()
+
     def test_any_pair_scoped_occupancy_refuses_before_bundle_or_material_access(self) -> None:
         from latent_triz.a0x_ccp_executor import runtime_mapping_path
         from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle
@@ -992,6 +1057,109 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         receipt = json.loads(output.getvalue())
         self.assertEqual("prepared", receipt["status"])
         self.assertEqual(sorted(receipt), list(receipt))
+
+    def test_cli_preflight_emits_sorted_summary_without_writing_bundle(self) -> None:
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        cli = self._cli_module()
+        output = io.StringIO()
+
+        class Result:
+            def __init__(self, stdout: str) -> None:
+                self.returncode = 0
+                self.stdout = stdout
+
+        def probe(argv, **_kwargs):
+            if argv == ["git", "rev-parse", "HEAD"]:
+                return Result("a" * 40 + "\n")
+            if argv == ["git", "status", "--porcelain", "--untracked-files=all"]:
+                return Result("")
+            if argv == [str(request.ccp_executable.resolve()), "--version"]:
+                return Result("commit-ci-preflight 0.1.0\n")
+            if len(argv) == 4 and argv[:3] == [str(request.python_executable.resolve()), "-I", "-c"]:
+                return Result("{}\n")
+            raise AssertionError(f"unexpected probe argv: {argv}")
+
+        argv = [
+            "--preflight",
+            "--fixed-dossier", request.fixed_dossier,
+            "--qualification-receipt", str(request.qualification_receipt),
+            "--ccp", str(request.ccp_executable),
+            "--python", str(request.python_executable),
+            "--public-evidence-commit", request.public_evidence_commit,
+            "--authorization-id", request.authorization_id,
+            "--attempt-id", request.attempt_id,
+        ]
+        with (
+            self._synthetic_ccp_hash(request),
+            patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
+            patch.object(
+                cli, "build_runtime_readiness",
+                side_effect=lambda **kwargs: _synthetic_runtime_readiness(
+                    kwargs["repository_root"], kwargs["pair"],
+                    kwargs["source_head"], kwargs["python_path"],
+                ),
+            ),
+            patch.object(cli.subprocess, "run", side_effect=probe),
+        ):
+            code = cli.main(argv, root=root, stdout=output)
+        self.assertEqual(0, code)
+        receipt = json.loads(output.getvalue())
+        self.assertEqual("preflight", receipt["status"])
+        self.assertEqual(sorted(receipt), list(receipt))
+        for key in ("readiness_path", "descriptor_path", "authorization_path", "mapping_path"):
+            self.assertFalse(os.path.lexists(root / receipt[key]))
+
+    def test_cli_preflight_wrong_receipt_path_reports_stable_safe_error(self) -> None:
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        cli = self._cli_module()
+        output = io.StringIO()
+        alternate = root / "alternate-receipt.json"
+        alternate.write_bytes(request.qualification_receipt.read_bytes())
+        request = replace(request, qualification_receipt=alternate)
+
+        class Result:
+            def __init__(self, stdout: str) -> None:
+                self.returncode = 0
+                self.stdout = stdout
+
+        def probe(argv, **_kwargs):
+            if argv == ["git", "rev-parse", "HEAD"]:
+                return Result("a" * 40 + "\n")
+            if argv == ["git", "status", "--porcelain", "--untracked-files=all"]:
+                return Result("")
+            if argv == [str(request.ccp_executable.resolve()), "--version"]:
+                return Result("commit-ci-preflight 0.1.0\n")
+            raise AssertionError(f"unexpected probe argv: {argv}")
+
+        argv = [
+            "--preflight",
+            "--fixed-dossier", request.fixed_dossier,
+            "--qualification-receipt", str(request.qualification_receipt),
+            "--ccp", str(request.ccp_executable),
+            "--python", str(request.python_executable),
+            "--public-evidence-commit", request.public_evidence_commit,
+            "--authorization-id", request.authorization_id,
+            "--attempt-id", request.attempt_id,
+        ]
+        with (
+            self._synthetic_ccp_hash(request),
+            patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
+            patch.object(cli.subprocess, "run", side_effect=probe),
+        ):
+            code = cli.main(argv, root=root, stdout=output)
+        self.assertEqual(2, code)
+        self.assertEqual(
+            {
+                "error": {
+                    "code": "A0X_QUALIFICATION_RECEIPT_PATH_NOT_SOURCE_DERIVED",
+                    "message": "qualification receipt path is not source-derived",
+                },
+                "status": "refused",
+            },
+            json.loads(output.getvalue()),
+        )
 
     def test_malformed_contract_refuses_before_creating_any_runtime_document(self) -> None:
         from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle

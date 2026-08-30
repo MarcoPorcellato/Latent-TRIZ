@@ -262,6 +262,13 @@ observation terminal recovery evidence without starting the child. No bundle,
 model, tokenizer, target, CCP, Docker, or remote action was used to discover
 or test these corrections.
 
+Future Gate B preparation follows the separate no-write, APFS clonefile,
+offline-wheelhouse and immutable-preparation boundaries in
+[A0X Gate B operator hardening](A0X_GATE_B_OPERATOR_HARDENING.md). This
+hardening does not change the bytes or status of any already prepared bundle.
+Because it changes frozen implementation inputs, it requires a new exact-head
+Gate A qualification before it can govern a future material attempt.
+
 The correction implementation anchor is
 `7e1afaba83def501a2641a036c10aae1b98be7b0`. Canonical regeneration produced
 the following exact approval-request dossier hashes:

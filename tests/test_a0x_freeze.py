@@ -237,10 +237,14 @@ class A0XFreezeTests(unittest.TestCase):
         """Each frozen leg must bind the preparer, its core, and its regression suite."""
         required = {
             "scripts/a0x_prepare_runtime.py",
+            "src/latent_triz/a0x_apfs.py",
             "src/latent_triz/a0x_runtime_bundle.py",
             "src/latent_triz/a0x_runtime_readiness.py",
+            "src/latent_triz/a0x_wheelhouse.py",
+            "tests/test_a0x_apfs.py",
             "tests/test_a0x_runtime_bundle.py",
             "tests/test_a0x_runtime_readiness.py",
+            "tests/test_a0x_wheelhouse.py",
         }
         for leg in ("a0", "r1"):
             with self.subTest(leg=leg):

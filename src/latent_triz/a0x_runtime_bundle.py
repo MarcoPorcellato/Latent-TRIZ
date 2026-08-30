@@ -66,6 +66,10 @@ _ENVIRONMENT = (
 class A0XRuntimeBundleError(RuntimeError):
     """A target-free runtime preparation binding was not exact."""
 
+    def __init__(self, message: str, *, code: str = "A0X_RUNTIME_BUNDLE_REFUSED") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 @dataclass(frozen=True)
 class RuntimePreparationRequest:
@@ -92,6 +96,17 @@ class _ValidatedPreparationInputs:
     descriptor_path: str
 
 
+@dataclass(frozen=True)
+class _PreparedRuntimeBundle:
+    repository: Path
+    pair: PairBinding
+    source_head: str
+    readiness: Mapping[str, Any]
+    descriptor: Mapping[str, Any]
+    authorization: Mapping[str, Any]
+    mapping: Mapping[str, Any]
+
+
 def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
     """Serialize one public document in its single permitted representation."""
     try:
@@ -111,6 +126,55 @@ def prepare_runtime_bundle(
     runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Prepare the exact v2 bundle without accessing material resources."""
+    bundle = _build_runtime_bundle(
+        root,
+        request,
+        source_state_probe=source_state_probe,
+        ccp_version_probe=ccp_version_probe,
+        runtime_readiness_probe=runtime_readiness_probe,
+    )
+    return _write_and_verify_bundle(
+        bundle.repository, bundle.pair, bundle.source_head, bundle.readiness,
+        bundle.descriptor, bundle.authorization, bundle.mapping,
+    )
+
+
+def preflight_runtime_bundle(
+    root: Path,
+    request: RuntimePreparationRequest,
+    *,
+    source_state_probe: Callable[[], tuple[str, bool]],
+    ccp_version_probe: Callable[[Path], str],
+    runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Validate and construct one exact bundle in memory without writing it."""
+    bundle = _build_runtime_bundle(
+        root,
+        request,
+        source_state_probe=source_state_probe,
+        ccp_version_probe=ccp_version_probe,
+        runtime_readiness_probe=runtime_readiness_probe,
+    )
+    return _bundle_summary(
+        bundle.pair,
+        bundle.source_head,
+        bundle.readiness,
+        bundle.descriptor,
+        bundle.authorization,
+        bundle.mapping,
+        status="preflight",
+    )
+
+
+def _build_runtime_bundle(
+    root: Path,
+    request: RuntimePreparationRequest,
+    *,
+    source_state_probe: Callable[[], tuple[str, bool]],
+    ccp_version_probe: Callable[[Path], str],
+    runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+) -> _PreparedRuntimeBundle:
+    """Validate inputs and construct the four documents entirely in memory."""
     repository = Path(root).resolve(strict=True)
     source_head, source_clean = _source_state(source_state_probe)
     if not source_clean:
@@ -142,8 +206,14 @@ def prepare_runtime_bundle(
     )
     if _source_state(source_state_probe) != (source_head, True):
         raise A0XRuntimeBundleError("runtime preparation source state drifted before output")
-    return _write_and_verify_bundle(
-        repository, pair, source_head, readiness, descriptor, authorization, mapping,
+    return _PreparedRuntimeBundle(
+        repository=repository,
+        pair=pair,
+        source_head=source_head,
+        readiness=readiness,
+        descriptor=descriptor,
+        authorization=authorization,
+        mapping=mapping,
     )
 
 
@@ -199,7 +269,10 @@ def _validate_preparation_inputs(
     child_path = _repository_file(root, "scripts/a0x_material_child.py")
     expected_receipt = derive_runtime_paths(pair, source_head=source_head).qualification_receipt_path
     if expected_receipt is None or _external_file(request.qualification_receipt, "qualification receipt") != _repository_file(root, expected_receipt):
-        raise A0XRuntimeBundleError("qualification receipt path is not source-derived")
+        raise A0XRuntimeBundleError(
+            "qualification receipt path is not source-derived",
+            code="A0X_QUALIFICATION_RECEIPT_PATH_NOT_SOURCE_DERIVED",
+        )
     qualification_raw = _repository_file(root, expected_receipt).read_bytes()
     try:
         qualification = qualification_evidence_from_receipt(
@@ -209,7 +282,10 @@ def _validate_preparation_inputs(
             public_evidence_commit=request.public_evidence_commit,
         )
     except A0XCcpExecutorError as error:
-        raise A0XRuntimeBundleError("qualification receipt is invalid") from error
+        raise A0XRuntimeBundleError(
+            "qualification receipt is invalid",
+            code="A0X_QUALIFICATION_RECEIPT_INVALID",
+        ) from error
     descriptor_path = derive_runtime_paths(pair).launch_descriptor_path
     return _ValidatedPreparationInputs(
         ccp_path=ccp_path,
@@ -396,8 +472,37 @@ def _write_and_verify_bundle(
     for name, raw in raw_documents.items():
         if _repository_file(root, relative_paths[name]).read_bytes() != raw:
             raise A0XRuntimeBundleError("runtime bundle bytes did not persist exactly")
+    return _bundle_summary(
+        pair, source_head, readiness, descriptor, authorization, mapping, status="prepared",
+    )
+
+
+def _bundle_summary(
+    pair: PairBinding,
+    source_head: str,
+    readiness: Mapping[str, Any],
+    descriptor: Mapping[str, Any],
+    authorization: Mapping[str, Any],
+    mapping: Mapping[str, Any],
+    *,
+    status: str,
+) -> dict[str, Any]:
+    """Describe exact bundle bytes without exposing private mapping contents."""
+    paths = derive_runtime_paths(pair)
+    relative_paths = {
+        "readiness": runtime_readiness_path(pair),
+        "descriptor": paths.launch_descriptor_path,
+        "authorization": paths.authorization_path,
+        "mapping": runtime_mapping_path(pair, source_head=source_head),
+    }
+    raw_documents = {
+        "readiness": canonical_json_bytes(readiness),
+        "descriptor": canonical_json_bytes(descriptor),
+        "authorization": canonical_json_bytes(authorization),
+        "mapping": canonical_json_bytes(mapping),
+    }
     return {
-        "status": "prepared",
+        "status": status,
         "source_head": source_head,
         "pair_binding": pair.as_mapping(),
         "readiness_path": relative_paths["readiness"],
@@ -583,6 +688,6 @@ def _identifier(value: Any, label: str) -> str:
 
 __all__ = [
     "A0XRuntimeBundleError", "RuntimePreparationRequest", "canonical_json_bytes",
-    "prepare_runtime_bundle", "_build_authorization", "_build_descriptor", "_build_mapping",
+    "preflight_runtime_bundle", "prepare_runtime_bundle", "_build_authorization", "_build_descriptor", "_build_mapping",
     "_exclusive_write", "_load_fixed_dossier", "_write_and_verify_bundle",
 ]

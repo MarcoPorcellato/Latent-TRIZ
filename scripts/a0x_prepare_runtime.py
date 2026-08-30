@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from latent_triz.a0x_runtime_bundle import (  # noqa: E402
     A0XRuntimeBundleError,
     RuntimePreparationRequest,
+    preflight_runtime_bundle,
     prepare_runtime_bundle,
 )
 from latent_triz.a0x_runtime_readiness import build_runtime_readiness  # noqa: E402
@@ -46,6 +47,11 @@ print(json.dumps(value,sort_keys=True,separators=(",",":")))'''
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="validate and construct the bundle in memory without writing runtime documents",
+    )
     parser.add_argument("--fixed-dossier", required=True)
     parser.add_argument("--qualification-receipt", required=True)
     parser.add_argument("--ccp", required=True)
@@ -110,15 +116,25 @@ def main(
         )
 
     try:
-        receipt = prepare_runtime_bundle(
+        operation = preflight_runtime_bundle if arguments.preflight else prepare_runtime_bundle
+        receipt = operation(
             repository,
             request,
             source_state_probe=source_state_probe,
             ccp_version_probe=ccp_version_probe,
             runtime_readiness_probe=runtime_readiness_probe,
         )
-    except (A0XRuntimeBundleError, OSError, ValueError, subprocess.SubprocessError):
-        print(json.dumps({"status": "refused"}, sort_keys=True, separators=(",", ":")), file=stream)
+    except (A0XRuntimeBundleError, OSError, ValueError, subprocess.SubprocessError) as error:
+        refusal: dict[str, object] = {"status": "refused"}
+        if arguments.preflight:
+            if isinstance(error, A0XRuntimeBundleError):
+                code = error.code
+                message = str(error)
+            else:
+                code = "A0X_RUNTIME_BUNDLE_REFUSED"
+                message = "runtime bundle preflight refused"
+            refusal["error"] = {"code": code, "message": message}
+        print(json.dumps(refusal, sort_keys=True, separators=(",", ":")), file=stream)
         return 2
     print(json.dumps(receipt, sort_keys=True, separators=(",", ":")), file=stream)
     return 0

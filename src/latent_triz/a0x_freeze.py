@@ -99,6 +99,7 @@ _IMPLEMENTATION_PATHS = (
     "scripts/a0x_prepare_runtime.py",
     "src/latent_triz/a0x_a0_activations.py",
     "src/latent_triz/a0x_a0_analysis.py",
+    "src/latent_triz/a0x_apfs.py",
     "src/latent_triz/a0x_contract.py",
     "src/latent_triz/a0x_ccp_executor.py",
     "src/latent_triz/a0x_execution.py",
@@ -115,8 +116,10 @@ _IMPLEMENTATION_PATHS = (
     "src/latent_triz/a0x_runtime_bundle.py",
     "src/latent_triz/a0x_runtime_readiness.py",
     "src/latent_triz/a0x_verify.py",
+    "src/latent_triz/a0x_wheelhouse.py",
     "tests/test_a0x_activations.py",
     "tests/test_a0x_a0_analysis.py",
+    "tests/test_a0x_apfs.py",
     "tests/test_a0x_contract.py",
     "tests/test_a0x_contract_check.py",
     "tests/test_a0x_ccp_executor.py",
@@ -137,6 +140,7 @@ _IMPLEMENTATION_PATHS = (
     "tests/test_a0x_runtime_readiness.py",
     "tests/test_a0x_schemas.py",
     "tests/test_a0x_verify.py",
+    "tests/test_a0x_wheelhouse.py",
     "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-27adf8d.json",
 )
 
