@@ -911,6 +911,20 @@ inspection, or a receipt for another commit are not a pass.
 
 ## A0X six-model A0/A0-R1 replication tranche
 
+### Pre-material readiness correction — 2026-08-30
+
+Gate A passed for exact source `68f8bfe75a883054118246101485f71a56a5e82e`,
+but a separate target-free Gate-B inventory correctly found that repository
+qualification did not prove a runnable pair-specific Python environment or
+snapshot. The correction freezes a readiness receipt binding a regular Python
+3.11 venv executable, exact packages/APIs, and independent regular runtime
+files before descriptor construction. It also enforces declared tokenizer
+padding and terminal recovery for the first post-claim observation write.
+After deterministic regeneration and independent review, obtain a new Gate A;
+then Gate B may separately materialize only the selected pair's runtime. Gate C
+remains the later one-shot scientific authorization. Do not reuse the earlier
+receipt for corrected bytes.
+
 A0X is the bounded model-family replication route for the six exact snapshots
 that were acquired after the original Pythia work. It is not an alternative to
 the human H1 gate and does not pool outcomes across models or legs.

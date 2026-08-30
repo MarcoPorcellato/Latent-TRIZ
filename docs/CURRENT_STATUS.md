@@ -121,6 +121,36 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
+### A0X pre-material readiness boundary
+
+Exact source `68f8bfe75a883054118246101485f71a56a5e82e` passed Gate A; the
+receipt-file SHA-256 is
+`3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`
+and its evidence commit is `fc46c39421ae85713f473ef49a1270beab3aefe6`.
+A target-free audit before Gate B nevertheless found two unproven material
+prerequisites: the available venv launcher resolved to a package-incomplete
+base Python, and the isolated clone lacked the pair-specific model snapshot.
+The local readiness correction binds an independent Python 3.11 executable,
+exact package/API facts, and independent regular snapshot files before a
+runtime descriptor can be created. It also closes tokenizer-padding and
+post-claim observation-write gaps. Because these are frozen implementation
+changes, the prior Gate A evidence becomes historical for the corrected HEAD.
+Deterministic regeneration and full target-free review are complete. The next
+stop is a new explicit Gate A authorization; no Gate B or C action is
+authorized.
+
+The implementation anchor is `7e1afaba83def501a2641a036c10aae1b98be7b0`.
+Regenerated A0 and A0-R1 freeze SHA-256 values are
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53` and
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+The corrected implementation revalidates regular-file type, link count, bytes,
+card, source receipts, and the full model binding again at every final material
+boundary, including once more immediately before model construction. Final
+target-free verification passed: frozen 11/11, synthetic 278/278, schema 155
+agreements with 19 rejected mutations, and repository 1,110 tests with one
+documented skip. Final independent Luna security, freeze/package, and
+documentation reviews all returned `APPROVE` before the local package commit.
+
 ### A0X final integration boundary
 
 The local exact-head qualification of

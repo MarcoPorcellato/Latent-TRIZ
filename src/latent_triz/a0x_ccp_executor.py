@@ -42,6 +42,11 @@ from .a0x_material_contract import (
     validate_qualification_evidence,
 )
 from .a0x_runner import planned_material_dossiers
+from .a0x_runtime_readiness import (
+    A0XRuntimeReadinessError,
+    runtime_readiness_path,
+    validate_runtime_readiness_live,
+)
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -222,12 +227,23 @@ def launch_fixed_dossier(
         implementation_source_head=implementation_source_head,
         root=root,
     )
+    authorization_commitment = canonical_commitment(
+        authorization, EXECUTION_AUTHORIZATION_PROFILE,
+    ).as_mapping()
+    material_contract_path = _repository_file(root, "experiments/a0x-six-model/material-execution-contract.json")
+    material_contract_raw = material_contract_path.read_bytes()
+    if _sha256_bytes(material_contract_raw) != authorization.get("material_contract_raw_sha256"):
+        raise A0XCcpExecutorError("material contract bytes are not bound to the execution authorization")
     if source_head_probe() != source_head:
         raise A0XCcpExecutorError("repository source HEAD differs from the execution authorization")
     descriptor_relative = launch.launch_descriptor_path
     descriptor_path = _repository_file(root, descriptor_relative)
     if sha256_file(descriptor_path) != launch.launch_descriptor_sha256:
         raise A0XCcpExecutorError("launch descriptor bytes drifted")
+    descriptor = _strict_object(descriptor_path.read_bytes(), "launch descriptor")
+    _validate_runtime_readiness_binding(
+        descriptor, root=root, pair=pair, source_head=source_head,
+    )
     mapping_path = _repository_file(root, runtime_mapping_path(pair, source_head=source_head))
     mapping = _strict_object(mapping_path.read_bytes(), "runtime role mapping")
     ccp_path, python_path = _validate_runtime_mapping(
@@ -258,6 +274,13 @@ def launch_fixed_dossier(
         root, expected_paths.observation_directory, guard_preflight,
     )
     guard_preflight_raw_sha256 = _sha256_bytes(_canonical_json(guard_preflight))
+    _assert_bound_authorization_and_contract(
+        authorization_path=authorization_path,
+        authorization_raw=authorization_raw,
+        authorization_commitment=authorization_commitment,
+        material_contract_path=material_contract_path,
+        material_contract_raw=material_contract_raw,
+    )
     if source_head_probe() != source_head:
         raise A0XCcpExecutorError("repository source HEAD drifted before attempt claim")
 
@@ -269,6 +292,8 @@ def launch_fixed_dossier(
         "attempt_id": authorization["attempt_id"],
         "pair_binding": pair.as_mapping(),
         "fixed_dossier": relative_dossier,
+        "authorization_raw_sha256": _sha256_bytes(authorization_raw),
+        "authorization_commitment": authorization_commitment,
         "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
         "guard_preflight_observation_path": guard_preflight_path,
         "guard_preflight_observation_raw_sha256": guard_preflight_raw_sha256,
@@ -281,12 +306,14 @@ def launch_fixed_dossier(
     pre_run = _pre_run_observation(
         source_head=source_head, pair=pair, dossier=relative_dossier,
         authorization_raw=authorization_raw, launch=launch, claim_path=expected_paths.claim_path,
+        authorization_commitment=authorization_commitment,
         qualification_evidence=authorization["qualification_evidence"], argv=argv,
         guard_preflight_path=guard_preflight_path, guard_preflight_raw_sha256=guard_preflight_raw_sha256,
     )
-    pre_run_path = _write_pre_run_observation(root, expected_paths.observation_directory, pre_run)
     pre_run_raw_sha256 = _sha256_bytes(_canonical_json(pre_run))
+    pre_run_path = expected_paths.observation_directory + "pre-run-observation.json"
     try:
+        _write_pre_run_observation(root, expected_paths.observation_directory, pre_run)
         # The claim is intentionally before the final recheck: a binding drift
         # in this narrow race window consumes the attempt and receives durable
         # recovery evidence rather than silently enabling a retry.
@@ -296,6 +323,13 @@ def launch_fixed_dossier(
         _validate_file_hash(python_path, launch.python_sha256, "Python executable")
         if source_head_probe() != source_head:
             raise A0XCcpExecutorError("repository source HEAD drifted after attempt claim")
+        _assert_bound_authorization_and_contract(
+            authorization_path=authorization_path,
+            authorization_raw=authorization_raw,
+            authorization_commitment=authorization_commitment,
+            material_contract_path=material_contract_path,
+            material_contract_raw=material_contract_raw,
+        )
         result = executor.run(
             argv, cwd=root, env=environment,
             timeout_seconds=_SUPERVISION_TIMEOUT_SECONDS,
@@ -306,6 +340,8 @@ def launch_fixed_dossier(
             source_head=source_head, pair=pair, dossier=relative_dossier,
             launch=launch, result=None, classification="launcher_internal_error",
             recovery_required=True, error_type=type(error).__name__,
+            authorization_raw_sha256=_sha256_bytes(authorization_raw),
+            authorization_commitment=authorization_commitment,
             pre_run_path=pre_run_path, pre_run_raw_sha256=pre_run_raw_sha256,
             guard_preflight_path=guard_preflight_path, guard_preflight_raw_sha256=guard_preflight_raw_sha256,
         )
@@ -319,6 +355,8 @@ def launch_fixed_dossier(
         launch=launch, result=result, classification=classification,
         recovery_required=classification != "completed" or child_terminal_status is None,
         child_terminal_status=child_terminal_status,
+        authorization_raw_sha256=_sha256_bytes(authorization_raw),
+        authorization_commitment=authorization_commitment,
         pre_run_path=pre_run_path, pre_run_raw_sha256=pre_run_raw_sha256,
         guard_preflight_path=guard_preflight_path, guard_preflight_raw_sha256=guard_preflight_raw_sha256,
     )
@@ -331,6 +369,8 @@ def launch_fixed_dossier(
         "status": "completed",
         "source_head": source_head,
         "pair_binding": pair.as_mapping(),
+        "authorization_raw_sha256": _sha256_bytes(authorization_raw),
+        "authorization_commitment": authorization_commitment,
         "claim_path": expected_paths.claim_path,
         "terminal_observation_path": observation_path,
         "child_terminal_status": observation["child_terminal_status"],
@@ -432,6 +472,33 @@ def _validate_runtime_mapping(
     return ccp_path, python_path
 
 
+def _validate_runtime_readiness_binding(
+    descriptor: Mapping[str, Any], *, root: Path, pair: PairBinding, source_head: str,
+) -> None:
+    binding = descriptor.get("runtime_readiness")
+    python = descriptor.get("python")
+    if (
+        not isinstance(binding, Mapping)
+        or set(binding) != {"role", "path", "sha256"}
+        or binding.get("role") != "readiness"
+        or binding.get("path") != runtime_readiness_path(pair)
+        or not isinstance(python, Mapping)
+        or not isinstance(python.get("path"), str)
+    ):
+        raise A0XCcpExecutorError("runtime readiness binding is invalid")
+    readiness_path = _repository_file(root, str(binding["path"]))
+    raw = readiness_path.read_bytes()
+    if _sha256_bytes(raw) != binding.get("sha256"):
+        raise A0XCcpExecutorError("runtime readiness bytes drifted")
+    try:
+        validate_runtime_readiness_live(
+            _strict_object(raw, "runtime readiness"), repository_root=root,
+            source_head=source_head, pair=pair, python_path=Path(python["path"]),
+        )
+    except A0XRuntimeReadinessError as error:
+        raise A0XCcpExecutorError("runtime readiness is invalid") from error
+
+
 def _validate_local_qualification_receipt(
     path: Path, *, evidence: Mapping[str, Any], source_head: str,
 ) -> None:
@@ -439,27 +506,90 @@ def _validate_local_qualification_receipt(
     raw = path.read_bytes()
     if _sha256_bytes(raw) != evidence.get("qualification_receipt_raw_sha256"):
         raise A0XCcpExecutorError("local qualification receipt raw SHA-256 differs")
-    envelope = _strict_object(raw, "local qualification receipt")
+    ccp = evidence.get("ccp")
+    public = evidence.get("public_evidence")
+    if not isinstance(ccp, Mapping) or not isinstance(public, Mapping) or not isinstance(public.get("commit"), str):
+        raise A0XCcpExecutorError("local qualification receipt CCP binding is invalid")
+    try:
+        observed = qualification_evidence_from_receipt(
+            raw,
+            source_head=source_head,
+            ccp_identity=ccp,
+            public_evidence_commit=public["commit"],
+        )
+    except A0XCcpExecutorError:
+        raise
+    if observed != dict(evidence):
+        raise A0XCcpExecutorError("local qualification receipt CCP/source/generation binding differs")
+
+
+def qualification_evidence_from_receipt(
+    receipt_raw: bytes,
+    *,
+    source_head: str,
+    ccp_identity: Mapping[str, Any],
+    public_evidence_commit: str,
+) -> dict[str, Any]:
+    """Extract public-safe qualification evidence without launching anything."""
+    _revision(source_head, "qualification receipt source head")
+    _revision(public_evidence_commit, "qualification public evidence commit")
+    if not isinstance(ccp_identity, Mapping):
+        raise A0XCcpExecutorError("qualification receipt CCP binding is invalid")
+    binary_sha256 = ccp_identity.get("sha256", ccp_identity.get("binary_sha256"))
+    source_commit = ccp_identity.get("source_commit")
+    source_tree = ccp_identity.get("qualified_source_tree", ccp_identity.get("source_tree"))
+    version = ccp_identity.get("version")
+    if (
+        ccp_identity.get("executable_name") != "commit-ci-preflight"
+        or not isinstance(binary_sha256, str) or not _SHA256.fullmatch(binary_sha256)
+        or not isinstance(source_commit, str) or not _REVISION.fullmatch(source_commit)
+        or not isinstance(source_tree, str) or not _REVISION.fullmatch(source_tree)
+        or not isinstance(version, str) or not re.fullmatch(r"commit-ci-preflight [^\s]+", version)
+    ):
+        raise A0XCcpExecutorError("qualification receipt CCP binding is invalid")
+    envelope = _strict_object(receipt_raw, "local qualification receipt")
     if set(envelope) != {"receipt_id", "receipt"} or not isinstance(envelope.get("receipt"), Mapping):
         raise A0XCcpExecutorError("local qualification receipt envelope is invalid")
     receipt = envelope["receipt"]
     semantic_id = "sha256:" + _sha256_bytes(_canonical_json(receipt))
-    if envelope.get("receipt_id") != semantic_id or semantic_id != evidence.get("qualification_receipt_id"):
+    if envelope.get("receipt_id") != semantic_id:
         raise A0XCcpExecutorError("local qualification receipt semantic ID differs")
-    ccp = evidence.get("ccp")
-    if not isinstance(ccp, Mapping):
-        raise A0XCcpExecutorError("local qualification receipt CCP binding is invalid")
     producer, repository, run = receipt.get("producer"), receipt.get("repository"), receipt.get("run")
-    expected_version = str(ccp.get("version", "")).removeprefix("commit-ci-preflight ") + "+matrix-v2-legacy-v1"
+    expected_version = version.removeprefix("commit-ci-preflight ") + "+matrix-v2-legacy-v1"
     if (
         receipt.get("schema_version") != "2.0" or receipt.get("overall_status") != "PASS"
         or receipt.get("incomplete_reason") is not None
         or producer != {"name": "commit-ci-preflight", "version": expected_version}
         or not isinstance(repository, Mapping) or repository.get("commit_sha") != source_head
         or repository.get("dirty") is not False
-        or not isinstance(run, Mapping) or run.get("generation") != evidence.get("generation")
+        or not isinstance(run, Mapping) or not isinstance(run.get("generation"), int)
+        or isinstance(run.get("generation"), bool) or run["generation"] < 1
     ):
         raise A0XCcpExecutorError("local qualification receipt CCP/source/generation binding differs")
+    evidence = {
+        "artifact_class": "a0x-qualification-evidence",
+        "evidence_profile": "a0x-qualification-evidence-v1",
+        "qualification_receipt_id": semantic_id,
+        "qualification_receipt_raw_sha256": _sha256_bytes(receipt_raw),
+        "qualified_source_head": source_head,
+        "generation": run["generation"],
+        "ccp": {
+            "executable_name": "commit-ci-preflight",
+            "source_commit": source_commit,
+            "qualified_source_tree": source_tree,
+            "binary_sha256": binary_sha256,
+            "version": version,
+        },
+        "public_evidence": {
+            "branch": f"ccp-evidence/{source_head}",
+            "path": ".ccp/receipt.json",
+            "commit": public_evidence_commit,
+        },
+    }
+    try:
+        return validate_qualification_evidence(evidence)
+    except A0XContractError as error:
+        raise A0XCcpExecutorError("qualification evidence is invalid") from error
 
 
 _GUARD_PREFLIGHT_ROLES = (
@@ -621,6 +751,7 @@ def _terminal_observation(
     *, source_head: str, pair: PairBinding, dossier: str, launch: A0XGuardLaunch,
     result: ProcessResult | None, classification: str, recovery_required: bool,
     error_type: str | None = None, child_terminal_status: str | None = None,
+    authorization_raw_sha256: str, authorization_commitment: Mapping[str, Any],
     pre_run_path: str, pre_run_raw_sha256: str,
     guard_preflight_path: str, guard_preflight_raw_sha256: str,
 ) -> dict[str, Any]:
@@ -629,6 +760,8 @@ def _terminal_observation(
         "source_head": source_head,
         "pair_binding": pair.as_mapping(),
         "fixed_dossier": dossier,
+        "authorization_raw_sha256": authorization_raw_sha256,
+        "authorization_commitment": dict(authorization_commitment),
         "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
         "outer_timeout_seconds": OUTER_TIMEOUT_SECONDS,
         "internal_budget_seconds": INTERNAL_BUDGET_SECONDS,
@@ -659,7 +792,7 @@ def _terminal_observation(
 
 def _pre_run_observation(
     *, source_head: str, pair: PairBinding, dossier: str, authorization_raw: bytes,
-    launch: A0XGuardLaunch, claim_path: str, qualification_evidence: Any,
+    launch: A0XGuardLaunch, claim_path: str, authorization_commitment: Mapping[str, Any], qualification_evidence: Any,
     argv: Sequence[str], guard_preflight_path: str, guard_preflight_raw_sha256: str,
 ) -> dict[str, Any]:
     """Record the private process binding before the OS can start a child."""
@@ -672,6 +805,7 @@ def _pre_run_observation(
         "fixed_dossier": dossier,
         "claim_path": claim_path,
         "authorization_raw_sha256": _sha256_bytes(authorization_raw),
+        "authorization_commitment": dict(authorization_commitment),
         "qualification_receipt_id": qualification_evidence.get("qualification_receipt_id"),
         "qualification_receipt_raw_sha256": qualification_evidence.get("qualification_receipt_raw_sha256"),
         "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
@@ -684,6 +818,31 @@ def _pre_run_observation(
         "guard_timeout_seconds": OUTER_TIMEOUT_SECONDS,
         "supervision_timeout_seconds": _SUPERVISION_TIMEOUT_SECONDS,
     }
+
+
+def _assert_bound_authorization_and_contract(
+    *, authorization_path: Path, authorization_raw: bytes, authorization_commitment: Mapping[str, Any],
+    material_contract_path: Path, material_contract_raw: bytes,
+) -> None:
+    """Reject a changed trust root before claim creation or process launch."""
+    try:
+        observed_authorization_raw = authorization_path.read_bytes()
+        observed_contract_raw = material_contract_path.read_bytes()
+    except OSError as error:
+        raise A0XCcpExecutorError("bound runtime document is unavailable") from error
+    if observed_authorization_raw != authorization_raw:
+        raise A0XCcpExecutorError("execution authorization bytes drifted")
+    try:
+        observed_authorization = _strict_object(observed_authorization_raw, "execution authorization")
+        observed_commitment = canonical_commitment(
+            observed_authorization, EXECUTION_AUTHORIZATION_PROFILE,
+        ).as_mapping()
+    except (A0XCcpExecutorError, A0XContractError, TypeError, ValueError) as error:
+        raise A0XCcpExecutorError("execution authorization commitment is invalid") from error
+    if observed_commitment != dict(authorization_commitment):
+        raise A0XCcpExecutorError("execution authorization commitment drifted")
+    if observed_contract_raw != material_contract_raw:
+        raise A0XCcpExecutorError("material contract bytes drifted")
 
 
 def _write_pre_run_observation(root: Path, directory_relative: str, observation: Mapping[str, Any]) -> str:
@@ -934,5 +1093,5 @@ def _sha256_bytes(value: bytes) -> str:
 __all__ = [
     "A0XCcpExecutorError", "GuardPreflightOutput", "GuardPreflightProducer",
     "ProcessExecutor", "ProcessResult", "SubprocessGuardPreflightProducer",
-    "launch_fixed_dossier", "runtime_mapping_path",
+    "launch_fixed_dossier", "qualification_evidence_from_receipt", "runtime_mapping_path",
 ]

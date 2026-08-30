@@ -57,10 +57,11 @@ class FakeTorch:
 class FakeTokenizer:
     is_fast = True
 
-    def __init__(self, calls, *, offsets=True, slow=False):
+    def __init__(self, calls, *, offsets=True, slow=False, padding_side="right"):
         self.calls = calls
         self.offsets = offsets
         self.is_fast = not slow
+        self.padding_side = padding_side
 
     def __call__(self, text, **kwargs):
         self.calls.append("offset-probe" if kwargs.get("return_offsets_mapping") else "tokenize")
@@ -257,6 +258,14 @@ class A0XHiddenStateAdapterTests(unittest.TestCase):
                 with self.assertRaises(A0XModelAdapterError):
                     load_synthetic(card, tokenizer=tokenizer)
                 self.assertNotIn("model", calls)
+
+    def test_enforces_card_padding_side_when_declared(self):
+        card = next(card for card in registry_cards() if card.model_key == "gpt_neo_125m")
+        calls = []
+        tokenizer = tokenizer_for(card, calls, padding_side="left")
+        with self.assertRaisesRegex(A0XModelAdapterError, "padding side"):
+            load_synthetic(card, tokenizer=tokenizer)
+        self.assertNotIn("model", calls)
 
     def test_rejects_non_cpu_float32_parameters(self):
         card = next(card for card in registry_cards() if card.model_key == "smollm2_135m")

@@ -1,18 +1,113 @@
-A0X final integration checkpoint (2026-08-29): the local exact-head
-qualification of `4aee4698f5c59101b1f3292519f10ae802629bf7` passed with
-receipt-file SHA-256
-`08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447`.
-That receipt is historical after policy-only PR #106 advanced public main to
-`4ba3c36a0f6b7a50d34bc87bb34bafc79687eb08`; it cannot attest the future
-integrated source commit. Complete only the target-free integration and verify
-that every A0X protected file remains byte-identical. Then stop for one new
-authorization bound to the final commit, tree, legacy profile, plan digests,
-and qualified producer. No model, tokenizer, target, CCP heavy command,
-publication, scientific retry, or claim promotion is authorized before then.
+A0X pre-material readiness correction (2026-08-30): exact source
+`68f8bfe75a883054118246101485f71a56a5e82e` passed Gate A and its receipt is
+publicly preserved (receipt-file SHA-256
+`3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`,
+evidence commit `fc46c39421ae85713f473ef49a1270beab3aefe6`). A target-free pre-Gate-B
+audit then found that the available venv launcher resolved to a package-
+incomplete base Python and that the isolated clone had no selected model
+snapshot. The local correction adds a private hash-bound readiness receipt for
+an independent regular Python 3.11 venv executable, exact five-package/API
+contract, and independent pair-specific snapshot files; it also enforces card
+padding and terminally seals a post-claim pre-run-observation write failure
+without starting a child. It also revalidates regular-file identity and rejects
+post-readiness symlink/hardlink substitution at every final material boundary.
+Target-free verification and final Luna review are complete; the regenerated
+package is committed on the current local branch. Verify the live commit and
+stop before a new Gate A.
+Do not prepare Gate B assets, run CCP, load models/tokenizers, open targets, or
+publish. The prior receipt is historical once corrected bytes are committed.
+The implementation anchor is `7e1afaba83def501a2641a036c10aae1b98be7b0`;
+regenerated A0/A0-R1 freeze hashes are
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53` and
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+Final target-free verification passed: frozen 11/11, synthetic 278/278, schema
+155 agreements with 19 rejected mutations, and repository 1,110 tests with one
+expected skip. Final security, freeze/package, and documentation reviews
+returned `APPROVE` with no remaining P0--P3 blocker. Stop for the new exact-head
+Gate A authorization.
 
-A0X checkpoint (2026-08-29): preparatory work remains on branch
-`agent/a0x-six-model-design` at `sealed_gate_pending`. The current correction
-anchor is `6b8c8e3491b24fa4717b2f4faa8700b007c48892`, tree
+A0X Gate A temp-mount correction checkpoint (2026-08-29): the campaign remains
+`sealed_gate_pending`. The exact-head qualification at
+`e340e142fcd745d47dec1df386eb9fdb1b2e15f7` ended terminal `FAIL`; both schema
+checks passed and both repository checks returned exit code 1 without timeout.
+Receipt-file SHA-256:
+`6e354744099921f240108698258a184b2bdfbe170e9b29975bb305a88cfb99ac`.
+One authorized Python 3.11 diagnostic established a single test-fixture cause:
+the repository check selected writable `/dev/shm`, but inert synthetic CCP and
+Python files created there did not satisfy executable access in the container.
+The production fail-closed executable validator remains unchanged. A TDD
+regression now makes only those two exact synthetic files independent of the
+temporary mount's executable policy and delegates all other access decisions
+to the real operating-system probe.
+
+Because `tests/test_a0x_runtime_bundle.py` belongs to both frozen
+implementation inventories, the correction and canonical notes were committed
+at implementation anchor `d4845f0a7b204ba65b9669c05a677fc0560ababd`.
+Deterministic regeneration completed two implementations, two freezes, and all
+twelve dossiers with zero CCP, model, tokenizer, target, or remote access.
+A0 implementation/freeze SHA-256 values are
+`2398f026dc352be8a11950e0cb0996437d87b4ca1f0db11558d40e16f31c7b57` and
+`cc78b1baf158d0a0c3f9e77cd411d8fff5abd0b579947687c2f53d55aa027ac1`;
+A0-R1 implementation/freeze values are
+`6246c84fc4c7fc48114598406c5fa6a8b457f2fdb973626142bad30e7c68e004` and
+`c4564adcd1e767e339467db953540123017284461abbd8225ed95ab1bb49695a`.
+Frozen verification passed 11/11, the synthetic aggregate passed 268/268, and
+the repository check passed 1,100 tests with 11 documented skips. Commit the
+regenerated package and final notes, then stop for a new explicit Gate A
+exact-head authorization. Do not reuse or relabel the failed receipt.
+No CCP heavy command, Docker diagnostic, model, tokenizer, target, runtime
+bundle, material run, network, publication, or retry is authorized by this
+checkpoint.
+
+A0X runtime-binding correction checkpoint (2026-08-29): the campaign is
+`sealed_gate_pending`. Descriptor-v2 is acyclic: the operator-rooted
+authorization binds exact descriptor bytes, while the descriptor carries only
+the pair-derived authorization path and byte-bound material contract. The
+target-free preparer writes readiness, descriptor, authorization, and mapping
+in that order and refuses every overwrite. Its implementation inventory must be frozen
+before the two leg freezes and twelve approval-request dossiers are regenerated
+from the resulting exact implementation HEAD.
+
+The campaign has three explicit operator stops, which are not interchangeable:
+**A** authorizes one exact-head repository qualification; **B** separately
+authorizes preparation of one exact pair/attempt private runtime bundle; and
+**C** later authorizes one one-shot material attempt bound to the prepared
+authorization raw SHA-256. The current work stops before **A**. It cannot
+prepare a private bundle under **B**, and no prepared bundle authorizes **C**.
+`sealed_gate_pending` remains the only current execution state.
+
+The old local qualification of `4aee4698f5c59101b1f3292519f10ae802629bf7`
+and its receipt-file SHA-256
+`08b1a8f1c08d2ab9784c95acd3b452c218b76108744a129cd6b8df2aef52c447` are
+historical only. They cannot attest this corrected source. Stop after the
+target-free package regeneration and no-model verification for one new,
+explicit exact-head repository-qualification authorization (**A**); only a
+subsequent separate exact pair/attempt bundle-preparation authorization (**B**)
+may name a private runtime bundle. A later one-shot material authorization
+(**C**) must bind the prepared authorization raw SHA-256. No model, tokenizer,
+target, CCP heavy command, Docker, network, publication, scientific retry, or
+claim promotion is authorized before its respective stop.
+
+**Historical A0X runtime-binding correction state (2026-08-29; superseded).** The exact
+implementation anchor is `e2f557909c9f816eb40ae5aae7be54cb523c97cd`. The
+generated package commit is
+`a52a621d67a379937475fa066639cedd215c4c27`; it precedes this
+documentation-only clarification. The then-current A0 freeze SHA-256 was
+`a8ca1889f91cd965399eaa9f3ac066d1f5b7bc9beea26ee2ceca517ebb358353`, and
+the then-current A0-R1 freeze SHA-256 was
+`b8c470d45b098233f3497cb75d7fc95a41edd9f7772539b55db71aa803355c64`.
+This documentation-only commit is not in either implementation inventory, so
+it does not alter that anchor or authorize regeneration. The stop boundary is
+unchanged: **A** is one new explicit exact-head repository qualification; **B**
+is a separate exact pair/attempt bundle-preparation authorization; and **C** is
+a later one-shot material authorization bound to the prepared authorization raw
+SHA-256. The current work stops before **A**; `sealed_gate_pending` remains the
+only current A0X execution state.
+
+**Historical A0X checkpoint (superseded; not the current runtime-binding
+state).** Preparatory work previously remained on branch
+`agent/a0x-six-model-design` at `sealed_gate_pending`, with correction anchor
+`6b8c8e3491b24fa4717b2f4faa8700b007c48892`, tree
 `18b8fdaf9ba00a81e3c90686a2563a23f2436824`. The public material contract
 deliberately binds the large-blob-qualified CCP producer at commit
 `27adf8d0820b3cd96f9c5e149de9b580ae41f639`, tree
@@ -85,7 +180,7 @@ reads, CCP invocations, and remote mutations. Resume through
 `docs/A0X_ENGINEERING_PROBLEM_SOLUTION_LOG.md`, and the canonical A0X
 design/plan.
 
-Current hashes: material contract
+Historical hashes from the superseded checkpoint: material contract
 `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`,
 A0 implementation
 `7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570`,
@@ -104,15 +199,14 @@ Python 3.11 digest
 and Python 3.12 digest
 `sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510`.
 
-Fresh dependency-free verification passed: no-`make` regression 3/3, frozen
+Historical dependency-free verification at that superseded checkpoint passed:
+no-`make` regression 3/3, frozen
 package 10/10, A0X aggregate 248/248, schema cross-validation 155 agreements
 with 19 rejected mutations, repository suite 1,075 tests with one documented
 skip, documentation audit, and diff check. Independent Luna review returned
-`APPROVE` with no P0--P3 findings. Next gate: commit the regenerated A0X
-package and canonical documentation, then request a new
-exact-head Latent-TRIZ qualification authorization bound to that final commit,
-the exact selected candidate, the explicit `matrix-v2-legacy-v1` profile, and
-the three plan digests above. Installation, each of the twelve
+`APPROVE` with no P0--P3 findings. That checkpoint's proposed package commit
+and next gate were superseded by the current correction state above.
+Installation, each of the twelve
 dossier-bound scientific attempts, Latent-TRIZ publication, and merge remain
 separate decisions. No
 model, material tokenizer, historical or sealed target, CCP heavy command,
@@ -263,7 +357,7 @@ exact-head no-model qualification and merge of this boundary, followed by a
 new final dossier hash and explicit operator approval; only then may the
 seven-model campaign be considered for execution.
 
-Final dossier checkpoint (2026-08-20): PR #102 merged at
+Historical EXP-002 final dossier checkpoint (2026-08-20): PR #102 merged at
 `9a86bedcc30eed63bd76e0b5d516c64347e478bc`. The public main branch now
 contains the exact material-binding dossier and its fail-closed runner. The
 canonical dossier SHA-256 is
@@ -274,5 +368,7 @@ The corresponding CCP exact-head receipt is published on
 Python 3.11 and 3.12. The next and only material gate is explicit operator
 approval of that exact dossier, including the seven frozen model revisions,
 CPU-float32/no-network/no-generation limits, one analysis-boundary sealed-key
-read, and the stated 1,800-second/8-GiB/128-MiB ceilings. Until then, no
+read, and the historical 1,800-second/8-GiB/128-MiB ceilings. This does not
+describe A0X, whose current envelope is 3,600 seconds outer, 3,300 seconds
+scientific work, and 300 seconds reserved for sealing and cleanup. Until then, no
 model, tokenizer, generation, or sealed target access is authorized.

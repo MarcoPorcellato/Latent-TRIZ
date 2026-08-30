@@ -25,6 +25,7 @@ from latent_triz.validator import validate  # noqa: E402
 
 class A0XFreezeTests(unittest.TestCase):
     FIXTURES = Path(__file__).resolve().parent / "fixtures" / "a0x"
+    ROOT = Path(__file__).resolve().parents[1]
 
     def setUp(self) -> None:
         self._temporary_directory = tempfile.TemporaryDirectory()
@@ -231,6 +232,26 @@ class A0XFreezeTests(unittest.TestCase):
         external.write_bytes(b"external")
         with self.assertRaisesRegex(A0XFreezeError, "external asset"):
             build_protected_tree(self.root, roots=(), external_assets=(Path("external.bin"),))
+
+    def test_each_leg_inventory_binds_the_runtime_preparer_surface(self) -> None:
+        """Each frozen leg must bind the preparer, its core, and its regression suite."""
+        required = {
+            "scripts/a0x_prepare_runtime.py",
+            "src/latent_triz/a0x_apfs.py",
+            "src/latent_triz/a0x_runtime_bundle.py",
+            "src/latent_triz/a0x_runtime_readiness.py",
+            "src/latent_triz/a0x_wheelhouse.py",
+            "tests/test_a0x_apfs.py",
+            "tests/test_a0x_runtime_bundle.py",
+            "tests/test_a0x_runtime_readiness.py",
+            "tests/test_a0x_wheelhouse.py",
+        }
+        for leg in ("a0", "r1"):
+            with self.subTest(leg=leg):
+                implementation = json.loads((
+                    self.ROOT / f"experiments/a0x-six-model/{leg}/implementation.json"
+                ).read_text(encoding="utf-8"))
+                self.assertTrue(required.issubset(implementation["implementation_paths"]))
 
     def test_complete_artifacts_validate_the_strict_task_two_schemas(self) -> None:
         historical = self.root / "historical"

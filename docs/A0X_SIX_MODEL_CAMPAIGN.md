@@ -135,16 +135,32 @@ Make-target mapping. It must report:
 Material execution is outside Task 11. Before one pair may run, all of the
 following must be true at the same exact source HEAD:
 
-1. a separate repository-qualification authorization owns one exact positive
-   Matrix generation, and the repository has its terminal exact-head receipt;
-2. the installed CCP path and full SHA-256 match the current operator
-   contract;
-3. live `resource status` is `Admit`, admission is inactive, and the queue is
-   empty;
-4. the operator supplies a new per-pair execution authorization bound to
-   exactly one dossier SHA-256, one pair, the exact qualification receipt, and
-   one attempt ID; this authorization contains no Matrix generation;
-5. a primary reviewer confirms the authorization chain and fixed command.
+The following are three separate operator stops, not one reusable approval:
+
+1. **A — repository qualification.** An exact-head authorization names one
+   repository qualification only; it must reach its terminal positive receipt.
+2. **B — runtime-bundle preparation.** A separate exact pair/attempt
+   authorization may prepare descriptor, authorization, and local mapping for
+   exactly one dossier/pair/attempt. It does not start material work.
+3. **C — material attempt.** A later one-shot material authorization must name
+   the prepared authorization raw SHA-256 as well as the pair and attempt. It
+   is the only stop that may permit the material action.
+
+The current campaign is `sealed_gate_pending` and stops before **A**. Neither
+the preparer, synthetic tests, nor regenerated approval-request artifacts
+open **A**, **B**, or **C**.
+
+The following are conditions inside those three stops, not additional stops:
+
+- **A** owns one exact positive Matrix generation and its terminal exact-head
+  receipt; the installed CCP path and full SHA-256 must match the current
+  operator contract, while live resources must be `Admit` with inactive
+  admission and an empty queue.
+- **B** owns preparation for exactly one dossier, pair, and attempt after the
+  Gate A receipt has been bound.
+- **C** owns one material execution authorization bound to exactly one dossier
+  SHA-256, one prepared authorization raw SHA-256, one pair, and one attempt
+  ID. A primary reviewer confirms the complete chain and fixed command.
 
 One approval is not reusable for another model, another leg, another source
 HEAD, or a retry. A null, positive, failed, incompatible, interrupted, or
@@ -183,14 +199,120 @@ hypothesis. Human TRIZ construct validation, stronger controls,
 generalization, compositionality, and causal intervention remain separate
 gates.
 
+## Runtime-binding correction checkpoint
+
+The earlier private runtime descriptor had an unmaterializable reciprocal hash
+dependency. Descriptor-v2 removes that cycle: the operator-rooted execution
+authorization binds the exact raw descriptor bytes; the descriptor refers only
+to its pair-derived authorization path and byte-bound material contract; and
+the local role mapping repeats the descriptor path and hash. The offline
+preparer writes readiness, descriptor, authorization, and mapping only in that
+dependency order and refuses every existing output path.
+
+This is a three-stop design. First, **A** explicitly authorizes and completes
+one exact-head repository qualification. Second, **B** separately authorizes
+one exact pair/attempt private runtime bundle, binding the resulting dossier,
+qualification receipt, authorization ID, and attempt ID. Third, **C** is a
+later one-shot material authorization bound to that prepared authorization raw
+SHA-256. No earlier stop opens a later one; the preparer, its synthetic tests,
+and regenerated approval-request artifacts open none of them.
+
+The frozen-inventory defect discovered during this correction was
+`scripts/a0x_material_child.py`: its live bytes are 21,582 and its SHA-256 is
+`fda405fbe6a3000f7de9b597aeea23300b5ecb107394411bddd21c3d3ba93955`.
+It was not `tests/test_a0x_runtime_bundle.py`. Both leg inventories now bind
+the preparer CLI, preparer module, and its regression suite, and the canonical
+package is regenerated only from the post-inventory implementation commit.
+
+### Pre-material readiness gate
+
+The successful Gate A qualification of public source
+`68f8bfe75a883054118246101485f71a56a5e82e` is preserved by receipt-file
+SHA-256 `3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`
+and receipt ID
+`sha256:2c82dc5205ad0b0c788fc1e5837ea9a790dfe924c488878b7a73413867103093`.
+Its public evidence branch is rooted at commit
+`fc46c39421ae85713f473ef49a1270beab3aefe6`. This is valid historical Gate A
+evidence for that exact source only; the readiness correction changes frozen
+implementation inputs and therefore requires a new Gate A qualification after
+regeneration.
+
+A target-free audit before Gate B found two independent blockers that the
+earlier bundle contract did not prove:
+
+- the available virtual-environment launcher was a symlink; resolving it
+  selected the Homebrew base interpreter and lost the required package set;
+- the isolated execution clone intentionally contained no model snapshot, so
+  its pair-specific runtime root could not pass the allowlist/hash checks.
+
+Gate B must now create or select one independent regular Python 3.11
+executable in an exact virtual environment and materialize only the selected
+pair's already acquired snapshot inside the isolated execution clone as
+independent regular files. Symlinks and hardlinks are refused. On APFS, a
+copy-on-write copy may avoid duplicating physical blocks, but it remains an
+explicit Gate B action and must be followed by byte/size/SHA-256 verification.
+The preparer records one private readiness receipt binding exact interpreter
+bytes, the five pinned packages, required APIs, card bytes, runtime-file
+commitment, and pair identity. The descriptor binds that receipt before any
+authorization or role mapping is produced.
+
+The same correction also enforces a model card's non-null `pad_side` before
+model construction and makes a post-claim failure to persist the pre-run
+observation terminal recovery evidence without starting the child. No bundle,
+model, tokenizer, target, CCP, Docker, or remote action was used to discover
+or test these corrections.
+
+Future Gate B preparation follows the separate no-write, APFS clonefile,
+offline-wheelhouse and immutable-preparation boundaries in
+[A0X Gate B operator hardening](A0X_GATE_B_OPERATOR_HARDENING.md). This
+hardening does not change the bytes or status of any already prepared bundle.
+Because it changes frozen implementation inputs, it requires a new exact-head
+Gate A qualification before it can govern a future material attempt.
+
+The correction implementation anchor is
+`7e1afaba83def501a2641a036c10aae1b98be7b0`. Canonical regeneration produced
+the following exact approval-request dossier hashes:
+
+| Leg/model | Dossier SHA-256 |
+| --- | --- |
+| A0 / GPT-2 | `13426c45a90fb282ce45093e99b26e4c5b6d5e268cf88432eaf516bb0b9151e9` |
+| A0 / GPT-Neo-125M | `2e51117632b77a50af725a7c507531b648b060c7642caf679f89fbbc422e9d97` |
+| A0 / Qwen2.5-0.5B | `07034dd03ffdf1c24066979d93ba8b50531b714047a1eeb449998a2cb8f6b6eb` |
+| A0 / Qwen3-0.6B Base | `7de97fc2a4dcd232606106d3e99420b75466960c96f6431ed8a8b33195cd8e25` |
+| A0 / SmolLM2-135M | `d3e5950d94516fb96b069ee8812c777475a1b872b7c0afb572e93e47391c9445` |
+| A0 / SmolLM2-360M | `606072d9c12e9dcb4d6427320921c09eecec26b4b9d5919786d5694f3a7b7d81` |
+| A0-R1 / GPT-2 | `3eb2315b2dc8388bc6d84f2da858eb2befec3c864eb3a66f3d4f1ab7db353fc8` |
+| A0-R1 / GPT-Neo-125M | `fd0bc5485e82e4e3af44fb99d386487f4327c71a39880a49ec4b0f5e7efa6000` |
+| A0-R1 / Qwen2.5-0.5B | `18105adb2402a2f9681c05b60a748baf8806d67c477f2e4d21b281586b7da5db` |
+| A0-R1 / Qwen3-0.6B Base | `abe67b5acaf1bcb6079617a27ae8746fda815d49003e365fabdbfba9fb9ae278` |
+| A0-R1 / SmolLM2-135M | `07e055882d1ce62292d5fbe34901df12f005b1aec449acc81cc7066962edf9c7` |
+| A0-R1 / SmolLM2-360M | `db2d8d42a4936bc4be1f7bd690f14364fe3b343b03042543507e085bb3498934` |
+
+The material contract remains byte-identical at
+`b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+The regenerated bindings are A0 implementation/freeze
+`eb74b5375f90a6da948db7b90d46dca7a4c8584a32b974fd6a059f05e572af33` /
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53`
+and A0-R1 implementation/freeze
+`cede3f23c5659bbbedacdfa4ff74f55297b031f374af2cc3d21a65e85f5f7e63` /
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+Final target-free verification after this last regeneration passed: frozen
+11/11, synthetic A0X aggregate 278/278, schema cross-validation 155 agreements
+plus 19 rejected mutations, and the complete repository suite 1,110 tests with
+one documented skip. Final independent Luna audits returned `APPROVE`: the
+security review found no remaining pre-model alias/TOCTOU bypass (focused
+69/69), the freeze/package review found no P0--P3 issue (41/41), and the
+documentation review found no P1/P2 hash, gate, authorization, or timeout
+inconsistency.
+
 ## Current checkpoint
 
 The campaign remains `sealed_gate_pending`. The material composition is no
-longer a refusal stub: it now has a fixed outer launcher, an exact child
-descriptor, a pair-scoped private runtime inlet, a one-shot target reader,
-terminal sealing, package verification, protected-tree postflight, and model
-release. All of those paths have been exercised only with synthetic injected
-dependencies.
+longer a refusal stub: it now has a fixed outer launcher, an acyclic
+descriptor-v2 chain, a deterministic overwrite-refusing private runtime inlet,
+a one-shot target reader, terminal sealing, package verification,
+protected-tree postflight, and model release. All of those paths have been
+exercised only with synthetic injected dependencies.
 
 Every pair uses the same execution envelope:
 
@@ -236,44 +358,43 @@ context, and active-container count. Each probe has a 30-second timeout and a
 wrong source, non-Admit resources, non-idle admission, unavailable runtime, or
 an active container.
 
-Correction anchor: `6b8c8e3491b24fa4717b2f4faa8700b007c48892`
-(tree `18b8fdaf9ba00a81e3c90686a2563a23f2436824`).
-The two freezes and twelve dossiers were regenerated from that exact anchor.
-The correction removes the undeclared `make` runtime dependency from the
-Matrix binding test while preserving exact recipe, legacy-profile, V2-policy,
-generation, receipt, and expected-commit checks. Fresh verification passed the
-no-`make` regression 3/3, frozen package 10/10, A0X aggregate 248/248, schema
-cross-validation 155 agreements with 19 rejected mutations, repository suite
-1,075 tests with one documented skip, documentation audit, and diff check.
-Independent Luna review returned `APPROVE` with no P0--P3 findings. The local
-package commit is the remaining local gate. The no-model receipt reports zero
-model loads, tokenizer constructions, sealed-target reads, CCP invocations,
-and remote mutations.
+**Historical runtime-binding checkpoint.** The former implementation anchor was
+`e2f557909c9f816eb40ae5aae7be54cb523c97cd`; its generated package is commit
+`a52a621d67a379937475fa066639cedd215c4c27`. The package is still
+`sealed_gate_pending`: stop before **A**, one new exact-head repository
+qualification; then require distinct authorization **B** for one exact
+pair/attempt private-bundle preparation; then require distinct one-shot
+material authorization **C** bound to the prepared authorization raw SHA-256.
+Neither the package nor this documentation grants any stop.
 
 | Artifact | SHA-256 |
 | --- | --- |
 | Material execution contract | `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8` |
 | A0 protocol | `42e252b21dd9f1d6b793be304bfe708d2d9324e8e08ffe1d1915e7f01b75f586` |
-| A0 implementation | `7645761ad5fb7ff42a603a8370bce0be1f3c3f179f937e551194bc2b78f44570` |
-| A0 freeze | `34876ec4ad5ae209bc3ffd49202deb660830fa225caa00831f70dedfa34bf006` |
+| A0 implementation | `f168ad9cec7cd757c12a711e5c138608bbaa86ec2fe826ed2d9af210a4942e8e` |
+| A0 freeze | `a8ca1889f91cd965399eaa9f3ac066d1f5b7bc9beea26ee2ceca517ebb358353` |
 | A0-R1 protocol | `32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52` |
-| A0-R1 implementation | `d6cc0f6de81d0da4108570559579d76045a7a7a1ea282a84866e3825bcb023bc` |
-| A0-R1 freeze | `1c7425d90be524ba9ab55ec66967b0eee32272addc025948459ea4e3b6383e8a` |
+| A0-R1 implementation | `705de31ef6c8dd8d53cb34c611de49637fed6e51719077e7c63524a5391abfdd` |
+| A0-R1 freeze | `b8c470d45b098233f3497cb75d7fc95a41edd9f7772539b55db71aa803355c64` |
 | No-model verification receipt | `c761ae76d77b976ea83bc83aa139da9730858a387422aff501ffad1b87217e4c` |
-| A0 / SmolLM2-360M dossier | `40ccf9623ec93a36718e1f5b565e56022882ede34f769b17e4d70127febbb443` |
-| A0 / Qwen3-0.6B-Base dossier | `0390b7dc1c78562059b2cc78b48d2ee1ed90f50450c0febc960b2f8fd261cb27` |
-| A0 / GPT-2 dossier | `36470af70981826da3995c1c3557dd16871c6e4c8e89a6eeae4f1c90366e0fb1` |
-| A0 / SmolLM2-135M dossier | `0a8637371999da59f6e905e3e9b8d575a1e79efbdf2e54fd921c3d81710ec970` |
-| A0 / GPT-Neo-125M dossier | `25b76445060bb3f9f0b089ee6dadbf02042af0004528988173ae59479fbb6b1d` |
-| A0 / Qwen2.5-0.5B dossier | `b9516adffa3172b2ee030e01c2c9a93c66ab8b343db20aa42e5241001d865f66` |
-| A0-R1 / SmolLM2-360M dossier | `542bc3a21c010bc1d7efe1aa64742f8cd0c66db79b29d63d49bc542480f2064a` |
-| A0-R1 / Qwen3-0.6B-Base dossier | `18cdb5405a496cc5f18b2ca8b08fcd8a9e3484c70172e08bcfa043690a8aeedc` |
-| A0-R1 / GPT-2 dossier | `db9bf0c4a899498fc86bf424768ed787302fc7a3c76cb59e808e1b8cb485ffb5` |
-| A0-R1 / SmolLM2-135M dossier | `d02808ecb9572059f21185b03150bc2cb2eb0deeb6e9c3c7740e7f9df3a7fc90` |
-| A0-R1 / GPT-Neo-125M dossier | `d38b096a65623f1c358362f37757c09dea503a2909f715420e4da1575265fcad` |
-| A0-R1 / Qwen2.5-0.5B dossier | `0b7db4ada1866d4cdd73ef6afe387ec98e8c22f339c1fdedbd2413fe98bd5796` |
+| A0 / SmolLM2-360M dossier | `f71f57de77d99e7c5e4c3c90cf5975213b0d4cc11f135068ccefa89325cc4ca3` |
+| A0 / Qwen3-0.6B-Base dossier | `873a87a4d5bace562df80b97c2b4138141064202172e94c39a731ba23822e3ec` |
+| A0 / GPT-2 dossier | `26c37f8fc19f59c95cd0c02e071c5b758b6ad43d35cf3409263767f8a9744bae` |
+| A0 / SmolLM2-135M dossier | `857df3060cc71493920a2e170ec3c36d8e37d02238ced879023650a8e24ed450` |
+| A0 / GPT-Neo-125M dossier | `2dd6def8af02343b8ec33bdd553c3ec0f20af5948cfeea7f7f4bddd33cd9bbee` |
+| A0 / Qwen2.5-0.5B dossier | `af475aacd4e947ea30b119e74cff31d15798d5ceefd782ea18b00bfc71d0cc96` |
+| A0-R1 / SmolLM2-360M dossier | `942f73da7528d1c3ba2ae8569a0ab6cd24ba513c9b80068c6244e185d157de0f` |
+| A0-R1 / Qwen3-0.6B-Base dossier | `2f9df9292477a3e967d237d839d5dcaa6c668fd0fb7c8280919c8923a9f23a0c` |
+| A0-R1 / GPT-2 dossier | `9bb38d992bda0fdcc94d825e2e950be8d4ea1d8de75d0ff5d9da90f7f0b26aa3` |
+| A0-R1 / SmolLM2-135M dossier | `c31538a72a253d78b25c0f38baf95c4ec76c3f3f3fdb107f4e39f60d01dbbcb2` |
+| A0-R1 / GPT-Neo-125M dossier | `a94b49a9640977669af38969782095fcc69a8d36155e5b0d4cbd0a1598e4ed4d` |
+| A0-R1 / Qwen2.5-0.5B dossier | `797cf4fd525daae3e5853c5216d5f82ad11e102b4666fcdc23f28e7ff71ec219` |
 
-These are approval-request artifacts only. They now bind the TDD-corrected
+These are historical approval-request artifacts only. They bind the former
+runtime-binding checkpoint and do not authorize A, B, or C. The current
+approval-request hashes are listed in the pre-material readiness section above.
+
+**Historical producer/receipt note.** The former package bound the TDD-corrected
 producer that passed one exact generation-1 Matrix qualification. Its receipt ID is
 `sha256:21d5cf99a9d142b879b37ef8bb2f50573e45fd569a2259fa863a50fe6be08e85`
 and its receipt-file SHA-256 is
@@ -309,3 +430,32 @@ host suite passed, and the failure reproduced under a no-`make` `PATH`. The
 dependency-free Python recipe verifier is the only behavioral correction; the
 protocol, plan profile, timeouts, policies, and scientific rules are unchanged.
 This attempt is consumed and does not authorize a retry.
+
+The later one authorized Gate A qualification at
+`e340e142fcd745d47dec1df386eb9fdb1b2e15f7` is likewise preserved as terminal
+`FAIL`. Both schema checks passed; both repository checks returned exit code 1
+without timeout. Receipt-file SHA-256:
+`6e354744099921f240108698258a184b2bdfbe170e9b29975bb305a88cfb99ac`.
+One separately authorized Python 3.11 diagnostic reproduced 24 errors and one
+derived failure across 1,099 tests. The shared runtime-bundle fixture created
+inert synthetic executables on writable `/dev/shm`, while that container temp
+mount did not grant executable access. The production executable check remains
+unchanged. A test-only seam now recognizes only the fixture's two exact inert
+files and delegates all other access checks to the operating system. Because
+that fixture is frozen implementation input, both implementations, both
+freezes, and all twelve dossiers require deterministic regeneration from the
+new corrective implementation anchor before another explicit Gate A
+authorization can be requested. No scientific artifact or claim changes.
+
+The corrective implementation anchor is
+`d4845f0a7b204ba65b9669c05a677fc0560ababd`. Deterministic no-material
+regeneration produced A0 implementation/freeze SHA-256
+`2398f026dc352be8a11950e0cb0996437d87b4ca1f0db11558d40e16f31c7b57` /
+`cc78b1baf158d0a0c3f9e77cd411d8fff5abd0b579947687c2f53d55aa027ac1`
+and A0-R1 implementation/freeze SHA-256
+`6246c84fc4c7fc48114598406c5fa6a8b457f2fdb973626142bad30e7c68e004` /
+`c4564adcd1e767e339467db953540123017284461abbd8225ed95ab1bb49695a`.
+Frozen verification passed 11/11, the synthetic aggregate passed 268/268, and
+the repository check passed 1,100 tests with 11 documented skips. The next
+action remains a separately authorized exact-head Gate A qualification after
+the regenerated package is committed.

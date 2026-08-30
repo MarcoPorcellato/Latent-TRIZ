@@ -38,6 +38,8 @@ ADMISSION_TIMEOUT_SECONDS = 300
 MEMORY_LIMIT_BYTES = 8_589_934_592
 GUARD_LAUNCH_PROFILE = "a0x-guard-launch-v2"
 QUALIFICATION_EVIDENCE_PROFILE = "a0x-qualification-evidence-v1"
+DESCRIPTOR_PROFILE = "a0x-material-child-descriptor-v2"
+MATERIAL_CONTRACT_PATH = "experiments/a0x-six-model/material-execution-contract.json"
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,28 @@ def validate_dossier_authorization_path(
     if not isinstance(path, str) or path != expected:
         raise A0XContractError("authorization inlet path does not match the frozen pair binding")
     return path
+
+
+def authorization_reference(value: Any, pair: PairBinding) -> str:
+    """Require the descriptor's authorization reference to be pair-derived."""
+    expected = derive_runtime_paths(pair).authorization_path
+    if not isinstance(value, Mapping) or set(value) != {"role", "path"}:
+        raise A0XContractError("authorization reference shape is invalid")
+    if value.get("role") != "authorization" or value.get("path") != expected:
+        raise A0XContractError("authorization reference is not pair-derived")
+    return expected
+
+
+def material_contract_binding(value: Any) -> tuple[str, str]:
+    """Validate the byte-bound public material-contract entry."""
+    if not isinstance(value, Mapping) or set(value) != {"role", "path", "sha256"}:
+        raise A0XContractError("material contract binding shape is invalid")
+    if value.get("role") != "material_contract" or value.get("path") != MATERIAL_CONTRACT_PATH:
+        raise A0XContractError("material contract binding path is invalid")
+    digest = value.get("sha256")
+    if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise A0XContractError("material contract binding hash is invalid")
+    return MATERIAL_CONTRACT_PATH, digest
 
 
 @dataclass(frozen=True)

@@ -284,7 +284,7 @@ impossible self-reference: committing the dossier changes the commit.
 
 **Correction.** Dossiers bind an `implementation_source_head` containing the
 reviewed implementation. A later execution authorization separately binds the
-exact live `source_head`. The current implementation anchor is
+exact live `source_head`. The implementation anchor recorded at that checkpoint was
 `9aeb6ef664b0576cb8a1ed58f50791be3bb070cb`.
 
 **Status.** Resolved.
@@ -658,6 +658,223 @@ unchanged.
 **Status.** Implementation in progress. Stop before CCP until the final
 integrated commit, tree, and verification ledger are recorded.
 
+## 27. Private runtime binding was cyclic and a frozen mismatch was misattributed
+
+**Symptom.** The original private descriptor required a future authorization
+binding while the authorization required the descriptor's raw SHA-256. No
+single descriptor/authorization pair could satisfy both commitments. The
+initial Task-3 narrative also attributed the resulting stale frozen inventory
+to `tests/test_a0x_runtime_bundle.py`.
+
+**Root cause.** The private descriptor was treated as an equal hash peer of the
+operator authorization rather than as a dependent document. The stale-inventory
+diagnosis relied on an outdated report instead of the live implementation
+bindings.
+
+**Correction.** Descriptor-v2 has a path-only pair-derived authorization
+reference and a byte-bound material-contract reference. The authorization is
+the operator-rooted document that binds exact descriptor bytes; the local role
+mapping repeats that descriptor path/hash. The target-free preparer constructs
+readiness, descriptor, authorization, and mapping in that order and refuses every
+overwrite. Live evidence identifies the stale file as
+`scripts/a0x_material_child.py` (21,582 bytes, SHA-256
+`fda405fbe6a3000f7de9b597aeea23300b5ecb107394411bddd21c3d3ba93955`), not
+`tests/test_a0x_runtime_bundle.py`.
+
+**Regression evidence.** Both leg implementation inventories bind the preparer
+CLI, module, and test. A deterministic test regenerates every protocol,
+implementation, freeze, and dossier from the committed implementation anchor
+and byte-compares them with the tracked package. No test loads a model or
+tokenizer, reads a target, invokes CCP/Docker, or uses the network.
+
+**Status.** Resolved locally only after the two frozen legs and twelve
+approval-request dossiers are regenerated from the exact post-inventory HEAD.
+That new source HEAD invalidates every earlier exact-head qualification for
+future material action; the campaign remains `sealed_gate_pending` and stops
+before **A**, the first of three explicit operator stops: **A** exact-head
+repository qualification authorization, **B** separate exact pair/attempt
+runtime-bundle-preparation authorization, and **C** later one-shot material
+authorization bound to the prepared authorization raw SHA-256.
+
+## 28. Synthetic executable fixtures depended on the container temp mount
+
+**Symptom.** The one authorized exact-head qualification of `e340e142...`
+completed both schema checks but both repository checks returned exit code 1.
+The authorized Python 3.11 diagnostic reproduced the failure without timeout:
+1,099 tests ran in 195.295 seconds, with 24 errors and one failure.
+
+**Root cause.** `scripts/repository_check.py` selected `/dev/shm` after proving
+only that it was writable. The A0X runtime-bundle fixture then created inert
+synthetic CCP and Python files there, set mode `0700`, and passed them through
+the production `os.access(..., os.X_OK)` validation. The verification
+container's temporary mount did not grant executable access, so every test
+that depended on the shared constructible fixture failed at the same boundary.
+The final CLI assertion observed only the derived exit code. This was a test
+fixture portability defect, not a timeout, schema, model, target, or scientific
+protocol failure.
+
+**Correction.** Keep the production executable check unchanged and fail-closed.
+The synthetic fixture now scopes a test-only access seam to its two exact inert
+files while delegating every other access decision to the real operating-system
+probe. The fixture still writes private mutable copies, so tamper tests remain
+independent and cannot alter a real interpreter or CCP executable.
+
+**Regression evidence required.** A test must first force the operating-system
+access probe to deny execution for the temporary mount, then prove that the
+synthetic bundle is prepared. The complete runtime-bundle, CCP-executor,
+material-child, and production-adapter surfaces must remain green. A new
+exact-head CCP qualification is still required; the consumed receipt and its
+failed checks are historical evidence and cannot be relabelled.
+
+**Status.** Resolved locally with TDD at implementation anchor
+`d4845f0a7b204ba65b9669c05a677fc0560ababd`. Canonical regeneration completed
+with two frozen legs, twelve dossiers, and zero material or remote access. The
+full repository check passed 1,100 tests with 11 documented skips. Commit the
+regenerated package, then request a new exact-head Gate A qualification.
+
+## 29. Gate A did not prove pair-specific Python and snapshot readiness
+
+**Symptom.** Gate A passed at `68f8bfe...`, but the pre-Gate-B inventory showed
+that the available Python path was a virtual-environment symlink which the
+existing external-file normalizer resolved to the Homebrew base interpreter.
+That base interpreter did not expose the five pinned packages. The isolated
+clone also had no `artifacts/models/` snapshot for the selected pair.
+
+**Root cause.** Repository qualification proved source and verification
+images, while runtime-bundle preparation bound executable bytes but not
+virtual-environment identity, package/API compatibility, or pair-specific
+snapshot presence. These are separate evidence layers and Gate A cannot imply
+Gate B readiness.
+
+**Correction.** Add an immutable private `a0x-runtime-readiness-v1` receipt as
+the first node in the runtime chain. It requires an independent regular Python
+3.11 executable inside a non-base environment; exact versions of torch,
+Transformers, tokenizers, NumPy, and safetensors; required API symbols; and the
+exact pair's source/card/allowlist/file commitments. Symlinked or hardlinked
+Python/model files, missing assets, package drift, API drift, and pair drift
+fail before bundle creation. Descriptor, material child, production adapter,
+and outer launcher all validate the binding before an attempt can start.
+
+**Regression evidence.** Synthetic tests cover a valid binding and reject
+symlink/base Python, missing or altered model files, hardlinks, package/API
+drift, wrong pairs, receipt/hash drift, and overwrite attempts. The readiness
+probe never constructs a tokenizer/model or reads a target.
+
+**Status.** Corrected locally; both implementation inventories, freezes, and
+twelve dossiers must be regenerated and a new Gate A qualification requested.
+
+## 30. Padding and post-claim observation persistence were incomplete
+
+**Symptom.** A non-null model-card padding direction was recorded but not
+enforced, and a filesystem failure while writing the pre-run observation
+occurred after the one-shot claim but outside the terminal recovery block.
+
+**Root cause.** The adapter verified tokenizer type/offset behavior without
+comparing `padding_side`, while the launcher assumed its first post-claim write
+could not fail.
+
+**Correction.** Refuse a declared padding-side mismatch before model factory
+construction. Move the pre-run observation write into the post-claim guarded
+section; if it fails, retain the claim, start no child, and persist the first
+possible terminal `launcher_internal_error` recovery observation.
+
+**Regression evidence.** The GPT-Neo synthetic card rejects left padding
+before model construction. An injected observation-write `OSError` produces no
+process call, preserves the claim, and records terminal recovery evidence.
+
+**Status.** Corrected locally; no material attempt was consumed.
+
+## 31. Independent-file readiness was not revalidated at launch
+
+**Symptom.** The readiness builder rejected symlinked or hardlinked Python and
+snapshot files, but later material boundaries compared paths and SHA-256 values
+without rechecking regular-file type and link count. A file could therefore be
+replaced after readiness with a same-byte hardlink and retain its hash.
+
+**Root cause.** Independent-file identity was treated as a build-time property
+rather than a live precondition at every boundary that could start material
+work.
+
+**Correction.** Add one shared live-readiness validator and call it from the
+outer executor, material child, and production adapter. It reopens and validates
+the readiness receipt, Python executable, card, source receipts, snapshot
+allowlist, every runtime file, and the complete model binding. Python and model
+files must be regular, non-symlink, single-link objects with unchanged bytes;
+the executable must also retain execute mode bits.
+
+**Regression evidence.** After creating a valid readiness receipt, synthetic
+tests replace Python with a hardlink, one model file with a hardlink, and Python
+with a symlink. Every mutation is rejected before any model, tokenizer, target,
+CCP, Docker, or network action.
+
+**Status.** Corrected with TDD at implementation anchor
+`7e1afaba83def501a2641a036c10aae1b98be7b0`. The shared validation now also
+runs immediately before model construction, and the general snapshot verifier
+rejects hardlinks. Final target-free verification passed (frozen 11/11,
+synthetic 278/278, schema 155/19, repository 1,110 with one documented skip).
+Final independent security, freeze/package, and documentation reviews returned
+`APPROVE`; no P0--P3 blocker remains before the regenerated package commit.
+
+## 32. Gate B validation occurred only in the writing command
+
+**Symptom.** The first runtime preparation refusal was discovered only when the
+operator invoked the output-producing command. Its public refusal was
+intentionally minimal, so the source-derived qualification-receipt path
+mismatch was not distinguishable from other preparation failures.
+
+**Root cause.** The preparer combined validation, in-memory document
+construction and exclusive writes. It had no no-write rehearsal surface and
+no opt-in stable diagnostic code. This made a predictable binding error consume
+operator time even though no material resource had been accessed.
+
+**Correction.** Extract one shared validation/construction phase and expose it
+through `preflight_runtime_bundle` and `scripts/a0x_prepare_runtime.py
+--preflight`. It constructs the exact readiness, descriptor, authorization and
+mapping bytes in memory, reports their hashes and writes no runtime output.
+Preflight refusals carry stable codes and safe messages; the existing writing
+mode preserves its byte-compatible minimal refusal response.
+
+**Regression evidence.** Synthetic tests prove deterministic repeated output,
+absence of all four runtime documents, non-reachability of the writer and the
+exact receipt-path diagnostic. Existing prepare success and legacy refusal
+tests remain unchanged.
+
+**Status.** Corrected with TDD in an isolated process-hardening clone. It does
+not modify the completed Gate B bundle and requires new exact-head Gate A
+qualification before future operational use.
+
+## 33. Copy-on-write and offline rebuildability were assertions, not tools
+
+**Symptom.** An earlier Gate B action used a copied environment and snapshot,
+but copy-on-write could not be proven retroactively and local package caches did
+not contain a demonstrably complete exact wheelhouse.
+
+**Root cause.** The repository validated the final interpreter and runtime
+files but had no narrow Darwin `clonefile(2)` boundary and no canonical
+offline-wheelhouse verifier. Host copying behavior and package availability
+were therefore external assumptions.
+
+**Correction.** Add two independent target-free modules. The APFS helper has
+no full-copy fallback and verifies unchanged source plus exact independent
+destination bytes after `clonefile(2)`. The wheelhouse verifier binds Python
+3.11, accepted tags and every wheel's normalized name, version, filename,
+size and SHA-256; it rejects aliases, missing/extra files and drift without
+invoking `pip` or network APIs.
+
+The APFS boundary requires explicit trusted source and destination roots,
+rejects every caller-controlled symlink component below them, and cleans up
+only the same regular inode it just created when post-clone verification
+fails.
+
+**Regression evidence.** Synthetic tests cover valid operation and reject
+unsupported platforms, aliasing, collision, post-clone drift, noncanonical
+manifests, missing/extra/changed wheels, duplicate distributions, tag/version
+mismatch and the wrong Python contract.
+
+**Status.** Corrected with TDD as preparatory infrastructure. No complete
+offline wheelhouse is currently proven, so the verifier does not promote the
+historical copied environment to reproducible-build evidence.
+
 ## Current stop boundary
 
 The final integration candidate must first complete all no-material gates and
@@ -665,6 +882,13 @@ the protected-path comparison against `4aee4698f5c59101b1f3292519f10ae802629bf7`
 It must then stop for a new Latent-TRIZ exact-head qualification authorization
 bound to the final commit, selected producer, `matrix-v2-legacy-v1`, and the
 three reviewed plan digests.
+
+That stop is **A** only. A completed **A** still requires **B**, a separate
+exact pair/attempt authorization to prepare one private runtime bundle. A
+prepared bundle still requires **C**, a later one-shot material authorization
+bound to its prepared authorization raw SHA-256. Current work remains before
+**A** and `sealed_gate_pending`; none of these documents authorizes a later
+stop.
 
 It does **not** authorize CCP heavy execution, Docker, model/tokenizer
 construction, protected-target access, installation, Latent-TRIZ publication,

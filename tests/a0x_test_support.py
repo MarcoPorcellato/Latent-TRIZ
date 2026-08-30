@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -18,6 +19,31 @@ from latent_triz.a0x_contract import (
 
 def sha(value: int) -> str:
     return f"{value:064x}"[-64:]
+
+
+def qualification_receipt(source_head: str, *, generation: int = 1, version: str = "commit-ci-preflight 0.1.0") -> bytes:
+    """Return a strict synthetic PASS receipt envelope for boundary tests."""
+    receipt = {
+        "schema_version": "2.0",
+        "producer": {
+            "name": "commit-ci-preflight",
+            "version": version.removeprefix("commit-ci-preflight ") + "+matrix-v2-legacy-v1",
+        },
+        "repository": {
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "commit_sha": source_head,
+            "dirty": False,
+        },
+        "run": {"generation": generation},
+        "overall_status": "PASS",
+        "incomplete_reason": None,
+    }
+    receipt_raw = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    envelope = {
+        "receipt_id": "sha256:" + hashlib.sha256(receipt_raw).hexdigest(),
+        "receipt": receipt,
+    }
+    return json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def identity(leg: Leg = Leg.A0) -> dict[str, str]:
