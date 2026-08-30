@@ -15,9 +15,11 @@ checks receive only `contents: read`; the aggregate job receives only
 `statuses: write`, performs no checkout, and executes no candidate code.
 Unknown surfaces fail closed. Documentation-only pull requests stay
 lightweight. Code, governance, runtime, unknown, and scientific changes run the
-dependency-free repository check on standard GitHub-hosted Python 3.11 and
-3.12 runners. Candidate jobs have no repository secrets and checkout with
-credentials persistence disabled. Scientific artifacts remain parsed with
+repository check on standard GitHub-hosted Python 3.11 and 3.12 runners. Each
+lane installs only the pinned `requirements-schema.lock` oracle required by the
+repository's independent Draft 2020-12 cross-validation tests; the production
+runtime package remains dependency-free. Candidate jobs have no repository
+secrets and checkout with credentials persistence disabled. Scientific artifacts remain parsed with
 trusted base-branch code and dense model files remain external, referenced by
 a retained hash. CCP remains available for separately authorized local
 provenance or runtime qualification, but no CCP receipt is an automatic pull
