@@ -230,10 +230,13 @@ index, terminal statistical result, recovery observation, and immutable logs.
 
 ### R3.4 — publication and fresh-clone verification
 
-Publish the package on a dedicated branch and PR, publish the exact-head CCP
-receipt on `ccp-evidence/<exact-head>`, and merge only after hosted CCP,
-scientific-artifact, trusted-path, documentation, and aggregate gates are
-terminally green. The manifest must name the external dense asset and SHA-256;
+At the time R3.4 was executed, the publication contract required a dedicated
+branch and PR plus an exact-head CCP receipt on
+`ccp-evidence/<exact-head>`. That historical package merged only after its CCP,
+scientific-artifact, trusted-path, documentation, and aggregate gates were
+terminally green. The current public-repository gate instead uses hosted
+Repository check jobs; the historical receipt remains immutable evidence. The
+manifest must name the external dense asset and SHA-256;
 the fresh-clone verifier must pass with that asset and fail closed when it is
 missing or mutated.
 

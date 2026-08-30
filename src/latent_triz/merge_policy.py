@@ -137,10 +137,8 @@ def classify_paths(files: Iterable[ChangedFile | str]) -> PolicyDecision:
         raise MergePolicyError("pull request has no changed files")
 
     docs_only = categories == {"docs"}
-    governance_or_unknown = bool(categories.intersection({"governance", "unknown"}))
     scientific = "scientific" in categories
     model_backed = "model_backed" in categories
-    runtime = "runtime" in categories
     require_python_311 = bool(
         categories.intersection({"code", "governance", "runtime", "unknown"})
     )
@@ -149,7 +147,7 @@ def classify_paths(files: Iterable[ChangedFile | str]) -> PolicyDecision:
         docs_only=docs_only,
         require_repository_check=not docs_only,
         require_python_311=require_python_311,
-        require_ccp=scientific or governance_or_unknown or runtime,
+        require_ccp=False,
         require_scientific_audit=scientific or "unknown" in categories,
         require_model_artifact_audit=model_backed,
         paths=tuple(sorted(item.path for item in normalized_files)),

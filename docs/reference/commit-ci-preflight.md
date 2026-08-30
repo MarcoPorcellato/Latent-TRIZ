@@ -1,9 +1,9 @@
 ---
 type: Reference
 title: Stable merge policy and Commit CI Preflight
-description: Path-aware GitHub qualification with exact-head CCP evidence for scientific changes.
+description: Path-aware GitHub-hosted qualification with optional local CCP provenance.
 status: active
-last_verified: 2026-08-25
+last_verified: 2026-08-30
 ---
 
 # Stable merge policy and Commit CI Preflight
@@ -14,12 +14,14 @@ jobs. The trusted classifier reads its policy from the base commit. Candidate
 checks receive only `contents: read`; the aggregate job receives only
 `statuses: write`, performs no checkout, and executes no candidate code.
 Unknown surfaces fail closed. Documentation-only pull requests stay
-lightweight. Code changes require an exact-head Commit CI Preflight (CCP) v2
-receipt for repository and schema checks on Python 3.11 and 3.12; those checks
-run in the locally admitted, immutable verification images rather than on
-GitHub-hosted candidate runners. Scientific artifacts remain parsed with
-trusted base-branch code and dense model files remain external, referenced by a
-retained hash.
+lightweight. Code, governance, runtime, unknown, and scientific changes run the
+dependency-free repository check on standard GitHub-hosted Python 3.11 and
+3.12 runners. Candidate jobs have no repository secrets and checkout with
+credentials persistence disabled. Scientific artifacts remain parsed with
+trusted base-branch code and dense model files remain external, referenced by
+a retained hash. CCP remains available for separately authorized local
+provenance or runtime qualification, but no CCP receipt is an automatic pull
+request gate for this public repository.
 
 ## Local CCP contract
 
@@ -109,7 +111,7 @@ make preflight-verify
 make preflight-postflight
 ```
 
-When a receipt-producing run fails, preserve the terminal receipt and do not
+When a separately authorized receipt-producing run fails, preserve the terminal receipt and do not
 retry. Use `recover status --json` only as read-only journal inspection. If
 more detail is required, reproduce only the failing explicit project check in
 a deliberate diagnostic context. `recover apply`, receipt publication,
@@ -117,12 +119,13 @@ evidence-branch push, PR creation, and merge each require their own bounded
 authorization. Never manually edit, remove, quarantine, or reinterpret CCP
 locks, tickets, leases, journals, cache entries, or admission state.
 
-The acceptance policy pins the project identity, outer and per-runtime
+The optional local acceptance policy pins the project identity, outer and per-runtime
 configuration digests, required check-to-runtime assignments, image digests,
 Apple Silicon macOS host, Docker-compatible runtime, and a maximum receipt age
 of one hour. When the classifier requires CCP, publish the receipt on the commit-bound
-`ccp-evidence/<40-character-head-SHA>` branch. The trusted workflow verifies
-it against the base-branch policy.
+`ccp-evidence/<40-character-head-SHA>` branch only when that separate
+publication is explicitly authorized. The standard public pull-request
+workflow neither requires nor reads that branch.
 
 ### Receipt custody across branch changes
 
@@ -200,19 +203,20 @@ post-migration route and merged at
 | Changed surface | Required qualification |
 |---|---|
 | `docs/**` and public root documents only | documentation audit |
-| `src/**`, `schemas/**`, `scripts/**`, `tests/**`, dependencies | exact-head CCP v2 receipt: repository and schema checks on Python 3.11 and 3.12 |
-| `data/**`, `experiments/**`, `preregistrations/**`, `results/**` | CCP v2 matrix receipt plus trusted scientific artifact audit |
+| `src/**`, `schemas/**`, `scripts/**`, `tests/**`, dependencies | hosted repository check on Python 3.11 and 3.12 |
+| `data/**`, `experiments/**`, `preregistrations/**`, `results/**` | hosted repository check plus trusted scientific artifact audit |
 | model-backed result or dense artifact suffix | scientific gates plus external-artifact/hash policy |
-| workflow, policy, or unknown path | CCP v2 matrix receipt; unknown paths also receive the trusted artifact audit |
+| workflow, policy, or unknown path | hosted repository check on Python 3.11 and 3.12; unknown paths also receive the trusted artifact audit |
 
-GitHub runs only the trusted path classifier, the receipt verifier, the
+GitHub runs the trusted path classifier, the two hosted repository checks, the
 aggregate status, documentation audit for documentation-only changes, and the
-trusted scientific artifact audit where required. The receipt verifier does not
-check out, build, or execute candidate project code. The artifact-audit job
-uses only `contents: read` and parses candidate files with trusted base-branch
-code. No job uses repository secrets or persists checkout credentials. The
-aggregator publishes only the required exact-head commit status. The v2 matrix
-is the code-qualification path. In pre-migration run `31948392224`, hosted
+trusted scientific artifact audit where required. The repository checks execute
+candidate code with `contents: read`, no repository secrets, and checkout
+credentials persistence disabled. The artifact-audit job parses candidate files
+with trusted base-branch code under the same read-only permission. The
+aggregator publishes only the required exact-head commit status. Local CCP
+receipts remain optional provenance and are not consumed by this workflow. In
+historical pre-migration run `31948392224`, hosted
 Python 3.11 and 3.12 jobs were present; run wall time was 237 seconds and
 summed successful-job intervals were 473 seconds. Post-migration run
 `31949031711` created neither Python job; wall time was 71 seconds and summed
