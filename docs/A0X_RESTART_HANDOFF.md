@@ -7,10 +7,41 @@ date: 2026-08-25
 
 # A0X restart handoff
 
-## Hosted-integration publication checkpoint — 2026-08-30
+## Post-bootstrap PR #109 reconstruction checkpoint — 2026-08-30
 
 This section is authoritative for the current continuation and supersedes all
-older current-gate wording below while preserving the historical evidence.
+older current-gate wording below while preserving historical evidence.
+
+- Public `main` is `d2a475f58db668a2ce0a4ec48082189422b19eab`, tree
+  `4d2b1221dd63a89d6c6c4433061a7d8ed130b76e`, after PR #110 installed
+  `requirements-schema.lock` in both GitHub-hosted repository lanes.
+- The PR #110 hosted run failed on the missing `jsonschema` dependency before
+  the bootstrap fix could qualify itself. Its exact-head merge used one
+  explicitly authorized administrative status backed by a verified CCP
+  receipt and evidence commit. This was a bootstrap bridge, not a hosted PASS,
+  and is not reusable for PR #109.
+- PR #109 remains the delivery vehicle for the A0X Gate B hardening. Its remote
+  pre-reconstruction head was `b2ac92c1e9fe18dda52e9185437462e1ef9e7501`,
+  tree `f356c80aacc6dc07828896d1a2fd92d7bc6d42ab`.
+- The new public main was merged into the isolated PR branch without rewriting
+  history at integration ancestry commit
+  `7ac5a6065d78974f52a86816b019184f8f147bd7`. The merge tree stayed exactly
+  `f356c80aacc6dc07828896d1a2fd92d7bc6d42ab`; therefore no protected A0X
+  implementation byte changed at that boundary.
+- The primary checkout remains dirty and preserved. Reconstruction occurs only
+  in `/private/tmp/latent-triz-pr109-reconstruction-20260830`.
+
+Next: update the target-free documentation checkpoint, prove the frozen package
+and repository checks locally, push PR #109 without force, and require all
+fresh GitHub-hosted checks to be terminally green on one unchanged exact head.
+The merge remains a separate external gate. Gate B/C, model, tokenizer, target,
+scientific execution, CCP heavy work, and claim promotion remain unauthorized;
+the campaign stays `sealed_gate_pending`.
+
+## Historical hosted-integration publication checkpoint — 2026-08-30
+
+This section records the pre-PR #110 state and is historical where it conflicts
+with the reconstruction checkpoint above.
 
 - Public `main` is `78b40677d7cd8b58421a6a2a80cb6feb066f85b3` after PR #108
   restored standard GitHub-hosted Python 3.11/3.12 repository checks and kept

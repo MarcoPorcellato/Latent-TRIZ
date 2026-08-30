@@ -899,16 +899,21 @@ steps are added. The full local target-free suite is rerun before updating the
 PR; GitHub must still prove both clean hosted environments on the new exact
 head.
 
-**Status.** Corrected locally after the terminal PR #109 failure. No workflow
-rerun, model, tokenizer, target, Gate B/C, or scientific execution was used to
-diagnose or correct it.
+**Status.** The correction was merged to public `main`
+`d2a475f58db668a2ce0a4ec48082189422b19eab` through PR #110. Because the
+pre-fix hosted workflow could not qualify its own missing dependency, that PR
+used one explicitly authorized CCP-backed administrative bootstrap bridge. It
+was not a hosted PASS. PR #109 then integrated the new main without history
+rewrite at ancestry commit `7ac5a6065d78974f52a86816b019184f8f147bd7`;
+fresh hosted verification on the reconstructed exact head is still required.
+No model, tokenizer, target, Gate B/C, or scientific execution was used.
 
 ## Current stop boundary
 
 The current integration branch must pass both clean hosted Python environments,
-the scientific audit, and `merge-policy/gate` on one unchanged exact head. Only
-then may the already authorized publication sequence merge and perform a fresh-
-clone target-free verification.
+the scientific audit, and `merge-policy/gate` on one unchanged exact head.
+Merge remains a separate external gate; after merge, a fresh clone must repeat
+the target-free verification.
 
 That hosted qualification is repository publication evidence only. The A0X
 campaign remains `sealed_gate_pending`; Gate B bundle preparation and Gate C

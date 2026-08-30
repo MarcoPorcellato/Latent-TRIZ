@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-08-29
+last_verified: 2026-08-30
 ---
 
 # Current laboratory status
@@ -14,7 +14,7 @@ and the event-by-event chronology remains in [`docs/log.md`](./log.md).
 
 ## Public checkpoint
 
-- **Public main:** `0123ce467408becbf127b66da1fcd4166bbbd431`
+- **Public main:** `d2a475f58db668a2ce0a4ec48082189422b19eab`
 - **Repository:** [MarcoPorcellato/Latent-TRIZ](https://github.com/MarcoPorcellato/Latent-TRIZ)
 - **Scientific posture:** exploratory, reproducible, and claim-free
 - **Registered claims:** all remain `E0`; `data/claims.jsonl` is unchanged
@@ -123,11 +123,14 @@ asset or recompute a scientific result.
 
 ### A0X hosted-integration boundary (current)
 
-Public `main` `78b40677d7cd8b58421a6a2a80cb6feb066f85b3` restored the
-standard GitHub-hosted Python 3.11 and 3.12 repository checks through PR #108,
-without changing the stable `merge-policy/gate`. The A0X Gate B hardening is
-anchored at implementation commit `74d6bc048e656f3ced2d4bc6db4b0492dfd16359`
-and generated binding commit `50cf959e7a9b50d68ee58a11ac063e6681761abe`.
+Public `main` `d2a475f58db668a2ce0a4ec48082189422b19eab` now installs the
+pinned schema oracle for GitHub-hosted Python 3.11 and 3.12 repository checks.
+PR #110 reached that bootstrap state through a one-time CCP-backed
+administrative bridge after its hosted run failed on the missing dependency;
+that bridge is not a hosted PASS. PR #109 is being reconstructed against this
+main without rewriting history. Its A0X Gate B hardening remains anchored at
+implementation commit `74d6bc048e656f3ced2d4bc6db4b0492dfd16359` and
+generated binding commit `50cf959e7a9b50d68ee58a11ac063e6681761abe`.
 The current A0/A0-R1 freeze SHA-256 values are
 `7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff` and
 `9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
@@ -135,9 +138,13 @@ The current A0/A0-R1 freeze SHA-256 values are
 Target-free verification passed: focused hardening 97/97, frozen 11/11,
 synthetic 293/293, schema cross-validation 155 agreements with 19 rejected
 mutations, and the complete repository suite 1,125 tests with 11 documented
-skips. The next permitted action is hosted publication and fresh-clone
-target-free verification. Gate B/C, model/tokenizer access, target reads, and
-scientific execution remain unauthorized; the state is `sealed_gate_pending`.
+skips. The integration ancestry commit is
+`7ac5a6065d78974f52a86816b019184f8f147bd7`; its merge tree stayed
+byte-identical to the prior PR head. The next permitted actions are fresh local
+target-free verification, a non-forced PR #109 update, and new GitHub-hosted
+gates. Merge remains separate. Gate B/C, model/tokenizer access, target reads,
+and scientific execution remain unauthorized; the state is
+`sealed_gate_pending`.
 
 ### Historical A0X pre-material readiness boundary
 

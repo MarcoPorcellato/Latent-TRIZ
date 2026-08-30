@@ -3,7 +3,7 @@ type: master-plan
 title: Laboratory Master Plan
 description: Canonical evolution ledger and gated route from the verified laboratory foundation to falsifiable, reproducible Latent TRIZ experiments.
 status: canonical
-last_verified: 2026-08-20
+last_verified: 2026-08-30
 ---
 
 # Laboratory Master Plan
@@ -43,22 +43,26 @@ It is normative for new WLT/SLT work and does not rewrite historical packages.
 | Item | Verified state | Authoritative anchor |
 |---|---|---|
 | Public repository | `MarcoPorcellato/Latent-TRIZ` | GitHub repository and tracked `LICENSE` / `NOTICE` |
-| Protected `main` | `0123ce467408becbf127b66da1fcd4166bbbd431` | public exact head after PR #98; verify again before the next mutation |
+| Protected `main` | `d2a475f58db668a2ce0a4ec48082189422b19eab` | public exact head after the hosted schema-oracle bootstrap PR #110; verify again before the next mutation |
 | Required merge context | strict `merge-policy/gate` | active GitHub ruleset and `.github/expected-main-ruleset.json` |
 | Completed automated milestone | A0-R Tier R1 same-model replication | PR 41, run `a0r1-v1.0.0-e93a9faa-r1` |
 | Current authentic-TRIZ milestone | H1 v1.2 collection packet | public packet is `ready_for_collection`; closure is blocked by three independent human TRIZ experts |
 | Claim state | all registered claims remain E0 | `data/claims.jsonl` |
 | First dataset attempt | rejected for scientific freeze | retained Wave 1 surface-audit artifacts |
 | Comparative reference tranche | seven terminal `null` packages | PRs #77, #96, and #97; public main `0123ce4`; exploratory and claim-free |
+| A0X Gate B hardening | in delivery, `sealed_gate_pending` | PR #109; implementation `74d6bc0`, bindings `50cf959`, fresh hosted gates required after integration with `d2a475f` |
 
-The implementation checkpoint for the latest comparative tranche is now the
-public `main` head above. The exact-head receipt branches and merged pull
-requests are recorded in the chronology and the comparative study. It is not a
-protected-main scientific claim: every result remains exploratory and must be
-read together with its protocol, receipt, and external-asset verifier.
+The comparative scientific record remains anchored to its own exact historical
+packages and commits; the newer public `main` head above changes repository CI,
+not those results. The exact-head receipt branches and merged pull requests are
+recorded in the chronology and the comparative study. No protected-main
+scientific claim follows from the newer engineering head: every result remains
+exploratory and must be read together with its protocol, receipt, and
+external-asset verifier.
 
 The checkout used for unrelated local work is not an authoritative integration
-base. Delivery uses an isolated worktree created from an exact verified commit.
+base. Delivery uses an isolated clone or owned worktree created from an exact
+verified commit.
 
 ### EXP-002 Qwen3 follow-up implementation checkpoint (2026-08-20)
 

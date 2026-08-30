@@ -270,11 +270,18 @@ Because it changes frozen implementation inputs, it requires a new exact-head
 Gate A qualification before it can govern a future material attempt.
 
 The current hosted-integration implementation anchor is
-`74d6bc048e656f3ced2d4bc6db4b0492dfd16359`. It is based on public `main`
-`78b40677d7cd8b58421a6a2a80cb6feb066f85b3`, which restored standard
-GitHub-hosted repository checks through PR #108 without changing the stable
-`merge-policy/gate` context. Canonical target-free regeneration produced
-the following exact approval-request dossier hashes:
+`74d6bc048e656f3ced2d4bc6db4b0492dfd16359`. Public `main` is now
+`d2a475f58db668a2ce0a4ec48082189422b19eab`, tree
+`4d2b1221dd63a89d6c6c4433061a7d8ed130b76e`, after PR #110 installed the
+pinned schema oracle in both GitHub-hosted repository lanes. PR #110 required a
+one-time CCP-backed administrative bootstrap bridge after its hosted run failed
+on the missing dependency; the bridge is not a hosted PASS and is not reusable.
+PR #109 integrated that main without history rewrite at ancestry commit
+`7ac5a6065d78974f52a86816b019184f8f147bd7`; its tree remained byte-identical
+to the pre-integration A0X head, so no protected implementation member changed
+and regeneration was not triggered merely by ancestry. Canonical target-free
+regeneration at the implementation anchor produced the following exact
+approval-request dossier hashes:
 
 | Leg/model | Dossier SHA-256 |
 | --- | --- |
@@ -304,7 +311,9 @@ hardening 97/97, frozen 11/11, synthetic A0X aggregate 293/293, schema
 cross-validation 155 agreements plus 19 rejected mutations, and the complete
 repository suite 1,125 tests with 11 documented skips. No model, tokenizer,
 sealed target, CCP heavy command, or scientific execution occurred. The branch
-remains `sealed_gate_pending`; publication does not authorize Gate B or C.
+remains `sealed_gate_pending`. Fresh local and GitHub-hosted verification is
+required on the reconstructed PR #109 head; publication does not authorize
+Gate B or C.
 
 ## Current checkpoint
 

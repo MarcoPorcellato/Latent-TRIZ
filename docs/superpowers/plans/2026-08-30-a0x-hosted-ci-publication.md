@@ -30,6 +30,12 @@ transition-only CCP qualification and one failed-workflow rerun were required
 to close the bootstrap. That historical exception does not restore an automatic
 CCP gate and does not authorize further CCP work.
 
+PR #110 later closed the schema-oracle bootstrap at public `main`
+`d2a475f58db668a2ce0a4ec48082189422b19eab`. Its hosted run failed before the
+fix could qualify itself, so the exact head was merged through one explicitly
+authorized CCP-backed administrative status. This was not a hosted PASS and
+must not be reused. Subsequent PRs must pass the installed hosted lanes.
+
 ## Task 2 — Reconstruct A0X on hosted-CI main: complete
 
 - [x] Apply the reviewed functional delta to the new public base.
@@ -46,9 +52,15 @@ CCP gate and does not authorize further CCP work.
 
 ## Task 3 — Hosted publication: in progress
 
-- [ ] Commit the authoritative documentation checkpoint.
-- [ ] Reverify public base, ruleset, branch head, and clean diff.
-- [ ] Push non-forced and open a ready PR.
+- [x] Reverify public base, ruleset, branch head, evidence branch, and dirty
+  primary checkout after restart.
+- [x] Merge public `main` into the isolated PR #109 branch without rewriting
+  history at ancestry commit
+  `7ac5a6065d78974f52a86816b019184f8f147bd7`; the merge tree remained
+  byte-identical to the prior PR head.
+- [x] Prepare and locally verify the authoritative post-bootstrap documentation
+  checkpoint.
+- [ ] Push the existing ready PR #109 non-forced.
 - [ ] Require hosted Python 3.11, Python 3.12, scientific audit, trusted
   classification, and aggregate gate to be terminally green.
 - [ ] Squash merge the unchanged exact head with no unresolved conversations.
