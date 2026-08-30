@@ -17,6 +17,8 @@ This is the **maintained** documentation bundle.
 - [Persistent Codex execution goal](./PERSISTENT_GOAL.txt)
 - [A0 automated weak-hypothesis exploration](./A0_AUTOMATED_WEAK_HYPOTHESIS.md)
 - [A0 replication and robustness](./A0_REPLICATION_AND_ROBUSTNESS.md)
+- [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md)
+- [A0X Gate B operator hardening](./A0X_GATE_B_OPERATOR_HARDENING.md)
 - [Chronology log](./log.md)
 - [Reference collection](./reference/index.md)
 - [TRIZ expert reference corpus](./reference/triz-reference-corpus.md)

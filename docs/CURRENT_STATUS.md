@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-08-29
+last_verified: 2026-08-30
 ---
 
 # Current laboratory status
@@ -14,7 +14,7 @@ and the event-by-event chronology remains in [`docs/log.md`](./log.md).
 
 ## Public checkpoint
 
-- **Public main:** `0123ce467408becbf127b66da1fcd4166bbbd431`
+- **Public main:** `d2a475f58db668a2ce0a4ec48082189422b19eab`
 - **Repository:** [MarcoPorcellato/Latent-TRIZ](https://github.com/MarcoPorcellato/Latent-TRIZ)
 - **Scientific posture:** exploratory, reproducible, and claim-free
 - **Registered claims:** all remain `E0`; `data/claims.jsonl` is unchanged
@@ -120,6 +120,61 @@ missing or mutated external dense asset; it must never silently substitute an
 asset or recompute a scientific result.
 
 ## Next evidence gate
+
+### A0X hosted-integration boundary (current)
+
+Public `main` `d2a475f58db668a2ce0a4ec48082189422b19eab` now installs the
+pinned schema oracle for GitHub-hosted Python 3.11 and 3.12 repository checks.
+PR #110 reached that bootstrap state through a one-time CCP-backed
+administrative bridge after its hosted run failed on the missing dependency;
+that bridge is not a hosted PASS. PR #109 is being reconstructed against this
+main without rewriting history. Its A0X Gate B hardening remains anchored at
+implementation commit `74d6bc048e656f3ced2d4bc6db4b0492dfd16359` and
+generated binding commit `50cf959e7a9b50d68ee58a11ac063e6681761abe`.
+The current A0/A0-R1 freeze SHA-256 values are
+`7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff` and
+`9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
+
+Target-free verification passed: focused hardening 97/97, frozen 11/11,
+synthetic 293/293, schema cross-validation 155 agreements with 19 rejected
+mutations, and the complete repository suite 1,125 tests with 11 documented
+skips. The integration ancestry commit is
+`7ac5a6065d78974f52a86816b019184f8f147bd7`; its merge tree stayed
+byte-identical to the prior PR head. The next permitted actions are fresh local
+target-free verification, a non-forced PR #109 update, and new GitHub-hosted
+gates. Merge remains separate. Gate B/C, model/tokenizer access, target reads,
+and scientific execution remain unauthorized; the state is
+`sealed_gate_pending`.
+
+### Historical A0X pre-material readiness boundary
+
+Exact source `68f8bfe75a883054118246101485f71a56a5e82e` passed Gate A; the
+receipt-file SHA-256 is
+`3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`
+and its evidence commit is `fc46c39421ae85713f473ef49a1270beab3aefe6`.
+A target-free audit before Gate B nevertheless found two unproven material
+prerequisites: the available venv launcher resolved to a package-incomplete
+base Python, and the isolated clone lacked the pair-specific model snapshot.
+The local readiness correction binds an independent Python 3.11 executable,
+exact package/API facts, and independent regular snapshot files before a
+runtime descriptor can be created. It also closes tokenizer-padding and
+post-claim observation-write gaps. Because these are frozen implementation
+changes, the prior Gate A evidence becomes historical for the corrected HEAD.
+Deterministic regeneration and full target-free review are complete. The next
+stop is a new explicit Gate A authorization; no Gate B or C action is
+authorized.
+
+The implementation anchor is `7e1afaba83def501a2641a036c10aae1b98be7b0`.
+Regenerated A0 and A0-R1 freeze SHA-256 values are
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53` and
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+The corrected implementation revalidates regular-file type, link count, bytes,
+card, source receipts, and the full model binding again at every final material
+boundary, including once more immediately before model construction. Final
+target-free verification passed: frozen 11/11, synthetic 278/278, schema 155
+agreements with 19 rejected mutations, and repository 1,110 tests with one
+documented skip. Final independent Luna security, freeze/package, and
+documentation reviews all returned `APPROVE` before the local package commit.
 
 ### A0X final integration boundary
 

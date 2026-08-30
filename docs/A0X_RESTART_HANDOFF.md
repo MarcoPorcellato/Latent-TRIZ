@@ -7,8 +7,156 @@ date: 2026-08-25
 
 # A0X restart handoff
 
+## Post-bootstrap PR #109 reconstruction checkpoint — 2026-08-30
+
+This section is authoritative for the current continuation and supersedes all
+older current-gate wording below while preserving historical evidence.
+
+- Public `main` is `d2a475f58db668a2ce0a4ec48082189422b19eab`, tree
+  `4d2b1221dd63a89d6c6c4433061a7d8ed130b76e`, after PR #110 installed
+  `requirements-schema.lock` in both GitHub-hosted repository lanes.
+- The PR #110 hosted run failed on the missing `jsonschema` dependency before
+  the bootstrap fix could qualify itself. Its exact-head merge used one
+  explicitly authorized administrative status backed by a verified CCP
+  receipt and evidence commit. This was a bootstrap bridge, not a hosted PASS,
+  and is not reusable for PR #109.
+- PR #109 remains the delivery vehicle for the A0X Gate B hardening. Its remote
+  pre-reconstruction head was `b2ac92c1e9fe18dda52e9185437462e1ef9e7501`,
+  tree `f356c80aacc6dc07828896d1a2fd92d7bc6d42ab`.
+- The new public main was merged into the isolated PR branch without rewriting
+  history at integration ancestry commit
+  `7ac5a6065d78974f52a86816b019184f8f147bd7`. The merge tree stayed exactly
+  `f356c80aacc6dc07828896d1a2fd92d7bc6d42ab`; therefore no protected A0X
+  implementation byte changed at that boundary.
+- The primary checkout remains dirty and preserved. Reconstruction occurs only
+  in `/private/tmp/latent-triz-pr109-reconstruction-20260830`.
+
+Next: update the target-free documentation checkpoint, prove the frozen package
+and repository checks locally, push PR #109 without force, and require all
+fresh GitHub-hosted checks to be terminally green on one unchanged exact head.
+The merge remains a separate external gate. Gate B/C, model, tokenizer, target,
+scientific execution, CCP heavy work, and claim promotion remain unauthorized;
+the campaign stays `sealed_gate_pending`.
+
+## Historical hosted-integration publication checkpoint — 2026-08-30
+
+This section records the pre-PR #110 state and is historical where it conflicts
+with the reconstruction checkpoint above.
+
+- Public `main` is `78b40677d7cd8b58421a6a2a80cb6feb066f85b3` after PR #108
+  restored standard GitHub-hosted Python 3.11/3.12 repository checks and kept
+  the stable `merge-policy/gate` context.
+- The A0X Gate B hardening implementation is
+  `74d6bc048e656f3ced2d4bc6db4b0492dfd16359`; generated bindings are committed
+  at `50cf959e7a9b50d68ee58a11ac063e6681761abe`, tree
+  `7967c6cd6415f15a44154e4b9cc953cf29a9384d`.
+- The material contract remains
+  `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+  Current A0/A0-R1 freeze hashes are
+  `7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff` and
+  `9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
+- Target-free checks passed: focused hardening 97/97, frozen 11/11, synthetic
+  293/293, schema 155 agreements plus 19 rejected mutations, and repository
+  1,125 tests with 11 documented skips.
+- Next: publish the clean branch, require all hosted gates terminally green,
+  squash merge, then repeat target-free verification from a fresh clone.
+
+No Gate B/C, model, tokenizer, target, scientific execution, or claim promotion
+is authorized by this checkpoint. The campaign remains `sealed_gate_pending`.
+
+## Historical pre-material readiness correction checkpoint — 2026-08-30
+
+The public Gate A evidence for exact source
+`68f8bfe75a883054118246101485f71a56a5e82e` is terminal `PASS`: receipt-file
+SHA-256 `3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`,
+receipt ID
+`sha256:2c82dc5205ad0b0c788fc1e5837ea9a790dfe924c488878b7a73413867103093`,
+public evidence commit `fc46c39421ae85713f473ef49a1270beab3aefe6`.
+It remains valid only for those exact bytes.
+
+Before Gate B, a target-free inventory found that the available venv Python
+was a symlink which normalized to a package-incomplete base interpreter and
+that the isolated clone had no pair-specific model snapshot. The current local
+correction adds a hash-bound readiness receipt for an independent Python 3.11
+venv executable, exact packages/APIs, and independent regular snapshot files;
+enforces declared tokenizer padding; and makes pre-run-observation write
+failure terminal after claim without child start. No material action occurred.
+
+The new readiness module and regression suite are frozen implementation inputs,
+so the prior Gate A receipt becomes historical after the correction commit.
+Both implementations/freezes and all twelve dossiers have been regenerated and
+committed on the current local branch. Target-free verification and independent
+Luna review are complete. Verify the live commit and stop for a new exact-head
+Gate A authorization. Gate B must later authorize the regular interpreter and
+selected snapshot materialization. Gate C remains a separate one-shot
+scientific authorization.
+
+The correction implementation anchor is
+`7e1afaba83def501a2641a036c10aae1b98be7b0`, tree
+`b359940f4619aba966ca06f8d575d5bf4227895a`. Deterministic regeneration
+reported two legs, twelve dossiers, and zero model loads, tokenizer
+constructions, sealed-target reads, CCP invocations, or remote mutations. New
+bindings are A0 implementation/freeze
+`eb74b5375f90a6da948db7b90d46dca7a4c8584a32b974fd6a059f05e572af33` /
+`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53`
+and A0-R1 implementation/freeze
+`cede3f23c5659bbbedacdfa4ff74f55297b031f374af2cc3d21a65e85f5f7e63` /
+`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
+The last security review found and the implementation fixed a post-readiness
+aliasing gap: Python and all snapshot files are now revalidated as independent
+regular files at every final material boundary, so symlink/hardlink
+substitution fails closed even when bytes are unchanged, including a final
+revalidation immediately before model construction. Final target-free
+verification passed: frozen 11/11, synthetic 278/278, schema 155 agreements
+with 19 rejected mutations, and repository 1,110 tests with one documented
+skip. Final Luna security, freeze/package, and documentation reviews returned
+`APPROVE` with no remaining P0--P3 blocker before the regenerated package
+commit.
+
 This is a reboot checkpoint, not a validation receipt or material-run
 authorization.
+
+## Gate A temp-mount correction checkpoint (2026-08-29)
+
+This section supersedes older current-gate wording while preserving every
+historical receipt below.
+
+- The one authorized qualification of `e340e142fcd745d47dec1df386eb9fdb1b2e15f7`
+  ended terminal `FAIL`. Both schema checks passed; both repository checks
+  returned exit code 1 without timeout or cancellation. Receipt-file SHA-256:
+  `6e354744099921f240108698258a184b2bdfbe170e9b29975bb305a88cfb99ac`.
+- One separately authorized, non-qualifying Python 3.11 diagnostic reproduced
+  the repository failure in 195.295 seconds: 1,099 tests, 24 errors, one
+  failure, and 31 skips. All 24 errors originated from the shared A0X runtime
+  fixture rejecting its inert synthetic CCP file as non-executable.
+- `scripts/repository_check.py` had selected writable `/dev/shm`, but the
+  container did not grant executable access on that temporary mount. The
+  production executable validator was correct and remains unchanged.
+- The TDD correction is test-only: the fixture treats only its two exact inert
+  CCP/Python files as executable while delegating every other access decision
+  to the real operating-system probe. The initial regression failed with the
+  diagnosed error and then passed; the four dependent modules passed 54/54.
+
+The changed fixture is part of both frozen implementation inventories. It is
+committed at implementation anchor `d4845f0a7b204ba65b9669c05a677fc0560ababd`.
+Deterministic regeneration produced two implementations, two freezes, and all
+twelve approval-request dossiers with zero model loads, tokenizer
+constructions, sealed-target reads, CCP invocations, or remote mutations.
+Current hashes are A0 implementation
+`2398f026dc352be8a11950e0cb0996437d87b4ca1f0db11558d40e16f31c7b57`,
+A0 freeze `cc78b1baf158d0a0c3f9e77cd411d8fff5abd0b579947687c2f53d55aa027ac1`,
+A0-R1 implementation
+`6246c84fc4c7fc48114598406c5fa6a8b457f2fdb973626142bad30e7c68e004`,
+and A0-R1 freeze
+`c4564adcd1e767e339467db953540123017284461abbd8225ed95ab1bb49695a`.
+Frozen verification passed 11/11, the synthetic aggregate passed 268/268, and
+the full repository check passed 1,100 tests with 11 documented skips.
+
+The next safe step is to commit the regenerated package and these final notes,
+then stop for a new Gate A exact-head authorization. No CCP retry, Docker
+diagnostic, model,
+tokenizer, target, private bundle, material execution, network, or publication
+is authorized by this checkpoint.
 
 ## Final integration continuation (2026-08-29)
 

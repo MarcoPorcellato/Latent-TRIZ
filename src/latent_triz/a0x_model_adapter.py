@@ -227,6 +227,8 @@ class A0XHiddenStateAdapter:
                 raise A0XModelAdapterError("unexpected runtime tokenizer class")
             if not bool(getattr(tokenizer, "is_fast", False)):
                 raise A0XModelAdapterError("fast tokenizer required")
+            if card.pad_side is not None and getattr(tokenizer, "padding_side", None) != card.pad_side:
+                raise A0XModelAdapterError("tokenizer padding side differs from model card")
             probe = tokenizer(
                 _OFFSET_PROBE, add_special_tokens=True, return_attention_mask=True,
                 return_offsets_mapping=True, return_special_tokens_mask=True, return_tensors="pt",

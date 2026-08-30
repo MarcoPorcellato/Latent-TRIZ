@@ -211,7 +211,10 @@ def verify_snapshot_files(root: str | Path, card: A0XModelCard) -> A0XModelCard:
             raise A0XPreflightError("snapshot contains unallowlisted or non-regular file")
         observed.add(relative)
         item = expected[relative]
-        if path.stat().st_size != item.size_bytes or sha256_file(path) != item.sha256:
+        metadata = path.stat()
+        if metadata.st_nlink != 1:
+            raise A0XPreflightError("snapshot contains hardlinked runtime file")
+        if metadata.st_size != item.size_bytes or sha256_file(path) != item.sha256:
             raise A0XPreflightError("snapshot file integrity mismatch")
     if observed != set(expected):
         raise A0XPreflightError("snapshot allowlist is incomplete")
