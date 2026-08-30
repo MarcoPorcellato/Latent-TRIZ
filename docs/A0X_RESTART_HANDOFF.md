@@ -7,7 +7,33 @@ date: 2026-08-25
 
 # A0X restart handoff
 
-## Pre-material readiness correction ready for local checkpoint — 2026-08-30
+## Hosted-integration publication checkpoint — 2026-08-30
+
+This section is authoritative for the current continuation and supersedes all
+older current-gate wording below while preserving the historical evidence.
+
+- Public `main` is `78b40677d7cd8b58421a6a2a80cb6feb066f85b3` after PR #108
+  restored standard GitHub-hosted Python 3.11/3.12 repository checks and kept
+  the stable `merge-policy/gate` context.
+- The A0X Gate B hardening implementation is
+  `74d6bc048e656f3ced2d4bc6db4b0492dfd16359`; generated bindings are committed
+  at `50cf959e7a9b50d68ee58a11ac063e6681761abe`, tree
+  `7967c6cd6415f15a44154e4b9cc953cf29a9384d`.
+- The material contract remains
+  `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+  Current A0/A0-R1 freeze hashes are
+  `7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff` and
+  `9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
+- Target-free checks passed: focused hardening 97/97, frozen 11/11, synthetic
+  293/293, schema 155 agreements plus 19 rejected mutations, and repository
+  1,125 tests with 11 documented skips.
+- Next: publish the clean branch, require all hosted gates terminally green,
+  squash merge, then repeat target-free verification from a fresh clone.
+
+No Gate B/C, model, tokenizer, target, scientific execution, or claim promotion
+is authorized by this checkpoint. The campaign remains `sealed_gate_pending`.
+
+## Historical pre-material readiness correction checkpoint — 2026-08-30
 
 The public Gate A evidence for exact source
 `68f8bfe75a883054118246101485f71a56a5e82e` is terminal `PASS`: receipt-file

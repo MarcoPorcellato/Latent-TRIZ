@@ -121,7 +121,25 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
-### A0X pre-material readiness boundary
+### A0X hosted-integration boundary (current)
+
+Public `main` `78b40677d7cd8b58421a6a2a80cb6feb066f85b3` restored the
+standard GitHub-hosted Python 3.11 and 3.12 repository checks through PR #108,
+without changing the stable `merge-policy/gate`. The A0X Gate B hardening is
+anchored at implementation commit `74d6bc048e656f3ced2d4bc6db4b0492dfd16359`
+and generated binding commit `50cf959e7a9b50d68ee58a11ac063e6681761abe`.
+The current A0/A0-R1 freeze SHA-256 values are
+`7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff` and
+`9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
+
+Target-free verification passed: focused hardening 97/97, frozen 11/11,
+synthetic 293/293, schema cross-validation 155 agreements with 19 rejected
+mutations, and the complete repository suite 1,125 tests with 11 documented
+skips. The next permitted action is hosted publication and fresh-clone
+target-free verification. Gate B/C, model/tokenizer access, target reads, and
+scientific execution remain unauthorized; the state is `sealed_gate_pending`.
+
+### Historical A0X pre-material readiness boundary
 
 Exact source `68f8bfe75a883054118246101485f71a56a5e82e` passed Gate A; the
 receipt-file SHA-256 is

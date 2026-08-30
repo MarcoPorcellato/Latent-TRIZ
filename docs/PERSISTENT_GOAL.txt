@@ -1,30 +1,26 @@
-A0X pre-material readiness correction (2026-08-30): exact source
+A0X hosted-integration publication checkpoint (2026-08-30): public `main`
+`78b40677d7cd8b58421a6a2a80cb6feb066f85b3` restored standard GitHub-hosted
+Python 3.11 and 3.12 repository checks through PR #108 while preserving the
+stable `merge-policy/gate`. The A0X Gate B hardening implementation is anchored
+at `74d6bc048e656f3ced2d4bc6db4b0492dfd16359`; its regenerated binding commit is
+`50cf959e7a9b50d68ee58a11ac063e6681761abe`. The material contract remains
+`b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
+Regenerated A0/A0-R1 freeze hashes are
+`7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff` and
+`9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
+Target-free verification passed: focused hardening 97/97, frozen 11/11,
+synthetic 293/293, schema 155 agreements with 19 rejected mutations, and the
+repository suite 1,125 tests with 11 documented skips. Publish this exact
+main-based branch through hosted gates, then verify from a fresh clone.
+Do not prepare Gate B assets, load models/tokenizers, open targets, execute Gate
+C, or promote scientific claims. The state remains `sealed_gate_pending`.
+
+**Historical pre-material readiness checkpoint (superseded).** Exact source
 `68f8bfe75a883054118246101485f71a56a5e82e` passed Gate A and its receipt is
 publicly preserved (receipt-file SHA-256
 `3f75c665115c00fd18df1a5fb403f6dd5e410b5d5cdb12c78eada39effb1810e`,
-evidence commit `fc46c39421ae85713f473ef49a1270beab3aefe6`). A target-free pre-Gate-B
-audit then found that the available venv launcher resolved to a package-
-incomplete base Python and that the isolated clone had no selected model
-snapshot. The local correction adds a private hash-bound readiness receipt for
-an independent regular Python 3.11 venv executable, exact five-package/API
-contract, and independent pair-specific snapshot files; it also enforces card
-padding and terminally seals a post-claim pre-run-observation write failure
-without starting a child. It also revalidates regular-file identity and rejects
-post-readiness symlink/hardlink substitution at every final material boundary.
-Target-free verification and final Luna review are complete; the regenerated
-package is committed on the current local branch. Verify the live commit and
-stop before a new Gate A.
-Do not prepare Gate B assets, run CCP, load models/tokenizers, open targets, or
-publish. The prior receipt is historical once corrected bytes are committed.
-The implementation anchor is `7e1afaba83def501a2641a036c10aae1b98be7b0`;
-regenerated A0/A0-R1 freeze hashes are
-`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53` and
-`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
-Final target-free verification passed: frozen 11/11, synthetic 278/278, schema
-155 agreements with 19 rejected mutations, and repository 1,110 tests with one
-expected skip. Final security, freeze/package, and documentation reviews
-returned `APPROVE` with no remaining P0--P3 blocker. Stop for the new exact-head
-Gate A authorization.
+evidence commit `fc46c39421ae85713f473ef49a1270beab3aefe6`). Later implementation hardening
+made that receipt historical; it does not authorize the current branch.
 
 A0X Gate A temp-mount correction checkpoint (2026-08-29): the campaign remains
 `sealed_gate_pending`. The exact-head qualification at

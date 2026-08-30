@@ -269,41 +269,42 @@ hardening does not change the bytes or status of any already prepared bundle.
 Because it changes frozen implementation inputs, it requires a new exact-head
 Gate A qualification before it can govern a future material attempt.
 
-The correction implementation anchor is
-`7e1afaba83def501a2641a036c10aae1b98be7b0`. Canonical regeneration produced
+The current hosted-integration implementation anchor is
+`74d6bc048e656f3ced2d4bc6db4b0492dfd16359`. It is based on public `main`
+`78b40677d7cd8b58421a6a2a80cb6feb066f85b3`, which restored standard
+GitHub-hosted repository checks through PR #108 without changing the stable
+`merge-policy/gate` context. Canonical target-free regeneration produced
 the following exact approval-request dossier hashes:
 
 | Leg/model | Dossier SHA-256 |
 | --- | --- |
-| A0 / GPT-2 | `13426c45a90fb282ce45093e99b26e4c5b6d5e268cf88432eaf516bb0b9151e9` |
-| A0 / GPT-Neo-125M | `2e51117632b77a50af725a7c507531b648b060c7642caf679f89fbbc422e9d97` |
-| A0 / Qwen2.5-0.5B | `07034dd03ffdf1c24066979d93ba8b50531b714047a1eeb449998a2cb8f6b6eb` |
-| A0 / Qwen3-0.6B Base | `7de97fc2a4dcd232606106d3e99420b75466960c96f6431ed8a8b33195cd8e25` |
-| A0 / SmolLM2-135M | `d3e5950d94516fb96b069ee8812c777475a1b872b7c0afb572e93e47391c9445` |
-| A0 / SmolLM2-360M | `606072d9c12e9dcb4d6427320921c09eecec26b4b9d5919786d5694f3a7b7d81` |
-| A0-R1 / GPT-2 | `3eb2315b2dc8388bc6d84f2da858eb2befec3c864eb3a66f3d4f1ab7db353fc8` |
-| A0-R1 / GPT-Neo-125M | `fd0bc5485e82e4e3af44fb99d386487f4327c71a39880a49ec4b0f5e7efa6000` |
-| A0-R1 / Qwen2.5-0.5B | `18105adb2402a2f9681c05b60a748baf8806d67c477f2e4d21b281586b7da5db` |
-| A0-R1 / Qwen3-0.6B Base | `abe67b5acaf1bcb6079617a27ae8746fda815d49003e365fabdbfba9fb9ae278` |
-| A0-R1 / SmolLM2-135M | `07e055882d1ce62292d5fbe34901df12f005b1aec449acc81cc7066962edf9c7` |
-| A0-R1 / SmolLM2-360M | `db2d8d42a4936bc4be1f7bd690f14364fe3b343b03042543507e085bb3498934` |
+| A0 / GPT-2 | `5dd0665aa2c6c5f32768767666144cf3085df66cfa643241b2383e53235c4b6f` |
+| A0 / GPT-Neo-125M | `17b16f87ccb8f32149c2f5a82018ae86047c553e0c2e957b3f7cae6242c982d7` |
+| A0 / Qwen2.5-0.5B | `238ff3165aee3a6a9d8c5eb24adb4b6142fa956d87d7c5400e2dad00fe120bef` |
+| A0 / Qwen3-0.6B Base | `151b394129db3f68559369d23d860057dbca156f0f8b3974e69037f3163a963c` |
+| A0 / SmolLM2-135M | `66a754ca46af2a318362f9c417fc2d98fc0314b5c583ada610f2121285a93990` |
+| A0 / SmolLM2-360M | `8317197a35853a98f6c00b94d776709399f9e02c19927437c9be49bb9b68f39c` |
+| A0-R1 / GPT-2 | `3baeacca07b8227eb523a176ab8b9e147c6ecbeb40e8ba46010fcf5b4b9a8977` |
+| A0-R1 / GPT-Neo-125M | `c2ce2d5cf27ca3fe4df9378d06eeb9b683e272b2ff270d0d5cf2ab134a108826` |
+| A0-R1 / Qwen2.5-0.5B | `094fc15b4f2ffdf814bc6fa64357e0ba8d7931f26ec77e6aaee66df015bf3929` |
+| A0-R1 / Qwen3-0.6B Base | `d2cb4b4b287a8a7ef33d1bf010a95d34f4bcc92a646c68fc28a226ce207d9961` |
+| A0-R1 / SmolLM2-135M | `ff78093886124f98c3690723228cfb48896c24a24c76adcff8d254429fa4ee68` |
+| A0-R1 / SmolLM2-360M | `ddb2abb77556a1fe75e05d51292ee12c33dbafe5d2117209fd88970be8c09260` |
 
 The material contract remains byte-identical at
 `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
 The regenerated bindings are A0 implementation/freeze
-`eb74b5375f90a6da948db7b90d46dca7a4c8584a32b974fd6a059f05e572af33` /
-`6fc72f35c1c2ae0e069164cef34eeb865712f2728555596c1bf3363603541e53`
+`dc3cdebf2a8abd3d87adc6ceaa6b583f5b74386270d20c7301f24f4d04d8ae77` /
+`7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff`
 and A0-R1 implementation/freeze
-`cede3f23c5659bbbedacdfa4ff74f55297b031f374af2cc3d21a65e85f5f7e63` /
-`f9c80dc071944e3f2c5e8e531a84ae670a9480f1e0c65e51847d1ec66ff75c54`.
-Final target-free verification after this last regeneration passed: frozen
-11/11, synthetic A0X aggregate 278/278, schema cross-validation 155 agreements
-plus 19 rejected mutations, and the complete repository suite 1,110 tests with
-one documented skip. Final independent Luna audits returned `APPROVE`: the
-security review found no remaining pre-model alias/TOCTOU bypass (focused
-69/69), the freeze/package review found no P0--P3 issue (41/41), and the
-documentation review found no P1/P2 hash, gate, authorization, or timeout
-inconsistency.
+`a951db803725f6214da79edef8a283e4c2428ea698cc8ed5f89e530bd60d96ab` /
+`9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
+Final target-free verification after this regeneration passed: focused Gate B
+hardening 97/97, frozen 11/11, synthetic A0X aggregate 293/293, schema
+cross-validation 155 agreements plus 19 rejected mutations, and the complete
+repository suite 1,125 tests with 11 documented skips. No model, tokenizer,
+sealed target, CCP heavy command, or scientific execution occurred. The branch
+remains `sealed_gate_pending`; publication does not authorize Gate B or C.
 
 ## Current checkpoint
 
