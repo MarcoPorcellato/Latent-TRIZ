@@ -106,6 +106,33 @@ class A0XMaterialContractTests(unittest.TestCase):
             },
         }
 
+    def _gate_a_evidence(self) -> dict[str, object]:
+        base = f".a0x-runtime/gate-a/evidence/{self.source_head}"
+        return {
+            "evidence_profile": "a0x-gate-a-evidence-binding-v2",
+            "provider": "github-hosted-attestation-v1",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "source_head": self.source_head,
+            "source_tree": "b" * 40,
+            "hosted_inputs": {
+                "manifest": {"path": base + "/hosted-gate-a-evidence.json", "sha256": sha(30)},
+                "attestation_bundle": {"path": base + "/hosted-gate-a-attestation.bundle.jsonl", "sha256": sha(31)},
+                "trusted_root": {"path": base + "/github-trusted-root.jsonl", "sha256": sha(32)},
+                "transport": {"path": base + "/hosted-gate-a-transport.json", "sha256": sha(33)},
+            },
+            "verification_receipt": {
+                "path": ".a0x-runtime/gate-b-verifications/" + self.source_head
+                + "/a0/gpt2/synthetic/gate-a-verification-receipt.json",
+                "sha256": sha(34),
+            },
+            "verifier": {
+                "role": "github_cli_verifier",
+                "version": "gh version 2.97.0 (2026-07-31)",
+                "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c",
+                "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4",
+            },
+        }
+
     def _schema(self, name: str) -> dict[str, object]:
         return json.loads((ROOT / "schemas" / name).read_text(encoding="utf-8"))
 
@@ -216,6 +243,30 @@ class A0XMaterialContractTests(unittest.TestCase):
             mutate(candidate)
             with self.subTest(field=field), self.assertRaisesRegex(A0XContractError, "qualification evidence"):
                 validate_qualification_evidence(candidate)
+
+    def test_gate_a_evidence_uses_an_explicit_current_or_historical_profile(self) -> None:
+        from latent_triz.a0x_material_contract import validate_gate_a_evidence
+
+        current = self._gate_a_evidence()
+        self.assertEqual(current, validate_gate_a_evidence(current))
+        self.assertEqual([], validate(current, self._schema("a0x-qualification-evidence.schema.json")))
+        with self.assertRaisesRegex(A0XContractError, "Gate A"):
+            validate_gate_a_evidence(self._qualification_evidence())
+        self.assertEqual(
+            self._qualification_evidence(),
+            validate_gate_a_evidence(self._qualification_evidence(), historical=True),
+        )
+
+        for field, mutate in (
+            ("provider", lambda value: value.__setitem__("provider", "ccp")),
+            ("missing_input", lambda value: value["hosted_inputs"].pop("transport")),
+            ("receipt_path", lambda value: value["verification_receipt"].__setitem__("path", "/private/receipt.json")),
+            ("verifier_hash", lambda value: value["verifier"].__setitem__("sha256", sha(36))),
+        ):
+            candidate = copy.deepcopy(current)
+            mutate(candidate)
+            with self.subTest(field=field), self.assertRaisesRegex(A0XContractError, "Gate A"):
+                validate_gate_a_evidence(candidate)
 
     def test_guard_launch_rejects_host_absolute_paths(self) -> None:
         from latent_triz.a0x_material_contract import A0XGuardLaunch

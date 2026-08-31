@@ -9,7 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
+    LEGACY_EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     Leg,
     PairBinding,
@@ -30,6 +32,44 @@ from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, sha
 
 
 class A0XContractTests(A0XTempTestCase):
+    def _current_gate_a_evidence(self, source_head: str = "a" * 40) -> dict[str, object]:
+        base = f".a0x-runtime/gate-a/evidence/{source_head}"
+        return {
+            "evidence_profile": "a0x-gate-a-evidence-binding-v2",
+            "provider": "github-hosted-attestation-v1",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "source_head": source_head,
+            "source_tree": "b" * 40,
+            "hosted_inputs": {
+                "manifest": {"path": base + "/hosted-gate-a-evidence.json", "sha256": sha(30)},
+                "attestation_bundle": {"path": base + "/hosted-gate-a-attestation.bundle.jsonl", "sha256": sha(31)},
+                "trusted_root": {"path": base + "/github-trusted-root.jsonl", "sha256": sha(32)},
+                "transport": {"path": base + "/hosted-gate-a-transport.json", "sha256": sha(33)},
+            },
+            "verification_receipt": {
+                "path": ".a0x-runtime/gate-b-verifications/" + source_head
+                + "/a0/gpt2/synthetic/gate-a-verification-receipt.json",
+                "sha256": sha(34),
+            },
+            "verifier": {
+                "role": "github_cli_verifier",
+                "version": "gh version 2.97.0 (2026-07-31)",
+                "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c",
+                "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4",
+            },
+        }
+
+    def _current_authorization_documents(self):
+        dossier, authorization, downstream = self._authorization_documents()
+        authorization["commitment_profile"] = "a0x-execution-authorization-json-v3"
+        authorization.pop("qualification_evidence")
+        authorization["source_tree"] = "b" * 40
+        authorization["gate_a_evidence"] = self._current_gate_a_evidence(authorization["source_head"])
+        downstream["authorization_chain"]["authorization_commitment"] = canonical_commitment(
+            authorization, "a0x-execution-authorization-json-v3",
+        ).as_mapping()
+        return dossier, authorization, downstream
+
     def _frozen_binding(self):
         protocol = artifact("a0x-protocol.schema.json")
         implementation = artifact("a0x-implementation.schema.json")
@@ -195,6 +235,42 @@ class A0XContractTests(A0XTempTestCase):
         ):
             with self.subTest(profile=profile), self.assertRaisesRegex(A0XContractError, "schema"):
                 canonical_commitment(invalid_document, profile)
+
+    def test_current_hosted_gate_a_and_gate_c_ccp_identities_are_independent(self) -> None:
+        dossier, authorization, downstream = self._current_authorization_documents()
+        self.assertEqual(
+            "a0x-execution-authorization-json-v3", CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
+        )
+        self.assertEqual(
+            "a0x-execution-authorization-json-v2", LEGACY_EXECUTION_AUTHORIZATION_PROFILE,
+        )
+        assert_authorization_chain(dossier, authorization, [downstream])
+
+        changed_ccp = copy.deepcopy(authorization)
+        changed_ccp["ccp"]["sha256"] = sha(99)
+        with self.assertRaisesRegex(A0XContractError, "CCP identity"):
+            assert_authorization_chain(dossier, changed_ccp, [downstream])
+
+        same_tree_different_head = copy.deepcopy(authorization)
+        changed_head = "f" * 40
+        evidence = same_tree_different_head["gate_a_evidence"]
+        evidence["source_head"] = changed_head
+        for binding in evidence["hosted_inputs"].values():
+            binding["path"] = binding["path"].replace("a" * 40, changed_head)
+        evidence["verification_receipt"]["path"] = evidence["verification_receipt"]["path"].replace(
+            "a" * 40, changed_head,
+        )
+        with self.assertRaisesRegex(A0XContractError, "source head"):
+            assert_authorization_chain(dossier, same_tree_different_head, [downstream])
+
+    def test_legacy_v2_authorization_retains_its_schema_and_commitment_bytes(self) -> None:
+        _, authorization, _ = self._authorization_documents()
+        self.assertEqual(
+            "dddc839d81942e4e9ff6d18667978c94ed6e4939928e0fd829181653397e6465",
+            canonical_commitment(authorization, LEGACY_EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256,
+        )
+        with self.assertRaisesRegex(A0XContractError, "schema"):
+            canonical_commitment(authorization, CURRENT_EXECUTION_AUTHORIZATION_PROFILE)
 
     def test_strict_commitment_json_rejects_noncanonical_inputs(self) -> None:
         valid = b'{"a":1,"b":[true,null]}'

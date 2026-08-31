@@ -38,6 +38,14 @@ ADMISSION_TIMEOUT_SECONDS = 300
 MEMORY_LIMIT_BYTES = 8_589_934_592
 GUARD_LAUNCH_PROFILE = "a0x-guard-launch-v2"
 QUALIFICATION_EVIDENCE_PROFILE = "a0x-qualification-evidence-v1"
+GATE_A_EVIDENCE_PROFILE = "a0x-gate-a-evidence-binding-v2"
+GATE_A_PROVIDER = "github-hosted-attestation-v1"
+_GATE_A_VERIFIER = {
+    "role": "github_cli_verifier",
+    "version": "gh version 2.97.0 (2026-07-31)",
+    "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c",
+    "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4",
+}
 DESCRIPTOR_PROFILE = "a0x-material-child-descriptor-v2"
 MATERIAL_CONTRACT_PATH = "experiments/a0x-six-model/material-execution-contract.json"
 
@@ -270,6 +278,54 @@ def validate_qualification_evidence(value: Mapping[str, Any]) -> dict[str, Any]:
         raise A0XContractError("qualification evidence path is not the public receipt path")
     if _contains_local_or_private_value(evidence):
         raise A0XContractError("qualification evidence contains a local path or private field")
+    return evidence
+
+
+def validate_gate_a_evidence(value: Mapping[str, Any], *, historical: bool = False) -> dict[str, Any]:
+    """Dispatch Gate A evidence by its explicit, non-substitutable profile."""
+    if not isinstance(value, Mapping):
+        raise A0XContractError("Gate A evidence must be an object")
+    profile = value.get("evidence_profile")
+    if historical:
+        if profile != QUALIFICATION_EVIDENCE_PROFILE:
+            raise A0XContractError("historical Gate A evidence profile is unsupported")
+        return validate_qualification_evidence(value)
+    if profile != GATE_A_EVIDENCE_PROFILE:
+        raise A0XContractError("current Gate A evidence profile is unsupported")
+    schema = _read_schema("a0x-qualification-evidence.schema.json")
+    issues = validate(dict(value), schema)
+    if issues:
+        raise A0XContractError(f"Gate A evidence schema rejected input: {issues[0].message}")
+    evidence = dict(value)
+    if evidence["provider"] != GATE_A_PROVIDER:
+        raise A0XContractError("Gate A evidence provider is unsupported")
+    source_head = evidence["source_head"]
+    _require_revision(source_head, "Gate A source head")
+    _require_revision(evidence["source_tree"], "Gate A source tree")
+    base = f".a0x-runtime/gate-a/evidence/{source_head}/"
+    expected_inputs = {
+        "manifest": "hosted-gate-a-evidence.json",
+        "attestation_bundle": "hosted-gate-a-attestation.bundle.jsonl",
+        "trusted_root": "github-trusted-root.jsonl",
+        "transport": "hosted-gate-a-transport.json",
+    }
+    inputs = evidence["hosted_inputs"]
+    if set(inputs) != set(expected_inputs):
+        raise A0XContractError("Gate A evidence must bind four hosted inputs")
+    for name, filename in expected_inputs.items():
+        binding = inputs[name]
+        if binding["path"] != base + filename or not _SHA256.fullmatch(binding["sha256"]):
+            raise A0XContractError("Gate A hosted input binding is invalid")
+    receipt = evidence["verification_receipt"]
+    receipt_prefix = f".a0x-runtime/gate-b-verifications/{source_head}/"
+    if not receipt["path"].startswith(receipt_prefix) or not receipt["path"].endswith("/gate-a-verification-receipt.json"):
+        raise A0XContractError("Gate A verification receipt binding is invalid")
+    if not _SHA256.fullmatch(receipt["sha256"]):
+        raise A0XContractError("Gate A verification receipt hash is invalid")
+    if evidence["verifier"] != _GATE_A_VERIFIER:
+        raise A0XContractError("Gate A verifier identity differs from the frozen policy")
+    if _contains_local_or_private_value(evidence):
+        raise A0XContractError("Gate A evidence contains a local path or private field")
     return evidence
 
 

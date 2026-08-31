@@ -2,40 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-qualification-evidence.schema.json",
   "type": "object",
-  "additionalProperties": false,
-  "required": ["artifact_class", "evidence_profile", "qualification_receipt_id", "qualification_receipt_raw_sha256", "qualified_source_head", "generation", "ccp", "public_evidence"],
-  "properties": {
-    "artifact_class": {"const": "a0x-qualification-evidence"},
-    "evidence_profile": {"const": "a0x-qualification-evidence-v1"},
-    "qualification_receipt_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
-    "qualification_receipt_raw_sha256": {"$ref": "#/$defs/sha"},
-    "qualified_source_head": {"$ref": "#/$defs/revision"},
-    "generation": {"type": "integer", "minimum": 1},
-    "ccp": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["executable_name", "source_commit", "qualified_source_tree", "binary_sha256", "version"],
-      "properties": {
-        "executable_name": {"const": "commit-ci-preflight"},
-        "source_commit": {"$ref": "#/$defs/revision"},
-        "qualified_source_tree": {"$ref": "#/$defs/revision"},
-        "binary_sha256": {"$ref": "#/$defs/sha"},
-        "version": {"type": "string", "pattern": "^commit-ci-preflight [^\\s]+$"}
-      }
-    },
-    "public_evidence": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["branch", "path", "commit"],
-      "properties": {
-        "branch": {"type": "string", "pattern": "^ccp-evidence/[a-f0-9]{40}$"},
-        "path": {"const": ".ccp/receipt.json"},
-        "commit": {"$ref": "#/$defs/revision"}
-      }
-    }
-  },
+  "if": {"required": ["evidence_profile"], "properties": {"evidence_profile": {"const": "a0x-qualification-evidence-v1"}}},
+  "then": {"$ref": "#/$defs/legacy_ccp"},
+  "else": {"$ref": "#/$defs/current_gate_a"},
   "$defs": {
     "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "legacy_ccp": {"type": "object", "additionalProperties": false, "required": ["artifact_class", "evidence_profile", "qualification_receipt_id", "qualification_receipt_raw_sha256", "qualified_source_head", "generation", "ccp", "public_evidence"], "properties": {"artifact_class": {"const": "a0x-qualification-evidence"}, "evidence_profile": {"const": "a0x-qualification-evidence-v1"}, "qualification_receipt_id": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, "qualification_receipt_raw_sha256": {"$ref": "#/$defs/sha"}, "qualified_source_head": {"$ref": "#/$defs/revision"}, "generation": {"type": "integer", "minimum": 1}, "ccp": {"$ref": "#/$defs/legacy_ccp_identity"}, "public_evidence": {"$ref": "#/$defs/public_evidence"}}},
+    "legacy_ccp_identity": {"type": "object", "additionalProperties": false, "required": ["executable_name", "source_commit", "qualified_source_tree", "binary_sha256", "version"], "properties": {"executable_name": {"const": "commit-ci-preflight"}, "source_commit": {"$ref": "#/$defs/revision"}, "qualified_source_tree": {"$ref": "#/$defs/revision"}, "binary_sha256": {"$ref": "#/$defs/sha"}, "version": {"type": "string", "pattern": "^commit-ci-preflight [^\\s]+$"}}},
+    "public_evidence": {"type": "object", "additionalProperties": false, "required": ["branch", "path", "commit"], "properties": {"branch": {"type": "string", "pattern": "^ccp-evidence/[a-f0-9]{40}$"}, "path": {"const": ".ccp/receipt.json"}, "commit": {"$ref": "#/$defs/revision"}}},
+    "current_gate_a": {"type": "object", "additionalProperties": false, "required": ["evidence_profile", "provider", "repository", "source_head", "source_tree", "hosted_inputs", "verification_receipt", "verifier"], "properties": {"evidence_profile": {"const": "a0x-gate-a-evidence-binding-v2"}, "provider": {"const": "github-hosted-attestation-v1"}, "repository": {"const": "MarcoPorcellato/Latent-TRIZ"}, "source_head": {"$ref": "#/$defs/revision"}, "source_tree": {"$ref": "#/$defs/revision"}, "hosted_inputs": {"$ref": "#/$defs/hosted_inputs"}, "verification_receipt": {"$ref": "#/$defs/verification_receipt"}, "verifier": {"$ref": "#/$defs/verifier"}}},
+    "hosted_inputs": {"type": "object", "additionalProperties": false, "required": ["manifest", "attestation_bundle", "trusted_root", "transport"], "properties": {"manifest": {"$ref": "#/$defs/manifest_input"}, "attestation_bundle": {"$ref": "#/$defs/bundle_input"}, "trusted_root": {"$ref": "#/$defs/root_input"}, "transport": {"$ref": "#/$defs/transport_input"}}},
+    "binding": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha"}}},
+    "manifest_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-evidence\\.json$"}}}]},
+    "bundle_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-attestation\\.bundle\\.jsonl$"}}}]},
+    "root_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/github-trusted-root\\.jsonl$"}}}]},
+    "transport_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-transport\\.json$"}}}]},
+    "verification_receipt": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-b-verifications/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/gate-a-verification-receipt\\.json$"}}}]},
+    "verifier": {"type": "object", "additionalProperties": false, "required": ["role", "version", "sha256", "policy_raw_sha256"], "properties": {"role": {"const": "github_cli_verifier"}, "version": {"const": "gh version 2.97.0 (2026-07-31)"}, "sha256": {"const": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"}, "policy_raw_sha256": {"$ref": "#/$defs/sha"}}}
   }
 }

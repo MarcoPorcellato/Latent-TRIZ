@@ -25,15 +25,19 @@ _MODEL_KEYS = frozenset((
 PAIR_BINDING_PROFILE = "a0x-pair-scope-v2"
 APPROVAL_DOSSIER_PROFILE = "a0x-approval-dossier-json-v2"
 EXECUTION_AUTHORIZATION_PROFILE = "a0x-execution-authorization-json-v2"
+LEGACY_EXECUTION_AUTHORIZATION_PROFILE = EXECUTION_AUTHORIZATION_PROFILE
+CURRENT_EXECUTION_AUTHORIZATION_PROFILE = "a0x-execution-authorization-json-v3"
 QUALIFICATION_AUTHORIZATION_PROFILE = "a0x-qualification-authorization-json-v1"
 _COMMITMENT_PREFIXES = {
     APPROVAL_DOSSIER_PROFILE: b"A0X-APPROVAL-DOSSIER-COMMITMENT-V2\x00",
     EXECUTION_AUTHORIZATION_PROFILE: b"A0X-EXECUTION-AUTHORIZATION-COMMITMENT-V2\x00",
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE: b"A0X-EXECUTION-AUTHORIZATION-COMMITMENT-V3\x00",
     QUALIFICATION_AUTHORIZATION_PROFILE: b"A0X-QUALIFICATION-AUTHORIZATION-COMMITMENT-V1\x00",
 }
 _COMMITMENT_SCHEMAS = {
     APPROVAL_DOSSIER_PROFILE: "a0x-authorization-dossier.schema.json",
     EXECUTION_AUTHORIZATION_PROFILE: "a0x-execution-authorization.schema.json",
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE: "a0x-execution-authorization-v3.schema.json",
     QUALIFICATION_AUTHORIZATION_PROFILE: "a0x-qualification-authorization.schema.json",
 }
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -286,11 +290,14 @@ def assert_authorization_chain(
     dossier_value = _strict_document(dossier)
     authorization_value = _strict_document(authorization)
     _validate_authorization_document(dossier_value, "a0x-authorization-dossier.schema.json")
-    _validate_authorization_document(authorization_value, "a0x-execution-authorization.schema.json")
+    authorization_profile = _execution_authorization_profile(authorization_value)
+    _validate_authorization_document(
+        authorization_value, _COMMITMENT_SCHEMAS[authorization_profile],
+    )
     _reject_self_commitment(dossier_value, "dossier")
     _reject_self_commitment(authorization_value, "authorization")
     _document_profile(dossier_value, APPROVAL_DOSSIER_PROFILE)
-    _document_profile(authorization_value, EXECUTION_AUTHORIZATION_PROFILE)
+    _document_profile(authorization_value, authorization_profile)
 
     dossier_pair = PairBinding.from_mapping(_mapping(dossier_value, "pair_binding"))
     authorization_pair = PairBinding.from_mapping(_mapping(authorization_value, "pair_binding"))
@@ -308,6 +315,7 @@ def assert_authorization_chain(
     # merely schema-shaped, before any commitment comparison can mask drift.
     from latent_triz.a0x_material_contract import (
         A0XGuardLaunch,
+        validate_gate_a_evidence,
         validate_dossier_authorization_path,
         validate_guard_launch_pair_binding,
         validate_qualification_evidence,
@@ -322,28 +330,38 @@ def assert_authorization_chain(
     validate_guard_launch_pair_binding(authorization_pair, launch)
     if launch.source_head != authorization_value.get("source_head"):
         raise A0XContractError("guard launch source head differs from execution authorization")
-    qualification_evidence = validate_qualification_evidence(
-        _mapping(authorization_value, "qualification_evidence"),
-    )
-    if qualification_evidence["qualified_source_head"] != authorization_value.get("source_head"):
-        raise A0XContractError("qualification evidence source head differs from execution authorization")
     authorization_ccp = _mapping(authorization_value, "ccp")
-    evidence_ccp = _mapping(qualification_evidence, "ccp")
-    if (
-        authorization_ccp.get("sha256") != launch.ccp_sha256
-        or authorization_ccp.get("sha256") != evidence_ccp.get("binary_sha256")
-        or authorization_ccp.get("source_commit") != evidence_ccp.get("source_commit")
-        or authorization_ccp.get("qualified_source_tree") != evidence_ccp.get("qualified_source_tree")
-        or authorization_ccp.get("version") != evidence_ccp.get("version")
-    ):
-        raise A0XContractError("qualification evidence CCP identity differs from execution authorization")
+    if authorization_ccp.get("sha256") != launch.ccp_sha256:
+        raise A0XContractError("Gate C CCP identity differs from guard launch")
+    if authorization_profile == CURRENT_EXECUTION_AUTHORIZATION_PROFILE:
+        gate_a_evidence = validate_gate_a_evidence(
+            _mapping(authorization_value, "gate_a_evidence"),
+        )
+        if gate_a_evidence["source_head"] != authorization_value.get("source_head"):
+            raise A0XContractError("Gate A evidence source head differs from execution authorization")
+        if gate_a_evidence["source_tree"] != authorization_value.get("source_tree"):
+            raise A0XContractError("Gate A evidence source tree differs from execution authorization")
+    else:
+        qualification_evidence = validate_qualification_evidence(
+            _mapping(authorization_value, "qualification_evidence"),
+        )
+        if qualification_evidence["qualified_source_head"] != authorization_value.get("source_head"):
+            raise A0XContractError("qualification evidence source head differs from execution authorization")
+        evidence_ccp = _mapping(qualification_evidence, "ccp")
+        if (
+            authorization_ccp.get("sha256") != evidence_ccp.get("binary_sha256")
+            or authorization_ccp.get("source_commit") != evidence_ccp.get("source_commit")
+            or authorization_ccp.get("qualified_source_tree") != evidence_ccp.get("qualified_source_tree")
+            or authorization_ccp.get("version") != evidence_ccp.get("version")
+        ):
+            raise A0XContractError("qualification evidence CCP identity differs from execution authorization")
 
     expected_dossier = canonical_commitment(dossier_value, APPROVAL_DOSSIER_PROFILE)
     approved_dossier = Commitment.from_mapping(_mapping(authorization_value, "approved_dossier_commitment"))
     if approved_dossier != expected_dossier:
         raise A0XContractError("approved dossier commitment does not match dossier")
     expected_authorization = canonical_commitment(
-        authorization_value, EXECUTION_AUTHORIZATION_PROFILE,
+        authorization_value, authorization_profile,
     )
 
     downstream_values = list(downstream_artifacts)
@@ -499,6 +517,16 @@ def _validate_authorization_document(value: Mapping[str, Any], schema_name: str)
     issues = validate(dict(value), schema)
     if issues:
         raise A0XContractError(f"authorization document schema rejected input: {issues[0].message}")
+
+
+def _execution_authorization_profile(value: Mapping[str, Any]) -> str:
+    profile = value.get("commitment_profile")
+    if profile not in {
+        LEGACY_EXECUTION_AUTHORIZATION_PROFILE,
+        CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
+    }:
+        raise A0XContractError("execution authorization commitment profile is unsupported")
+    return profile
 
 
 def _assert_downstream_authorization(
