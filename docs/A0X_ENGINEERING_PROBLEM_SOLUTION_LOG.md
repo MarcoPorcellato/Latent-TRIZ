@@ -967,3 +967,24 @@ wrapper are local only. The wrapper has injected runner and source-state seams;
 its focused test reaches neither seam on an invalid packet. No network, GitHub
 API, GitHub CLI verification, Gate B preparation, Gate C action, model,
 tokenizer, target, Docker, CCP, or scientific execution occurred.
+
+## 36. Post-verification rehash initially omitted ancestor revalidation
+
+**Problem.** The verifier rehashed each hosted input and the workflow after the
+injected GitHub CLI child returned, but the second pass reused previously
+constructed paths. A concurrent replacement of an input or workflow parent
+directory with a symlink to byte-identical content could therefore preserve
+every hash while changing the trusted path resolution.
+
+**Correction.** The post-child pass now resolves all four authorization-bound
+input paths again through the checked repository-root boundary. Workflow
+validation checks every caller-controlled ancestor before inspecting the leaf.
+This applies both before the child and during the final manifest revalidation.
+
+**Regression evidence.** New synthetic cases replace the workflow parent before
+the runner and replace either the evidence parent or workflow parent during the
+runner. All three cases reached the runner or produced a receipt before the
+correction. They now fail closed, and the post-run cases produce no receipt.
+
+**Status.** Corrected locally with TDD. This remains synthetic, target-free
+evidence; no real GitHub CLI verification or material boundary was crossed.

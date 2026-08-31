@@ -141,7 +141,7 @@ class HostedVerifierContractTest(unittest.TestCase):
         """Unauthenticated input changes never reach gh or create an output."""
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
 
-        cases = ("manifest_hash", "invalid_manifest", "policy", "source_state", "expired", "output_collision", "output_parent_symlink", "input_traversal", "input_parent_symlink", "symlink", "hardlink", "nonregular", "oversized")
+        cases = ("manifest_hash", "invalid_manifest", "policy", "source_state", "expired", "output_collision", "output_parent_symlink", "input_traversal", "input_parent_symlink", "workflow_parent_symlink", "symlink", "hardlink", "nonregular", "oversized")
         for case in cases:
             with self.subTest(case=case), TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
@@ -184,6 +184,11 @@ class HostedVerifierContractTest(unittest.TestCase):
                     redirect.mkdir()
                     evidence.rename(redirect / "evidence")
                     evidence.symlink_to(redirect / "evidence", target_is_directory=True)
+                elif case == "workflow_parent_symlink":
+                    github = root / ".github"
+                    redirect = root / "redirect-github"
+                    github.rename(redirect)
+                    github.symlink_to(redirect, target_is_directory=True)
                 elif case == "symlink":
                     bundle_path.unlink(); bundle_path.symlink_to(manifest_path)
                 elif case == "hardlink":
@@ -313,7 +318,7 @@ class HostedVerifierContractTest(unittest.TestCase):
         """Runner-time swaps of authorization, policy, or raw workflow are terminal."""
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
 
-        for case in ("authorization", "policy", "workflow"):
+        for case in ("authorization", "policy", "workflow", "input_parent", "workflow_parent"):
             with self.subTest(case=case), TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
                 authorization_path, policy_path, manifest_path, _bundle, _trusted, _transport = self._packet(root)
@@ -321,8 +326,19 @@ class HostedVerifierContractTest(unittest.TestCase):
                 result[0]["verificationResult"]["statement"]["subject"][0]["digest"]["sha256"] = self._sha(manifest_path)
 
                 def runner(_argv: tuple[str, ...], _cwd: Path) -> tuple[int, bytes, bytes]:
-                    target = {"authorization": authorization_path, "policy": policy_path, "workflow": root / ".github/workflows/a0x-hosted-gate-a.yml"}[case]
-                    target.write_bytes(target.read_bytes() + b" ")
+                    if case in {"authorization", "policy", "workflow"}:
+                        target = {"authorization": authorization_path, "policy": policy_path, "workflow": root / ".github/workflows/a0x-hosted-gate-a.yml"}[case]
+                        target.write_bytes(target.read_bytes() + b" ")
+                    elif case == "input_parent":
+                        evidence = manifest_path.parent
+                        redirect = root / "redirect-evidence"
+                        evidence.rename(redirect)
+                        evidence.symlink_to(redirect, target_is_directory=True)
+                    else:
+                        github = root / ".github"
+                        redirect = root / "redirect-github"
+                        github.rename(redirect)
+                        github.symlink_to(redirect, target_is_directory=True)
                     return 0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode(), b""
 
                 with self.assertRaises(A0XHostedVerifierError):

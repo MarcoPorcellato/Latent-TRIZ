@@ -251,6 +251,7 @@ def verify_hosted_gate_a(
     if observed_state != expected_state:
         raise A0XHostedVerifierError(SOURCE_DRIFT)
     _revalidate_controls(root, request, authorization_raw, policy_raw, executable)
+    inputs = _resolve_inputs(root, authorization)
     for name, path in inputs.items():
         _require_independent(path, _INPUT_LIMITS[name])
         if _sha256(path.read_bytes()) != authorization["hosted_inputs"][name]["sha256"]:
@@ -407,6 +408,7 @@ def _validate_manifest_and_transport(
     ):
         raise A0XHostedVerifierError(EXPECTATION_MISMATCH)
     workflow = root / manifest["workflow"]["path"]
+    _require_safe_ancestors(root, workflow)
     _require_independent(workflow, None)
     if _sha256(workflow.read_bytes()) != manifest["workflow"]["raw_sha256"]:
         raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
