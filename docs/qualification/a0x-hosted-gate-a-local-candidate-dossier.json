@@ -1,0 +1,126 @@
+{
+  "artifact_class": "a0x-hosted-gate-a-local-candidate-dossier-v1",
+  "status": "local_target_free_qualification_complete",
+  "created_on": "2026-08-31",
+  "repository": "MarcoPorcellato/Latent-TRIZ",
+  "scope": "Tasks 1-11 local deterministic qualification only",
+  "candidate_content_anchor": {
+    "head": "1fc73ee6a8147f523122737435cfd177a84dee6f",
+    "tree": "0a386e08b2c813f27075d4451bf6f483ba979293",
+    "implementation_source_head": "86d25ffce19790d150be1987e0de096977b17ae1",
+    "implementation_source_tree": "626eb291bbb58c3805d7d46024f4ee53639a1607"
+  },
+  "self_reference_rule": "This dossier records the frozen pre-dossier content anchor. A later authorization must separately bind the final commit and tree containing this dossier with this dossier raw SHA-256; this document never predicts its own commit identity.",
+  "canonical_inputs": {
+    "spec": {
+      "path": "docs/superpowers/specs/2026-08-31-a0x-hosted-gate-a-design.md",
+      "sha256": "4a1a8bff1bc59f8e72cc4996087fd69b59956360400e0586815556fb8a3d6881"
+    },
+    "plan": {
+      "path": "docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md",
+      "sha256": "300d29e2b7f3fe9f44d1f2c74deada77b68e59f2b88671121bac591c8694190a"
+    },
+    "workflow": {
+      "path": ".github/workflows/a0x-hosted-gate-a.yml",
+      "sha256": "e61045e9592237aadb6057ca752061855135109fd9e5bbdf508e55c706ab1458"
+    },
+    "action_manifest": {
+      "path": ".github/a0x-hosted-gate-a-actions.json",
+      "sha256": "f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd"
+    },
+    "lane_manifest": {
+      "path": ".github/a0x-hosted-gate-a-lanes.json",
+      "sha256": "4a6754e77e4a440d9e1af03d16017272e194bc6953cec16dd9473aa0b5929a97"
+    },
+    "requirements_input": {
+      "path": "requirements-schema.in",
+      "sha256": "37caf5bff910fbd7dda44433b92df25fbfd989aea829e9bc4ce37e70df1f1782"
+    },
+    "requirements_lock": {
+      "path": "requirements-schema.lock",
+      "sha256": "0bbafebbe4fdb6028f5e8565eae397d18d6ace90e7e5e2c5b9472aa924162be7"
+    },
+    "verifier_policy_schema": {
+      "path": "schemas/a0x-hosted-gate-a-verifier-policy.schema.json",
+      "sha256": "dc746e9c1985ac17dc918c7837891510b2c18a6c81e06aaeb8de2660bb0999d1"
+    },
+    "verification_result_schema": {
+      "path": "schemas/a0x-gh-2.97.0-verification-result.schema.json",
+      "sha256": "ae6b10ae31d9667a6a9c76ee219384d3c9bcb640d2098b006adc4be60be6f0d2"
+    },
+    "offline_verifier": {
+      "path": "src/latent_triz/a0x_hosted_verifier.py",
+      "sha256": "0cb6d457f2f31b53f935d622f3fe16ac3ce856819d2073a346892877c442ee15",
+      "github_cli_version": "2.97.0",
+      "github_cli_sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+    }
+  },
+  "regenerated_package": {
+    "count": 17,
+    "regular_non_symlink_link_count_one": true,
+    "second_regeneration_patch_sha256": "6e6046fe7b8609f8729cc1072441b2cfedebaf9ade013ae03651968940c91e34",
+    "artifacts": {
+      "a0_implementation": "5182eda360df6b3c2f25e8bbf2bd7b2c90cce8d4603da8ea9c13cb35a98ad88a",
+      "r1_implementation": "5a7e5b15138c247f0f72094f06181784b46e129755b2bad4df5e08259867e63e",
+      "a0_freeze": "d9337e52d94fd090f98c68bc34a9b5d056e48b1649ff36ecc42b173cd208f3a1",
+      "r1_freeze": "e769249263aef1594d6e714dd7ca68b23e3526e4034f8aeed11ab64deb2f0323",
+      "a0_gpt2_dossier": "077a25ee4cb65485e4115e996a3fd7be82f70b21ded09c0a7936c156ec0b803c",
+      "a0_gpt_neo_dossier": "7afe365344749ac9b4b78fb846134e5f22169c388402c01a3e2246f06c0ea534",
+      "a0_qwen2_5_dossier": "41958f6432121cc8ac79fb3e5ad199399c350cc5fd8fb2983c7a11d10c0c6fdc",
+      "a0_qwen3_dossier": "15e524070c4e68a29d4f4870241d0963277e076ffe1670413d5cb8d8dba5cd57",
+      "a0_smollm2_135m_dossier": "6f005202038db09702458d77986290d920f724be342135d113a0d1f42acbae11",
+      "a0_smollm2_360m_dossier": "f5e9fe6b55d95eb54d49d5504084a1acc938fcc36d1835d2271dbef38a767bd9",
+      "r1_gpt2_dossier": "1be64477901f68c53020e2217042a4b300ca55678293c294d93da81ce04bafbc",
+      "r1_gpt_neo_dossier": "4ce97ead3fdba32180c34d01cba9fd5056377fb7568a87cc91a1e3921499dbac",
+      "r1_qwen2_5_dossier": "6ae1bec88163fec515a481a5b93b5a1e3755d0eb85f18412e39199f56bcd614a",
+      "r1_qwen3_dossier": "05867d15232c35c36997fb593f5bf281443fc9aa1d5cfd38eed7c3ceed694183",
+      "r1_smollm2_135m_dossier": "e3c9db007d9d66131ca6f0c0b5edecf5240a35530b772f75de04f59815ceccaf",
+      "r1_smollm2_360m_dossier": "47e6020714f6bae11748abc55a117435d85424459d75848d5e60c36d21f3ce4d",
+      "no_model_receipt": "d5e8c044110623a8f54bd10e4ba37f7d960c84a86f272a67b06d5975e91d3beb"
+    }
+  },
+  "local_ladder": {
+    "hosted_unit_tests": {"tests": 24, "skipped": 0, "status": "pass"},
+    "hosted_gate_a_target": {"tests": 190, "skipped": 1, "status": "pass"},
+    "frozen_no_model_target": {"tests": 11, "skipped": 0, "status": "pass"},
+    "synthetic_target": {"tests": 342, "skipped": 1, "status": "pass"},
+    "schema_cross_validation": {"tracked_pairs": 155, "mutations_rejected": 19, "status": "pass", "python_override": "LAB01_PYTHON=python3"},
+    "documentation_audit": {"status": "pass"},
+    "repository_check": {"tests": 1174, "skipped": 12, "status": "pass"},
+    "diff_check": {"status": "pass"}
+  },
+  "static_material_boundary_audit": {
+    "scope": "Hosted workflow, manifest builder, offline verifier wrapper and module, Gate B bundle/preflight, and their focused tests",
+    "prohibited_runtime_imports": [],
+    "executed_material_or_network_operations": [],
+    "verified_inert_seams": [
+      "Synthetic spies show zero model, tokenizer, sealed-target, CCP, Docker, and subprocess seams during Gate B preparation tests.",
+      "Frozen and synthetic contract checks report zero model loads, tokenizer constructions, sealed-target reads, CCP invocations, and remote mutations.",
+      "The only subprocess-capable current wrapper is the non-executed offline Gate B adapter; it accepts a verifier-provided shell-free argv and uses a scrubbed environment."
+    ]
+  },
+  "candidate_state_before_dossier": {
+    "git_status_porcelain": "",
+    "working_tree_clean": true
+  },
+  "review_state": {
+    "task_10_independent_review": "approved",
+    "task_11_independent_reviews": "pending",
+    "sol_architecture_security_review_before_task_12": "required"
+  },
+  "stop_boundary": {
+    "task_12_requires": [
+      "fresh exact-head and ruleset review",
+      "separate Sol review",
+      "separate operator authorization"
+    ],
+    "forbidden_without_new_authorization": [
+      "network or GitHub access",
+      "push, pull request, merge, publication, or hosted evidence capture",
+      "Gate B runtime materialization",
+      "Gate C CCP heavy execution or Docker",
+      "model load or tokenizer construction",
+      "sealed-target read, generation, inference, scoring, or scientific claim"
+    ]
+  }
+}
