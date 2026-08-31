@@ -70,7 +70,14 @@ def validate(schema: str, data: str) -> None:
 def main() -> int:
     _ensure_writable_tempdir()
     run(PYTHON, "scripts/a0x_contract_check.py", "--phase", "synthetic")
-    run(PYTHON, "-m", "unittest", "tests.test_a0x_hosted_gate_a_workflow")
+    run(
+        PYTHON,
+        "-m",
+        "unittest",
+        "tests.test_a0x_hosted_gate_a",
+        "tests.test_a0x_hosted_gate_a_workflow",
+        "tests.test_a0x_hosted_verifier",
+    )
     run(PYTHON, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py")
 
     validation_pairs = (

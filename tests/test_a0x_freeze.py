@@ -253,6 +253,61 @@ class A0XFreezeTests(unittest.TestCase):
                 ).read_text(encoding="utf-8"))
                 self.assertTrue(required.issubset(implementation["implementation_paths"]))
 
+    def test_hosted_gate_a_paths_are_bound_in_both_implementation_inventories(self) -> None:
+        """Catch a hosted trust input omitted from either generated leg inventory."""
+        required = {
+            ".github/a0x-hosted-gate-a-actions.json",
+            ".github/a0x-hosted-gate-a-lanes.json",
+            ".github/workflows/a0x-hosted-gate-a.yml",
+            "requirements-schema.in",
+            "requirements-schema.lock",
+            "schemas/a0x-execution-authorization-v3.schema.json",
+            "schemas/a0x-gate-b-authorization.schema.json",
+            "schemas/a0x-hosted-gate-a-evidence.schema.json",
+            "schemas/a0x-hosted-gate-a-lane-receipt.schema.json",
+            "schemas/a0x-hosted-gate-a-transport.schema.json",
+            "schemas/a0x-hosted-gate-a-verification-receipt.schema.json",
+            "schemas/a0x-hosted-gate-a-verifier-policy.schema.json",
+            "scripts/a0x_hosted_gate_a.py",
+            "scripts/a0x_materialize_no_model_receipt.py",
+            "scripts/a0x_verify_hosted_gate_a.py",
+            "src/latent_triz/a0x_hosted_gate_a.py",
+            "src/latent_triz/a0x_hosted_verifier.py",
+            "tests/test_a0x_hosted_gate_a.py",
+            "tests/test_a0x_hosted_gate_a_workflow.py",
+            "tests/test_a0x_hosted_verifier.py",
+        }
+        required.update(
+            path.relative_to(self.ROOT).as_posix()
+            for path in (self.ROOT / "tests/fixtures/a0x/hosted-gate-a").rglob("*")
+            if path.is_file()
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_root = Path(directory)
+            a0x_freeze.freeze_a0x_campaign(
+                self.ROOT,
+                prepare_dossiers=True,
+                output_root=output_root,
+                implementation_source_head="f" * 40,
+            )
+            implementations = {
+                leg: json.loads((output_root / f"experiments/a0x-six-model/{leg}/implementation.json").read_text(encoding="utf-8"))
+                for leg in ("a0", "r1")
+            }
+
+        self.assertTrue(required.issubset(a0x_freeze._IMPLEMENTATION_PATHS))
+        self.assertEqual(tuple(sorted(a0x_freeze._IMPLEMENTATION_PATHS)), a0x_freeze._IMPLEMENTATION_PATHS)
+        self.assertEqual(
+            implementations["a0"]["implementation_paths"],
+            implementations["r1"]["implementation_paths"],
+        )
+        self.assertEqual(
+            implementations["a0"]["implementation_files"],
+            implementations["r1"]["implementation_files"],
+        )
+        self.assertTrue(required.issubset(implementations["a0"]["implementation_paths"]))
+
     def test_complete_artifacts_validate_the_strict_task_two_schemas(self) -> None:
         historical = self.root / "historical"
         historical.mkdir()
