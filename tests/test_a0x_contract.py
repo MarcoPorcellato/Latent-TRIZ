@@ -272,6 +272,23 @@ class A0XContractTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XContractError, "schema"):
             canonical_commitment(authorization, CURRENT_EXECUTION_AUTHORIZATION_PROFILE)
 
+    def test_current_v3_schema_preserves_gate_c_structural_constraints(self) -> None:
+        _, authorization, _ = self._current_authorization_documents()
+        schema = self._schema("a0x-execution-authorization-v3.schema.json")
+        self.assertEqual([], validate(authorization, schema))
+        mutations = {
+            "pair": lambda value: value["pair_binding"].__setitem__("binding_profile", "legacy"),
+            "dense": lambda value: value["pair_binding"]["dense_bound"].__setitem__("scalar_bytes", 8),
+            "guard_resource": lambda value: value["guard_launch"]["resource"].__setitem__("executor", "other"),
+            "guard_timeout": lambda value: value["guard_launch"]["timeouts"].__setitem__("outer_timeout_seconds", 3599),
+            "preflight": lambda value: value["guard_preflight_observation"].__setitem__("profile", "legacy"),
+        }
+        for name, mutate in mutations.items():
+            candidate = copy.deepcopy(authorization)
+            mutate(candidate)
+            with self.subTest(name=name):
+                self.assertTrue(validate(candidate, schema))
+
     def test_strict_commitment_json_rejects_noncanonical_inputs(self) -> None:
         valid = b'{"a":1,"b":[true,null]}'
         self.assertEqual({"a": 1, "b": [True, None]}, strict_json_object(valid))

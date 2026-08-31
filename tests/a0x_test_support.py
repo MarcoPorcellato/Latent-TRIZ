@@ -9,6 +9,7 @@ from pathlib import Path
 
 from latent_triz.a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
     Leg,
     PairBinding,
@@ -421,6 +422,29 @@ def artifact(name: str) -> dict[str, object]:
         return dossier
     if name == "a0x-execution-authorization.schema.json":
         return authorization
+    if name == "a0x-execution-authorization-v3.schema.json":
+        current = json.loads(json.dumps(authorization))
+        current["commitment_profile"] = CURRENT_EXECUTION_AUTHORIZATION_PROFILE
+        current["source_tree"] = "b" * 40
+        current.pop("qualification_evidence")
+        source_head = current["source_head"]
+        base = f".a0x-runtime/gate-a/evidence/{source_head}"
+        current["gate_a_evidence"] = {
+            "evidence_profile": "a0x-gate-a-evidence-binding-v2",
+            "provider": "github-hosted-attestation-v1",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "source_head": source_head,
+            "source_tree": current["source_tree"],
+            "hosted_inputs": {
+                "manifest": {"path": base + "/hosted-gate-a-evidence.json", "sha256": sha(30)},
+                "attestation_bundle": {"path": base + "/hosted-gate-a-attestation.bundle.jsonl", "sha256": sha(31)},
+                "trusted_root": {"path": base + "/github-trusted-root.jsonl", "sha256": sha(32)},
+                "transport": {"path": base + "/hosted-gate-a-transport.json", "sha256": sha(33)},
+            },
+            "verification_receipt": {"path": ".a0x-runtime/gate-b-verifications/" + source_head + "/a0/gpt2/synthetic/gate-a-verification-receipt.json", "sha256": sha(34)},
+            "verifier": {"role": "github_cli_verifier", "version": "gh version 2.97.0 (2026-07-31)", "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c", "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4"},
+        }
+        return current
     if name == "a0x-guard-launch.schema.json":
         return authorization["guard_launch"]
     if name == "a0x-qualification-evidence.schema.json":
@@ -456,6 +480,7 @@ def artifact(name: str) -> dict[str, object]:
                 "location_roles": {"repository_root": "repository_root", "managed_cache_root": "managed_cache_root"},
                 "matrix_plan_binding": {"plan_output_sha256": "0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad", "outer_digest": "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331", "python311_digest": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943", "python312_digest": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510"},
             },
+            "gate_a": {"provider": "github-hosted-attestation-v1", "workflow_path": ".github/workflows/a0x-hosted-gate-a.yml", "event": "push", "ref": "refs/heads/main", "required_lanes": ["a0x-no-model", "a0x-synthetic", "documentation-audit", "repository-python311", "repository-python312", "schema-cross-validation-python311", "schema-cross-validation-python312"], "size_ceilings_bytes": {"manifest": 32768, "attestation_bundle": 1048576, "trusted_root": 2097152, "transport": 16384}, "verifier": {"role": "github_cli_verifier", "version": "gh version 2.97.0 (2026-07-31)", "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c", "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4"}, "predicate_type": "https://slsa.dev/provenance/v1", "cert_oidc_issuer": "https://token.actions.githubusercontent.com", "deny_self_hosted_runners": True, "require_verified_timestamp": True, "workflow_raw_sha256": "e61045e9592237aadb6057ca752061855135109fd9e5bbdf508e55c706ab1458", "requirements_schema_lock_raw_sha256": "0bbafebbe4fdb6028f5e8565eae397d18d6ace90e7e5e2c5b9472aa924162be7", "action_manifest_raw_sha256": "f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd", "lane_manifest_raw_sha256": "4a6754e77e4a440d9e1af03d16017272e194bc6953cec16dd9473aa0b5929a97"},
             "offline": {"network": False, "generation": False, "local_cpu_float32": True},
             "max_run_count": 1,
             "stop_boundaries": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"],

@@ -43,7 +43,7 @@
     "event": "push",
     "ref": "refs/heads/main",
     "required_lanes": ["a0x-no-model", "a0x-synthetic", "documentation-audit", "repository-python311", "repository-python312", "schema-cross-validation-python311", "schema-cross-validation-python312"],
-    "size_ceilings_bytes": {"manifest": 32768, "attestation_bundle": 1048576, "trusted_root": 2097152, "transport": 16384, "verification_receipt": 32768},
+    "size_ceilings_bytes": {"manifest": 32768, "attestation_bundle": 1048576, "trusted_root": 2097152, "transport": 16384},
     "verifier": {"role": "github_cli_verifier", "version": "gh version 2.97.0 (2026-07-31)", "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c", "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4"},
     "predicate_type": "https://slsa.dev/provenance/v1",
     "cert_oidc_issuer": "https://token.actions.githubusercontent.com",

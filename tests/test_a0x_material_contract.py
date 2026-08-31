@@ -268,6 +268,21 @@ class A0XMaterialContractTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(A0XContractError, "Gate A"):
                 validate_gate_a_evidence(candidate)
 
+    def test_material_contract_requires_the_frozen_gate_a_policy(self) -> None:
+        schema = self._schema("a0x-material-execution-contract.schema.json")
+        contract = json.loads(
+            (ROOT / "experiments/a0x-six-model/material-execution-contract.json").read_text(
+                encoding="utf-8",
+            ),
+        )
+        self.assertEqual([], validate(contract, schema))
+        self.assertEqual(
+            {"manifest": 32768, "attestation_bundle": 1048576, "trusted_root": 2097152, "transport": 16384},
+            contract["gate_a"]["size_ceilings_bytes"],
+        )
+        contract.pop("gate_a")
+        self.assertTrue(validate(contract, schema))
+
     def test_guard_launch_rejects_host_absolute_paths(self) -> None:
         from latent_triz.a0x_material_contract import A0XGuardLaunch
 
