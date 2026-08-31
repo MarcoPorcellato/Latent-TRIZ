@@ -291,7 +291,7 @@ def _synthetic_ccp_hash(request: Any):
 
 
 def prepare_constructible_runtime_bundle() -> ConstructibleRuntimeBundle:
-    """Prepare one v2 bundle without a model, target, process, or CCP invocation."""
+    """Prepare one Gate B bundle without model, target, process, or CCP invocation."""
     from latent_triz.a0x_runtime_bundle import prepare_runtime_bundle
 
     temporary, root, request = _runtime_preparation_fixture()
@@ -439,6 +439,10 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         )
         verified = json.loads((root / evidence["verification_receipt"]["path"]).read_text())
         self.assertEqual(hashlib.sha256(request.gate_b_authorization.read_bytes()).hexdigest(), verified["authorization_raw_sha256"])
+        self.assertEqual(
+            hashlib.sha256(request.gate_b_authorization.read_bytes()).hexdigest(),
+            evidence["gate_b_authorization_raw_sha256"],
+        )
 
     def test_gate_b_refusal_creates_no_receipt_or_runtime_documents(self) -> None:
         from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle
@@ -456,6 +460,33 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         self.assertFalse((root / gate["verification_receipt_path"]).exists())
         self.assertFalse((root / ".a0x-runtime/launches").exists())
 
+    def test_static_preflight_never_consumes_gate_b_receipt_or_readiness(self) -> None:
+        """Preflight must not spend the one-shot verifier or create future bytes."""
+        from latent_triz.a0x_runtime_bundle import preflight_runtime_bundle
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        verifier = Mock(side_effect=AssertionError("verifier reached"))
+        readiness = Mock(side_effect=AssertionError("readiness reached"))
+        gate = json.loads(request.gate_b_authorization.read_text())
+        with self._synthetic_ccp_hash(request), patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}):
+            first = preflight_runtime_bundle(
+                root, request, source_state_probe=lambda: ("a" * 40, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=readiness, gate_a_verifier=verifier,
+            )
+            second = preflight_runtime_bundle(
+                root, request, source_state_probe=lambda: ("a" * 40, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=readiness, gate_a_verifier=verifier,
+            )
+        self.assertEqual(first, second)
+        verifier.assert_not_called()
+        readiness.assert_not_called()
+        self.assertFalse(os.path.lexists(root / gate["verification_receipt_path"]))
+        for key in ("readiness_path", "descriptor_path", "authorization_path", "mapping_path"):
+            self.assertFalse(os.path.lexists(root / first[key]))
+
     def test_post_verification_drift_preserves_only_owned_receipt(self) -> None:
         from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle
 
@@ -467,7 +498,7 @@ class A0XRuntimeBundleTests(unittest.TestCase):
             (root / gate["hosted_inputs"]["manifest"]["path"]).write_bytes(b"drift")
             return _synthetic_runtime_readiness(*args)
 
-        with self._synthetic_ccp_hash(request), patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}), self.assertRaisesRegex(A0XRuntimeBundleError, "hosted input bytes drifted"):
+        with self._synthetic_ccp_hash(request), patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}), self.assertRaisesRegex(A0XRuntimeBundleError, "hosted input bytes"):
             prepare_runtime_bundle(
                 root, request, source_state_probe=lambda: ("a" * 40, True),
                 ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
@@ -1183,7 +1214,6 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         self.assertFalse((root / ".a0x-runtime/authorizations").exists())
         self.assertFalse((root / ".a0x-runtime/bin").exists())
 
-    @unittest.skip("replaced legacy CCP qualification CLI contract")
     def test_cli_prepares_sorted_public_receipt_from_shell_free_probes(self) -> None:
         temporary, root, request = self._fixture()
         self.addCleanup(temporary.cleanup)
@@ -1208,10 +1238,11 @@ class A0XRuntimeBundleTests(unittest.TestCase):
 
         argv = [
             "--fixed-dossier", request.fixed_dossier,
-            "--qualification-receipt", str(request.qualification_receipt),
+            "--gate-b-authorization", str(request.gate_b_authorization),
+            "--verifier", str(request.verifier_executable),
+            "--verifier-policy", str(request.verifier_policy),
             "--ccp", str(request.ccp_executable),
             "--python", str(request.python_executable),
-            "--public-evidence-commit", request.public_evidence_commit,
             "--authorization-id", request.authorization_id,
             "--attempt-id", request.attempt_id,
         ]
@@ -1227,13 +1258,14 @@ class A0XRuntimeBundleTests(unittest.TestCase):
             ),
             patch.object(cli.subprocess, "run", side_effect=probe),
         ):
-            code = cli.main(argv, root=root, stdout=output)
+            code = cli.main(
+                argv, root=root, stdout=output, gate_a_verifier=_synthetic_gate_a_verifier,
+            )
         self.assertEqual(0, code)
         receipt = json.loads(output.getvalue())
         self.assertEqual("prepared", receipt["status"])
         self.assertEqual(sorted(receipt), list(receipt))
 
-    @unittest.skip("preflight now creates Gate B verification receipt")
     def test_cli_preflight_emits_sorted_summary_without_writing_bundle(self) -> None:
         temporary, root, request = self._fixture()
         self.addCleanup(temporary.cleanup)
@@ -1259,34 +1291,37 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         argv = [
             "--preflight",
             "--fixed-dossier", request.fixed_dossier,
-            "--qualification-receipt", str(request.qualification_receipt),
+            "--gate-b-authorization", str(request.gate_b_authorization),
+            "--verifier", str(request.verifier_executable),
+            "--verifier-policy", str(request.verifier_policy),
             "--ccp", str(request.ccp_executable),
             "--python", str(request.python_executable),
-            "--public-evidence-commit", request.public_evidence_commit,
             "--authorization-id", request.authorization_id,
             "--attempt-id", request.attempt_id,
         ]
+        verifier = Mock(side_effect=AssertionError("verifier reached"))
         with (
             self._synthetic_ccp_hash(request),
             patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
             patch.object(
                 cli, "build_runtime_readiness",
-                side_effect=lambda **kwargs: _synthetic_runtime_readiness(
-                    kwargs["repository_root"], kwargs["pair"],
-                    kwargs["source_head"], kwargs["python_path"],
-                ),
-            ),
+                side_effect=AssertionError("readiness reached"),
+            ) as readiness,
             patch.object(cli.subprocess, "run", side_effect=probe),
         ):
-            code = cli.main(argv, root=root, stdout=output)
+            code = cli.main(argv, root=root, stdout=output, gate_a_verifier=verifier)
         self.assertEqual(0, code)
         receipt = json.loads(output.getvalue())
         self.assertEqual("preflight", receipt["status"])
         self.assertEqual(sorted(receipt), list(receipt))
+        verifier.assert_not_called()
+        readiness.assert_not_called()
+        gate = json.loads(request.gate_b_authorization.read_text())
+        self.assertFalse(os.path.lexists(root / gate["verification_receipt_path"]))
         for key in ("readiness_path", "descriptor_path", "authorization_path", "mapping_path"):
             self.assertFalse(os.path.lexists(root / receipt[key]))
 
-    @unittest.skip("replaced legacy CCP qualification CLI contract")
+    @unittest.skip("historical qualification-receipt CLI contract retired by Gate B authorization")
     def test_cli_preflight_wrong_receipt_path_reports_stable_safe_error(self) -> None:
         temporary, root, request = self._fixture()
         self.addCleanup(temporary.cleanup)
@@ -1364,11 +1399,9 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         self.assertFalse((root / ".a0x-runtime/authorizations").exists())
         self.assertFalse((root / ".a0x-runtime/bin").exists())
 
-    @unittest.skip("replaced legacy CCP qualification CLI contract")
-    def test_cli_malformed_qualification_receipt_returns_refusal_code_two(self) -> None:
+    def test_cli_gate_b_verifier_refusal_returns_code_two(self) -> None:
         temporary, root, request = self._fixture()
         self.addCleanup(temporary.cleanup)
-        request.qualification_receipt.write_bytes(b"{not-json")
         cli = self._cli_module()
         output = io.StringIO()
 
@@ -1388,10 +1421,11 @@ class A0XRuntimeBundleTests(unittest.TestCase):
 
         argv = [
             "--fixed-dossier", request.fixed_dossier,
-            "--qualification-receipt", str(request.qualification_receipt),
+            "--gate-b-authorization", str(request.gate_b_authorization),
+            "--verifier", str(request.verifier_executable),
+            "--verifier-policy", str(request.verifier_policy),
             "--ccp", str(request.ccp_executable),
             "--python", str(request.python_executable),
-            "--public-evidence-commit", request.public_evidence_commit,
             "--authorization-id", request.authorization_id,
             "--attempt-id", request.attempt_id,
         ]
@@ -1400,6 +1434,9 @@ class A0XRuntimeBundleTests(unittest.TestCase):
             patch("latent_triz.a0x_runtime_bundle.planned_material_dossiers", return_value={("a0", "gpt2"): request.fixed_dossier}),
             patch.object(cli.subprocess, "run", side_effect=probe),
         ):
-            code = cli.main(argv, root=root, stdout=output)
+            code = cli.main(
+                argv, root=root, stdout=output,
+                gate_a_verifier=Mock(side_effect=ValueError("refused")),
+            )
         self.assertEqual(2, code)
         self.assertEqual({"status": "refused"}, json.loads(output.getvalue()))

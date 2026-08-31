@@ -114,6 +114,7 @@ class A0XMaterialContractTests(unittest.TestCase):
             "repository": "MarcoPorcellato/Latent-TRIZ",
             "source_head": self.source_head,
             "source_tree": "b" * 40,
+            "gate_b_authorization_raw_sha256": sha(35),
             "hosted_inputs": {
                 "manifest": {"path": base + "/hosted-gate-a-evidence.json", "sha256": sha(30)},
                 "attestation_bundle": {"path": base + "/hosted-gate-a-attestation.bundle.jsonl", "sha256": sha(31)},
@@ -262,6 +263,7 @@ class A0XMaterialContractTests(unittest.TestCase):
             ("missing_input", lambda value: value["hosted_inputs"].pop("transport")),
             ("receipt_path", lambda value: value["verification_receipt"].__setitem__("path", "/private/receipt.json")),
             ("verifier_hash", lambda value: value["verifier"].__setitem__("sha256", sha(36))),
+            ("gate_b_authorization_raw_sha256", lambda value: value.__setitem__("gate_b_authorization_raw_sha256", "0" * 63)),
         ):
             candidate = copy.deepcopy(current)
             mutate(candidate)

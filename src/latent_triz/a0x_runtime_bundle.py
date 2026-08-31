@@ -154,24 +154,36 @@ def preflight_runtime_bundle(
     runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
     gate_a_verifier: Callable[[GateBVerificationRequest], bytes] | None = None,
 ) -> dict[str, Any]:
-    """Validate and construct one exact bundle in memory without writing it."""
-    bundle = _build_runtime_bundle(
-        root,
-        request,
-        source_state_probe=source_state_probe,
+    """Check static inputs only; never consume verifier or readiness capability."""
+    del runtime_readiness_probe, gate_a_verifier
+    repository = Path(root).resolve(strict=True)
+    source_head, source_clean = _source_state(source_state_probe)
+    if not source_clean:
+        raise A0XRuntimeBundleError("runtime preparation requires a clean checkout")
+    dossier, pair = _load_fixed_dossier(repository, request.fixed_dossier)
+    _preflight_output_paths(repository, pair, source_head)
+    _validate_preparation_inputs(
+        repository, request, dossier=dossier, pair=pair, source_head=source_head,
         ccp_version_probe=ccp_version_probe,
-        runtime_readiness_probe=runtime_readiness_probe,
-        gate_a_verifier=_required_gate_a_verifier if gate_a_verifier is None else gate_a_verifier,
     )
-    return _bundle_summary(
-        bundle.pair,
-        bundle.source_head,
-        bundle.readiness,
-        bundle.descriptor,
-        bundle.authorization,
-        bundle.mapping,
-        status="preflight",
+    authorization_path, authorization_raw, authorization = _gate_b_authorization(repository, request)
+    _validate_gate_b_static(
+        repository, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head,
     )
+    paths = derive_runtime_paths(pair)
+    return {
+        "status": "preflight",
+        "source_head": source_head,
+        "pair_binding": pair.as_mapping(),
+        "verification_receipt_path": authorization["verification_receipt_path"],
+        "readiness_path": runtime_readiness_path(pair),
+        "descriptor_path": paths.launch_descriptor_path,
+        "authorization_path": paths.authorization_path,
+        "mapping_path": runtime_mapping_path(pair, source_head=source_head),
+        "authorization_id": request.authorization_id,
+        "attempt_id": request.attempt_id,
+    }
 
 
 def _build_runtime_bundle(
@@ -303,10 +315,10 @@ def _verify_gate_a_evidence(
 ) -> dict[str, Any]:
     """Create and bind Gate B's sole durable output before readiness starts."""
     authorization_path, authorization_raw, authorization = _gate_b_authorization(root, request)
-    if authorization["source_head"] != source_head or authorization["pair_binding"] != pair.as_mapping():
-        raise A0XRuntimeBundleError("Gate B authorization does not match runtime preparation")
-    policy_path = _controlled_repository_file(root, request.verifier_policy, "verifier policy")
-    executable = _external_executable(request.verifier_executable, "verifier executable")
+    policy_path, executable = _validate_gate_b_static(
+        root, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head,
+    )
     try:
         returned_raw = verifier(GateBVerificationRequest(root, authorization_path, executable, policy_path))
     except Exception as error:
@@ -329,16 +341,10 @@ def _revalidate_gate_a_evidence(
 ) -> None:
     """Reject any Gate A or verifier byte drift after receipt creation."""
     authorization_path, authorization_raw, authorization = _gate_b_authorization(root, request)
-    policy_path = _controlled_repository_file(root, request.verifier_policy, "verifier policy")
-    executable = _external_executable(request.verifier_executable, "verifier executable")
-    if hashlib.sha256(policy_path.read_bytes()).hexdigest() != authorization["verifier"]["policy_raw_sha256"]:
-        raise A0XRuntimeBundleError("verifier policy bytes drifted after Gate B verification")
-    if sha256_file(executable) != authorization["verifier"]["sha256"]:
-        raise A0XRuntimeBundleError("verifier executable bytes drifted after Gate B verification")
-    for binding in authorization["hosted_inputs"].values():
-        path = _repository_file(root, binding["path"])
-        if hashlib.sha256(path.read_bytes()).hexdigest() != binding["sha256"]:
-            raise A0XRuntimeBundleError("hosted input bytes drifted after Gate B verification")
+    _validate_gate_b_static(
+        root, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head, receipt_must_be_absent=False,
+    )
     receipt_path = _repository_file(root, authorization["verification_receipt_path"])
     _gate_a_evidence_from_receipt(
         root, authorization_path, authorization_raw, authorization, receipt_path.read_bytes(),
@@ -360,6 +366,34 @@ def _gate_b_authorization(root: Path, request: RuntimePreparationRequest) -> tup
         raise A0XRuntimeBundleError("Gate B authorization is not strict JSON") from error
     _validate_schema(value, _GATE_B_AUTHORIZATION_SCHEMA, "Gate B authorization")
     return path, raw, value
+
+
+def _validate_gate_b_static(
+    root: Path,
+    request: RuntimePreparationRequest,
+    authorization_path: Path,
+    authorization_raw: bytes,
+    authorization: Mapping[str, Any],
+    *,
+    pair: PairBinding,
+    source_head: str,
+    receipt_must_be_absent: bool = True,
+) -> tuple[Path, Path]:
+    if authorization["source_head"] != source_head or authorization["pair_binding"] != pair.as_mapping():
+        raise A0XRuntimeBundleError("Gate B authorization does not match runtime preparation")
+    policy_path = _controlled_repository_file(root, request.verifier_policy, "verifier policy")
+    executable = _external_executable(request.verifier_executable, "verifier executable")
+    if hashlib.sha256(policy_path.read_bytes()).hexdigest() != authorization["verifier"]["policy_raw_sha256"]:
+        raise A0XRuntimeBundleError("verifier policy bytes differ from Gate B authorization")
+    if sha256_file(executable) != authorization["verifier"]["sha256"]:
+        raise A0XRuntimeBundleError("verifier executable bytes differ from Gate B authorization")
+    for binding in authorization["hosted_inputs"].values():
+        path = _repository_file(root, binding["path"])
+        if hashlib.sha256(path.read_bytes()).hexdigest() != binding["sha256"]:
+            raise A0XRuntimeBundleError("hosted input bytes differ from Gate B authorization")
+    if receipt_must_be_absent and os.path.lexists(root / authorization["verification_receipt_path"]):
+        raise A0XRuntimeBundleError("Gate B verification receipt destination is already occupied")
+    return policy_path, executable
 
 
 def _gate_a_evidence_from_receipt(
@@ -397,6 +431,7 @@ def _gate_a_evidence_from_receipt(
         "repository": authorization["repository"],
         "source_head": source_head,
         "source_tree": authorization["source_tree"],
+        "gate_b_authorization_raw_sha256": hashlib.sha256(authorization_raw).hexdigest(),
         "hosted_inputs": dict(authorization["hosted_inputs"]),
         "verification_receipt": {
             "path": authorization["verification_receipt_path"],

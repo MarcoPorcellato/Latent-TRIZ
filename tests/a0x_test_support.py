@@ -435,6 +435,7 @@ def artifact(name: str) -> dict[str, object]:
             "repository": "MarcoPorcellato/Latent-TRIZ",
             "source_head": source_head,
             "source_tree": current["source_tree"],
+            "gate_b_authorization_raw_sha256": sha(35),
             "hosted_inputs": {
                 "manifest": {"path": base + "/hosted-gate-a-evidence.json", "sha256": sha(30)},
                 "attestation_bundle": {"path": base + "/hosted-gate-a-attestation.bundle.jsonl", "sha256": sha(31)},

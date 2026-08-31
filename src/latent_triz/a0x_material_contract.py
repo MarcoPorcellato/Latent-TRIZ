@@ -302,6 +302,8 @@ def validate_gate_a_evidence(value: Mapping[str, Any], *, historical: bool = Fal
     source_head = evidence["source_head"]
     _require_revision(source_head, "Gate A source head")
     _require_revision(evidence["source_tree"], "Gate A source tree")
+    if not _SHA256.fullmatch(evidence["gate_b_authorization_raw_sha256"]):
+        raise A0XContractError("Gate B authorization raw hash is invalid")
     base = f".a0x-runtime/gate-a/evidence/{source_head}/"
     expected_inputs = {
         "manifest": "hosted-gate-a-evidence.json",

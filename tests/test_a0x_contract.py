@@ -40,6 +40,7 @@ class A0XContractTests(A0XTempTestCase):
             "repository": "MarcoPorcellato/Latent-TRIZ",
             "source_head": source_head,
             "source_tree": "b" * 40,
+            "gate_b_authorization_raw_sha256": sha(35),
             "hosted_inputs": {
                 "manifest": {"path": base + "/hosted-gate-a-evidence.json", "sha256": sha(30)},
                 "attestation_bundle": {"path": base + "/hosted-gate-a-attestation.bundle.jsonl", "sha256": sha(31)},
@@ -282,6 +283,7 @@ class A0XContractTests(A0XTempTestCase):
             "guard_resource": lambda value: value["guard_launch"]["resource"].__setitem__("executor", "other"),
             "guard_timeout": lambda value: value["guard_launch"]["timeouts"].__setitem__("outer_timeout_seconds", 3599),
             "preflight": lambda value: value["guard_preflight_observation"].__setitem__("profile", "legacy"),
+            "gate_b_authorization_raw_sha256": lambda value: value["gate_a_evidence"].__setitem__("gate_b_authorization_raw_sha256", "0" * 63),
         }
         for name, mutate in mutations.items():
             candidate = copy.deepcopy(authorization)
