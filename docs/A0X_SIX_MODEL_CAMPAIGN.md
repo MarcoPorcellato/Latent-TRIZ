@@ -18,6 +18,26 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
+## Current Hosted Gate A migration checkpoint
+
+The active isolated implementation branch is locally anchored at
+`f79d7c717a46630a2617bad64f9727c1bf4df7d1`, tree
+`e55e3a80130a1399c99027f802f1f77302c21aa6`. Tasks 1–5 of
+`docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md` are
+complete through the synthetic offline verifier. Focused tests pass, but the
+complete frozen package is deliberately stale until Tasks 6–10 finish and
+perform one controlled regeneration. Earlier implementation commits, freeze
+hashes, PR #109 wording, and CCP Gate A receipts remain historical evidence;
+none qualifies this branch.
+
+The next local sequence is Tasks 6–11 only. It separates hosted Gate A from CCP
+Gate C, creates and propagates the five-file hosted evidence boundary, binds
+every new trust input into both implementation inventories, regenerates the two
+freezes and twelve dossiers, and produces one exact publication dossier.
+External publication and the first real hosted run remain Task 12 and require
+new exact authorization. Gate B/C, model, tokenizer, target, and scientific
+execution remain unauthorized; status is `sealed_gate_pending`.
+
 ## Frozen scientific legs
 
 | Leg | Inherited experiment | Frozen endpoint | Public selection source | Dense-output cap |
@@ -269,7 +289,7 @@ hardening does not change the bytes or status of any already prepared bundle.
 Because it changes frozen implementation inputs, it requires a new exact-head
 Gate A qualification before it can govern a future material attempt.
 
-The current hosted-integration implementation anchor is
+The historical hosted-integration implementation anchor was
 `74d6bc048e656f3ced2d4bc6db4b0492dfd16359`. Public `main` is now
 `d2a475f58db668a2ce0a4ec48082189422b19eab`, tree
 `4d2b1221dd63a89d6c6c4433061a7d8ed130b76e`, after PR #110 installed the

@@ -402,6 +402,23 @@ hosted run.
 
 ## Compatibility and frozen-state migration
 
+### Commit identities and regeneration order
+
+Two commit identities remain deliberately distinct. Each regenerated dossier
+stores `implementation_source_head`, the reviewed commit whose implementation
+bytes were used to produce both inventories and freezes. The later Gate B
+authorization stores `source_head`, the clean exact-main commit authenticated
+by Hosted Gate A and used by Gate C. A packaging commit or squash merge may
+therefore advance `source_head` while the dossier continues to identify its
+earlier implementation anchor. Neither identity may be replaced by tree
+equality, and neither field may be silently rewritten after evidence capture.
+
+Gate B authorization is created only after the exact-main hosted run and its
+four inputs have been captured. It binds that final `source_head`, source tree,
+all four raw inputs, and the newly created verification receipt. Approval
+dossiers do not predict a future squash SHA and do not authorize Gate B by
+themselves. This ordering avoids a self-referential commit cycle.
+
 - Historical CCP receipts, evidence branches, and packages remain byte-identical
   and retain their historical interpretation.
 - The existing CCP qualification parser remains available only to verify those

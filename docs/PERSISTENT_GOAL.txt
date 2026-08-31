@@ -1,3 +1,38 @@
+A0X Hosted Gate A local implementation checkpoint (2026-08-31): resume only
+from isolated branch `agent/a0x-hosted-gate-a-design`. Its reviewed
+implementation anchor is `f79d7c717a46630a2617bad64f9727c1bf4df7d1`, tree
+`e55e3a80130a1399c99027f802f1f77302c21aa6`; the live branch tip may advance
+only by the Sol preparation commit reported in the handoff. Verify branch,
+HEAD, ancestry, tree, and dirty state before acting.
+Canonical specification:
+`docs/superpowers/specs/2026-08-31-a0x-hosted-gate-a-design.md`.
+Canonical implementation plan:
+`docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md`.
+Terra handoff: `docs/A0X_HOSTED_GATE_A_TERRA_HANDOFF.md`.
+Sol architecture/security review:
+`docs/A0X_HOSTED_GATE_A_SOL_ARCHITECTURE_REVIEW.md`.
+
+Tasks 1–5 are locally implemented. Focused verifier/Hosted Gate A/schema tests
+pass 40/40 and schema cross-validation reports 155 agreeing pairs with 19
+mutations rejected. The complete repository is intentionally not green: four
+frozen-package checks correctly detect stale pre-migration implementation
+bindings. Execute Tasks 6–11 in order under the frozen Sol rulings. Terra owns
+implementation and integration; delegate bounded inventories, mutation audits,
+deterministic test execution, documentation comparison, and hash/count
+distillation to Luna. Do not weaken or regenerate around an intermediate
+failure. Task 10 alone regenerates two inventories, two freezes, twelve
+dossiers, and the no-model receipt from its recorded implementation anchor.
+
+Stop before Task 12. Push, PR, merge, hosted-run acceptance, evidence capture,
+offline verification of real hosted bytes, publication, Gate B/C, model,
+tokenizer, target, CCP heavy work, Docker, scientific execution, retry, and
+claim promotion require their own exact authorization. Preserve historical
+packages and receipts byte-identically. Continue until Task 11 produces a clean
+exact-head local candidate and publication dossier, then request Sol/operator
+review.
+
+--- Historical checkpoint below; retained as evidence, not current authority ---
+
 A0X post-bootstrap hosted-integration checkpoint (2026-08-30): verify live
 state before acting. Public `main`
 `d2a475f58db668a2ce0a4ec48082189422b19eab`, tree
