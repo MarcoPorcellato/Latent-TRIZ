@@ -1,0 +1,242 @@
+name: A0X Hosted Gate A
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: a0x-gate-a-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  a0x-no-model:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      gate_a_lane_receipt: ${{ steps.receipt.outputs.gate_a_lane_receipt }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: command
+        run: make a0x-no-model-verify
+      - id: receipt
+        run: python scripts/a0x_hosted_gate_a.py lane --lane-id "a0x-no-model" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --github-output "$GITHUB_OUTPUT" -- make a0x-no-model-verify
+
+  a0x-synthetic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      gate_a_lane_receipt: ${{ steps.receipt.outputs.gate_a_lane_receipt }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: command
+        run: make a0x-synthetic-verify
+      - id: receipt
+        run: python scripts/a0x_hosted_gate_a.py lane --lane-id "a0x-synthetic" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --github-output "$GITHUB_OUTPUT" -- make a0x-synthetic-verify
+
+  documentation-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      gate_a_lane_receipt: ${{ steps.receipt.outputs.gate_a_lane_receipt }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: command
+        run: make docs-audit
+      - id: receipt
+        run: python scripts/a0x_hosted_gate_a.py lane --lane-id "documentation-audit" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --github-output "$GITHUB_OUTPUT" -- make docs-audit
+
+  repository-python311:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      gate_a_lane_receipt: ${{ steps.receipt.outputs.gate_a_lane_receipt }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+      - id: observed-python
+        run: python -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version'
+      - id: install
+        run: python -m pip install --require-hashes -r requirements-schema.lock
+      - id: command
+        run: python scripts/repository_check.py
+      - id: receipt
+        run: python scripts/a0x_hosted_gate_a.py lane --lane-id "repository-python311" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --github-output "$GITHUB_OUTPUT" -- python scripts/repository_check.py
+
+  repository-python312:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      gate_a_lane_receipt: ${{ steps.receipt.outputs.gate_a_lane_receipt }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - id: observed-python
+        run: python -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
+      - id: install
+        run: python -m pip install --require-hashes -r requirements-schema.lock
+      - id: command
+        run: python scripts/repository_check.py
+      - id: receipt
+        run: python scripts/a0x_hosted_gate_a.py lane --lane-id "repository-python312" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --github-output "$GITHUB_OUTPUT" -- python scripts/repository_check.py
+
+  schema-cross-validation-python311:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      gate_a_lane_receipt: ${{ steps.receipt.outputs.gate_a_lane_receipt }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+      - id: observed-python
+        run: python -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version'
+      - id: install
+        run: python -m pip install --require-hashes -r requirements-schema.lock
+      - id: command
+        run: python scripts/schema_cross_validate.py
+      - id: receipt
+        run: python scripts/a0x_hosted_gate_a.py lane --lane-id "schema-cross-validation-python311" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --github-output "$GITHUB_OUTPUT" -- python scripts/schema_cross_validate.py
+
+  schema-cross-validation-python312:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      gate_a_lane_receipt: ${{ steps.receipt.outputs.gate_a_lane_receipt }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - id: observed-python
+        run: python -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
+      - id: install
+        run: python -m pip install --require-hashes -r requirements-schema.lock
+      - id: command
+        run: python scripts/schema_cross_validate.py
+      - id: receipt
+        run: python scripts/a0x_hosted_gate_a.py lane --lane-id "schema-cross-validation-python312" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --github-output "$GITHUB_OUTPUT" -- python scripts/schema_cross_validate.py
+
+  aggregate:
+    if: ${{ always() }}
+    needs:
+      - a0x-no-model
+      - a0x-synthetic
+      - documentation-audit
+      - repository-python311
+      - repository-python312
+      - schema-cross-validation-python311
+      - schema-cross-validation-python312
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - id: source
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: manifest
+        run: |
+          workflow_sha256="$(sha256sum .github/workflows/a0x-hosted-gate-a.yml | awk '{print $1}')"
+          requirements_lock_sha256="$(sha256sum requirements-schema.lock | awk '{print $1}')"
+          action_manifest_sha256="$(sha256sum .github/a0x-hosted-gate-a-actions.json | awk '{print $1}')"
+          lane_manifest_sha256="$(sha256sum .github/a0x-hosted-gate-a-lanes.json | awk '{print $1}')"
+          python scripts/a0x_hosted_gate_a.py aggregate --repository "MarcoPorcellato/Latent-TRIZ" --source-head "$GITHUB_SHA" --source-tree "$SOURCE_TREE" --workflow-sha256 "$workflow_sha256" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --requirements-lock-sha256 "$requirements_lock_sha256" --action-manifest-sha256 "$action_manifest_sha256" --lane-manifest-sha256 "$lane_manifest_sha256" --lane-output "${{ needs['a0x-no-model'].outputs.gate_a_lane_receipt }}" --lane-output "${{ needs['a0x-synthetic'].outputs.gate_a_lane_receipt }}" --lane-output "${{ needs['documentation-audit'].outputs.gate_a_lane_receipt }}" --lane-output "${{ needs['repository-python311'].outputs.gate_a_lane_receipt }}" --lane-output "${{ needs['repository-python312'].outputs.gate_a_lane_receipt }}" --lane-output "${{ needs['schema-cross-validation-python311'].outputs.gate_a_lane_receipt }}" --lane-output "${{ needs['schema-cross-validation-python312'].outputs.gate_a_lane_receipt }}" --output "a0x-hosted-gate-a-evidence.json"
+      - id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          if-no-files-found: error
+          name: a0x-hosted-gate-a-${{ github.sha }}
+          path: a0x-hosted-gate-a-evidence.json
+      - id: attest
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-path: a0x-hosted-gate-a-evidence.json
