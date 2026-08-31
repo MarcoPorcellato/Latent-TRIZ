@@ -19,6 +19,7 @@ from latent_triz.a0x_runtime_bundle import (  # noqa: E402
     preflight_runtime_bundle,
     prepare_runtime_bundle,
 )
+from latent_triz.a0x_hosted_verifier import GateBVerificationRequest, verify_hosted_gate_a  # noqa: E402
 from latent_triz.a0x_runtime_readiness import build_runtime_readiness  # noqa: E402
 
 
@@ -53,10 +54,11 @@ def _parser() -> argparse.ArgumentParser:
         help="validate and construct the bundle in memory without writing runtime documents",
     )
     parser.add_argument("--fixed-dossier", required=True)
-    parser.add_argument("--qualification-receipt", required=True)
+    parser.add_argument("--gate-b-authorization", required=True)
+    parser.add_argument("--verifier", required=True)
+    parser.add_argument("--verifier-policy", required=True)
     parser.add_argument("--ccp", required=True)
     parser.add_argument("--python", required=True)
-    parser.add_argument("--public-evidence-commit", required=True)
     parser.add_argument("--authorization-id", required=True)
     parser.add_argument("--attempt-id", required=True)
     return parser
@@ -77,6 +79,7 @@ def main(
     *,
     root: Path | None = None,
     stdout: TextIO | None = None,
+    gate_a_verifier=None,
 ) -> int:
     """Run the shell-free readiness probes and emit one sorted public receipt."""
     arguments = _parser().parse_args(argv)
@@ -84,10 +87,11 @@ def main(
     stream = sys.stdout if stdout is None else stdout
     request = RuntimePreparationRequest(
         fixed_dossier=arguments.fixed_dossier,
-        qualification_receipt=Path(arguments.qualification_receipt),
+        gate_b_authorization=Path(arguments.gate_b_authorization),
+        verifier_executable=Path(arguments.verifier),
+        verifier_policy=Path(arguments.verifier_policy),
         ccp_executable=Path(arguments.ccp),
         python_executable=Path(arguments.python),
-        public_evidence_commit=arguments.public_evidence_commit,
         authorization_id=arguments.authorization_id,
         attempt_id=arguments.attempt_id,
     )
@@ -115,6 +119,22 @@ def main(
             python_probe=python_metadata,
         )
 
+    def default_gate_a_verifier(request: GateBVerificationRequest) -> bytes:
+        def runner(argv, cwd):
+            result = subprocess.run(
+                list(argv), cwd=str(cwd), shell=False, check=False,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            return result.returncode, result.stdout, result.stderr
+
+        def verifier_source_state(probe_root: Path) -> tuple[str, str, bool]:
+            head = _probe(("git", "rev-parse", "HEAD"), probe_root).strip()
+            tree = _probe(("git", "rev-parse", "HEAD^{tree}"), probe_root).strip()
+            clean = _probe(("git", "status", "--porcelain", "--untracked-files=all"), probe_root) == ""
+            return head, tree, clean
+
+        return verify_hosted_gate_a(request, runner=runner, source_state_probe=verifier_source_state)
+
     try:
         operation = preflight_runtime_bundle if arguments.preflight else prepare_runtime_bundle
         receipt = operation(
@@ -123,6 +143,7 @@ def main(
             source_state_probe=source_state_probe,
             ccp_version_probe=ccp_version_probe,
             runtime_readiness_probe=runtime_readiness_probe,
+            gate_a_verifier=default_gate_a_verifier if gate_a_verifier is None else gate_a_verifier,
         )
     except (A0XRuntimeBundleError, OSError, ValueError, subprocess.SubprocessError) as error:
         refusal: dict[str, object] = {"status": "refused"}

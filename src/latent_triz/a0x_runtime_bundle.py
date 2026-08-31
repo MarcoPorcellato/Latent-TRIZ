@@ -2,8 +2,8 @@
 
 Preparation is deliberately limited to public documents, executable/package
 metadata, and the acquired runtime-file allowlist. It never constructs a
-tokenizer or model and never reads a sealed target. Its four documents form an
-acyclic dependency chain: readiness -> descriptor -> authorization -> mapping.
+tokenizer or model and never reads a sealed target. Its Gate B chain is
+verification receipt -> readiness -> descriptor -> authorization -> mapping.
 """
 from __future__ import annotations
 
@@ -15,14 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from .a0x_ccp_executor import (
-    A0XCcpExecutorError,
-    qualification_evidence_from_receipt,
-    runtime_mapping_path,
-)
+from .a0x_ccp_executor import runtime_mapping_path
 from .a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
-    EXECUTION_AUTHORIZATION_PROFILE,
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     PairBinding,
     canonical_commitment,
@@ -38,7 +34,9 @@ from .a0x_material_contract import (
     MEMORY_LIMIT_BYTES,
     OUTER_TIMEOUT_SECONDS,
     derive_runtime_paths,
+    validate_gate_a_evidence,
 )
+from .a0x_hosted_verifier import GateBVerificationRequest
 from .a0x_runner import planned_material_dossiers
 from .a0x_runtime_readiness import (
     A0XRuntimeReadinessError,
@@ -54,6 +52,8 @@ _IDENTIFIER = re.compile(r"^[A-Za-z0-9._-]+$")
 _MAPPING_PROFILE = "a0x-runtime-role-mapping-v1"
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _MATERIAL_CONTRACT_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-material-execution-contract.schema.json"
+_GATE_B_AUTHORIZATION_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-gate-b-authorization.schema.json"
+_GATE_A_RECEIPT_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-hosted-gate-a-verification-receipt.schema.json"
 _ENVIRONMENT = (
     "HF_HUB_OFFLINE=1",
     "TRANSFORMERS_OFFLINE=1",
@@ -61,6 +61,10 @@ _ENVIRONMENT = (
     "TOKENIZERS_PARALLELISM=false",
     "PYTHONNOUSERSITE=1",
 )
+
+
+def _required_gate_a_verifier(_request: GateBVerificationRequest) -> bytes:
+    raise A0XRuntimeBundleError("Gate B verifier callback is required")
 
 
 class A0XRuntimeBundleError(RuntimeError):
@@ -74,10 +78,11 @@ class A0XRuntimeBundleError(RuntimeError):
 @dataclass(frozen=True)
 class RuntimePreparationRequest:
     fixed_dossier: str
-    qualification_receipt: Path
+    gate_b_authorization: Path
+    verifier_executable: Path
+    verifier_policy: Path
     ccp_executable: Path
     python_executable: Path
-    public_evidence_commit: str
     authorization_id: str
     attempt_id: str
 
@@ -92,7 +97,6 @@ class _ValidatedPreparationInputs:
     child_sha256: str
     contract_sha256: str
     ccp_identity: Mapping[str, Any]
-    qualification_evidence: Mapping[str, Any]
     descriptor_path: str
 
 
@@ -124,14 +128,16 @@ def prepare_runtime_bundle(
     source_state_probe: Callable[[], tuple[str, bool]],
     ccp_version_probe: Callable[[Path], str],
     runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+    gate_a_verifier: Callable[[GateBVerificationRequest], bytes] | None = None,
 ) -> dict[str, Any]:
-    """Prepare the exact v2 bundle without accessing material resources."""
+    """Prepare the current Gate B bundle without accessing material resources."""
     bundle = _build_runtime_bundle(
         root,
         request,
         source_state_probe=source_state_probe,
         ccp_version_probe=ccp_version_probe,
         runtime_readiness_probe=runtime_readiness_probe,
+        gate_a_verifier=_required_gate_a_verifier if gate_a_verifier is None else gate_a_verifier,
     )
     return _write_and_verify_bundle(
         bundle.repository, bundle.pair, bundle.source_head, bundle.readiness,
@@ -146,6 +152,7 @@ def preflight_runtime_bundle(
     source_state_probe: Callable[[], tuple[str, bool]],
     ccp_version_probe: Callable[[Path], str],
     runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+    gate_a_verifier: Callable[[GateBVerificationRequest], bytes] | None = None,
 ) -> dict[str, Any]:
     """Validate and construct one exact bundle in memory without writing it."""
     bundle = _build_runtime_bundle(
@@ -154,6 +161,7 @@ def preflight_runtime_bundle(
         source_state_probe=source_state_probe,
         ccp_version_probe=ccp_version_probe,
         runtime_readiness_probe=runtime_readiness_probe,
+        gate_a_verifier=_required_gate_a_verifier if gate_a_verifier is None else gate_a_verifier,
     )
     return _bundle_summary(
         bundle.pair,
@@ -173,16 +181,21 @@ def _build_runtime_bundle(
     source_state_probe: Callable[[], tuple[str, bool]],
     ccp_version_probe: Callable[[Path], str],
     runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+    gate_a_verifier: Callable[[GateBVerificationRequest], bytes],
 ) -> _PreparedRuntimeBundle:
-    """Validate inputs and construct the four documents entirely in memory."""
+    """Verify hosted evidence, then construct the later documents in memory."""
     repository = Path(root).resolve(strict=True)
     source_head, source_clean = _source_state(source_state_probe)
     if not source_clean:
         raise A0XRuntimeBundleError("runtime preparation requires a clean checkout")
     dossier, pair = _load_fixed_dossier(repository, request.fixed_dossier)
+    _preflight_output_paths(repository, pair, source_head)
     inputs = _validate_preparation_inputs(
         repository, request, dossier=dossier, pair=pair, source_head=source_head,
         ccp_version_probe=ccp_version_probe,
+    )
+    gate_a_evidence = _verify_gate_a_evidence(
+        repository, request, pair=pair, source_head=source_head, verifier=gate_a_verifier,
     )
     readiness = _runtime_readiness(
         runtime_readiness_probe, repository, pair, source_head, inputs.python_path,
@@ -196,7 +209,7 @@ def _build_runtime_bundle(
     descriptor_raw = canonical_json_bytes(descriptor)
     descriptor_sha256 = hashlib.sha256(descriptor_raw).hexdigest()
     authorization = _build_authorization(
-        dossier, pair, source_head, descriptor_sha256, inputs.qualification_evidence,
+        dossier, pair, source_head, descriptor_sha256, gate_a_evidence,
         inputs.ccp_identity, inputs.python_sha256, inputs.child_sha256,
         request.authorization_id, request.attempt_id,
     )
@@ -204,6 +217,7 @@ def _build_runtime_bundle(
         repository, pair, source_head, inputs.ccp_path, inputs.python_path,
         inputs.descriptor_path, descriptor_sha256,
     )
+    _revalidate_gate_a_evidence(repository, request, pair=pair, source_head=source_head, evidence=gate_a_evidence)
     if _source_state(source_state_probe) != (source_head, True):
         raise A0XRuntimeBundleError("runtime preparation source state drifted before output")
     return _PreparedRuntimeBundle(
@@ -244,8 +258,6 @@ def _validate_preparation_inputs(
 ) -> _ValidatedPreparationInputs:
     """Bind every input byte before any runtime output can be created."""
     _revision(source_head, "source HEAD")
-    _preflight_output_paths(root, pair, source_head)
-    _revision(request.public_evidence_commit, "public evidence commit")
     _identifier(request.authorization_id, "authorization ID")
     _identifier(request.attempt_id, "attempt ID")
     contract_path = _repository_file(root, MATERIAL_CONTRACT_PATH)
@@ -267,25 +279,6 @@ def _validate_preparation_inputs(
         raise A0XRuntimeBundleError("CCP executable version differs from material contract")
     python_path = _external_executable(request.python_executable, "Python executable")
     child_path = _repository_file(root, "scripts/a0x_material_child.py")
-    expected_receipt = derive_runtime_paths(pair, source_head=source_head).qualification_receipt_path
-    if expected_receipt is None or _external_file(request.qualification_receipt, "qualification receipt") != _repository_file(root, expected_receipt):
-        raise A0XRuntimeBundleError(
-            "qualification receipt path is not source-derived",
-            code="A0X_QUALIFICATION_RECEIPT_PATH_NOT_SOURCE_DERIVED",
-        )
-    qualification_raw = _repository_file(root, expected_receipt).read_bytes()
-    try:
-        qualification = qualification_evidence_from_receipt(
-            qualification_raw,
-            source_head=source_head,
-            ccp_identity=ccp_identity,
-            public_evidence_commit=request.public_evidence_commit,
-        )
-    except A0XCcpExecutorError as error:
-        raise A0XRuntimeBundleError(
-            "qualification receipt is invalid",
-            code="A0X_QUALIFICATION_RECEIPT_INVALID",
-        ) from error
     descriptor_path = derive_runtime_paths(pair).launch_descriptor_path
     return _ValidatedPreparationInputs(
         ccp_path=ccp_path,
@@ -296,9 +289,143 @@ def _validate_preparation_inputs(
         child_sha256=sha256_file(child_path),
         contract_sha256=contract_sha256,
         ccp_identity=ccp_identity,
-        qualification_evidence=qualification,
         descriptor_path=descriptor_path,
     )
+
+
+def _verify_gate_a_evidence(
+    root: Path,
+    request: RuntimePreparationRequest,
+    *,
+    pair: PairBinding,
+    source_head: str,
+    verifier: Callable[[GateBVerificationRequest], bytes],
+) -> dict[str, Any]:
+    """Create and bind Gate B's sole durable output before readiness starts."""
+    authorization_path, authorization_raw, authorization = _gate_b_authorization(root, request)
+    if authorization["source_head"] != source_head or authorization["pair_binding"] != pair.as_mapping():
+        raise A0XRuntimeBundleError("Gate B authorization does not match runtime preparation")
+    policy_path = _controlled_repository_file(root, request.verifier_policy, "verifier policy")
+    executable = _external_executable(request.verifier_executable, "verifier executable")
+    try:
+        returned_raw = verifier(GateBVerificationRequest(root, authorization_path, executable, policy_path))
+    except Exception as error:
+        raise A0XRuntimeBundleError("Gate B verification refused") from error
+    if not isinstance(returned_raw, bytes):
+        raise A0XRuntimeBundleError("Gate B verifier returned invalid receipt bytes")
+    return _gate_a_evidence_from_receipt(
+        root, authorization_path, authorization_raw, authorization, returned_raw,
+        pair=pair, source_head=source_head,
+    )
+
+
+def _revalidate_gate_a_evidence(
+    root: Path,
+    request: RuntimePreparationRequest,
+    *,
+    pair: PairBinding,
+    source_head: str,
+    evidence: Mapping[str, Any],
+) -> None:
+    """Reject any Gate A or verifier byte drift after receipt creation."""
+    authorization_path, authorization_raw, authorization = _gate_b_authorization(root, request)
+    policy_path = _controlled_repository_file(root, request.verifier_policy, "verifier policy")
+    executable = _external_executable(request.verifier_executable, "verifier executable")
+    if hashlib.sha256(policy_path.read_bytes()).hexdigest() != authorization["verifier"]["policy_raw_sha256"]:
+        raise A0XRuntimeBundleError("verifier policy bytes drifted after Gate B verification")
+    if sha256_file(executable) != authorization["verifier"]["sha256"]:
+        raise A0XRuntimeBundleError("verifier executable bytes drifted after Gate B verification")
+    for binding in authorization["hosted_inputs"].values():
+        path = _repository_file(root, binding["path"])
+        if hashlib.sha256(path.read_bytes()).hexdigest() != binding["sha256"]:
+            raise A0XRuntimeBundleError("hosted input bytes drifted after Gate B verification")
+    receipt_path = _repository_file(root, authorization["verification_receipt_path"])
+    _gate_a_evidence_from_receipt(
+        root, authorization_path, authorization_raw, authorization, receipt_path.read_bytes(),
+        pair=pair, source_head=source_head,
+    )
+    try:
+        if validate_gate_a_evidence(evidence) != dict(evidence):
+            raise A0XRuntimeBundleError("Gate A evidence changed after Gate B verification")
+    except A0XContractError as error:
+        raise A0XRuntimeBundleError("Gate A evidence is invalid") from error
+
+
+def _gate_b_authorization(root: Path, request: RuntimePreparationRequest) -> tuple[Path, bytes, dict[str, Any]]:
+    path = _controlled_repository_file(root, request.gate_b_authorization, "Gate B authorization")
+    raw = path.read_bytes()
+    try:
+        value = strict_json_object(raw)
+    except A0XContractError as error:
+        raise A0XRuntimeBundleError("Gate B authorization is not strict JSON") from error
+    _validate_schema(value, _GATE_B_AUTHORIZATION_SCHEMA, "Gate B authorization")
+    return path, raw, value
+
+
+def _gate_a_evidence_from_receipt(
+    root: Path,
+    authorization_path: Path,
+    authorization_raw: bytes,
+    authorization: Mapping[str, Any],
+    returned_raw: bytes,
+    *,
+    pair: PairBinding,
+    source_head: str,
+) -> dict[str, Any]:
+    receipt_path = _repository_file(root, authorization["verification_receipt_path"])
+    receipt_raw = receipt_path.read_bytes()
+    if receipt_raw != returned_raw:
+        raise A0XRuntimeBundleError("Gate B verifier receipt bytes did not persist exactly")
+    try:
+        receipt = strict_json_object(receipt_raw)
+    except A0XContractError as error:
+        raise A0XRuntimeBundleError("Gate B verifier receipt is not strict JSON") from error
+    _validate_schema(receipt, _GATE_A_RECEIPT_SCHEMA, "Gate B verifier receipt")
+    if (
+        authorization["source_head"] != source_head
+        or receipt["qualified_source_head"] != source_head
+        or receipt["qualified_source_tree"] != authorization["source_tree"]
+        or receipt["pair_binding"] != pair.as_mapping()
+        or receipt["authorization_raw_sha256"] != hashlib.sha256(authorization_raw).hexdigest()
+        or receipt["hosted_inputs"] != authorization["hosted_inputs"]
+        or receipt["verifier"] != authorization["verifier"]
+    ):
+        raise A0XRuntimeBundleError("Gate B verifier receipt does not bind authorized hosted evidence")
+    evidence = {
+        "evidence_profile": "a0x-gate-a-evidence-binding-v2",
+        "provider": "github-hosted-attestation-v1",
+        "repository": authorization["repository"],
+        "source_head": source_head,
+        "source_tree": authorization["source_tree"],
+        "hosted_inputs": dict(authorization["hosted_inputs"]),
+        "verification_receipt": {
+            "path": authorization["verification_receipt_path"],
+            "sha256": hashlib.sha256(receipt_raw).hexdigest(),
+        },
+        "verifier": dict(authorization["verifier"]),
+    }
+    try:
+        return validate_gate_a_evidence(evidence)
+    except A0XContractError as error:
+        raise A0XRuntimeBundleError("Gate A evidence binding is invalid") from error
+
+
+def _controlled_repository_file(root: Path, candidate: Path, label: str) -> Path:
+    path = _external_file(candidate, label)
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise A0XRuntimeBundleError(f"{label} is outside repository") from error
+    return _repository_file(root, relative.as_posix())
+
+
+def _validate_schema(value: Mapping[str, Any], path: Path, label: str) -> None:
+    try:
+        schema = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise A0XRuntimeBundleError(f"{label} schema is unavailable") from error
+    if not isinstance(schema, dict) or validate(dict(value), schema):
+        raise A0XRuntimeBundleError(f"{label} schema rejected input")
 
 
 def _build_descriptor(
@@ -346,7 +473,7 @@ def _build_authorization(
     pair: PairBinding,
     source_head: str,
     descriptor_sha256: str,
-    qualification_evidence: Mapping[str, Any],
+    gate_a_evidence: Mapping[str, Any],
     ccp_identity: Mapping[str, Any],
     python_sha256: str,
     child_sha256: str,
@@ -360,7 +487,7 @@ def _build_authorization(
     paths = derive_runtime_paths(pair)
     authorization = {
         "artifact_class": "a0x-execution-authorization",
-        "commitment_profile": EXECUTION_AUTHORIZATION_PROFILE,
+        "commitment_profile": CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
         "empirical": True,
         "scientific_status": "exploratory",
         "evidence_eligible": False,
@@ -372,6 +499,7 @@ def _build_authorization(
         "repository": "MarcoPorcellato/Latent-TRIZ",
         "implementation_source_head": dossier["implementation_source_head"],
         "source_head": source_head,
+        "source_tree": gate_a_evidence["source_tree"],
         "material_contract_raw_sha256": dossier["material_contract_raw_sha256"],
         "ccp": dict(ccp_identity),
         "authorization_inlet_path": paths.authorization_path,
@@ -408,14 +536,14 @@ def _build_authorization(
             "profile": "a0x-guard-preflight-observation-v1",
             "path": paths.observation_directory + "guard-preflight-observation.json",
         },
-        "qualification_evidence": dict(qualification_evidence),
+        "gate_a_evidence": dict(gate_a_evidence),
         "max_guard_exec_count": 1,
         "stop_boundary": "after_one_sealed_target_read",
         "authorization_id": authorization_id,
         "attempt_id": attempt_id,
     }
     try:
-        canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE)
+        canonical_commitment(authorization, CURRENT_EXECUTION_AUTHORIZATION_PROFILE)
     except (A0XContractError, TypeError, ValueError) as error:
         raise A0XRuntimeBundleError("runtime authorization does not satisfy its frozen contract") from error
     return authorization
@@ -465,13 +593,25 @@ def _write_and_verify_bundle(
         "authorization": authorization, "mapping": mapping,
     }
     raw_documents = {name: canonical_json_bytes(document) for name, document in documents.items()}
-    for name in ("readiness", "descriptor", "authorization", "mapping"):
-        path = _write_path(root, relative_paths[name])
-        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        _exclusive_write(path, raw_documents[name])
-    for name, raw in raw_documents.items():
-        if _repository_file(root, relative_paths[name]).read_bytes() != raw:
-            raise A0XRuntimeBundleError("runtime bundle bytes did not persist exactly")
+    created: list[tuple[Path, os.stat_result]] = []
+    try:
+        for name in ("readiness", "descriptor", "authorization", "mapping"):
+            path = _write_path(root, relative_paths[name])
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            _exclusive_write(path, raw_documents[name])
+            created.append((path, path.stat(follow_symlinks=False)))
+        for name, raw in raw_documents.items():
+            if _repository_file(root, relative_paths[name]).read_bytes() != raw:
+                raise A0XRuntimeBundleError("runtime bundle bytes did not persist exactly")
+    except Exception:
+        for path, created_stat in reversed(created):
+            try:
+                current = path.stat(follow_symlinks=False)
+                if current.st_ino == created_stat.st_ino and current.st_dev == created_stat.st_dev and path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+        raise
     return _bundle_summary(
         pair, source_head, readiness, descriptor, authorization, mapping, status="prepared",
     )
@@ -513,6 +653,8 @@ def _bundle_summary(
         "authorization_sha256": hashlib.sha256(raw_documents["authorization"]).hexdigest(),
         "mapping_path": relative_paths["mapping"],
         "mapping_sha256": hashlib.sha256(raw_documents["mapping"]).hexdigest(),
+        "verification_receipt_path": authorization["gate_a_evidence"]["verification_receipt"]["path"],
+        "verification_receipt_sha256": authorization["gate_a_evidence"]["verification_receipt"]["sha256"],
         "authorization_id": authorization["authorization_id"],
         "attempt_id": authorization["attempt_id"],
     }
