@@ -13,6 +13,10 @@ from typing import TextIO
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+_CHILD_ENV = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC"}
+_GIT = "/usr/bin/git"
+_VERIFIER_TIMEOUT_SECONDS = 300
+_GIT_TIMEOUT_SECONDS = 30
 
 from latent_triz.a0x_hosted_verifier import (
     A0XHostedVerifierError,
@@ -33,28 +37,34 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _runner(argv: Sequence[str], cwd: Path) -> tuple[int, bytes, bytes]:
-    """Execute only verifier-provided argv; no shell or inherited stdin."""
-    process = subprocess.run(
-        tuple(argv), cwd=cwd, stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
-    )
+    """Execute only verifier-provided argv with a fixed non-networking environment."""
+    try:
+        process = subprocess.run(
+            tuple(argv), cwd=cwd, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, env=dict(_CHILD_ENV), timeout=_VERIFIER_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise A0XHostedVerifierError("A0X_GATE_B_ATTESTATION_REFUSED") from error
     return process.returncode, process.stdout, process.stderr
 
 
 def _source_state(root: Path) -> tuple[str, str, bool]:
     """Read exact local HEAD/tree and reject a dirty or inaccessible checkout."""
     def capture(*argv: str) -> bytes:
-        process = subprocess.run(
-            argv, cwd=root, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
-        )
+        try:
+            process = subprocess.run(
+                argv, cwd=root, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, env=dict(_CHILD_ENV), timeout=_GIT_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise A0XHostedVerifierError("A0X_GATE_B_SOURCE_DRIFT") from error
         if process.returncode != 0:
             raise A0XHostedVerifierError("A0X_GATE_B_SOURCE_DRIFT")
         return process.stdout
 
-    head = capture("git", "rev-parse", "HEAD").decode("ascii", "strict").strip()
-    tree = capture("git", "rev-parse", "HEAD^{tree}").decode("ascii", "strict").strip()
-    clean = capture("git", "status", "--porcelain=v1", "--untracked-files=all") == b""
+    head = capture(_GIT, "rev-parse", "HEAD").decode("ascii", "strict").strip()
+    tree = capture(_GIT, "rev-parse", "HEAD^{tree}").decode("ascii", "strict").strip()
+    clean = capture(_GIT, "status", "--porcelain=v1", "--untracked-files=all") == b""
     return head, tree, clean
 
 

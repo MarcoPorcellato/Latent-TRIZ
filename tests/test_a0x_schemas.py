@@ -425,7 +425,7 @@ class A0XSchemasTests(unittest.TestCase):
         self.assertEqual(
             {
                 "artifact_class", "authorization_profile", "authorization_status",
-                "repository", "source_head", "source_tree", "pair_binding",
+                "repository", "source_head", "source_tree", "job_workflow_sha", "source_sha", "pair_binding",
                 "hosted_inputs", "verifier", "verification_receipt_path",
                 "max_verification_count", "stop_boundary", "authorization_id",
             },

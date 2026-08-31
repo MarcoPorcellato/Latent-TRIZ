@@ -929,20 +929,38 @@ high-level result semantics, but lacked an exact parser contract for
 or sigstore-go output drift into a silent authorization change.
 
 **Correction.** Add a synthetic-only adapter schema and inert fixture for
-GitHub CLI `2.97.0` with `sigstore-go 1.2.2`. The pure verifier accepts exactly
-one result with exact top-level, certificate-extension, subject, predicate,
-builder, source, signer, timestamp, and workflow-consistency fields. It
-independently binds raw workflow SHA-256 from canonical manifest, preserves
-separate exact-head signer/source digest claims, validates raw inputs before
-and after one injected shell-free runner, and writes one fsynced exclusive
-receipt. Predicate fields remain workflow-controlled consistency evidence, not
-a trust anchor.
+GitHub CLI `2.97.0` with `sigstore-go 1.2.2`. The frozen result media type is
+`application/vnd.dev.sigstore.verificationresult+json;version=0.1`; its
+certificate summary carries flat lower-camel extension fields, while
+`verifiedIdentity` carries the version-pinned nested matcher serialization:
+the literal GitHub CLI SAN prefix matcher and fixed issuer matcher are compared
+as data and are never evaluated as supplied regular expressions.
+The pure verifier binds the GitHub Actions workflow build type, workflow object,
+single source dependency, repository IDs, push/github-hosted internal
+parameters, invocation URL, certificate SAN/issuer, timestamps, and separate
+`job_workflow_sha`/`source_sha` fields. For the current non-reusable same-repo
+contract both fields must independently equal `source_head`; their command-line
+flags remain distinct. Predicate evidence is workflow-controlled consistency
+evidence, not a trust anchor.
+
+It independently binds raw workflow SHA-256 from the canonical manifest,
+rehashes authorization, policy, workflow, executable, and all four inputs after
+the one injected runner, and writes a single fsynced receipt through a checked
+trusted-root directory descriptors with component `mkdirat`/`openat`, then
+`O_EXCL` and `O_NOFOLLOW` on the receipt leaf. Control,
+input, and output paths reject traversal and caller-controlled ancestors. The
+operational wrapper supplies only a fixed locale/path environment to both the
+verifier and absolute `/usr/bin/git`; it never passes inherited GitHub tokens,
+authentication, or proxy variables. Verifier stdout/stderr are each capped at
+1 MiB before parse or receipt handling; the wrapper bounds verification to 300
+seconds and each local Git probe to 30 seconds.
 
 **Regression evidence.** Synthetic tests reject malformed, unknown, duplicate,
-extra, missing, and wrong signed fields; nonzero runner; source drift; pre/post
-hash drift; symlink; hardlink; nonregular; oversize; output collision; and
-rerun. Each refusal writes no new receipt and reaches no readiness, descriptor,
-authorization, or mapping stage.
+extra, missing, and wrong signed fields; independently wrong signer/source
+revisions; nonzero or malformed runner output; source drift; pre/post control,
+workflow, and input hash drift; traversal; symlink; hardlink; nonregular;
+oversize; output collision; and rerun. Each refusal writes no new receipt and
+reaches no readiness, descriptor, authorization, or mapping stage.
 
 **Status.** The pure verifier, schema, fixture, mutation suite, and shell-free
 wrapper are local only. The wrapper has injected runner and source-state seams;

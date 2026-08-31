@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 from latent_triz.a0x_hosted_gate_a import LANE_COMMANDS, build_lane_receipt, build_manifest, canonical_json_bytes
 
@@ -23,6 +24,16 @@ class HostedVerifierContractTest(unittest.TestCase):
         self.assertTrue(callable(verify_hosted_gate_a))
         self.assertTrue(GateBVerificationRequest)
 
+    def test_timestamp_accepts_only_utc_rfc3339_z_with_stable_refusal(self) -> None:
+        """Clock and transport parsing never leak a TypeError or local offset."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, _parse_timestamp
+
+        self.assertEqual(_parse_timestamp("2026-08-31T12:04:00Z").tzinfo.utcoffset(None).total_seconds(), 0)
+        for value in (None, 3, "2026-08-31T12:04:00+00:00", "2026-08-31 12:04:00Z", "not-a-time"):
+            with self.subTest(value=value), self.assertRaises(A0XHostedVerifierError) as raised:
+                _parse_timestamp(value)
+            self.assertEqual(raised.exception.code, "A0X_GATE_B_INPUT_INVALID")
+
     def test_signed_fixture_verifies_one_exact_manifest(self) -> None:
         """Changing any signed binding must make offline Gate B refuse it."""
         from latent_triz.a0x_hosted_verifier import validate_verification_result
@@ -33,12 +44,13 @@ class HostedVerifierContractTest(unittest.TestCase):
             validate_verification_result(
                 result,
                 manifest_sha256="1" * 64,
-                source_head="a" * 40,
+                job_workflow_sha="a" * 40, source_sha="a" * 40,
                 repository="MarcoPorcellato/Latent-TRIZ",
                 signer_workflow="MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml",
                 predicate_type="https://slsa.dev/provenance/v1",
                 cert_oidc_issuer="https://token.actions.githubusercontent.com",
                 required_ref="refs/heads/main",
+                run_id=2002, run_attempt=1,
             )["verificationResult"]["statement"]["subject"][0]["digest"]["sha256"],
             "1" * 64,
         )
@@ -48,7 +60,7 @@ class HostedVerifierContractTest(unittest.TestCase):
         from latent_triz.a0x_hosted_verifier import GateBVerificationRequest, verify_hosted_gate_a
 
         with TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             authorization_path, policy_path, manifest_path, bundle_path, trusted_root_path, transport_path = self._packet(root)
             calls: list[tuple[tuple[str, ...], Path]] = []
             manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
@@ -86,10 +98,11 @@ class HostedVerifierContractTest(unittest.TestCase):
         baseline = json.loads(self._result_fixture())
         mutations = {
             "wrong_subject": lambda value: value[0]["verificationResult"]["statement"]["subject"][0]["digest"].__setitem__("sha256", "2" * 64),
-            "wrong_signer": lambda value: value[0]["verificationResult"]["signature"]["certificate"]["extensions"].__setitem__("BuildSignerDigest", {"sha1": "b" * 40}),
-            "wrong_source": lambda value: value[0]["verificationResult"]["signature"]["certificate"]["extensions"].__setitem__("SourceRepositoryDigest", {"sha1": "b" * 40}),
+            "wrong_signer": lambda value: value[0]["verificationResult"]["signature"]["certificate"].__setitem__("buildSignerDigest", "b" * 40),
+            "wrong_source": lambda value: value[0]["verificationResult"]["signature"]["certificate"].__setitem__("sourceRepositoryDigest", "b" * 40),
             "wrong_issuer": lambda value: value[0]["verificationResult"]["signature"]["certificate"].__setitem__("issuer", "https://wrong.invalid"),
             "wrong_builder": lambda value: value[0]["verificationResult"]["statement"]["predicate"]["runDetails"]["builder"].__setitem__("id", "https://wrong.invalid"),
+            "permissive_san_matcher": lambda value: value[0]["verificationResult"]["verifiedIdentity"]["subjectAlternativeName"].__setitem__("regexp", ".*"),
             "wrong_predicate": lambda value: value[0]["verificationResult"]["statement"].__setitem__("predicateType", "https://wrong.invalid"),
             "missing_timestamp": lambda value: value[0]["verificationResult"].__setitem__("verifiedTimestamps", []),
             "extra_field": lambda value: value[0].__setitem__("extra", True),
@@ -102,21 +115,36 @@ class HostedVerifierContractTest(unittest.TestCase):
                 with self.assertRaises(A0XHostedVerifierError):
                     validate_verification_result(
                         json.dumps(value, sort_keys=True, separators=(",", ":")).encode(),
-                        manifest_sha256="1" * 64, source_head="a" * 40,
+                        manifest_sha256="1" * 64, job_workflow_sha="a" * 40, source_sha="a" * 40,
                         repository="MarcoPorcellato/Latent-TRIZ",
                         signer_workflow="MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml",
                         predicate_type="https://slsa.dev/provenance/v1",
                         cert_oidc_issuer="https://token.actions.githubusercontent.com", required_ref="refs/heads/main",
+                        run_id=2002, run_attempt=1,
                     )
+
+    def test_signer_and_source_revisions_are_independent_bindings(self) -> None:
+        """A valid-looking signer/source revision cannot substitute for the other."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, validate_verification_result
+
+        kwargs = dict(
+            manifest_sha256="1" * 64, repository="MarcoPorcellato/Latent-TRIZ",
+            signer_workflow="MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml",
+            predicate_type="https://slsa.dev/provenance/v1", cert_oidc_issuer="https://token.actions.githubusercontent.com",
+            required_ref="refs/heads/main", run_id=2002, run_attempt=1,
+        )
+        for field in ("job_workflow_sha", "source_sha"):
+            with self.subTest(field=field), self.assertRaises(A0XHostedVerifierError):
+                validate_verification_result(self._result_fixture(), **kwargs, **{field: "b" * 40, **({"source_sha": "a" * 40} if field == "job_workflow_sha" else {"job_workflow_sha": "a" * 40})})
 
     def test_pre_runner_input_mutation_matrix_refuses_without_receipt_or_runner(self) -> None:
         """Unauthenticated input changes never reach gh or create an output."""
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
 
-        cases = ("manifest_hash", "invalid_manifest", "policy", "source_state", "expired", "output_collision", "output_parent_symlink", "symlink", "hardlink", "nonregular", "oversized")
+        cases = ("manifest_hash", "invalid_manifest", "policy", "source_state", "expired", "output_collision", "output_parent_symlink", "input_traversal", "input_parent_symlink", "symlink", "hardlink", "nonregular", "oversized")
         for case in cases:
             with self.subTest(case=case), TemporaryDirectory() as temporary:
-                root = Path(temporary)
+                root = Path(temporary).resolve()
                 authorization_path, policy_path, manifest_path, bundle_path, trusted_root_path, transport_path = self._packet(root)
                 output = root / ".a0x-runtime/gate-b-verifications/" / ("a" * 40) / "a0/gpt2/a0x-a0-gpt2-run-1/gate-a-verification-receipt.json"
                 if case == "manifest_hash":
@@ -146,6 +174,16 @@ class HostedVerifierContractTest(unittest.TestCase):
                     redirect = root / "redirect"
                     redirect.mkdir()
                     output.parent.symlink_to(redirect, target_is_directory=True)
+                elif case == "input_traversal":
+                    authorization = json.loads(authorization_path.read_text())
+                    authorization["hosted_inputs"]["manifest"]["path"] = "../hosted-gate-a-evidence.json"
+                    authorization_path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode())
+                elif case == "input_parent_symlink":
+                    evidence = manifest_path.parent
+                    redirect = root / "redirect"
+                    redirect.mkdir()
+                    evidence.rename(redirect / "evidence")
+                    evidence.symlink_to(redirect / "evidence", target_is_directory=True)
                 elif case == "symlink":
                     bundle_path.unlink(); bundle_path.symlink_to(manifest_path)
                 elif case == "hardlink":
@@ -173,9 +211,9 @@ class HostedVerifierContractTest(unittest.TestCase):
         """A successful process status cannot bypass result, source, or rehash checks."""
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
 
-        for case in ("nonzero", "malformed", "source_drift", "input_drift"):
+        for case in ("nonzero", "malformed", "runner_shape", "oversized_output", "source_drift", "input_drift"):
             with self.subTest(case=case), TemporaryDirectory() as temporary:
-                root = Path(temporary)
+                root = Path(temporary).resolve()
                 authorization_path, policy_path, manifest_path, _bundle, _trusted, _transport = self._packet(root)
                 output = root / ".a0x-runtime/gate-b-verifications/" / ("a" * 40) / "a0/gpt2/a0x-a0-gpt2-run-1/gate-a-verification-receipt.json"
                 manifest_sha256 = self._sha(manifest_path)
@@ -188,6 +226,10 @@ class HostedVerifierContractTest(unittest.TestCase):
                         manifest_path.write_bytes(manifest_path.read_bytes() + b" ")
                     if case == "nonzero":
                         return 1, b"", b"synthetic refusal"
+                    if case == "runner_shape":
+                        return (0, b"")  # type: ignore[return-value]
+                    if case == "oversized_output":
+                        return 0, b"x" * (1024 * 1024 + 1), b""
                     if case == "malformed":
                         return 0, b"not-json", b""
                     return 0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode(), b""
@@ -206,7 +248,7 @@ class HostedVerifierContractTest(unittest.TestCase):
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
 
         with TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             authorization_path, policy_path, manifest_path, _bundle, _trusted, _transport = self._packet(root)
             result = json.loads(self._result_fixture())
             result[0]["verificationResult"]["statement"]["subject"][0]["digest"]["sha256"] = self._sha(manifest_path)
@@ -229,7 +271,7 @@ class HostedVerifierContractTest(unittest.TestCase):
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
 
         with TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             authorization_path, policy_path, _manifest, _bundle, _trusted, _transport = self._packet(root)
             alias = root / "authorization-link.json"
             alias.symlink_to(authorization_path)
@@ -241,6 +283,54 @@ class HostedVerifierContractTest(unittest.TestCase):
                     source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z",
                 )
             self.assertEqual(calls, [])
+
+    def test_control_parent_and_output_traversal_refuse_before_runner(self) -> None:
+        """Caller-controlled control parents and output traversal cannot escape root."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
+
+        for case in ("control_parent", "output_traversal"):
+            with self.subTest(case=case), TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                authorization_path, policy_path, _manifest, _bundle, _trusted, _transport = self._packet(root)
+                if case == "control_parent":
+                    alias_parent = root / "authorization-parent"
+                    alias_parent.symlink_to(authorization_path.parent, target_is_directory=True)
+                    authorization_path = alias_parent / authorization_path.name
+                else:
+                    authorization = json.loads(authorization_path.read_text())
+                    authorization["verification_receipt_path"] = ".a0x-runtime/gate-b-verifications/" + "a" * 40 + "/a0/gpt2/../gate-a-verification-receipt.json"
+                    authorization_path.write_bytes(canonical_json_bytes(authorization))
+                calls: list[tuple[str, ...]] = []
+                with self.assertRaises(A0XHostedVerifierError):
+                    verify_hosted_gate_a(
+                        GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+                        runner=lambda argv, _cwd: calls.append(tuple(argv)) or (0, self._result_fixture(), b""),
+                        source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z",
+                    )
+                self.assertEqual(calls, [])
+
+    def test_post_runner_control_and_workflow_rehash_refuse_without_receipt(self) -> None:
+        """Runner-time swaps of authorization, policy, or raw workflow are terminal."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
+
+        for case in ("authorization", "policy", "workflow"):
+            with self.subTest(case=case), TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                authorization_path, policy_path, manifest_path, _bundle, _trusted, _transport = self._packet(root)
+                result = json.loads(self._result_fixture())
+                result[0]["verificationResult"]["statement"]["subject"][0]["digest"]["sha256"] = self._sha(manifest_path)
+
+                def runner(_argv: tuple[str, ...], _cwd: Path) -> tuple[int, bytes, bytes]:
+                    target = {"authorization": authorization_path, "policy": policy_path, "workflow": root / ".github/workflows/a0x-hosted-gate-a.yml"}[case]
+                    target.write_bytes(target.read_bytes() + b" ")
+                    return 0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode(), b""
+
+                with self.assertRaises(A0XHostedVerifierError):
+                    verify_hosted_gate_a(
+                        GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+                        runner=runner, source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z",
+                    )
+                self.assertFalse((root / ".a0x-runtime/gate-b-verifications").exists())
 
     def test_cli_wraps_only_injected_shell_free_verifier(self) -> None:
         """CLI constructs no shell and exposes only a stable refusal code."""
@@ -262,6 +352,39 @@ class HostedVerifierContractTest(unittest.TestCase):
         )
         self.assertEqual(code, 2)
         self.assertEqual(stream.getvalue(), "A0X_GATE_B_INPUT_INVALID\n")
+
+    def test_wrapper_scrubs_child_environment_and_uses_absolute_git(self) -> None:
+        """No inherited credential, proxy, or GitHub variable reaches a child."""
+        script_path = Path(__file__).parents[1] / "scripts/a0x_verify_hosted_gate_a.py"
+        spec = importlib.util.spec_from_file_location("a0x_verify_hosted_gate_a_env", script_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        observed: list[dict[str, object]] = []
+
+        class Process:
+            returncode = 0
+            stdout = b"a" * 40 + b"\n"
+            stderr = b""
+
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret", "GITHUB_TOKEN": "secret", "HTTPS_PROXY": "bad"}, clear=False), mock.patch.object(module.subprocess, "run", side_effect=lambda *args, **kwargs: observed.append({"argv": args[0], "env": kwargs["env"], "timeout": kwargs["timeout"]}) or Process()):
+            module._runner(("/opt/homebrew/bin/gh", "attestation"), Path("/private/tmp"))
+            module._source_state(Path("/private/tmp"))
+        self.assertEqual(len(observed), 4)
+        for child in observed:
+            self.assertEqual(child["env"], {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC"})
+        self.assertEqual(observed[0]["timeout"], 300)
+        self.assertTrue(all(child["timeout"] == 30 for child in observed[1:]))
+        self.assertTrue(all(child["argv"][0] == "/usr/bin/git" for child in observed[1:]))
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
+
+        with mock.patch.object(module.subprocess, "run", side_effect=OSError("synthetic")):
+            with self.assertRaises(A0XHostedVerifierError) as runner_error:
+                module._runner(("/opt/homebrew/bin/gh", "attestation"), Path("/private/tmp"))
+            with self.assertRaises(A0XHostedVerifierError) as source_error:
+                module._source_state(Path("/private/tmp"))
+        self.assertEqual(runner_error.exception.code, "A0X_GATE_B_ATTESTATION_REFUSED")
+        self.assertEqual(source_error.exception.code, "A0X_GATE_B_SOURCE_DRIFT")
 
 
     @staticmethod
