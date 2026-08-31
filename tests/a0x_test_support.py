@@ -251,6 +251,18 @@ def rich_r1_statistical_result(
 
 
 def artifact(name: str) -> dict[str, object]:
+    hosted_fixture_names = {
+        "a0x-hosted-gate-a-transport.schema.json": "transport.json",
+        "a0x-hosted-gate-a-verifier-policy.schema.json": "verifier-policy.json",
+        "a0x-hosted-gate-a-verification-receipt.schema.json": "verification-receipt.json",
+        "a0x-gate-b-authorization.schema.json": "gate-b-authorization.json",
+    }
+    if name in hosted_fixture_names:
+        fixture_path = (
+            Path(__file__).resolve().parent / "fixtures" / "a0x" / "hosted-gate-a"
+            / "positive" / hosted_fixture_names[name]
+        )
+        return json.loads(fixture_path.read_text(encoding="utf-8"))
     common_fields = common()
     pair = pair_binding()
     dossier, authorization, chain = authorization_documents(pair)

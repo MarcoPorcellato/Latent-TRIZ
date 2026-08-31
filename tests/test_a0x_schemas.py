@@ -42,6 +42,10 @@ SCHEMA_FILES = (
     "a0x-terminal-result.schema.json",
     "a0x-external-assets-locator.schema.json",
     "a0x-publication-manifest.schema.json",
+    "a0x-hosted-gate-a-transport.schema.json",
+    "a0x-hosted-gate-a-verifier-policy.schema.json",
+    "a0x-hosted-gate-a-verification-receipt.schema.json",
+    "a0x-gate-b-authorization.schema.json",
 )
 
 
@@ -85,6 +89,10 @@ class A0XSchemasTests(unittest.TestCase):
             "a0x-terminal-result.schema.json": lambda value: value.__setitem__("statistical_result", None),
             "a0x-external-assets-locator.schema.json": lambda value: value["assets"][0].__setitem__("raw_sha256", "short"),
             "a0x-publication-manifest.schema.json": lambda value: value.__setitem__("manifest_profile", "legacy"),
+            "a0x-hosted-gate-a-transport.schema.json": lambda value: value.__setitem__("run_attempt", 2),
+            "a0x-hosted-gate-a-verifier-policy.schema.json": lambda value: value.__setitem__("required_ref", "refs/heads/feature"),
+            "a0x-hosted-gate-a-verification-receipt.schema.json": lambda value: value.__setitem__("verification_status", "pending"),
+            "a0x-gate-b-authorization.schema.json": lambda value: value.__setitem__("max_verification_count", 2),
         }
         for name, mutate in mutations.items():
             with self.subTest(schema=name):
@@ -396,3 +404,75 @@ class A0XSchemasTests(unittest.TestCase):
             mutate(invalid)
             with self.subTest(invalid=invalid):
                 self.assertTrue(list(Draft202012Validator(schema).iter_errors(invalid)))
+
+    def test_hosted_gate_b_schemas_bind_only_four_safe_inputs_and_one_future_output(self) -> None:
+        schemas = {
+            name: self.schemas[name]
+            for name in (
+                "a0x-hosted-gate-a-transport.schema.json",
+                "a0x-hosted-gate-a-verifier-policy.schema.json",
+                "a0x-hosted-gate-a-verification-receipt.schema.json",
+                "a0x-gate-b-authorization.schema.json",
+            )
+        }
+        values = {name: artifact(name) for name in schemas}
+        for name, schema in schemas.items():
+            with self.subTest(schema=name):
+                self.assertEqual([], validate(values[name], schema))
+                self.assertEqual([], list(Draft202012Validator(schema).iter_errors(values[name])))
+
+        authorization = values["a0x-gate-b-authorization.schema.json"]
+        self.assertEqual(
+            {
+                "artifact_class", "authorization_profile", "authorization_status",
+                "repository", "source_head", "source_tree", "pair_binding",
+                "hosted_inputs", "verifier", "verification_receipt_path",
+                "max_verification_count", "stop_boundary", "authorization_id",
+            },
+            set(authorization),
+        )
+        self.assertEqual(
+            {"manifest", "attestation_bundle", "trusted_root", "transport"},
+            set(authorization["hosted_inputs"]),
+        )
+        self.assertNotIn("verification_receipt_raw_sha256", authorization)
+
+        mutations = (
+            ("fifth-input", "a0x-gate-b-authorization.schema.json", lambda value: value["hosted_inputs"].__setitem__("receipt", {"path": ".a0x-runtime/gate-a/evidence/" + "a" * 40 + "/receipt.json", "sha256": "f" * 64})),
+            ("prebound-receipt-hash", "a0x-gate-b-authorization.schema.json", lambda value: value.__setitem__("verification_receipt_raw_sha256", "f" * 64)),
+            ("local-input-path", "a0x-gate-b-authorization.schema.json", lambda value: value["hosted_inputs"]["manifest"].__setitem__("path", "/private/tmp/hosted-gate-a-evidence.json")),
+            ("unsafe-input-path", "a0x-gate-b-authorization.schema.json", lambda value: value["hosted_inputs"]["transport"].__setitem__("path", ".a0x-runtime/gate-a/evidence/" + "a" * 40 + "/../hosted-gate-a-transport.json")),
+            ("output-outside-inlet", "a0x-gate-b-authorization.schema.json", lambda value: value.__setitem__("verification_receipt_path", "results/a0x/a0/gpt2/gate-a-verification-receipt.json")),
+            ("overlong-authorization-id", "a0x-gate-b-authorization.schema.json", lambda value: value.__setitem__("authorization_id", "a" * 129)),
+            ("uppercase-input-hash", "a0x-gate-b-authorization.schema.json", lambda value: value["hosted_inputs"]["manifest"].__setitem__("sha256", "A" * 64)),
+            ("integer-boolean", "a0x-hosted-gate-a-verifier-policy.schema.json", lambda value: value.__setitem__("deny_self_hosted_runners", 1)),
+            ("local-policy-string", "a0x-hosted-gate-a-verifier-policy.schema.json", lambda value: value.__setitem__("signer_workflow", "/Users/marco1/.a0x-runtime/workflow.yml")),
+            ("wrong-type", "a0x-hosted-gate-a-transport.schema.json", lambda value: value.__setitem__("artifact_id", True)),
+            ("uppercase-archive-hash", "a0x-hosted-gate-a-transport.schema.json", lambda value: value.__setitem__("archive_digest", "sha256:" + "A" * 64)),
+            ("receipt-self-hash", "a0x-hosted-gate-a-verification-receipt.schema.json", lambda value: value.__setitem__("verification_receipt_raw_sha256", "f" * 64)),
+            ("uppercase-receipt-input-hash", "a0x-hosted-gate-a-verification-receipt.schema.json", lambda value: value["hosted_inputs"]["manifest"].__setitem__("sha256", "A" * 64)),
+        )
+        for label, schema_name, mutate in mutations:
+            invalid = copy.deepcopy(values[schema_name])
+            mutate(invalid)
+            with self.subTest(label=label):
+                self.assertTrue(validate(invalid, schemas[schema_name]))
+                self.assertTrue(list(Draft202012Validator(schemas[schema_name]).iter_errors(invalid)))
+
+        shape_mutations = (
+            ("a0x-hosted-gate-a-transport.schema.json", "artifact_id", True),
+            ("a0x-hosted-gate-a-verifier-policy.schema.json", "deny_self_hosted_runners", 1),
+            ("a0x-hosted-gate-a-verification-receipt.schema.json", "authorization_raw_sha256", 1),
+            ("a0x-gate-b-authorization.schema.json", "source_head", True),
+        )
+        for schema_name, typed_field, wrong_value in shape_mutations:
+            unknown = copy.deepcopy(values[schema_name])
+            unknown["unexpected"] = "field"
+            missing = copy.deepcopy(values[schema_name])
+            missing.pop(typed_field)
+            wrong_type = copy.deepcopy(values[schema_name])
+            wrong_type[typed_field] = wrong_value
+            for label, invalid in (("unknown", unknown), ("missing", missing), ("wrong-type", wrong_type)):
+                with self.subTest(schema=schema_name, label=label):
+                    self.assertTrue(validate(invalid, schemas[schema_name]))
+                    self.assertTrue(list(Draft202012Validator(schemas[schema_name]).iter_errors(invalid)))
