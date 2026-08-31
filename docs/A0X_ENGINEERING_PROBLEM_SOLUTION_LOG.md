@@ -988,3 +988,31 @@ correction. They now fail closed, and the post-run cases produce no receipt.
 
 **Status.** Corrected locally with TDD. This remains synthetic, target-free
 evidence; no real GitHub CLI verification or material boundary was crossed.
+
+## 37. Hosted qualification and local execution had been conflated
+
+**Problem.** Historical A0X packages used a local CCP qualification receipt for
+the pre-material Gate A boundary. Public GitHub-hosted repository checks then
+duplicated ordinary target-free work without producing a provider shape that
+new dossiers could verify offline.
+
+**Correction.** Hosted Gate A now has seven exact lanes:
+`repository-python311`, `schema-cross-validation-python311`,
+`repository-python312`, `schema-cross-validation-python312`, `a0x-no-model`,
+`a0x-synthetic`, and `documentation-audit`. It carries four hosted inputs with
+hard 32 KiB/1 MiB/2 MiB/16 KiB caps; Gate B creates the fifth 32 KiB verification
+receipt only after hash-bound offline verification. There is no rerun or CCP
+Gate A fallback. CCP Gate C remains an independent local coordinator and
+execution envelope.
+
+**Limitations.** The first real post-merge hosted Gate A run is acceptance, not
+permission to adapt the verifier. A trusted-root snapshot cannot reveal
+revocations published after that snapshot. Signed provenance does not prove
+branch-protection non-bypass, review state, or a SLSA level. Capture,
+publication, Gate B, and Gate C are separate authorization boundaries.
+
+**Status.** Target-free local implementation and documentation only. Earlier
+CCP receipts and pre-migration package hashes remain **Historical evidence**
+with their original bytes and meanings. No hosted capture, GitHub CLI
+verification, Gate B, Gate C, model, tokenizer, target, CCP heavy, Docker,
+network, publication, or scientific execution occurred in this correction.

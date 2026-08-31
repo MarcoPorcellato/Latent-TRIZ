@@ -1,9 +1,7 @@
 A0X Hosted Gate A local implementation checkpoint (2026-08-31): resume only
-from isolated branch `agent/a0x-hosted-gate-a-design`. Its reviewed
-implementation anchor is `f79d7c717a46630a2617bad64f9727c1bf4df7d1`, tree
-`e55e3a80130a1399c99027f802f1f77302c21aa6`; the live branch tip may advance
-only by the Sol preparation commit reported in the handoff. Verify branch,
-HEAD, ancestry, tree, and dirty state before acting.
+from isolated branch `agent/a0x-hosted-gate-a-design`. Tasks 1–9 are complete;
+Task 9's stale package refusal is Historical evidence and Task 10 alone may
+regenerate. Verify branch, HEAD, ancestry, tree, and dirty state before acting.
 Canonical specification:
 `docs/superpowers/specs/2026-08-31-a0x-hosted-gate-a-design.md`.
 Canonical implementation plan:
@@ -12,16 +10,22 @@ Terra handoff: `docs/A0X_HOSTED_GATE_A_TERRA_HANDOFF.md`.
 Sol architecture/security review:
 `docs/A0X_HOSTED_GATE_A_SOL_ARCHITECTURE_REVIEW.md`.
 
-Tasks 1–5 are locally implemented. Focused verifier/Hosted Gate A/schema tests
-pass 40/40 and schema cross-validation reports 155 agreeing pairs with 19
-mutations rejected. The complete repository is intentionally not green: four
-frozen-package checks correctly detect stale pre-migration implementation
-bindings. Execute Tasks 6–11 in order under the frozen Sol rulings. Terra owns
-implementation and integration; delegate bounded inventories, mutation audits,
-deterministic test execution, documentation comparison, and hash/count
-distillation to Luna. Do not weaken or regenerate around an intermediate
-failure. Task 10 alone regenerates two inventories, two freezes, twelve
-dossiers, and the no-model receipt from its recorded implementation anchor.
+Hosted Gate A has seven lanes: `repository-python311`,
+`schema-cross-validation-python311`, `repository-python312`,
+`schema-cross-validation-python312`, `a0x-no-model`, `a0x-synthetic`, and
+`documentation-audit`. It accepts four hosted inputs (32 KiB manifest, 1 MiB
+bundle, 2 MiB trusted root, 16 KiB transport) and Gate B creates the fifth
+verification receipt (32 KiB). No rerun and no CCP Gate A fallback are allowed;
+CCP Gate C remains independent. The first real post-merge hosted Gate A run is
+acceptance only. The trusted-root snapshot cannot identify revocations
+published after that snapshot. Capture, publication, Gate B, and Gate C each
+need separate authorization.
+
+Execute Tasks 10–11 in order under the frozen Sol rulings. Terra owns
+integration; Luna distills inventories, determinism and documentation checks.
+Do not weaken or regenerate around an intermediate failure. Task 10 alone
+regenerates two inventories, two freezes, twelve dossiers, and the no-model
+receipt from its recorded implementation anchor.
 
 Stop before Task 12. Push, PR, merge, hosted-run acceptance, evidence capture,
 offline verification of real hosted bytes, publication, Gate B/C, model,

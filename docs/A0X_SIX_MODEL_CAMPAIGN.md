@@ -20,23 +20,32 @@ publication.
 
 ## Current Hosted Gate A migration checkpoint
 
-The active isolated implementation branch is locally anchored at
-`f79d7c717a46630a2617bad64f9727c1bf4df7d1`, tree
-`e55e3a80130a1399c99027f802f1f77302c21aa6`. Tasks 1–5 of
+Tasks 1–9 of
 `docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md` are
-complete through the synthetic offline verifier. Focused tests pass, but the
-complete frozen package is deliberately stale until Tasks 6–10 finish and
-perform one controlled regeneration. Earlier implementation commits, freeze
-hashes, PR #109 wording, and CCP Gate A receipts remain historical evidence;
-none qualifies this branch.
+locally complete through provider separation, Gate B lifecycle hardening, the
+shared five-file Gate C boundary, and the explicit stale-freeze `NO-GO`. Task
+10 records a documentation/implementation anchor and performs the one
+controlled, target-free regeneration. The resulting dossiers retain that
+immutable `implementation_source_head`; a later packaging or merge commit must
+not rewrite it. Earlier implementation commits, freeze hashes, PR #109 wording,
+and CCP Gate A receipts are **Historical evidence**; none qualifies this
+branch.
 
-The next local sequence is Tasks 6–11 only. It separates hosted Gate A from CCP
-Gate C, creates and propagates the five-file hosted evidence boundary, binds
-every new trust input into both implementation inventories, regenerates the two
-freezes and twelve dossiers, and produces one exact publication dossier.
-External publication and the first real hosted run remain Task 12 and require
-new exact authorization. Gate B/C, model, tokenizer, target, and scientific
-execution remain unauthorized; status is `sealed_gate_pending`.
+Hosted Gate A has exactly seven target-free lanes: `repository-python311`,
+`schema-cross-validation-python311`, `repository-python312`,
+`schema-cross-validation-python312`, `a0x-no-model`, `a0x-synthetic`, and
+`documentation-audit`. It binds four hosted inputs (manifest, attestation
+bundle, trusted root, and transport) before Gate B may create the fifth
+verification receipt. The respective caps are 32 KiB, 1 MiB, 2 MiB, 16 KiB,
+and 32 KiB. Hosted qualification is one-run/no rerun; a local CCP Gate A
+fallback is prohibited. CCP Gate C remains separately required for local
+execution and never shares a producer identity with Hosted Gate A.
+
+External publication, capture, the first real hosted run as acceptance, Gate B,
+and Gate C each require a new separate authorization. Gate B/C, model,
+tokenizer, target, and scientific execution remain unauthorized; status is
+`sealed_gate_pending`. See the [Hosted Gate A operator runbook](A0X_HOSTED_GATE_A_OPERATOR_RUNBOOK.md)
+for refusal, retention, trusted-root revocation, governance, and restart limits.
 
 ## Frozen scientific legs
 

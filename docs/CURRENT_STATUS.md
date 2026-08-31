@@ -123,28 +123,27 @@ asset or recompute a scientific result.
 
 ### A0X Hosted Gate A implementation boundary (current local checkpoint)
 
-The isolated local branch `agent/a0x-hosted-gate-a-design` is at commit
-`f79d7c717a46630a2617bad64f9727c1bf4df7d1`, tree
-`e55e3a80130a1399c99027f802f1f77302c21aa6`. It contains Tasks 1–5 of the
-Hosted Gate A migration: pinned hosted dependencies, canonical lane and
-manifest contracts, the seven-lane workflow, strict transport and Gate B
-schemas, and the offline GitHub CLI 2.97.0 verifier wrapper. This checkpoint is
-local only and is not public-main, hosted-run, Gate B, or scientific evidence.
+Tasks 1–9 of the Hosted Gate A migration are locally complete. Task 9 ended
+with the deliberate stale-freeze `NO-GO`; Task 10 is the only regeneration
+boundary. The seven hosted lanes are `repository-python311`,
+`schema-cross-validation-python311`, `repository-python312`,
+`schema-cross-validation-python312`, `a0x-no-model`, `a0x-synthetic`, and
+`documentation-audit`.
 
-Fresh focused verification passed 40 verifier/Hosted Gate A/schema tests and
-schema cross-validation passed 155 tracked pairs with 19 mutations rejected by
-both validators. The complete repository check intentionally remains
-fail-closed: four frozen-package checks detect that the pre-migration A0 and
-A0-R1 implementation bytes have not yet been regenerated. Tasks 6–9 must first
-complete provider separation and the five-file material boundary; Task 10 then
-regenerates both inventories, both freezes, all twelve dossiers, and the
-no-model receipt. No prior freeze hash or PR #109 implementation anchor is
-current evidence for this branch.
+Current Gate A binds four hosted inputs—manifest, attestation bundle, trusted
+root, and transport—with caps 32 KiB, 1 MiB, 2 MiB, and 16 KiB. Gate B may
+create the fifth verification receipt, capped at 32 KiB, only after offline
+verification. There is no rerun and no CCP Gate A fallback. CCP Gate C remains
+a separate local coordinator. All old CCP Gate A receipts are **Historical
+evidence**, not current hosted qualification.
 
-The state remains `sealed_gate_pending`. No real GitHub CLI attestation
-verification, network capture, Gate B runtime bundle, Gate C execution, model,
-tokenizer, target read, CCP heavy command, push, PR, merge, or evidence
-publication is authorized by this checkpoint.
+The first real post-merge hosted Gate A run is acceptance only. Capture,
+publication, Gate B, and Gate C each require separate authorization; the
+trusted-root snapshot cannot expose revocations published after that snapshot.
+The state remains `sealed_gate_pending`. No real GitHub CLI verification,
+network capture, Gate B runtime bundle, Gate C execution, model, tokenizer,
+target read, CCP heavy command, push, PR, merge, or evidence publication is
+authorized by this checkpoint.
 
 ### Historical A0X hosted-integration boundary
 

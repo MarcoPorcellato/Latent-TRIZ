@@ -151,6 +151,62 @@ class A0XHostedGateAWorkflowTests(unittest.TestCase):
         with self.assertRaises(yaml.constructor.ConstructorError):
             yaml.load("!!python/tuple [1, 2]\n", Loader=UniqueSafeLoader)
 
+    def test_current_operator_documents_state_hosted_gate_a_boundaries(self) -> None:
+        paths = (
+            "docs/A0X_HOSTED_GATE_A_OPERATOR_RUNBOOK.md",
+            "docs/A0X_SIX_MODEL_CAMPAIGN.md",
+            "docs/A0X_GATE_B_OPERATOR_HARDENING.md",
+            "docs/A0X_ENGINEERING_PROBLEM_SOLUTION_LOG.md",
+            "docs/CURRENT_STATUS.md",
+            "docs/PERSISTENT_GOAL.txt",
+            "artifacts/checkpoints/A0X_RESTART_CHECKPOINT_2026-08-30.md",
+        )
+        text = "\n".join((self.root / path).read_text(encoding="utf-8") for path in paths)
+        required = (
+            "repository-python311",
+            "schema-cross-validation-python311",
+            "repository-python312",
+            "schema-cross-validation-python312",
+            "a0x-no-model",
+            "a0x-synthetic",
+            "documentation-audit",
+            "32 KiB",
+            "1 MiB",
+            "2 MiB",
+            "16 KiB",
+            "four hosted inputs",
+            "fifth verification receipt",
+            "no rerun",
+            "CCP Gate C",
+            "Historical evidence",
+            "first real post-merge hosted Gate A run",
+            "revocations published after that snapshot",
+            "separate authorization",
+        )
+        for phrase in required:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
+        runbook = (self.root / paths[0]).read_text(encoding="utf-8")
+        for flag in (
+            "--bundle",
+            "--custom-trusted-root",
+            "--signer-workflow",
+            "--source-digest",
+            "--predicate-type",
+            "--deny-self-hosted-runners",
+        ):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, runbook)
+        for filename in (
+            "hosted-gate-a-evidence.json",
+            "hosted-gate-a-attestation.bundle.jsonl",
+            "github-trusted-root.jsonl",
+            "hosted-gate-a-transport.json",
+        ):
+            with self.subTest(filename=filename):
+                self.assertIn(filename, runbook)
+
     def test_workflow_is_exact_main_hosted_and_hash_bound(self) -> None:
         raw, workflow = self._workflow()
         self.assertEqual({"name", "on", "permissions", "concurrency", "jobs"}, set(workflow))
