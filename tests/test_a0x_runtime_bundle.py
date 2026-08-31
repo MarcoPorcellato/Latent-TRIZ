@@ -535,7 +535,6 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         for path in (runtime.launch_descriptor_path, runtime.authorization_path):
             self.assertFalse((root / path).exists())
 
-    @unittest.skip("Gate C v3 execution acceptance is outside Gate B preparation")
     def test_one_constructible_bundle_crosses_all_static_boundaries(self) -> None:
         """One Task-2 bundle, unchanged, is accepted by every static boundary."""
         from latent_triz.a0x_ccp_executor import ProcessResult, launch_fixed_dossier

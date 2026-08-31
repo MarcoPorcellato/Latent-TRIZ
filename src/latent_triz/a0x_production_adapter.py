@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .a0x_contract import (
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     Leg,
@@ -24,6 +25,7 @@ from .a0x_contract import (
     canonical_commitment,
     strict_json_object,
 )
+from .a0x_ccp_executor import A0XCcpExecutorError, rehash_gate_a_evidence
 from .a0x_material_contract import (
     CLEANUP_MARGIN_SECONDS,
     INTERNAL_BUDGET_SECONDS,
@@ -142,7 +144,10 @@ def _bind_context(*, root: Path, descriptor: Mapping[str, Any]) -> ProductionCon
     try:
         authorization = strict_json_object(runtime_documents["authorization"][0])
         contract = strict_json_object(runtime_documents["material_contract"][0])
-        canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE)
+        profile = authorization.get("commitment_profile")
+        if profile not in {EXECUTION_AUTHORIZATION_PROFILE, CURRENT_EXECUTION_AUTHORIZATION_PROFILE}:
+            raise A0XProductionAdapterError("production authorization profile is unsupported")
+        canonical_commitment(authorization, profile)
         auth_pair = PairBinding.from_mapping(authorization["pair_binding"])
     except (A0XContractError, KeyError, TypeError, ValueError) as error:
         raise A0XProductionAdapterError("production authorization is invalid") from error
@@ -272,7 +277,22 @@ def _load_model_after_live_readiness(
     if card is not identity or card is not expected_card:
         raise A0XProductionAdapterError("model construction identity drifted")
     _bound_runtime_documents(context.root, context.descriptor, context.pair)
+    _rehash_gate_a_at_model_boundary(context)
     return loader(context.root / card.runtime_root, card=card)
+
+
+def _rehash_gate_a_at_model_boundary(context: ProductionContext) -> None:
+    """Repeat current Gate-A local hashes immediately before model construction."""
+    if context.authorization.get("commitment_profile") != CURRENT_EXECUTION_AUTHORIZATION_PROFILE:
+        return
+    try:
+        rehash_gate_a_evidence(
+            repository_root=context.root,
+            evidence=context.authorization["gate_a_evidence"],
+            source_head=context.source_head,
+        )
+    except (A0XCcpExecutorError, KeyError, A0XContractError, ValueError) as error:
+        raise A0XProductionAdapterError("current Gate A evidence drifted before model construction") from error
 
 
 def _read_repository_file(root: Path, relative: str) -> bytes:
@@ -359,18 +379,21 @@ def _default_dependencies(context: ProductionContext) -> MaterialLifecycleDepend
         }
         if context.authorization.get("guard_preflight_observation") != expected_observation:
             raise A0XProductionAdapterError("authorization guard-preflight observation binding differs")
+        _rehash_gate_a_at_model_boundary(context)
         observation_path = context.root / expected_observation["path"]
         observation_raw = _read_repository_file(context.root, expected_observation["path"])
         observation = strict_json_object(observation_raw)
-        qualification_relative = runtime_paths.qualification_receipt_path
-        if qualification_relative is None:
-            raise A0XProductionAdapterError("pair-derived qualification receipt path is unavailable")
-        qualification_path = context.root / qualification_relative
-        qualification_raw = _read_repository_file(context.root, qualification_relative)
-        _validate_local_qualification_receipt(
-            qualification_raw, evidence=context.authorization["qualification_evidence"],
-            source_head=context.source_head,
-        )
+        qualification_path = None
+        if context.authorization.get("commitment_profile") == EXECUTION_AUTHORIZATION_PROFILE:
+            qualification_relative = runtime_paths.qualification_receipt_path
+            if qualification_relative is None:
+                raise A0XProductionAdapterError("pair-derived qualification receipt path is unavailable")
+            qualification_path = context.root / qualification_relative
+            qualification_raw = _read_repository_file(context.root, qualification_relative)
+            _validate_local_qualification_receipt(
+                qualification_raw, evidence=context.authorization["qualification_evidence"],
+                source_head=context.source_head,
+            )
         protected_trees = {
             "a0": strict_json_object(_read_repository_file(context.root, "experiments/a0x-six-model/protected-a0-tree.json")),
             "r1": strict_json_object(_read_repository_file(context.root, "experiments/a0x-six-model/protected-a0r1-tree.json")),

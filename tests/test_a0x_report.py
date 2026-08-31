@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from latent_triz.a0x_contract import Leg, LegFreezeBinding
@@ -163,6 +164,37 @@ class A0XReportTests(A0XTempTestCase):
             if role not in {"target_read_receipt", "statistical_result"}
         }
         return fixture
+
+    def test_current_gate_a_files_refuse_before_package_construction(self) -> None:
+        """Current package construction rehashes every Gate-A file locally."""
+        from latent_triz.a0x_report import A0XReportError, _gate_a_evidence_for_package
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        for role in ("manifest", "attestation_bundle", "trusted_root", "transport", "verification_receipt"):
+            for mutation in ("missing", "mutated", "symlink", "hardlink", "nonregular"):
+                with self.subTest(role=role, mutation=mutation):
+                    bundle = prepare_constructible_runtime_bundle()
+                    self.addCleanup(bundle.close)
+                    authorization = json.loads((bundle.root / bundle.receipt["authorization_path"]).read_text())
+                    evidence = authorization["gate_a_evidence"]
+                    binding = evidence["verification_receipt"] if role == "verification_receipt" else evidence["hosted_inputs"][role]
+                    path = bundle.root / binding["path"]
+                    if mutation == "missing":
+                        path.unlink()
+                    elif mutation == "mutated":
+                        path.write_bytes(b"mutated")
+                    elif mutation == "symlink":
+                        target = bundle.root / "untrusted-gate-a-package-bytes"
+                        target.write_bytes(path.read_bytes())
+                        path.unlink()
+                        path.symlink_to(target)
+                    elif mutation == "hardlink":
+                        os.link(path, bundle.root / "untrusted-gate-a-package-alias")
+                    else:
+                        path.unlink()
+                        path.mkdir()
+                    with self.assertRaises(A0XReportError):
+                        _gate_a_evidence_for_package(bundle.root, authorization)
 
     def test_builds_an_immutable_complete_a0_package(self) -> None:
         from latent_triz.a0x_report import build_terminal_package

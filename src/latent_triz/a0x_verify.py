@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from latent_triz.validator import validate
 from .a0x_contract import A0XContractError, LegFreezeBinding, PairBinding, assert_authorization_chain, assert_leg_freeze_binding, assert_pair_binding
-from .a0x_material_contract import validate_qualification_evidence
+from .a0x_material_contract import validate_gate_a_evidence, validate_qualification_evidence
+from .a0x_ccp_executor import A0XCcpExecutorError, rehash_gate_a_evidence
 
 class A0XVerificationError(ValueError): pass
 _ROOT=Path(__file__).resolve().parents[2]
@@ -37,12 +38,16 @@ def verify_a0x_package(*, package_root:str|Path, repository_root:str|Path, leg_f
             if schema is None: raise A0XVerificationError("unknown artifact role")
             _validate(value,schema,role)
             if role=="qualification_evidence":
-                try: validate_qualification_evidence(value)
+                try:
+                    if auth.get("commitment_profile")=="a0x-execution-authorization-json-v3":
+                        validate_gate_a_evidence(value)
+                    else:
+                        validate_qualification_evidence(value)
                 except A0XContractError as error: raise A0XVerificationError("qualification evidence is invalid") from error
             elif _pair(value).as_mapping()!=pair.as_mapping() or (role not in {"authorization_record","ccp_observation"} and not isinstance(value.get("authorization_chain"),Mapping)): raise A0XVerificationError("artifact pair/chain differs")
         values[role]=value; raws[role]=raw
     _sources(repo,ledgers["source_inputs"],dossier_path,dossier_raw,authorization_path,auth_raw,raws,seen)
-    _qualification_evidence(values, auth, qualification_receipt_loader)
+    _qualification_evidence(repo, values, auth, qualification_receipt_loader)
     _ccp_preflight_link(values, raws, auth)
     _external(repo,ledgers["external_outputs"],values,pair,seen); _residue(repo,ledgers["retained_residue"],seen)
     _matrix(manifest,values,raws,leg_freeze); _root(root,root_raw,manifest_raw,ledgers,pair)
@@ -64,11 +69,20 @@ def verify_a0x_package(*, package_root:str|Path, repository_root:str|Path, leg_f
         except Exception as error: raise A0XVerificationError("protected-tree postflight verification failed") from error
     _report(raws.get("report",b""), values["terminal_result"]); _forbidden([manifest,root,*values.values()])
 
-def _qualification_evidence(values:Mapping[str,Mapping[str,Any]], authorization:Mapping[str,Any], loader:Callable[[Mapping[str,Any]],bytes]|None)->None:
+def _qualification_evidence(repo:Path, values:Mapping[str,Mapping[str,Any]], authorization:Mapping[str,Any], loader:Callable[[Mapping[str,Any]],bytes]|None)->None:
     """Verify public receipt semantics and raw bytes as distinct commitments."""
     packaged=values.get("qualification_evidence")
-    if not isinstance(packaged,Mapping) or packaged!=authorization.get("qualification_evidence"):
+    current=authorization.get("commitment_profile")=="a0x-execution-authorization-json-v3"
+    expected=authorization.get("gate_a_evidence") if current else authorization.get("qualification_evidence")
+    if not isinstance(packaged,Mapping) or packaged!=expected:
         raise A0XVerificationError("package qualification evidence differs from authorization")
+    if current:
+        try:
+            evidence=validate_gate_a_evidence(packaged)
+            rehash_gate_a_evidence(repository_root=repo,evidence=evidence,source_head=str(authorization.get("source_head","")))
+        except (A0XCcpExecutorError, A0XContractError, ValueError) as error:
+            raise A0XVerificationError("current Gate A evidence is invalid") from error
+        return
     try: evidence=validate_qualification_evidence(packaged)
     except A0XContractError as error: raise A0XVerificationError("qualification evidence is invalid") from error
     authorization_ccp=authorization.get("ccp")

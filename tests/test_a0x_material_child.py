@@ -155,6 +155,7 @@ class A0XMaterialChildTests(unittest.TestCase):
             (ROOT / "schemas" / "a0x-material-execution-contract.schema.json").read_text(encoding="utf-8")
         )
         ccp = schema["$defs"]["ccp"]["properties"]
+        gate_a = schema["$defs"]["gate_a"]["properties"]
         plan = schema["$defs"]["plan_binding"]["properties"]
         return {
             "artifact_class": "a0x-material-execution-contract",
@@ -178,6 +179,26 @@ class A0XMaterialChildTests(unittest.TestCase):
                         "plan_output_sha256", "outer_digest", "python311_digest", "python312_digest",
                     )
                 },
+            },
+            "gate_a": {
+                "provider": gate_a["provider"]["const"],
+                "workflow_path": gate_a["workflow_path"]["const"],
+                "event": gate_a["event"]["const"],
+                "ref": gate_a["ref"]["const"],
+                "required_lanes": gate_a["required_lanes"]["const"],
+                "size_ceilings_bytes": gate_a["size_ceilings_bytes"]["const"],
+                "verifier": {
+                    key: value["const"]
+                    for key, value in gate_a["verifier"]["properties"].items()
+                },
+                "predicate_type": gate_a["predicate_type"]["const"],
+                "cert_oidc_issuer": gate_a["cert_oidc_issuer"]["const"],
+                "deny_self_hosted_runners": gate_a["deny_self_hosted_runners"]["const"],
+                "require_verified_timestamp": gate_a["require_verified_timestamp"]["const"],
+                "workflow_raw_sha256": gate_a["workflow_raw_sha256"]["const"],
+                "requirements_schema_lock_raw_sha256": gate_a["requirements_schema_lock_raw_sha256"]["const"],
+                "action_manifest_raw_sha256": gate_a["action_manifest_raw_sha256"]["const"],
+                "lane_manifest_raw_sha256": gate_a["lane_manifest_raw_sha256"]["const"],
             },
             "offline": {"network": False, "generation": False, "local_cpu_float32": True},
             "max_run_count": 1,
@@ -252,6 +273,44 @@ class A0XMaterialChildTests(unittest.TestCase):
         self.assertEqual("completed", terminal["exit_class"])
         self.assertEqual("null", terminal["terminal_status"])
         self.assertEqual([descriptor], received)
+
+    def test_current_gate_a_files_refuse_at_child_inlet_before_executor(self) -> None:
+        """A current authorization rehashes every hosted Gate-A input at inlet."""
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        for role in ("manifest", "attestation_bundle", "trusted_root", "transport", "verification_receipt"):
+            for mutation in ("missing", "mutated", "symlink", "hardlink", "nonregular"):
+                with self.subTest(role=role, mutation=mutation):
+                    bundle = prepare_constructible_runtime_bundle()
+                    self.addCleanup(bundle.close)
+                    root = bundle.root
+                    authorization = json.loads((root / bundle.receipt["authorization_path"]).read_text())
+                    evidence = authorization["gate_a_evidence"]
+                    binding = evidence["verification_receipt"] if role == "verification_receipt" else evidence["hosted_inputs"][role]
+                    path = root / binding["path"]
+                    if mutation == "missing":
+                        path.unlink()
+                    elif mutation == "mutated":
+                        path.write_bytes(b"mutated")
+                    elif mutation == "symlink":
+                        target = root / "untrusted-gate-a-child-bytes"
+                        target.write_bytes(path.read_bytes())
+                        path.unlink()
+                        path.symlink_to(target)
+                    elif mutation == "hardlink":
+                        os.link(path, root / "untrusted-gate-a-child-alias")
+                    else:
+                        path.unlink()
+                        path.mkdir()
+                    code, terminal, received = self._run(
+                        root=root,
+                        child=root / "scripts/a0x_material_child.py",
+                        python=bundle.request.python_executable,
+                        argv=["--launch-descriptor", bundle.receipt["descriptor_path"]],
+                    )
+                    self.assertEqual(2, code)
+                    self.assertEqual("refused", terminal["exit_class"])
+                    self.assertEqual([], received)
 
     def test_descriptor_v2_uses_acyclic_authorization_reference(self) -> None:
         root, descriptor, child, python = self._fixture()

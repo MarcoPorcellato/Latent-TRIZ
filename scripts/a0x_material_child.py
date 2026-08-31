@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from latent_triz.a0x_contract import (  # noqa: E402
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     PairBinding,
@@ -37,8 +38,10 @@ from latent_triz.a0x_material_contract import (  # noqa: E402
     OUTER_TIMEOUT_SECONDS,
     authorization_reference,
     material_contract_binding,
+    validate_gate_a_evidence,
     validate_qualification_evidence,
 )
+from latent_triz.a0x_ccp_executor import A0XCcpExecutorError, rehash_gate_a_evidence  # noqa: E402
 from latent_triz.a0x_runtime_readiness import (  # noqa: E402
     A0XRuntimeReadinessError,
     runtime_readiness_path,
@@ -172,7 +175,8 @@ def _validate_descriptor(
     _validate_environment(descriptor.get("environment_template"), environment)
     runtime_documents = _validate_runtime_documents(descriptor, root=resolved_root, pair=pair)
     _validate_authorization_contract_chain(
-        descriptor, pair=pair, runtime_documents=runtime_documents, descriptor_raw_sha256=descriptor_raw_sha256,
+        descriptor, root=resolved_root, pair=pair, runtime_documents=runtime_documents,
+        descriptor_raw_sha256=descriptor_raw_sha256,
     )
     if not isinstance(descriptor.get("execution"), Mapping) or dict(descriptor["execution"]) != _EXECUTION:
         raise A0XMaterialChildError("launch descriptor execution envelope is invalid")
@@ -247,7 +251,7 @@ def _validate_runtime_documents(
 
 
 def _validate_authorization_contract_chain(
-    descriptor: Mapping[str, Any], *, pair: PairBinding, runtime_documents: Mapping[str, bytes],
+    descriptor: Mapping[str, Any], *, root: Path, pair: PairBinding, runtime_documents: Mapping[str, bytes],
     descriptor_raw_sha256: str,
 ) -> None:
     """Validate real authorization/contract semantics, not only their hashes."""
@@ -256,7 +260,10 @@ def _validate_authorization_contract_chain(
         contract_raw = runtime_documents["material_contract"]
         authorization = strict_json_object(authorization_raw)
         contract = strict_json_object(contract_raw)
-        canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE)
+        profile = authorization.get("commitment_profile")
+        if profile not in {EXECUTION_AUTHORIZATION_PROFILE, CURRENT_EXECUTION_AUTHORIZATION_PROFILE}:
+            raise A0XMaterialChildError("execution authorization profile is unsupported")
+        canonical_commitment(authorization, profile)
         schema = json.loads((ROOT / "schemas" / "a0x-material-execution-contract.schema.json").read_text(encoding="utf-8"))
         if validate(contract, schema):
             raise A0XMaterialChildError("material contract schema is invalid")
@@ -278,7 +285,6 @@ def _validate_authorization_contract_chain(
             or launch.python_sha256 != descriptor["python"]["sha256"]
         ):
             raise A0XMaterialChildError("authorization launch binding drifted")
-        evidence = validate_qualification_evidence(authorization["qualification_evidence"])
         authorization_ccp = authorization["ccp"]
         contract_ccp = contract["ccp"]
         identity_fields = (
@@ -290,9 +296,20 @@ def _validate_authorization_contract_chain(
         if any(authorization_ccp.get(authorization_field) != contract_ccp.get(contract_field)
                for authorization_field, contract_field in identity_fields):
             raise A0XMaterialChildError("authorization CCP identity drifted")
-        if evidence["qualified_source_head"] != descriptor["source_head"]:
-            raise A0XMaterialChildError("qualification source head drifted")
-    except (A0XContractError, KeyError, OSError, TypeError, ValueError) as error:
+        if profile == CURRENT_EXECUTION_AUTHORIZATION_PROFILE:
+            evidence = validate_gate_a_evidence(authorization["gate_a_evidence"])
+            if evidence["source_head"] != descriptor["source_head"]:
+                raise A0XMaterialChildError("Gate A source head drifted")
+            rehash_gate_a_evidence(
+                repository_root=root,
+                evidence=evidence,
+                source_head=str(descriptor["source_head"]),
+            )
+        else:
+            evidence = validate_qualification_evidence(authorization["qualification_evidence"])
+            if evidence["qualified_source_head"] != descriptor["source_head"]:
+                raise A0XMaterialChildError("qualification source head drifted")
+    except (A0XCcpExecutorError, A0XContractError, KeyError, OSError, TypeError, ValueError) as error:
         raise A0XMaterialChildError("authorization or material contract is invalid") from error
 
 
