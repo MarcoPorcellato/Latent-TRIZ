@@ -390,6 +390,7 @@ class A0XSchemasTests(unittest.TestCase):
             (evidence, evidence_schema, lambda item: item["required_lanes"].pop()),
             (evidence, evidence_schema, lambda item: item["required_lanes"].__setitem__(1, item["required_lanes"][0])),
             (evidence, evidence_schema, lambda item: item["required_lanes"].__setitem__(0, item["required_lanes"][1])),
+            (evidence, evidence_schema, lambda item: item["required_lanes"][0].__setitem__("unexpected", "field")),
         ):
             invalid = copy.deepcopy(value)
             mutate(invalid)
