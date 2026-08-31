@@ -350,3 +350,43 @@ class A0XSchemasTests(unittest.TestCase):
             mutated = copy.deepcopy(locator)
             mutation(mutated)
             self.assertTrue(validate(mutated, schema))
+
+    def test_hosted_gate_a_schemas_are_closed_and_reject_integer_booleans(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        lane_schema = json.loads((root / "schemas/a0x-hosted-gate-a-lane-receipt.schema.json").read_text(encoding="utf-8"))
+        evidence_schema = json.loads((root / "schemas/a0x-hosted-gate-a-evidence.schema.json").read_text(encoding="utf-8"))
+        lane = {
+            "artifact_class": "a0x-hosted-gate-a-lane-receipt",
+            "receipt_profile": "a0x-hosted-gate-a-lane-receipt-v1",
+            "lane_id": "repository-python311",
+            "qualified_source_head": "a" * 40,
+            "qualified_source_tree": "b" * 40,
+            "command": ["python", "scripts/repository_check.py"],
+            "status": "PASS",
+        }
+        evidence = {
+            "artifact_class": "a0x-hosted-gate-a-evidence",
+            "evidence_profile": "a0x-hosted-gate-a-evidence-v1",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "event": "push",
+            "ref": "refs/heads/main",
+            "qualified_source_head": "a" * 40,
+            "qualified_source_tree": "b" * 40,
+            "workflow": {"path": ".github/workflows/a0x-hosted-gate-a.yml", "raw_sha256": "c" * 64, "run_id": 1, "run_attempt": 1},
+            "inputs": {"requirements_schema_lock_sha256": "d" * 64, "action_pin_manifest_sha256": "e" * 64, "lane_manifest_sha256": "f" * 64},
+            "required_lanes": [{"id": lane_id, "receipt_sha256": "1" * 64, "status": "PASS"} for lane_id in (
+                "a0x-no-model", "a0x-synthetic", "documentation-audit", "repository-python311", "repository-python312", "schema-cross-validation-python311", "schema-cross-validation-python312",
+            )],
+            "overall_status": "PASS",
+        }
+        self.assertEqual([], validate(lane, lane_schema))
+        self.assertEqual([], validate(evidence, evidence_schema))
+        for value, schema, mutate in (
+            (lane, lane_schema, lambda item: item.__setitem__("extra", True)),
+            (evidence, evidence_schema, lambda item: item["workflow"].__setitem__("run_id", True)),
+            (evidence, evidence_schema, lambda item: item["required_lanes"].pop()),
+        ):
+            invalid = copy.deepcopy(value)
+            mutate(invalid)
+            with self.subTest(invalid=invalid):
+                self.assertTrue(validate(invalid, schema))
