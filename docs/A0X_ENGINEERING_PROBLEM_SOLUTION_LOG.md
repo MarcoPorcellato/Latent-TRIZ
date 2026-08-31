@@ -920,3 +920,32 @@ campaign remains `sealed_gate_pending`; Gate B bundle preparation and Gate C
 material execution each still require their own later exact authorization. No
 model, tokenizer, protected target, scientific retry, or claim promotion is
 authorized here.
+
+## 35. Hosted-attestation adapter required a frozen result-shape boundary
+
+**Problem.** Offline Gate B bound GitHub CLI bytes, version, flags, and
+high-level result semantics, but lacked an exact parser contract for
+`gh attestation verify --format json`. Permissive parsing would turn future CLI
+or sigstore-go output drift into a silent authorization change.
+
+**Correction.** Add a synthetic-only adapter schema and inert fixture for
+GitHub CLI `2.97.0` with `sigstore-go 1.2.2`. The pure verifier accepts exactly
+one result with exact top-level, certificate-extension, subject, predicate,
+builder, source, signer, timestamp, and workflow-consistency fields. It
+independently binds raw workflow SHA-256 from canonical manifest, preserves
+separate exact-head signer/source digest claims, validates raw inputs before
+and after one injected shell-free runner, and writes one fsynced exclusive
+receipt. Predicate fields remain workflow-controlled consistency evidence, not
+a trust anchor.
+
+**Regression evidence.** Synthetic tests reject malformed, unknown, duplicate,
+extra, missing, and wrong signed fields; nonzero runner; source drift; pre/post
+hash drift; symlink; hardlink; nonregular; oversize; output collision; and
+rerun. Each refusal writes no new receipt and reaches no readiness, descriptor,
+authorization, or mapping stage.
+
+**Status.** The pure verifier, schema, fixture, mutation suite, and shell-free
+wrapper are local only. The wrapper has injected runner and source-state seams;
+its focused test reaches neither seam on an invalid packet. No network, GitHub
+API, GitHub CLI verification, Gate B preparation, Gate C action, model,
+tokenizer, target, Docker, CCP, or scientific execution occurred.
