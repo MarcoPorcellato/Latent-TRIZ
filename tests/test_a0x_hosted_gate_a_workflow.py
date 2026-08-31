@@ -230,6 +230,10 @@ class A0XHostedGateAWorkflowTests(unittest.TestCase):
 
         aggregate = jobs[AGGREGATE_JOB]
         self.assertEqual("${{ always() }}", aggregate["if"])
+        self.assertEqual(
+            {AGGREGATE_JOB: "${{ always() }}"},
+            {job_id: job["if"] for job_id, job in jobs.items() if "if" in job},
+        )
         self.assertEqual(list(LANE_IDS), aggregate["needs"])
         self.assertEqual("ubuntu-latest", aggregate["runs-on"])
         self.assertEqual(AGGREGATE_PERMISSIONS, aggregate["permissions"])
