@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -15,7 +14,22 @@ ACTION_PINS = {
     "actions/upload-artifact": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
 }
 
-LANES = (
+EXPECTED_ACTIONS = {"actions": ACTION_PINS, "format": "actions-v1"}
+
+EXPECTED_LANES = {
+    "format": "lanes-v1",
+    "lanes": [
+        {"argv": ["make", "a0x-no-model-verify"], "id": "a0x-no-model", "python": None},
+        {"argv": ["make", "a0x-synthetic-verify"], "id": "a0x-synthetic", "python": None},
+        {"argv": ["make", "docs-audit"], "id": "documentation-audit", "python": None},
+        {"argv": ["python", "scripts/repository_check.py"], "id": "repository-python311", "python": "3.11"},
+        {"argv": ["python", "scripts/repository_check.py"], "id": "repository-python312", "python": "3.12"},
+        {"argv": ["python", "scripts/schema_cross_validate.py"], "id": "schema-cross-validation-python311", "python": "3.11"},
+        {"argv": ["python", "scripts/schema_cross_validate.py"], "id": "schema-cross-validation-python312", "python": "3.12"},
+    ],
+}
+
+LANE_IDS = (
     "a0x-no-model",
     "a0x-synthetic",
     "documentation-audit",
@@ -47,22 +61,26 @@ class A0XHostedGateAWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(__file__).resolve().parents[1]
 
+    def _assert_canonical_json(self, path: Path, expected: dict) -> None:
+        encoded = path.read_bytes()
+        self.assertTrue(encoded.endswith(b"\n"))
+        self.assertFalse(encoded.endswith(b"\n\n"))
+        self.assertEqual(
+            json.dumps(expected, separators=(",", ":"), sort_keys=True) + "\n",
+            encoded.decode("utf-8"),
+        )
+
     def test_actions_and_lanes_are_canonical_frozen_inputs(self) -> None:
         actions_path = self.root / ".github/a0x-hosted-gate-a-actions.json"
         lanes_path = self.root / ".github/a0x-hosted-gate-a-lanes.json"
         actions = json.loads(actions_path.read_text(encoding="utf-8"))
         lanes = json.loads(lanes_path.read_text(encoding="utf-8"))
-        self.assertEqual({"format", "actions"}, set(actions))
-        self.assertEqual("actions-v1", actions["format"])
-        self.assertEqual(ACTION_PINS, actions["actions"])
-        self.assertEqual({"format", "lanes"}, set(lanes))
-        self.assertEqual("lanes-v1", lanes["format"])
-        self.assertEqual(LANES, tuple(lane["id"] for lane in lanes["lanes"]))
-        self.assertEqual(sorted(LANES), list(LANES))
-        for lane in lanes["lanes"]:
-            self.assertEqual({"id", "python", "argv"}, set(lane))
-            self.assertIsInstance(lane["argv"], list)
-        self.assertEqual(hashlib.sha256(actions_path.read_bytes()).hexdigest(), hashlib.sha256(actions_path.read_bytes()).hexdigest())
+        self.assertEqual(EXPECTED_ACTIONS, actions)
+        self.assertEqual(EXPECTED_LANES, lanes)
+        self.assertEqual(LANE_IDS, tuple(lane["id"] for lane in lanes["lanes"]))
+        self.assertEqual(sorted(LANE_IDS), list(LANE_IDS))
+        self._assert_canonical_json(actions_path, EXPECTED_ACTIONS)
+        self._assert_canonical_json(lanes_path, EXPECTED_LANES)
 
     def test_schema_requirements_are_hash_locked_and_safe_yaml_is_strict(self) -> None:
         requirements = (self.root / "requirements-schema.in").read_text(encoding="utf-8")
