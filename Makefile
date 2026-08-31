@@ -75,7 +75,7 @@ schema-cross-validate:
 
 a0x-synthetic-verify:
 	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_contract_check.py --phase synthetic
-	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_runner tests.test_a0x_contract_check tests.test_a0x_material tests.test_a0x_material_child tests.test_a0x_material_contract tests.test_a0x_material_runtime tests.test_a0x_runtime_bundle tests.test_a0x_runtime_readiness tests.test_a0x_apfs tests.test_a0x_wheelhouse tests.test_a0x_production_adapter tests.test_a0x_ccp_executor tests.test_a0x_contract tests.test_a0x_preflight tests.test_a0x_freeze tests.test_a0x_frozen_package tests.test_a0x_schemas tests.test_a0x_activations tests.test_a0x_a0_analysis tests.test_a0x_r1_analysis tests.test_a0x_report tests.test_a0x_verify tests.test_a0x_execution tests.test_a0x_model_adapter tests.test_a0x_matrix_plan_binding
+	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_runner tests.test_a0x_contract_check tests.test_a0x_material tests.test_a0x_material_child tests.test_a0x_material_contract tests.test_a0x_material_runtime tests.test_a0x_runtime_bundle tests.test_a0x_runtime_readiness tests.test_a0x_apfs tests.test_a0x_wheelhouse tests.test_a0x_production_adapter tests.test_a0x_ccp_executor tests.test_a0x_contract tests.test_a0x_preflight tests.test_a0x_freeze tests.test_a0x_frozen_package tests.test_a0x_schemas tests.test_a0x_activations tests.test_a0x_a0_analysis tests.test_a0x_r1_analysis tests.test_a0x_report tests.test_a0x_verify tests.test_a0x_execution tests.test_a0x_model_adapter tests.test_a0x_matrix_plan_binding tests.test_a0x_hosted_gate_a_workflow
 	@echo "A0X synthetic implementation verified: no model, tokenizer, sealed target, or CCP access."
 
 a0x-no-model-verify:
