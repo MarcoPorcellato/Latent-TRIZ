@@ -6,6 +6,8 @@ import sys
 import unittest
 from pathlib import Path
 
+from jsonschema import Draft202012Validator
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import A0XContractError, assert_pair_binding
@@ -379,14 +381,17 @@ class A0XSchemasTests(unittest.TestCase):
             )],
             "overall_status": "PASS",
         }
-        self.assertEqual([], validate(lane, lane_schema))
-        self.assertEqual([], validate(evidence, evidence_schema))
+        self.assertEqual([], list(Draft202012Validator(lane_schema).iter_errors(lane)))
+        self.assertEqual([], list(Draft202012Validator(evidence_schema).iter_errors(evidence)))
         for value, schema, mutate in (
             (lane, lane_schema, lambda item: item.__setitem__("extra", True)),
+            (lane, lane_schema, lambda item: item.__setitem__("command", ["make", "docs-audit"])),
             (evidence, evidence_schema, lambda item: item["workflow"].__setitem__("run_id", True)),
             (evidence, evidence_schema, lambda item: item["required_lanes"].pop()),
+            (evidence, evidence_schema, lambda item: item["required_lanes"].__setitem__(1, item["required_lanes"][0])),
+            (evidence, evidence_schema, lambda item: item["required_lanes"].__setitem__(0, item["required_lanes"][1])),
         ):
             invalid = copy.deepcopy(value)
             mutate(invalid)
             with self.subTest(invalid=invalid):
-                self.assertTrue(validate(invalid, schema))
+                self.assertTrue(list(Draft202012Validator(schema).iter_errors(invalid)))
