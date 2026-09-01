@@ -33,6 +33,31 @@ class A0XFreezeTests(unittest.TestCase):
         self.root = Path(self._temporary_directory.name)
         self.addCleanup(self._temporary_directory.cleanup)
 
+    def test_implementation_inventory_is_stable_and_binds_task_one_to_six_surface(self) -> None:
+        required = {
+            "src/latent_triz/a0x_pair.py",
+            "src/latent_triz/a0x_compatibility.py",
+            "src/latent_triz/a0x_gate_contract.py",
+            "src/latent_triz/a0x_schema_projection.py",
+            "scripts/a0x_compatibility_check.py",
+            "scripts/a0x_compile_pair_schemas.py",
+            "schemas/a0x-pair-binding.fragment.json",
+            "schemas/a0x-pair-projections.json",
+            "tests/test_a0x_pair_compatibility.py",
+            "tests/test_a0x_schema_projection.py",
+            "tests/test_a0x_architecture.py",
+        }
+        paths = a0x_freeze._IMPLEMENTATION_PATHS
+        self.assertEqual(tuple(sorted(paths)), paths)
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertTrue(required.issubset(paths))
+        for relative in paths:
+            path = self.ROOT / relative
+            with self.subTest(path=relative):
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+                self.assertEqual(1, path.stat().st_nlink)
+
     def test_selection_uses_public_cases_only_and_is_deterministic(self) -> None:
         manifest = build_a0_selection_manifest(
             cases_path=self.FIXTURES / "public-cases-mini.jsonl",
