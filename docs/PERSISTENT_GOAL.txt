@@ -1,3 +1,14 @@
+Current A0X checkpoint (2026-09-01): use
+`docs/A0X_SIX_MODEL_CAMPAIGN.md` as the sole current scientific lifecycle and
+`docs/A0X_ARCHITECTURE_CONVERGENCE.md` as architecture authority. The reviewed
+implementation base is `68b7f224b27fc9929260885eaddf31150aad2bf5`; re-read
+the actual resulting `HEAD` before any authorization. Require the 12 × 2
+compatibility oracle, architecture fitness tests, and documentation audit
+before any future Gate A/B action. Gate C, model/tokenizer access, target read,
+CCP heavy work, network, publication, and scientific execution remain blocked.
+
+--- Historical checkpoint below; retained with original hashes and outcomes ---
+
 A0X Hosted Gate A local implementation checkpoint (2026-08-31): resume only
 from isolated branch `agent/a0x-hosted-gate-a-design`. Tasks 1–9 are complete;
 Task 9's stale package refusal is Historical evidence and Task 10 alone may

@@ -18,7 +18,28 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
-## Current Hosted Gate A migration checkpoint
+## Current architecture-convergence checkpoint — 2026-09-01
+
+This document is the canonical current scientific lifecycle for A0X. The
+approved target-free correction is
+[A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md). Its reviewed
+implementation base is `68b7f224b27fc9929260885eaddf31150aad2bf5`; re-read
+the resulting exact `HEAD` before any later authorization.
+
+Current state: contract convergence is target-free only. `PairBinding` is the
+sole pair identity and run-specific output-path authority; the checked-in
+consumer schemas and hosted positive fixtures must be derived from it; the
+compatibility oracle must pass all 12 dossier × 2 hosted-consumer cases before
+any Gate A or Gate B action. The lifecycle reducer is the sole transition
+authority. No current Gate A evidence, Gate B preparation, Gate C execution,
+model/tokenizer access, target read, CCP heavy command, network action, or
+publication is authorized.
+
+Current checks: `make a0x-compatibility-check`, the architecture fitness tests,
+and `make docs-audit`. Historical hashes, receipts, package outcomes, and
+earlier checkpoint text remain evidence only; they do not define this state.
+
+## Historical Hosted Gate A migration checkpoint
 
 Tasks 1–9 of
 `docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md` are
@@ -344,7 +365,7 @@ remains `sealed_gate_pending`. Fresh local and GitHub-hosted verification is
 required on the reconstructed PR #109 head; publication does not authorize
 Gate B or C.
 
-## Current checkpoint
+## Historical 2026-08-25 checkpoint
 
 The campaign remains `sealed_gate_pending`. The material composition is no
 longer a refusal stub: it now has a fixed outer launcher, an acyclic

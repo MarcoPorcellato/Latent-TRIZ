@@ -7,7 +7,18 @@ date: 2026-08-25
 
 # A0X restart handoff
 
-## Post-bootstrap PR #109 reconstruction checkpoint — 2026-08-30
+## Current pointer — 2026-09-01
+
+This handoff is historical evidence. The current A0X lifecycle is
+[A0X six-model campaign](A0X_SIX_MODEL_CAMPAIGN.md), and its approved
+architecture correction is [A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md).
+Before any Gate A/B action, bind the actual exact `HEAD` and prove the
+12 × 2 compatibility oracle, architecture fitness tests, and documentation
+audit. Gate C and all material actions remain separately unauthorized.
+
+--- Historical checkpoints below; hashes and outcomes are preserved verbatim ---
+
+## Historical post-bootstrap PR #109 reconstruction checkpoint — 2026-08-30
 
 This section is authoritative for the current continuation and supersedes all
 older current-gate wording below while preserving historical evidence.
