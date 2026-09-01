@@ -7,6 +7,7 @@ import hashlib
 import io
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 import re
 import shutil
@@ -49,7 +50,12 @@ def _sha256(value: object) -> bool:
     return isinstance(value, str) and _SHA256.fullmatch(value) is not None
 
 def _timestamp(value: object) -> bool:
-    return isinstance(value, str) and _TIMESTAMP.fullmatch(value) is not None
+    if not isinstance(value, str) or _TIMESTAMP.fullmatch(value) is None:
+        return False
+    try:
+        return datetime.fromisoformat(value[:-1] + "+00:00").tzinfo == timezone.utc
+    except ValueError:
+        return False
 
 def _sha(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
@@ -120,9 +126,7 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
     if not (transport.artifact_id == request.artifact_id and transport.run_id == request.run_id and transport.run_attempt == request.run_attempt and transport.head_sha == request.source_head and transport.archive_digest == "sha256:" + request.archive_sha256 and transport.archive_size_bytes == request.archive_size_bytes and transport.expires_at == request.expires_at): raise A0XHostedCaptureError(BINDING_MISMATCH)
     destination = request.output_root
     if os.path.lexists(destination): raise A0XHostedCaptureError(OUTPUT_EXISTS)
-    try: meta = destination.parent.lstat()
-    except OSError as error: raise A0XHostedCaptureError(CAPTURE_INVALID) from error
-    if stat.S_ISLNK(meta.st_mode) or not stat.S_ISDIR(meta.st_mode): raise A0XHostedCaptureError(CAPTURE_INVALID)
+    _require_safe_output_ancestors(destination)
     archive = _read_regular(Path(archive_path), ARCHIVE_INVALID)
     if len(archive) != request.archive_size_bytes or _sha(archive) != request.archive_sha256: raise A0XHostedCaptureError(ARCHIVE_INVALID)
     manifest = _extract_manifest(archive)
@@ -132,17 +136,18 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
     if not (parsed["repository"] == request.repository and parsed["qualified_source_head"] == request.source_head and parsed["qualified_source_tree"] == request.source_tree and parsed["workflow"]["run_id"] == request.run_id and parsed["workflow"]["run_attempt"] == request.run_attempt): raise A0XHostedCaptureError(BINDING_MISMATCH)
     if not isinstance(attestation_bundle, bytes) or not attestation_bundle or len(attestation_bundle) > MAX_BUNDLE_BYTES or not isinstance(trusted_root, bytes) or not trusted_root or len(trusted_root) > MAX_TRUSTED_ROOT_BYTES: raise A0XHostedCaptureError(CAPTURE_INVALID)
     stage = Path(tempfile.mkdtemp(prefix=".a0x-hosted-capture-", dir=destination.parent))
+    stage_identity = _directory_identity(stage)
     try:
         for name, raw in zip(FINAL_NAMES, (manifest, attestation_bundle, trusted_root, transport.as_document()), strict=True):
             with (stage / name).open("xb") as stream: stream.write(raw); stream.flush(); os.fsync(stream.fileno())
         _assert_stage(stage)
         (publish or _darwin_publish_exclusive)(stage, destination)
+        if os.path.lexists(stage) or destination.is_symlink(): raise A0XHostedCaptureError(PUBLICATION_FAILED)
+        _assert_stage(destination)
     except A0XHostedCaptureError:
-        _cleanup(stage); raise
+        _cleanup(stage, stage_identity); raise
     except Exception as error:
-        _cleanup(stage); raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
-    if os.path.lexists(stage) or destination.is_symlink(): raise A0XHostedCaptureError(PUBLICATION_FAILED)
-    _assert_stage(destination)
+        _cleanup(stage, stage_identity); raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
     return destination
 
 def _extract_manifest(archive: bytes) -> bytes:
@@ -173,9 +178,33 @@ def _assert_stage(path: Path) -> None:
     if {entry.name for entry in entries} != set(FINAL_NAMES): raise A0XHostedCaptureError(PUBLICATION_FAILED)
     for entry in entries: _read_regular(entry, PUBLICATION_FAILED)
 
-def _cleanup(stage: Path) -> None:
+def _require_safe_output_ancestors(destination: Path) -> None:
+    current = Path(destination.anchor)
     try:
-        if stage.is_dir() and not stage.is_symlink(): shutil.rmtree(stage, ignore_errors=True)
+        for component in destination.parts[1:-1]:
+            current /= component
+            metadata = current.lstat()
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                raise A0XHostedCaptureError(CAPTURE_INVALID)
+    except A0XHostedCaptureError:
+        raise
+    except OSError as error:
+        raise A0XHostedCaptureError(CAPTURE_INVALID) from error
+
+def _directory_identity(path: Path) -> tuple[int, int]:
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise A0XHostedCaptureError(PUBLICATION_FAILED)
+    return metadata.st_dev, metadata.st_ino
+
+def _cleanup(stage: Path, identity: tuple[int, int]) -> None:
+    try:
+        metadata = stage.lstat()
+        if stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode) and (metadata.st_dev, metadata.st_ino) == identity:
+            shutil.rmtree(stage, ignore_errors=True)
     except OSError: pass
 
 def _darwin_publish_exclusive(stage: Path, destination: Path) -> None:

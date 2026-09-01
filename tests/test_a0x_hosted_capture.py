@@ -35,6 +35,24 @@ def _zip_member(name: str, payload: bytes) -> bytes:
     return stream.getvalue()
 
 
+def _encrypted_flag_zip(name: str, payload: bytes) -> bytes:
+    raw = bytearray(_zip_member(name, payload))
+    for signature, offset in ((b"PK\x03\x04", 6), (b"PK\x01\x02", 8)):
+        index = raw.index(signature)
+        raw[index + offset] |= 0x01
+    return bytes(raw)
+
+
+def _typed_zip(name: str, payload: bytes, mode: int) -> bytes:
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        member = zipfile.ZipInfo(name)
+        member.create_system = 3
+        member.external_attr = mode << 16
+        archive.writestr(member, payload)
+    return stream.getvalue()
+
+
 class HostedCaptureTest(unittest.TestCase):
     def _request(self, output_root: Path) -> dict[str, object]:
         return {
@@ -150,6 +168,10 @@ class HostedCaptureTest(unittest.TestCase):
                 "a0x-hosted-gate-a-transport",
                 json.loads((result / "hosted-gate-a-transport.json").read_bytes())["artifact_class"],
             )
+            transport_schema = json.loads((ROOT / "schemas/a0x-hosted-gate-a-capture-transport.schema.json").read_text())
+            self.assertEqual([], __import__("latent_triz.validator", fromlist=["validate"]).validate(
+                json.loads((result / "hosted-gate-a-transport.json").read_bytes()), transport_schema,
+            ))
 
     def test_request_refuses_nonabsolute_output_and_metadata_drift(self) -> None:
         """Removing exact request shape or absolute output validation must fail capture admission."""
@@ -255,11 +277,16 @@ class HostedCaptureTest(unittest.TestCase):
                 )
             }
             self.assertEqual([], validate(request, schemas["a0x-hosted-gate-a-capture-request.schema.json"]))
-            self.assertEqual([], validate(transport, schemas["a0x-hosted-gate-a-capture-transport.schema.json"]))
+            from latent_triz.a0x_hosted_capture import CaptureTransport
+            self.assertEqual([], validate(
+                json.loads(CaptureTransport.from_mapping(transport).as_document()),
+                schemas["a0x-hosted-gate-a-capture-transport.schema.json"],
+            ))
             request["output_root"] = "relative/capture"
             self.assertTrue(validate(request, schemas["a0x-hosted-gate-a-capture-request.schema.json"]))
             transport["run_attempt"] = 2
-            self.assertTrue(validate(transport, schemas["a0x-hosted-gate-a-capture-transport.schema.json"]))
+            with self.assertRaises(ValueError):
+                CaptureTransport.from_mapping(transport)
 
     def test_capture_refuses_archive_links_and_existing_output(self) -> None:
         """Removing regular independent archive or exclusive output checks would permit replay or replacement."""
@@ -309,3 +336,74 @@ class HostedCaptureTest(unittest.TestCase):
                 with self.subTest(field=field), self.assertRaisesRegex(A0XHostedCaptureError, BINDING_MISMATCH):
                     capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(drifted), archive_path, bundle, trusted, publish=lambda _stage, _destination: None)
                 self.assertFalse((root / "capture").exists())
+
+    def test_capture_refuses_nested_symlink_and_non_directory_ancestors(self) -> None:
+        """Removing full ancestor checks would redirect a capture below a symlinked path component."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID, CaptureRequest, CaptureTransport, capture_hosted_gate_a
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+            redirect_target = root / "redirect-target"
+            (redirect_target / "inner").mkdir(parents=True)
+            (root / "link").symlink_to(redirect_target, target_is_directory=True)
+            request["output_root"] = str(root / "link" / "inner" / "capture")
+            with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=lambda _stage, _destination: None)
+            request, transport, archive, bundle, trusted = self._inputs(root)
+            (root / "blocked").write_bytes(b"not a directory")
+            request["output_root"] = str(root / "blocked" / "inner" / "capture")
+            with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=lambda _stage, _destination: None)
+
+    def test_noop_or_invalid_publisher_cleans_owned_stage(self) -> None:
+        """Removing post-publication cleanup would leave synthetic staged evidence after a bad publisher."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CaptureRequest, CaptureTransport, PUBLICATION_FAILED, capture_hosted_gate_a
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            for publisher in (lambda _stage, _destination: None, lambda stage, _destination: (stage / "unexpected").write_bytes(b"x")):
+                with self.subTest(publisher=publisher):
+                    request, transport, archive, bundle, trusted = self._inputs(root)
+                    with self.assertRaisesRegex(A0XHostedCaptureError, PUBLICATION_FAILED):
+                        capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=publisher)
+                    self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
+                    self.assertFalse((root / "capture").exists())
+
+    def test_request_transport_and_schemas_refuse_semantically_invalid_utc_timestamps(self) -> None:
+        """Replacing semantic UTC parsing with regex-only checks would admit impossible dates and times."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CaptureRequest, CaptureTransport
+        from latent_triz.validator import validate
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, _archive, _bundle, _trusted = self._inputs(root)
+            request["expires_at"] = "2026-99-99T99:99:99Z"
+            transport["created_at"] = "2026-02-30T12:00:00Z"
+            with self.assertRaises(A0XHostedCaptureError):
+                CaptureRequest.from_mapping(request)
+            with self.assertRaises(A0XHostedCaptureError):
+                CaptureTransport.from_mapping(transport)
+            request_schema = json.loads((ROOT / "schemas/a0x-hosted-gate-a-capture-request.schema.json").read_text())
+            self.assertTrue(validate(request, request_schema))
+
+    def test_capture_refuses_actual_encrypted_directory_symlink_and_nonregular_zip_members(self) -> None:
+        """Removing ZIP flags/type validation would accept an encrypted or nonregular archive member."""
+        from latent_triz.a0x_hosted_capture import ARCHIVE_INVALID, A0XHostedCaptureError, CaptureRequest, CaptureTransport, capture_hosted_gate_a
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+            manifest = self._manifest()
+            fixtures = {
+                "encrypted": _encrypted_flag_zip("a0x-hosted-gate-a-evidence.json", manifest),
+                "directory": _typed_zip("a0x-hosted-gate-a-evidence.json/", b"", 0o40755),
+                "symlink": _typed_zip("a0x-hosted-gate-a-evidence.json", b"target", 0o120777),
+                "fifo": _typed_zip("a0x-hosted-gate-a-evidence.json", b"", 0o010644),
+            }
+            for label, raw in fixtures.items():
+                archive.write_bytes(raw)
+                request.update({"archive_sha256": hashlib.sha256(raw).hexdigest(), "archive_size_bytes": len(raw)})
+                transport.update({"archive_digest": "sha256:" + request["archive_sha256"], "archive_size_bytes": len(raw)})
+                with self.subTest(label=label), self.assertRaisesRegex(A0XHostedCaptureError, ARCHIVE_INVALID):
+                    capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=lambda _stage, _destination: None)
