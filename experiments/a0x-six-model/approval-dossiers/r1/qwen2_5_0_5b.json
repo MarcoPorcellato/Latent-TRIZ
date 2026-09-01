@@ -6,7 +6,7 @@
   "empirical": true,
   "evidence_eligible": false,
   "expert_validated": false,
-  "implementation_source_head": "86d25ffce19790d150be1987e0de096977b17ae1",
+  "implementation_source_head": "13b80ed371cb2803a58f5f78f2d9fdeb6e3b7031",
   "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
   "material_contract_raw_sha256": "9d743d1913664290451be62dbd21fa27b7bb6b5285a4cdea75e43c576cac2156",
   "pair_binding": {
@@ -29,7 +29,7 @@
       "view_site_count": 2
     },
     "leg": "r1",
-    "leg_freeze_sha256": "e769249263aef1594d6e714dd7ca68b23e3526e4034f8aeed11ab64deb2f0323",
+    "leg_freeze_sha256": "afc8d97e30c8d36a875bd1d3e58d20a848fa4653639fd28714a9bbcf19061344",
     "model_id": "Qwen/Qwen2.5-0.5B",
     "model_key": "qwen2_5_0_5b",
     "output_path": "results/a0x/r1/qwen2_5_0_5b/a0x-r1-qwen2_5_0_5b-060db649-attempt-01",

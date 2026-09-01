@@ -18,14 +18,14 @@
       "sha256": "f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd"
     },
     {
-      "bytes": 666,
+      "bytes": 672,
       "path": ".github/a0x-hosted-gate-a-lanes.json",
-      "sha256": "4a6754e77e4a440d9e1af03d16017272e194bc6953cec16dd9473aa0b5929a97"
+      "sha256": "06a3c748ae9491ed4cfbf53f5f8eecdd23ab4ac2a9f7ca465b57874b838aa236"
     },
     {
-      "bytes": 10342,
+      "bytes": 11419,
       "path": ".github/workflows/a0x-hosted-gate-a.yml",
-      "sha256": "e61045e9592237aadb6057ca752061855135109fd9e5bbdf508e55c706ab1458"
+      "sha256": "5f74199107481c73adc2fa1efbd462c2a9d8b1d5009164892a2917d02ae595e4"
     },
     {
       "bytes": 33,
@@ -61,6 +61,11 @@
       "bytes": 5370,
       "path": "schemas/a0x-gate-b-authorization.schema.json",
       "sha256": "6e34f8ae41f5900f6855a3f0ddb60cc54fcb30af064bfa85fcb8cc901aaf04cc"
+    },
+    {
+      "bytes": 6933,
+      "path": "schemas/a0x-gh-2.97.0-verification-result.schema.json",
+      "sha256": "ae6b10ae31d9667a6a9c76ee219384d3c9bcb640d2098b006adc4be60be6f0d2"
     },
     {
       "bytes": 3479,
@@ -178,9 +183,9 @@
       "sha256": "fb308fab14319f3a60c72016fbb77ebe91667ca5a28f17748008f56772c26721"
     },
     {
-      "bytes": 46827,
+      "bytes": 46888,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "806f729e0217eeab338364053d417f7b20df16aa50a5872301ab9d23306f6689"
+      "sha256": "acb132dd495dd88cb1c689b510b9e35dc9be40f776834781456f956639585344"
     },
     {
       "bytes": 11866,
@@ -323,9 +328,9 @@
       "sha256": "ff0a4da825fc16201616bb90ae55358f0a0f004089417a5c26c495f8776a8c88"
     },
     {
-      "bytes": 15983,
+      "bytes": 17402,
       "path": "tests/test_a0x_freeze.py",
-      "sha256": "da4feba77698a12b59c91096416fdc03012b8a19a72f4aa1a14d5a4a5ac55592"
+      "sha256": "106ae2c4818afa21d40f4f83cf5bf24211d9b5246d98018e14df1754deb016ac"
     },
     {
       "bytes": 13681,
@@ -338,9 +343,9 @@
       "sha256": "93415a3537a68d7ffd9ff1284f588d316451617034dae31675b50883bbe3b113"
     },
     {
-      "bytes": 14700,
+      "bytes": 14410,
       "path": "tests/test_a0x_hosted_gate_a_workflow.py",
-      "sha256": "68996ca8de64285e3d2380fe6a155478cc6bc05bbf0fb8f5339439928d196df6"
+      "sha256": "b41e05a253b5c3587eb0718eedc78ee202fe906173a13628e85f249c4ebbeb62"
     },
     {
       "bytes": 30369,
@@ -434,6 +439,7 @@
     "schemas/a0x-execution-authorization-v3.schema.json",
     "schemas/a0x-execution-authorization.schema.json",
     "schemas/a0x-gate-b-authorization.schema.json",
+    "schemas/a0x-gh-2.97.0-verification-result.schema.json",
     "schemas/a0x-guard-launch.schema.json",
     "schemas/a0x-hosted-gate-a-evidence.schema.json",
     "schemas/a0x-hosted-gate-a-lane-receipt.schema.json",
