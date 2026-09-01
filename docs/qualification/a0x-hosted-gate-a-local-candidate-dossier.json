@@ -138,7 +138,23 @@
   },
   "review_state": {
     "task_10_independent_review": "approved",
-    "task_11_independent_reviews": "pending",
+    "task_11_independent_reviews": "approved",
+    "architecture_security_review": {
+      "status": "approved",
+      "path": "docs/qualification/a0x-hosted-gate-a-architecture-security-review-3274e23.md",
+      "sha256": "bb8d291a4bb786097ba301a4ccf4aa444414326ff006b3787dcc7ccf2e05c514"
+    },
+    "scientific_material_boundary_review": {
+      "status": "approved",
+      "path": "docs/qualification/a0x-hosted-gate-a-scientific-boundary-review-3274e23.md",
+      "sha256": "0dd2154963f5be12340ee3d34d7b458c287fb1cb0bdd0ddf6e8b6fd7c84e795b"
+    },
+    "historical_scientific_review": {
+      "status": "non_authoritative",
+      "reviewed_candidate": "157b4b1",
+      "path": "docs/qualification/a0x-hosted-gate-a-scientific-boundary-review-157b4b1-historical.md",
+      "sha256": "943657c674965750082c83794b84b360b8a0cf8906f8e15cb0984be9a284c27f"
+    },
     "sol_architecture_security_review_before_task_12": "required"
   },
   "stop_boundary": {
