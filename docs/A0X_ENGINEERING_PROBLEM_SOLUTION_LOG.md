@@ -1016,3 +1016,40 @@ CCP receipts and pre-migration package hashes remain **Historical evidence**
 with their original bytes and meanings. No hosted capture, GitHub CLI
 verification, Gate B, Gate C, model, tokenizer, target, CCP heavy, Docker,
 network, publication, or scientific execution occurred in this correction.
+
+## 38. Hosted verifier tests assumed macOS-only paths
+
+**Symptom.** GitHub Actions run `33459576482` failed three verifier tests on
+both Python 3.11 and Python 3.12. The fixtures assumed `/private/tmp` and the
+Homebrew path `/opt/homebrew/bin/gh`, neither of which is a portable contract
+for Ubuntu hosted runners.
+
+**Rejected correction.** Mocking the SHA-256 calculation would have made a
+synthetic executable appear to be the pinned GitHub CLI. That would weaken the
+security property the public verifier entry point is intended to prove, so the
+approach was not used.
+
+**Correction.** The public entry point still accepts only the exact pinned
+GitHub CLI as a regular independent file with the frozen version and SHA-256.
+After that check succeeds, it passes a private immutable verifier capability to
+the already validated orchestration. Tests may exercise only that private
+post-validation orchestration with a real temporary regular file and its real
+hash. A separate public-boundary regression proves the same synthetic file is
+rejected before the runner is invoked. All affected fixtures now use portable
+temporary files and directories.
+
+The verifier revalidates the executable path and hash after the child returns,
+before the exclusive receipt write. The operational wrapper continues to call
+only the public entry point; production code does not import or construct the
+private test capability.
+
+**Regression evidence.** The new public rejection test observes zero runner
+calls and no receipt. The private orchestration cases retain pre-run and
+post-run drift, input, path, output-collision, and rerun refusals without
+mocking the frozen version, frozen SHA-256, or hash function. Independent Luna
+and Terra reviews found no blocking issue in the correction.
+
+**Status.** Corrected locally with TDD. This is target-free portability and
+security-boundary evidence only. GitHub-hosted requalification remains pending;
+no network, evidence capture, Gate B/C, model, tokenizer, target, CCP, Docker,
+push, rerun, merge, or scientific execution occurred.

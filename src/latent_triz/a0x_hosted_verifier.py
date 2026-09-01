@@ -54,6 +54,14 @@ class GateBVerificationRequest:
     verifier_policy_path: Path
 
 
+@dataclass(frozen=True)
+class _PinnedVerifier:
+    """Private capability created only after the public verifier pin passes."""
+
+    path: Path
+    raw_sha256: str
+
+
 VerifierRunner = Callable[[Sequence[str], Path], tuple[int, bytes, bytes]]
 SourceState = tuple[str, str, bool]
 SourceStateProbe = Callable[[Path], SourceState]
@@ -180,18 +188,36 @@ def verify_hosted_gate_a(
 ) -> bytes:
     """Verify one exact hosted Gate A evidence packet without network access."""
     root = Path(request.repository_root).resolve(strict=True)
+    _controlled_path(root, request.authorization_path)
+    _controlled_path(root, request.verifier_policy_path)
+    pinned_verifier = _require_pinned_verifier(Path(request.verifier_executable))
+    return _verify_hosted_gate_a_after_verifier_preflight(
+        request, pinned_verifier, runner=runner, source_state_probe=source_state_probe, clock=clock,
+    )
+
+
+def _verify_hosted_gate_a_after_verifier_preflight(
+    request: GateBVerificationRequest,
+    pinned_verifier: _PinnedVerifier,
+    runner: VerifierRunner,
+    source_state_probe: SourceStateProbe,
+    clock: Callable[[], str] | None = None,
+) -> bytes:
+    """Run orchestration only after the public entrypoint validates the verifier pin."""
+    root = Path(request.repository_root).resolve(strict=True)
     authorization_path = _controlled_path(root, request.authorization_path)
     policy_path = _controlled_path(root, request.verifier_policy_path)
-    _require_independent(Path(request.verifier_executable), None)
-    executable = Path(request.verifier_executable).resolve(strict=True)
+    executable = pinned_verifier.path
     _require_independent(authorization_path, _MAX_CONTROL_BYTES)
     _require_independent(policy_path, _MAX_CONTROL_BYTES)
     _require_independent(executable, None)
+    if _sha256(executable.read_bytes()) != pinned_verifier.raw_sha256:
+        raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
     authorization_raw = authorization_path.read_bytes()
     authorization = _load_schema_object(authorization_raw, "a0x-gate-b-authorization.schema.json")
     policy_raw = policy_path.read_bytes()
     policy = _load_schema_object(policy_raw, "a0x-hosted-gate-a-verifier-policy.schema.json")
-    _validate_authorization(authorization, policy, policy_raw, executable)
+    _validate_authorization(authorization, policy, policy_raw)
     timestamp = (clock or _utc_timestamp)()
     current_time = _parse_timestamp(timestamp)
     inputs = _resolve_inputs(root, authorization)
@@ -250,7 +276,7 @@ def verify_hosted_gate_a(
         raise A0XHostedVerifierError(SOURCE_DRIFT) from error
     if observed_state != expected_state:
         raise A0XHostedVerifierError(SOURCE_DRIFT)
-    _revalidate_controls(root, request, authorization_raw, policy_raw, executable)
+    _revalidate_controls(root, request, authorization_raw, policy_raw, pinned_verifier)
     inputs = _resolve_inputs(root, authorization)
     for name, path in inputs.items():
         _require_independent(path, _INPUT_LIMITS[name])
@@ -262,7 +288,7 @@ def verify_hosted_gate_a(
         raise A0XHostedVerifierError(INPUT_INVALID) from error
     _validate_manifest_and_transport(final_manifest, _load_schema_object(inputs["transport"].read_bytes(), "a0x-hosted-gate-a-transport.schema.json"), authorization, root, current_time)
     _require_independent(executable, None)
-    if _sha256(executable.read_bytes()) != _GH_SHA256:
+    if _sha256(executable.read_bytes()) != pinned_verifier.raw_sha256:
         raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
     receipt = {
         "artifact_class": "a0x-hosted-gate-a-verification-receipt",
@@ -352,7 +378,24 @@ def _resolve_inputs(root: Path, authorization: Mapping[str, Any]) -> dict[str, P
     return result
 
 
-def _validate_authorization(authorization: Mapping[str, Any], policy: Mapping[str, Any], policy_raw: bytes, executable: Path) -> None:
+def _require_pinned_verifier(path: Path) -> _PinnedVerifier:
+    """Create the private verifier capability only from the frozen executable bytes."""
+    _require_independent(path, None)
+    try:
+        executable = path.resolve(strict=True)
+    except OSError as error:
+        raise A0XHostedVerifierError(INPUT_INVALID) from error
+    _require_independent(executable, None)
+    try:
+        observed_sha256 = _sha256(executable.read_bytes())
+    except OSError as error:
+        raise A0XHostedVerifierError(INPUT_INVALID) from error
+    if observed_sha256 != _GH_SHA256:
+        raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
+    return _PinnedVerifier(path=executable, raw_sha256=observed_sha256)
+
+
+def _validate_authorization(authorization: Mapping[str, Any], policy: Mapping[str, Any], policy_raw: bytes) -> None:
     verifier = authorization.get("verifier")
     expected_verifier = {
         "role": "github_cli_verifier", "version": _GH_VERSION,
@@ -364,16 +407,12 @@ def _validate_authorization(authorization: Mapping[str, Any], policy: Mapping[st
         or authorization.get("source_sha") != authorization.get("source_head")
     ):
         raise A0XHostedVerifierError(EXPECTATION_MISMATCH)
-    if _sha256(executable.read_bytes()) != _GH_SHA256:
-        raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
-
-
 def _revalidate_controls(
     root: Path,
     request: GateBVerificationRequest,
     authorization_raw: bytes,
     policy_raw: bytes,
-    executable: Path,
+    pinned_verifier: _PinnedVerifier,
 ) -> None:
     """Re-bind controls and executable bytes after the child exits."""
     authorization_path = _controlled_path(root, request.authorization_path)
@@ -383,13 +422,13 @@ def _revalidate_controls(
     _require_independent(policy_path, _MAX_CONTROL_BYTES)
     _require_independent(current_executable, None)
     try:
-        if current_executable.resolve(strict=True) != executable:
+        if current_executable.resolve(strict=True) != pinned_verifier.path:
             raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
     except OSError as error:
         raise A0XHostedVerifierError(INPUT_INVALID) from error
     if authorization_path.read_bytes() != authorization_raw or policy_path.read_bytes() != policy_raw:
         raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
-    if _sha256(current_executable.read_bytes()) != _GH_SHA256:
+    if _sha256(current_executable.read_bytes()) != pinned_verifier.raw_sha256:
         raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
 
 

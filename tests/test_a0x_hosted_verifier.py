@@ -23,6 +23,33 @@ class HostedVerifierContractTest(unittest.TestCase):
 
         self.assertTrue(callable(verify_hosted_gate_a))
         self.assertTrue(GateBVerificationRequest)
+        wrapper = (Path(__file__).parents[1] / "scripts/a0x_verify_hosted_gate_a.py").read_text()
+        self.assertIn("verify_hosted_gate_a(", wrapper)
+        self.assertNotIn("_verify_hosted_gate_a_after_verifier_preflight", wrapper)
+
+    def test_public_entrypoint_refuses_unpinned_verifier_before_runner(self) -> None:
+        """Only the frozen GitHub CLI bytes may create the private verifier capability."""
+        from latent_triz.a0x_hosted_verifier import (
+            A0XHostedVerifierError, GateBVerificationRequest, INPUT_HASH_MISMATCH, verify_hosted_gate_a,
+        )
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            authorization_path, policy_path, _manifest, _bundle, _trusted, _transport = self._packet(root)
+            executable = root / "synthetic-tools/unpinned-gh"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"not the frozen GitHub CLI\n")
+            calls: list[tuple[str, ...]] = []
+            with self.assertRaises(A0XHostedVerifierError) as raised:
+                verify_hosted_gate_a(
+                    GateBVerificationRequest(root, authorization_path, executable, policy_path),
+                    runner=lambda argv, _cwd: calls.append(tuple(argv)) or (0, self._result_fixture(), b""),
+                    source_state_probe=lambda _root: ("a" * 40, "b" * 40, True),
+                    clock=lambda: "2026-08-31T12:04:00Z",
+                )
+            self.assertEqual(raised.exception.code, INPUT_HASH_MISMATCH)
+            self.assertEqual(calls, [])
+            self.assertFalse((root / ".a0x-runtime/gate-b-verifications").exists())
 
     def test_timestamp_accepts_only_utc_rfc3339_z_with_stable_refusal(self) -> None:
         """Clock and transport parsing never leak a TypeError or local offset."""
@@ -57,7 +84,7 @@ class HostedVerifierContractTest(unittest.TestCase):
 
     def test_verifier_writes_one_receipt_after_one_bound_runner_call(self) -> None:
         """Missing any preflight must prevent the one authenticated runner call."""
-        from latent_triz.a0x_hosted_verifier import GateBVerificationRequest, verify_hosted_gate_a
+        from latent_triz.a0x_hosted_verifier import GateBVerificationRequest, _verify_hosted_gate_a_after_verifier_preflight
 
         with TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -71,8 +98,9 @@ class HostedVerifierContractTest(unittest.TestCase):
                 calls.append((argv, cwd))
                 return 0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode("utf-8"), b""
 
-            raw = verify_hosted_gate_a(
-                GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+            verifier = self._portable_verifier(root)
+            raw = _verify_hosted_gate_a_after_verifier_preflight(
+                GateBVerificationRequest(root, authorization_path, verifier.path, policy_path), verifier,
                 runner=runner,
                 source_state_probe=lambda _root: ("a" * 40, "b" * 40, True),
                 clock=lambda: "2026-08-31T12:04:00Z",
@@ -83,7 +111,7 @@ class HostedVerifierContractTest(unittest.TestCase):
             self.assertEqual(len(calls), 1)
             argv, cwd = calls[0]
             self.assertEqual(cwd, root.resolve())
-            self.assertEqual(argv[0], str(Path("/opt/homebrew/bin/gh").resolve()))
+            self.assertEqual(argv[0], str(verifier.path))
             self.assertIn("--signer-digest", argv)
             self.assertEqual(argv[argv.index("--signer-digest") + 1], "a" * 40)
             self.assertIn("--source-digest", argv)
@@ -201,8 +229,8 @@ class HostedVerifierContractTest(unittest.TestCase):
                 states = [("a" * 40, "b" * 40, True)] if case != "source_state" else [("a" * 40, "b" * 40, False)]
                 calls: list[tuple[str, ...]] = []
                 with self.assertRaises(A0XHostedVerifierError):
-                    verify_hosted_gate_a(
-                        GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+                    self._verify_post_pin(
+                        GateBVerificationRequest(root, authorization_path, root / "synthetic-tools/gh", policy_path),
                         runner=lambda argv, _cwd: calls.append(tuple(argv)) or (0, self._result_fixture(), b""),
                         source_state_probe=lambda _root: states[0], clock=lambda: "2027-01-02T00:00:00Z" if case == "expired" else "2026-08-31T12:04:00Z",
                     )
@@ -240,8 +268,8 @@ class HostedVerifierContractTest(unittest.TestCase):
                     return 0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode(), b""
 
                 with self.assertRaises(A0XHostedVerifierError):
-                    verify_hosted_gate_a(
-                        GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+                    self._verify_post_pin(
+                        GateBVerificationRequest(root, authorization_path, root / "synthetic-tools/gh", policy_path),
                         runner=runner,
                         source_state_probe=lambda _root: next(states) if case == "source_drift" else ("a" * 40, "b" * 40, True),
                         clock=lambda: "2026-08-31T12:04:00Z",
@@ -263,10 +291,12 @@ class HostedVerifierContractTest(unittest.TestCase):
                 calls.append(argv)
                 return 0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode(), b""
 
-            request = GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path)
-            first = verify_hosted_gate_a(request, runner=runner, source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z")
+            verifier = self._portable_verifier(root)
+            request = GateBVerificationRequest(root, authorization_path, verifier.path, policy_path)
+            from latent_triz.a0x_hosted_verifier import _verify_hosted_gate_a_after_verifier_preflight
+            first = _verify_hosted_gate_a_after_verifier_preflight(request, verifier, runner=runner, source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z")
             with self.assertRaises(A0XHostedVerifierError) as raised:
-                verify_hosted_gate_a(request, runner=runner, source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z")
+                _verify_hosted_gate_a_after_verifier_preflight(request, verifier, runner=runner, source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z")
             self.assertEqual(raised.exception.code, "A0X_GATE_B_OUTPUT_EXISTS")
             self.assertEqual(len(calls), 1)
             self.assertEqual(first, (root / ".a0x-runtime/gate-b-verifications/" / ("a" * 40) / "a0/gpt2/a0x-a0-gpt2-run-1/gate-a-verification-receipt.json").read_bytes())
@@ -282,8 +312,8 @@ class HostedVerifierContractTest(unittest.TestCase):
             alias.symlink_to(authorization_path)
             calls: list[tuple[str, ...]] = []
             with self.assertRaises(A0XHostedVerifierError):
-                verify_hosted_gate_a(
-                    GateBVerificationRequest(root, alias, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+                self._verify_post_pin(
+                    GateBVerificationRequest(root, alias, root / "synthetic-tools/gh", policy_path),
                     runner=lambda argv, _cwd: calls.append(tuple(argv)) or (0, self._result_fixture(), b""),
                     source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z",
                 )
@@ -307,8 +337,8 @@ class HostedVerifierContractTest(unittest.TestCase):
                     authorization_path.write_bytes(canonical_json_bytes(authorization))
                 calls: list[tuple[str, ...]] = []
                 with self.assertRaises(A0XHostedVerifierError):
-                    verify_hosted_gate_a(
-                        GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+                    self._verify_post_pin(
+                        GateBVerificationRequest(root, authorization_path, root / "synthetic-tools/gh", policy_path),
                         runner=lambda argv, _cwd: calls.append(tuple(argv)) or (0, self._result_fixture(), b""),
                         source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z",
                     )
@@ -318,7 +348,7 @@ class HostedVerifierContractTest(unittest.TestCase):
         """Runner-time swaps of authorization, policy, or raw workflow are terminal."""
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest, verify_hosted_gate_a
 
-        for case in ("authorization", "policy", "workflow", "input_parent", "workflow_parent"):
+        for case in ("authorization", "policy", "workflow", "verifier", "input_parent", "workflow_parent"):
             with self.subTest(case=case), TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
                 authorization_path, policy_path, manifest_path, _bundle, _trusted, _transport = self._packet(root)
@@ -329,6 +359,8 @@ class HostedVerifierContractTest(unittest.TestCase):
                     if case in {"authorization", "policy", "workflow"}:
                         target = {"authorization": authorization_path, "policy": policy_path, "workflow": root / ".github/workflows/a0x-hosted-gate-a.yml"}[case]
                         target.write_bytes(target.read_bytes() + b" ")
+                    elif case == "verifier":
+                        (root / "synthetic-tools/gh").write_bytes(b"post-run verifier drift\n")
                     elif case == "input_parent":
                         evidence = manifest_path.parent
                         redirect = root / "redirect-evidence"
@@ -342,8 +374,8 @@ class HostedVerifierContractTest(unittest.TestCase):
                     return 0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode(), b""
 
                 with self.assertRaises(A0XHostedVerifierError):
-                    verify_hosted_gate_a(
-                        GateBVerificationRequest(root, authorization_path, Path("/opt/homebrew/bin/gh").resolve(), policy_path),
+                    self._verify_post_pin(
+                        GateBVerificationRequest(root, authorization_path, root / "synthetic-tools/gh", policy_path),
                         runner=runner, source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z",
                     )
                 self.assertFalse((root / ".a0x-runtime/gate-b-verifications").exists())
@@ -357,15 +389,17 @@ class HostedVerifierContractTest(unittest.TestCase):
         assert spec.loader is not None
         spec.loader.exec_module(module)
         stream = io.StringIO()
-        arguments = [
-            "--repository-root", "/private/tmp", "--authorization", "/private/tmp/authorization.json",
-            "--verifier", "/opt/homebrew/bin/gh", "--policy", "/private/tmp/policy.json",
-        ]
-        code = module.main(
-            arguments, stderr=stream,
-            runner=lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("must not invoke runner")),
-            source_state_probe=lambda _root: (_ for _ in ()).throw(AssertionError("must not probe source")),
-        )
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            arguments = [
+                "--repository-root", str(root), "--authorization", str(root / "missing-authorization.json"),
+                "--verifier", str(root / "missing-gh"), "--policy", str(root / "missing-policy.json"),
+            ]
+            code = module.main(
+                arguments, stderr=stream,
+                runner=lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("must not invoke runner")),
+                source_state_probe=lambda _root: (_ for _ in ()).throw(AssertionError("must not probe source")),
+            )
         self.assertEqual(code, 2)
         self.assertEqual(stream.getvalue(), "A0X_GATE_B_INPUT_INVALID\n")
 
@@ -383,9 +417,12 @@ class HostedVerifierContractTest(unittest.TestCase):
             stdout = b"a" * 40 + b"\n"
             stderr = b""
 
-        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret", "GITHUB_TOKEN": "secret", "HTTPS_PROXY": "bad"}, clear=False), mock.patch.object(module.subprocess, "run", side_effect=lambda *args, **kwargs: observed.append({"argv": args[0], "env": kwargs["env"], "timeout": kwargs["timeout"]}) or Process()):
-            module._runner(("/opt/homebrew/bin/gh", "attestation"), Path("/private/tmp"))
-            module._source_state(Path("/private/tmp"))
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            verifier = root / "synthetic-tools/gh"
+            with mock.patch.dict(os.environ, {"GH_TOKEN": "secret", "GITHUB_TOKEN": "secret", "HTTPS_PROXY": "bad"}, clear=False), mock.patch.object(module.subprocess, "run", side_effect=lambda *args, **kwargs: observed.append({"argv": args[0], "env": kwargs["env"], "timeout": kwargs["timeout"]}) or Process()):
+                module._runner((str(verifier), "attestation"), root)
+                module._source_state(root)
         self.assertEqual(len(observed), 4)
         for child in observed:
             self.assertEqual(child["env"], {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC"})
@@ -394,11 +431,12 @@ class HostedVerifierContractTest(unittest.TestCase):
         self.assertTrue(all(child["argv"][0] == "/usr/bin/git" for child in observed[1:]))
         from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
 
-        with mock.patch.object(module.subprocess, "run", side_effect=OSError("synthetic")):
+        with TemporaryDirectory() as temporary, mock.patch.object(module.subprocess, "run", side_effect=OSError("synthetic")):
+            root = Path(temporary).resolve()
             with self.assertRaises(A0XHostedVerifierError) as runner_error:
-                module._runner(("/opt/homebrew/bin/gh", "attestation"), Path("/private/tmp"))
+                module._runner((str(root / "synthetic-tools/gh"), "attestation"), root)
             with self.assertRaises(A0XHostedVerifierError) as source_error:
-                module._source_state(Path("/private/tmp"))
+                module._source_state(root)
         self.assertEqual(runner_error.exception.code, "A0X_GATE_B_ATTESTATION_REFUSED")
         self.assertEqual(source_error.exception.code, "A0X_GATE_B_SOURCE_DRIFT")
 
@@ -406,6 +444,28 @@ class HostedVerifierContractTest(unittest.TestCase):
     @staticmethod
     def _result_fixture() -> bytes:
         return (Path(__file__).parent / "fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json").read_bytes()
+
+    @staticmethod
+    def _portable_verifier(root: Path):
+        """Create an independent post-pin fixture without claiming the public GH identity."""
+        from latent_triz.a0x_hosted_verifier import _PinnedVerifier
+
+        executable = root / "synthetic-tools/gh"
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_bytes(b"a0x synthetic post-pin verifier fixture\n")
+        return _PinnedVerifier(path=executable.resolve(strict=True), raw_sha256=HostedVerifierContractTest._sha(executable))
+
+    def _verify_post_pin(self, request, *, runner, source_state_probe, clock):
+        """Exercise orchestration after an explicit synthetic private pin boundary."""
+        from latent_triz.a0x_hosted_verifier import GateBVerificationRequest, _verify_hosted_gate_a_after_verifier_preflight
+
+        verifier = self._portable_verifier(Path(request.repository_root))
+        portable_request = GateBVerificationRequest(
+            request.repository_root, request.authorization_path, verifier.path, request.verifier_policy_path,
+        )
+        return _verify_hosted_gate_a_after_verifier_preflight(
+            portable_request, verifier, runner=runner, source_state_probe=source_state_probe, clock=clock,
+        )
 
     def _packet(self, root: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
         head, tree = "a" * 40, "b" * 40
