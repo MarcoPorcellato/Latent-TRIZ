@@ -1082,3 +1082,50 @@ dossier/consumer combination before a material boundary.
 architecture fitness tests, and the documentation audit. These checks are
 target-free and do not authorize Gate C, model/tokenizer access, target reads,
 CCP heavy work, network, publication, or scientific execution.
+
+## 40. Verified wheels still did not define a reproducible Gate B environment
+
+**Problem.** The wheelhouse verifier proved exact local wheel bytes, and the
+APFS primitive proved exact copy-on-write files, but no single transaction
+bound them to a clean source HEAD, an exact interpreter, a final installed
+distribution set, a model card, and an overwrite-refusing local receipt.
+Using `venv` naively would also retain bootstrap `pip`, producing an
+environment larger than the frozen 39-distribution contract. A generic pip
+install could resolve online or accept unbound package bytes.
+
+**Correction.** Add a focused offline prerequisite builder. Planning verifies
+the exact clean source, canonical wheelhouse manifest, 39 wheel files, a
+canonical allowlist of the complete base Python runtime, Python hash/version,
+bootstrap pip bytes/version, canonical model card, and exact source snapshot
+without writing or executing external code. The material path first APFS-clones
+the complete verified base runtime and all 39 wheels into private attempt-owned
+paths. It executes and installs only from those reverified paths, uses
+`venv --copies`, verifies the actual environment-local bootstrap installer,
+then runs one shell-free
+`pip --isolated install` with `--no-index`, `--no-cache-dir`,
+`--only-binary :all:`, `--require-hashes`, `--no-deps`, and the verified
+wheelhouse. It removes bootstrap pip and accepts
+the environment only when an isolated metadata probe reports exactly the 39
+locked distributions and no importable pip. Model files are cloned only by the
+existing no-fallback APFS boundary. Inputs, source state, output ancestors,
+interpreter bytes, complete base-runtime allowlist, distribution metadata, and
+model bytes are checked again before an exclusive receipt write. Static
+validation precedes all child execution, read-only probes disable bytecode
+writes, and every child has a 3,600-second timeout. The CLI requires an explicit
+`--plan` or `--build`; material execution is never an implicit default.
+
+**Regression evidence.** Synthetic tests cover exact command construction,
+manifest/card/Python/base-runtime hashes, model-card double-read refusal,
+owned input binding, no-runner planning, explicit mode selection,
+dot-identifier refusal, 39-package cardinality, deterministic
+requirements, dirty or wrong source, child failure, malformed or extra and
+duplicate distributions, model-source drift, source-root and attempt-root
+symlink swaps, occupied outputs, exact allowlist cloning, and canonical CLI
+planning. Adjacent APFS and wheelhouse tests remain green.
+
+**Status.** Implementation is target-free and uses only temporary synthetic
+fixtures. The local wheelhouse manifest
+`fe541aa83b5dbd9770da1f50d2cd88eb192586406398d9cffa5507f9f352ca72`
+binds 39 wheels totalling 150,397,774 bytes, but no real environment has been
+created and no real snapshot has been cloned. Gate B/C, model, tokenizer,
+target, network, CCP, push, and publication remain unauthorized.

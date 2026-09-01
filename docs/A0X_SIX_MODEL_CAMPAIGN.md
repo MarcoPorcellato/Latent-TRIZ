@@ -18,57 +18,55 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
-## Current architecture-convergence checkpoint — 2026-09-01
+## Current offline Gate B builder checkpoint — 2026-09-01
 
 This is the sole canonical current A0X status ledger. Architecture authority is
-[A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md). All later A0X
-checkpoint blocks in this file and elsewhere are historical evidence only.
+[A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md); operator
+authority is [A0X Gate B hardening](A0X_GATE_B_OPERATOR_HARDENING.md). All later
+A0X checkpoint blocks in this file are historical evidence only.
 
-The corrected implementation anchor is
-`425f27fcec2f89507c3b1cc696f8523f93b8ade9`
-(`fix: close A0X convergence review findings`). The target-free artifact closure
-is `64cd504a24f620e69a12befb792c9e1d8e0749f8`
-(`chore: regenerate corrected A0X contracts`). The two generated freezes are:
+The reviewed implementation anchor is
+`b7ab6513c759b4f0133b33c8a70c034d8a1f92ba`, tree
+`480e96a94a8602a3ba1bb08741a3ecf0fb86cce1`. Target-free regeneration binds:
 
-| Leg | Freeze file SHA-256 |
-| --- | --- |
-| A0 | `d643f600c2fb050ae763e1039837b885d711219bf3ba152f4bd2bb6e38284371` |
-| A0-R1 | `9f543186dd74dbe8f252664ee5bdb40a48e28f324aee3df504962ce0689d9e08` |
+| Leg | Implementation SHA-256 | Freeze SHA-256 |
+| --- | --- | --- |
+| A0 | `beea84d11b8c3c5b7262991a3f5e951834b81432c2aea0ca71a521a78228c6c3` | `38bdbb99db20c471e9aeafeb7b961709ce373d2fd8f0801c56655ac550266677` |
+| A0-R1 | `6f8f6adeccb067aec4473a3b46c632db400317bcee432e41186c368a419da021` | `2ec31870102a9219a36df24304748e31da4050514d9e59cfd0c9056adaba3ffa` |
 
 The twelve-dossier ledger identity is
-`e4c8a72082a6bb721ee4c388c6ea8b4319fd0523d664e75fa07d61446d7bc8ae`: SHA-256
+`c249f94e3d5124c8fb19ebdf873d4bf91eb2dc7eb6c75654e55d9dff58451df0`: SHA-256
 of compact, key-sorted JSON containing the ordered `dossiers` rows below, each
-with its repository-relative `path` and SHA-256. The canonical no-model receipt SHA-256 is
-`d5e8c044110623a8f54bd10e4ba37f7d960c84a86f272a67b06d5975e91d3beb`.
+with its repository-relative `path` and SHA-256.
 
 | Dossier | SHA-256 |
 | --- | --- |
-| `a0/gpt2.json` | `c3f1051ccf79773673b631e274571f3fcfd1f870db3324684c55b1b80901295d` |
-| `a0/gpt_neo_125m.json` | `56a0cc38b0c02dc64435c6ca65e1e342360747ed0ead3be974b61034802ed01b` |
-| `a0/qwen2_5_0_5b.json` | `5e676e79215088c97ecf2d94159f9d264884e379af09c0135db5b1c270ebf9e9` |
-| `a0/qwen3_0_6b_base.json` | `35d09e372fdc76ee3f08312bfcae0530cee8ad7cde9faa12a87932f64b1960e7` |
-| `a0/smollm2_135m.json` | `d8e24cbe8079e9e0a0e9e725320c8506329ea93079f66b9f04d2c5fdf4042f28` |
-| `a0/smollm2_360m.json` | `23ad4e9a48bd405bfaaca325db42d2417c2724935c5642919a34eb95fafa55bb` |
-| `r1/gpt2.json` | `a830c55c36e58a13f13e2fd0153c831a62c292dafd4ad6de63e924f7d65618d2` |
-| `r1/gpt_neo_125m.json` | `e85da9f789cd98c5287908046a9296d470e7b1b00710c05475a7afb07e643d88` |
-| `r1/qwen2_5_0_5b.json` | `bc418625eb91488c62124d5872fa712e4684a264bf26148dfa960d4ef5acfc8e` |
-| `r1/qwen3_0_6b_base.json` | `35b47eaf6a09fbe992702c6230142f0e5f69dfbbbc20a10e6d79e2dd936c87df` |
-| `r1/smollm2_135m.json` | `808e3f320472e51f54ab7cc9bec8951b56522ed5e9bb6ea881c0f98daaf7acbc` |
-| `r1/smollm2_360m.json` | `47b5188380c2b9e28d8526f3ea0730b418a3b2fcbd800309570d78d1cab52d5d` |
+| `a0/gpt2.json` | `c1e48c06d1d4d10b741edff0d3e7c06d452848fb30e4a7bcd80e7485c3392d7f` |
+| `a0/gpt_neo_125m.json` | `167c45a926532c280683427df818c3668d9e86c83223bf916f6829e0c67563aa` |
+| `a0/qwen2_5_0_5b.json` | `16a3f584121f533378a903aed22e6db37118af2839372fad56ed5f86c7d0c3fe` |
+| `a0/qwen3_0_6b_base.json` | `876e04a9ee9f36f11ef662411967367838bba260240cec76f8befb18ac574a6b` |
+| `a0/smollm2_135m.json` | `213d915b48705beaba1c5e4d77a08daaa999aaf0d64bc12c9b93ea396d0dae8b` |
+| `a0/smollm2_360m.json` | `41e748437c620117fac22d7ce4df3de3ce068ad44673f1a1adbdde514c950a92` |
+| `r1/gpt2.json` | `8f0e4bcfe18a71b9bea98515e1aa8be4856ca73e8de0ce5e685e4cbab6f0151b` |
+| `r1/gpt_neo_125m.json` | `090128e0b84d76ca0cac42ba4f00acd470b89603fedca52e8eecf54760351fb1` |
+| `r1/qwen2_5_0_5b.json` | `425291b73d2d5a1e8702fcbf9f9bf3e62bf423225c6eb8d188018db317b3a5e1` |
+| `r1/qwen3_0_6b_base.json` | `56f31e074f5d4d8d56266fcb74c71ca1b0fd8fbffee01be913995316e8e8f4eb` |
+| `r1/smollm2_135m.json` | `445fc14935aac0007a3f287ab5f3e05856f9503c9c2797eda8e1545f1459a5a8` |
+| `r1/smollm2_360m.json` | `7f77eb6fac9ce168dae42c030d7ede4f43035018f62529dccfd8289069bcfe47` |
 
-Target-free closure evidence: schema compiler `19` files; compatibility oracle
-`24/24`; no-model package `12` tests; synthetic suite `389` tests with `1`
-skip; schema cross-validation `155` tracked pairs and `19` rejected mutations;
-repository check `1,221` tests with `2` skips. All recorded no-material
-counters are zero: model loads, tokenizer constructions, sealed-target reads,
-CCP invocations, and remote mutations.
+The builder now performs no external execution during planning. A separately
+authorized material build must APFS-bind the complete manifest-qualified base
+Python runtime and all 39 wheels into attempt-owned paths before executing or
+installing from them. The CLI requires explicit `--plan` or `--build`; all
+bound inputs are revalidated before receipt sealing.
 
-Current boundary: contract convergence remains target-free. Gate A and Gate B
-remain blocked pending a new explicit authorization that binds this exact
-closure; Gate C, model/tokenizer access, target reads, CCP heavy work, network,
-publication, and scientific execution remain unauthorized. The final
-documentation-only commit follows the artifact closure; it is not a self-hashed
-scientific binding and does not alter the implementation anchor or artifacts.
+Current boundary remains target-free and `sealed_gate_pending`. Regeneration
+reported two freezes, twelve approval-request dossiers, and zero model loads,
+tokenizer constructions, sealed-target reads, CCP invocations, or remote
+mutations. Gate B/C, real environment creation, installation, model/tokenizer
+access, target reads, network, push, publication, and scientific execution
+remain unauthorized. Final verification and a packaging commit may follow this
+anchor without rewriting its generated `implementation_source_head`.
 
 ## Historical Hosted Gate A migration checkpoint
 
@@ -280,7 +278,7 @@ hypothesis. Human TRIZ construct validation, stronger controls,
 generalization, compositionality, and causal intervention remain separate
 gates.
 
-## Runtime-binding correction checkpoint
+## Historical runtime-binding correction checkpoint
 
 The earlier private runtime descriptor had an unmaterializable reciprocal hash
 dependency. Descriptor-v2 removes that cycle: the operator-rooted execution
@@ -337,6 +335,24 @@ bytes, the five pinned packages, required APIs, card bytes, runtime-file
 commitment, and pair identity. The descriptor binds that receipt before any
 authorization or role mapping is produced.
 
+The offline prerequisite builder now makes that process explicit and
+reproducible. It binds the clean source HEAD, the exact 39-wheel manifest, the
+base Python and bootstrap `pip`, the model card, and the allowlisted source
+snapshot. It creates the environment with `venv --copies`, installs only
+hash-locked wheels with no index or dependency resolution, removes bootstrap
+`pip`, requires the final exact 39-distribution set, and materializes the card
+files only through APFS `clonefile(2)`. It writes a local prerequisite receipt
+last; it does not write the Hosted Gate A verification receipt, readiness,
+descriptor, authorization, mapping, or scientific output.
+
+The verified local wheelhouse manifest is
+`fe541aa83b5dbd9770da1f50d2cd88eb192586406398d9cffa5507f9f352ca72`
+(39 wheels; 150,397,774 bytes). The wheel bytes remain ignored and local.
+Their verification is not a Gate B authorization and is not portable public
+evidence. This implementation tranche uses only synthetic fixtures; no real
+environment, package installation, model snapshot, tokenizer, target, or
+scientific action is performed.
+
 The same correction also enforces a model card's non-null `pad_side` before
 model construction and makes a post-claim failure to persist the pre-run
 observation terminal recovery evidence without starting the child. No bundle,
@@ -366,27 +382,30 @@ approval-request dossier hashes:
 
 | Leg/model | Dossier SHA-256 |
 | --- | --- |
-| A0 / GPT-2 | `5dd0665aa2c6c5f32768767666144cf3085df66cfa643241b2383e53235c4b6f` |
-| A0 / GPT-Neo-125M | `17b16f87ccb8f32149c2f5a82018ae86047c553e0c2e957b3f7cae6242c982d7` |
-| A0 / Qwen2.5-0.5B | `238ff3165aee3a6a9d8c5eb24adb4b6142fa956d87d7c5400e2dad00fe120bef` |
-| A0 / Qwen3-0.6B Base | `151b394129db3f68559369d23d860057dbca156f0f8b3974e69037f3163a963c` |
-| A0 / SmolLM2-135M | `66a754ca46af2a318362f9c417fc2d98fc0314b5c583ada610f2121285a93990` |
-| A0 / SmolLM2-360M | `8317197a35853a98f6c00b94d776709399f9e02c19927437c9be49bb9b68f39c` |
-| A0-R1 / GPT-2 | `3baeacca07b8227eb523a176ab8b9e147c6ecbeb40e8ba46010fcf5b4b9a8977` |
-| A0-R1 / GPT-Neo-125M | `c2ce2d5cf27ca3fe4df9378d06eeb9b683e272b2ff270d0d5cf2ab134a108826` |
-| A0-R1 / Qwen2.5-0.5B | `094fc15b4f2ffdf814bc6fa64357e0ba8d7931f26ec77e6aaee66df015bf3929` |
-| A0-R1 / Qwen3-0.6B Base | `d2cb4b4b287a8a7ef33d1bf010a95d34f4bcc92a646c68fc28a226ce207d9961` |
-| A0-R1 / SmolLM2-135M | `ff78093886124f98c3690723228cfb48896c24a24c76adcff8d254429fa4ee68` |
-| A0-R1 / SmolLM2-360M | `ddb2abb77556a1fe75e05d51292ee12c33dbafe5d2117209fd88970be8c09260` |
+| A0 / GPT-2 | `86e9ae7dc951cab86ee0034939db21f76d423de2f7812a242d7a89af7273feef` |
+| A0 / GPT-Neo-125M | `79f7524bbff0de66c2a5cea089f4a25abe75bd5a52d6ba050dc0a4424cf6bbfa` |
+| A0 / Qwen2.5-0.5B | `bb5448a66a004e65adf1da67d1aba711761455bbd1355b7c0c3e9d2aaee62093` |
+| A0 / Qwen3-0.6B Base | `f6d98408721d237eb768d0790d534b84fc6eb52930cfb57d464277a2ee3a40a2` |
+| A0 / SmolLM2-135M | `c9e95325a66e06811ee8e535a7a6bdbb464384fe1e9b29522eb64a7f5d310314` |
+| A0 / SmolLM2-360M | `9252f35a159c435af83c56acf4ed4192a79c9454d5ec2da5fd32ccdc0b26695f` |
+| A0-R1 / GPT-2 | `f191ec0bafba2c8ff5cb0e6a9dbeaf234c52675f4c6fc0875dca99baba2e883f` |
+| A0-R1 / GPT-Neo-125M | `dc6685fdb5ff753d9dc47d501a2c9e238835c31bf6853abff270861d52cbd644` |
+| A0-R1 / Qwen2.5-0.5B | `0046d789b5bf070c9b75e9e6701d97d02b933c62979ee9978203dce615b2f955` |
+| A0-R1 / Qwen3-0.6B Base | `668bb760e9269e20308ee12a3bf88e9983b55e5bc131387c5008485cefbd40d1` |
+| A0-R1 / SmolLM2-135M | `5a37fd8023b3bf35a09c21abecf0fbdff330fe3c8cff999f49f2117b7bc795b3` |
+| A0-R1 / SmolLM2-360M | `c58ceeb29f6dbd0a9dbbc8c71669e17aa971bf95261c798a1121bfbd6f0e81c7` |
 
 The material contract remains byte-identical at
 `b56b860a4f4673f675035e0c76aa1b79e75b37ace9c441b2d1e36076d35c3fc8`.
-The regenerated bindings are A0 implementation/freeze
-`dc3cdebf2a8abd3d87adc6ceaa6b583f5b74386270d20c7301f24f4d04d8ae77` /
-`7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff`
+The builder implementation anchor is
+`0eb13410591cce4ad48c5a1f77fee765d587aa48`, tree
+`d36010a678339c70c1ee782a71990aa4f8b1cd07`. The regenerated bindings are A0
+implementation/freeze
+`e663513ec1b4175dae39982cb35a40f652e60e80fac6f9a3a83ea5e17463f316` /
+`91b040c4700083b412769cc17b013c8271ea7a8217ccc9bdf21e67339294e7eb`
 and A0-R1 implementation/freeze
-`a951db803725f6214da79edef8a283e4c2428ea698cc8ed5f89e530bd60d96ab` /
-`9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
+`857ee11cae8919de9c242262634c14f83c84943a8c376a30e508d368d6bed4c3` /
+`02c57238d1da8449636b330a7455a1be3b20cf7e3a8bfe3167a2add7ae693935`.
 Final target-free verification after this regeneration passed: focused Gate B
 hardening 97/97, frozen 11/11, synthetic A0X aggregate 293/293, schema
 cross-validation 155 agreements plus 19 rejected mutations, and the complete

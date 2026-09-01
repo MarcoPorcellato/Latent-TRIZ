@@ -428,3 +428,28 @@ read, and the historical 1,800-second/8-GiB/128-MiB ceilings. This does not
 describe A0X, whose current envelope is 3,600 seconds outer, 3,300 seconds
 scientific work, and 300 seconds reserved for sealing and cleanup. Until then, no
 model, tokenizer, generation, or sealed target access is authorized.
+
+A0X offline Gate B builder checkpoint (2026-09-01): the target-free builder can
+later create an independent Python 3.11 environment from an exact full-runtime
+manifest and the exact 39-wheel manifest, then APFS-clone one exact model-card
+snapshot. Planning executes no external code. Material mode must be explicit
+and may execute or install only after the base runtime and all wheels have been
+APFS-bound into private attempt-owned paths. The local wheelhouse manifest
+SHA-256 is
+`fe541aa83b5dbd9770da1f50d2cd88eb192586406398d9cffa5507f9f352ca72`
+and binds 150,397,774 bytes. This checkpoint authorizes synthetic fixtures,
+tests, documentation, target-free regeneration, and local commits only. Stop
+before any real environment, installation, snapshot, Gate B/C, model,
+tokenizer, target, network, CCP, push, or publication.
+
+The exact reviewed implementation anchor is
+`b7ab6513c759b4f0133b33c8a70c034d8a1f92ba`, tree
+`480e96a94a8602a3ba1bb08741a3ecf0fb86cce1`. Target-free regeneration binds
+A0 implementation/freeze
+`beea84d11b8c3c5b7262991a3f5e951834b81432c2aea0ca71a521a78228c6c3` /
+`38bdbb99db20c471e9aeafeb7b961709ce373d2fd8f0801c56655ac550266677`
+and A0-R1 implementation/freeze
+`6f8f6adeccb067aec4473a3b46c632db400317bcee432e41186c368a419da021` /
+`2ec31870102a9219a36df24304748e31da4050514d9e59cfd0c9056adaba3ffa`.
+The ordered twelve-dossier ledger SHA-256 is
+`c249f94e3d5124c8fb19ebdf873d4bf91eb2dc7eb6c75654e55d9dff58451df0`.

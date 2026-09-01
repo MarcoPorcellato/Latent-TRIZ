@@ -28,9 +28,9 @@
       "sha256": "5f74199107481c73adc2fa1efbd462c2a9d8b1d5009164892a2917d02ae595e4"
     },
     {
-      "bytes": 36723,
+      "bytes": 36753,
       "path": "Makefile",
-      "sha256": "56b24d023731ae928bd7ed125a6210b0176e22a0bd9223dc751f2a1618084b00"
+      "sha256": "b084ab8be7f9c6eb657024b9045560abaf72941243d8d8c2485d69ea98e3b032"
     },
     {
       "bytes": 33,
@@ -188,6 +188,11 @@
       "sha256": "95ccdac5be8bf205f071642c46f6b4b089d0943f66f7596e0370961d9aa139a2"
     },
     {
+      "bytes": 4496,
+      "path": "scripts/a0x_build_gate_b_runtime.py",
+      "sha256": "b4dffcaf9c93e76e0f2d55577aa730d6828b2027a7ffa4ce0e3598f00f6bffca"
+    },
+    {
       "bytes": 1403,
       "path": "scripts/a0x_compatibility_check.py",
       "sha256": "c89dc10de43b6b0a341963effa7e5eb854888a38be74b33f74c8aefed51e8b2e"
@@ -273,9 +278,14 @@
       "sha256": "8c7f52a69a41e0f8a9e946b0d023c4caa620420fef9bb7e9daa28d4454205b6f"
     },
     {
-      "bytes": 48161,
+      "bytes": 48289,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "504e1bb4d18d928ede684c66a426097e81462753410c7513fd46f7302fd6d85f"
+      "sha256": "f60b3104a7bd5740c77c86a5675ba787b4e6fcb427e389811466cf9f47d10f6e"
+    },
+    {
+      "bytes": 47086,
+      "path": "src/latent_triz/a0x_gate_b_builder.py",
+      "sha256": "260e43a767dbc2e3f6a458d72cce81f1fa2385e2c73640f069680bfced552142"
     },
     {
       "bytes": 8549,
@@ -443,14 +453,19 @@
       "sha256": "03283b28c73db1a946ffeb98ac9854a9c18b014ef0ae3733075131651ecbd344"
     },
     {
-      "bytes": 21483,
+      "bytes": 21635,
       "path": "tests/test_a0x_freeze.py",
-      "sha256": "8d77f87eff6877029c25ed9183e8a670e84fcf0e98c49ed839b9b0fa8d96add6"
+      "sha256": "cdc28665b9ddc7d054ed8cf9694717c2f0cf89ebc99b8ddcb1603d3f385c7fac"
     },
     {
-      "bytes": 14239,
+      "bytes": 14415,
       "path": "tests/test_a0x_frozen_package.py",
-      "sha256": "191a901a913d87f16eb9561fc2419b60d0994e8797e8beebde47544f2dbc5242"
+      "sha256": "be4d01f706e744d26beed3a1d2d6d37c63eb21b40f524554b2996e25ba5ba43e"
+    },
+    {
+      "bytes": 33787,
+      "path": "tests/test_a0x_gate_b_builder.py",
+      "sha256": "e887510d7d60d4a4c85d539f8b5b7eca219195c78b0bf65783816fb80c347065"
     },
     {
       "bytes": 6666,
@@ -589,6 +604,7 @@
     "schemas/a0x-statistical-result.schema.json",
     "schemas/a0x-target-read-receipt.schema.json",
     "schemas/a0x-terminal-result.schema.json",
+    "scripts/a0x_build_gate_b_runtime.py",
     "scripts/a0x_compatibility_check.py",
     "scripts/a0x_compile_pair_schemas.py",
     "scripts/a0x_contract_check.py",
@@ -607,6 +623,7 @@
     "src/latent_triz/a0x_contract.py",
     "src/latent_triz/a0x_execution.py",
     "src/latent_triz/a0x_freeze.py",
+    "src/latent_triz/a0x_gate_b_builder.py",
     "src/latent_triz/a0x_gate_contract.py",
     "src/latent_triz/a0x_hosted_gate_a.py",
     "src/latent_triz/a0x_hosted_verifier.py",
@@ -642,6 +659,7 @@
     "tests/test_a0x_execution.py",
     "tests/test_a0x_freeze.py",
     "tests/test_a0x_frozen_package.py",
+    "tests/test_a0x_gate_b_builder.py",
     "tests/test_a0x_hosted_gate_a.py",
     "tests/test_a0x_hosted_gate_a_workflow.py",
     "tests/test_a0x_hosted_verifier.py",

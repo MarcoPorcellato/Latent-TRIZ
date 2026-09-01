@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-08-31
+last_verified: 2026-09-01
 ---
 
 # Current laboratory status
@@ -14,7 +14,7 @@ and the event-by-event chronology remains in [`docs/log.md`](./log.md).
 
 ## Public checkpoint
 
-- **Public main:** `d2a475f58db668a2ce0a4ec48082189422b19eab`
+- **Public main:** `0e41e042ec9ded01075c5761ba1e6e7e4bc0e7b9`
 - **Repository:** [MarcoPorcellato/Latent-TRIZ](https://github.com/MarcoPorcellato/Latent-TRIZ)
 - **Scientific posture:** exploratory, reproducible, and claim-free
 - **Registered claims:** all remain `E0`; `data/claims.jsonl` is unchanged
@@ -127,6 +127,13 @@ Current A0X lifecycle and hash authority is the sole ledger in
 [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md). Architecture authority
 is [A0X architecture convergence](./A0X_ARCHITECTURE_CONVERGENCE.md). Earlier
 A0X checkpoint blocks below are historical.
+
+The next target-free tranche implements an offline Gate B prerequisite builder
+from synthetic fixtures. It binds a clean exact HEAD, the verified 39-wheel
+Python 3.11 manifest, exact base Python/bootstrap pip identity, a model card,
+and APFS-only snapshot materialization. This code does not itself authorize or
+perform the real environment build. The current state remains
+`sealed_gate_pending` before material Gate B.
 
 ### Historical A0X Hosted Gate A implementation boundary
 

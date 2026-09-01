@@ -321,12 +321,15 @@ class A0XFreezeTests(unittest.TestCase):
     def test_each_leg_inventory_binds_the_runtime_preparer_surface(self) -> None:
         """Each frozen leg must bind the preparer, its core, and its regression suite."""
         required = {
+            "scripts/a0x_build_gate_b_runtime.py",
             "scripts/a0x_prepare_runtime.py",
             "src/latent_triz/a0x_apfs.py",
+            "src/latent_triz/a0x_gate_b_builder.py",
             "src/latent_triz/a0x_runtime_bundle.py",
             "src/latent_triz/a0x_runtime_readiness.py",
             "src/latent_triz/a0x_wheelhouse.py",
             "tests/test_a0x_apfs.py",
+            "tests/test_a0x_gate_b_builder.py",
             "tests/test_a0x_runtime_bundle.py",
             "tests/test_a0x_runtime_readiness.py",
             "tests/test_a0x_wheelhouse.py",
