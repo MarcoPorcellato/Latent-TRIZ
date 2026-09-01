@@ -28,6 +28,14 @@ jobs:
           test "$GITHUB_RUN_ATTEMPT" = "1"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+      - id: observed-python
+        run: python -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version'
+      - id: install
+        run: python -m pip install --require-hashes -r requirements-schema.lock
       - id: command
         run: make a0x-no-model-verify
       - id: receipt
@@ -50,6 +58,14 @@ jobs:
           test "$GITHUB_RUN_ATTEMPT" = "1"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+      - id: observed-python
+        run: python -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version'
+      - id: install
+        run: python -m pip install --require-hashes -r requirements-schema.lock
       - id: command
         run: make a0x-synthetic-verify
       - id: receipt
@@ -72,6 +88,14 @@ jobs:
           test "$GITHUB_RUN_ATTEMPT" = "1"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           echo "SOURCE_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+      - id: python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+      - id: observed-python
+        run: python -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version'
+      - id: install
+        run: python -m pip install --require-hashes -r requirements-schema.lock
       - id: command
         run: make docs-audit
       - id: receipt

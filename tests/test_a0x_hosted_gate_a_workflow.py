@@ -21,9 +21,9 @@ EXPECTED_ACTIONS = {"actions": ACTION_PINS, "format": "actions-v1"}
 EXPECTED_LANES = {
     "format": "lanes-v1",
     "lanes": [
-        {"argv": ["make", "a0x-no-model-verify"], "id": "a0x-no-model", "python": None},
-        {"argv": ["make", "a0x-synthetic-verify"], "id": "a0x-synthetic", "python": None},
-        {"argv": ["make", "docs-audit"], "id": "documentation-audit", "python": None},
+        {"argv": ["make", "a0x-no-model-verify"], "id": "a0x-no-model", "python": "3.11"},
+        {"argv": ["make", "a0x-synthetic-verify"], "id": "a0x-synthetic", "python": "3.11"},
+        {"argv": ["make", "docs-audit"], "id": "documentation-audit", "python": "3.11"},
         {"argv": ["python", "scripts/repository_check.py"], "id": "repository-python311", "python": "3.11"},
         {"argv": ["python", "scripts/repository_check.py"], "id": "repository-python312", "python": "3.12"},
         {"argv": ["python", "scripts/schema_cross_validate.py"], "id": "schema-cross-validation-python311", "python": "3.11"},
@@ -251,28 +251,24 @@ class A0XHostedGateAWorkflowTests(unittest.TestCase):
             self.assertIn('test "$(git rev-parse HEAD)" = "$GITHUB_SHA"', source["run"])
             self.assertIn("git rev-parse HEAD^{tree}", source["run"])
 
-            if lane["python"] is None:
-                self.assertFalse(any(step.get("id") == "python" for step in job["steps"]))
-                command_index, command = self._step_with_id(job, "command")
-            else:
-                python_index, python = self._step_with_id(job, "python")
-                self.assertGreater(python_index, source_index)
-                self.assertEqual(
-                    f"actions/setup-python@{ACTION_PINS['actions/setup-python']}", python["uses"]
-                )
-                self.assertEqual({"python-version": lane["python"]}, python["with"])
-                observed_index, observed = self._step_with_id(job, "observed-python")
-                install_index, install = self._step_with_id(job, "install")
-                self.assertGreater(observed_index, python_index)
-                self.assertGreater(install_index, observed_index)
-                expected_tuple = tuple(int(part) for part in lane["python"].split("."))
-                self.assertIn(f"sys.version_info[:2] == {expected_tuple}", observed["run"])
-                self.assertEqual(
-                    "python -m pip install --require-hashes -r requirements-schema.lock",
-                    install["run"],
-                )
-                command_index, command = self._step_with_id(job, "command")
-                self.assertGreater(command_index, install_index)
+            python_index, python = self._step_with_id(job, "python")
+            self.assertGreater(python_index, source_index)
+            self.assertEqual(
+                f"actions/setup-python@{ACTION_PINS['actions/setup-python']}", python["uses"]
+            )
+            self.assertEqual({"python-version": lane["python"]}, python["with"])
+            observed_index, observed = self._step_with_id(job, "observed-python")
+            install_index, install = self._step_with_id(job, "install")
+            self.assertGreater(observed_index, python_index)
+            self.assertGreater(install_index, observed_index)
+            expected_tuple = tuple(int(part) for part in lane["python"].split("."))
+            self.assertIn(f"sys.version_info[:2] == {expected_tuple}", observed["run"])
+            self.assertEqual(
+                "python -m pip install --require-hashes -r requirements-schema.lock",
+                install["run"],
+            )
+            command_index, command = self._step_with_id(job, "command")
+            self.assertGreater(command_index, install_index)
 
             self.assertEqual(" ".join(lane["argv"]), command["run"])
             receipt_index, receipt = self._step_with_id(job, "receipt")
