@@ -35,6 +35,19 @@ class A0XFreezeTests(unittest.TestCase):
 
     def test_implementation_inventory_is_stable_and_binds_task_one_to_six_surface(self) -> None:
         required = {
+            "schemas/a0x-activation-receipt.schema.json",
+            "schemas/a0x-activation-stage-occupancy-receipt.schema.json",
+            "schemas/a0x-attempt-claim.schema.json",
+            "schemas/a0x-external-assets-locator.schema.json",
+            "schemas/a0x-model-identity-receipt.schema.json",
+            "schemas/a0x-output-occupancy-receipt.schema.json",
+            "schemas/a0x-preflight-receipt.schema.json",
+            "schemas/a0x-representation-record.schema.json",
+            "schemas/a0x-statistical-result.schema.json",
+            "schemas/a0x-target-read-receipt.schema.json",
+            "schemas/a0x-terminal-result.schema.json",
+            "scripts/repository_check.py",
+            "tests/a0x_test_support.py",
             "src/latent_triz/a0x_pair.py",
             "src/latent_triz/a0x_compatibility.py",
             "src/latent_triz/a0x_gate_contract.py",
@@ -57,6 +70,14 @@ class A0XFreezeTests(unittest.TestCase):
                 self.assertTrue(path.is_file())
                 self.assertFalse(path.is_symlink())
                 self.assertEqual(1, path.stat().st_nlink)
+
+    def test_file_binding_rejects_hardlink_in_temporary_tree(self) -> None:
+        source = self.root / "source.py"
+        bound = self.root / "bound.py"
+        source.write_text("x = 1\n", encoding="utf-8")
+        bound.hardlink_to(source)
+        with self.assertRaisesRegex(A0XFreezeError, "hardlink"):
+            a0x_freeze._file_binding(self.root, "bound.py")
 
     def test_selection_uses_public_cases_only_and_is_deterministic(self) -> None:
         manifest = build_a0_selection_manifest(
