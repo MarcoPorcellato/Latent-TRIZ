@@ -285,9 +285,14 @@ points and prove they share the same API and return `24/24 PASS`.
 - [ ] **Step 9: Commit the first fully green convergence checkpoint**
 
 ```bash
-rtk git add Makefile scripts/a0x_compatibility_check.py scripts/a0x_compile_pair_schemas.py scripts/repository_check.py schemas src/latent_triz/a0x_compatibility.py src/latent_triz/a0x_contract.py src/latent_triz/a0x_freeze.py src/latent_triz/a0x_pair.py src/latent_triz/a0x_runner.py src/latent_triz/a0x_schema_projection.py tests/a0x_test_support.py tests/test_a0x_contract.py tests/test_a0x_freeze.py tests/test_a0x_pair_compatibility.py tests/test_a0x_schema_projection.py
+rtk git add Makefile scripts/a0x_compatibility_check.py scripts/a0x_compile_pair_schemas.py scripts/repository_check.py schemas/a0x-pair-binding.fragment.json schemas/a0x-pair-projections.json 'schemas/a0x-*.schema.json' src/latent_triz/a0x_compatibility.py src/latent_triz/a0x_contract.py src/latent_triz/a0x_freeze.py src/latent_triz/a0x_pair.py src/latent_triz/a0x_runner.py src/latent_triz/a0x_schema_projection.py tests/a0x_test_support.py tests/test_a0x_contract.py tests/test_a0x_freeze.py tests/test_a0x_pair_compatibility.py tests/test_a0x_schema_projection.py
+rtk git diff --cached --name-only
 rtk git commit -m "refactor: converge A0X pair contracts"
 ```
+
+The cached list must contain only the named source/test files, the two
+generated registry artifacts, and consumer schemas present in the exact
+registry. An unregistered schema or any non-A0X path is a stop condition.
 
 ---
 
@@ -354,7 +359,8 @@ rtk env PYTHONPATH=src:. python3 -m unittest tests.test_a0x_hosted_verifier test
 - [ ] **Step 7: Commit**
 
 ```bash
-rtk git add src/latent_triz/a0x_gate_contract.py src/latent_triz/a0x_hosted_verifier.py src/latent_triz/a0x_runtime_bundle.py tests/a0x_test_support.py tests/fixtures/a0x/hosted-gate-a/positive tests/test_a0x_hosted_verifier.py tests/test_a0x_runtime_bundle.py
+rtk git add src/latent_triz/a0x_gate_contract.py src/latent_triz/a0x_hosted_verifier.py src/latent_triz/a0x_runtime_bundle.py tests/a0x_test_support.py tests/fixtures/a0x/hosted-gate-a/positive/gate-b-authorization.json tests/fixtures/a0x/hosted-gate-a/positive/verification-receipt.json tests/test_a0x_hosted_verifier.py tests/test_a0x_runtime_bundle.py
+rtk git diff --cached --name-only
 rtk git commit -m "fix: bind Hosted Gate A to semantic pair identity"
 ```
 
