@@ -123,16 +123,10 @@ asset or recompute a scientific result.
 
 ### A0X contract-convergence checkpoint (current)
 
-Current A0X lifecycle authority is
-[A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md); architecture authority
-is [A0X architecture convergence](./A0X_ARCHITECTURE_CONVERGENCE.md). The
-reviewed implementation base is `68b7f224b27fc9929260885eaddf31150aad2bf5`;
-any later action must bind its actual exact `HEAD`, not this documentation.
-
-Gate A and Gate B remain blocked on target-free proof that all 24 frozen
-dossier/hosted-consumer projections pass the compatibility oracle. Gate C,
-model/tokenizer access, target reads, CCP heavy work, network, and publication
-remain unauthorized. Earlier A0X checkpoint blocks below are historical.
+Current A0X lifecycle and hash authority is the sole ledger in
+[A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md). Architecture authority
+is [A0X architecture convergence](./A0X_ARCHITECTURE_CONVERGENCE.md). Earlier
+A0X checkpoint blocks below are historical.
 
 ### Historical A0X Hosted Gate A implementation boundary
 
