@@ -308,6 +308,35 @@ class A0XFreezeTests(unittest.TestCase):
         )
         self.assertTrue(required.issubset(implementations["a0"]["implementation_paths"]))
 
+    def test_active_hosted_verifier_schemas_are_bound_in_both_implementation_inventories(self) -> None:
+        """Catch a schema read by the active Hosted Gate A verifier outside both freezes."""
+        active_verifier_schemas = {
+            "schemas/a0x-gate-b-authorization.schema.json",
+            "schemas/a0x-gh-2.97.0-verification-result.schema.json",
+            "schemas/a0x-hosted-gate-a-transport.schema.json",
+            "schemas/a0x-hosted-gate-a-verification-receipt.schema.json",
+            "schemas/a0x-hosted-gate-a-verifier-policy.schema.json",
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_root = Path(directory)
+            a0x_freeze.freeze_a0x_campaign(
+                self.ROOT,
+                prepare_dossiers=True,
+                output_root=output_root,
+                implementation_source_head="f" * 40,
+            )
+            path_sets = {
+                leg: set(json.loads((
+                    output_root / f"experiments/a0x-six-model/{leg}/implementation.json"
+                ).read_text(encoding="utf-8"))["implementation_paths"])
+                for leg in ("a0", "r1")
+            }
+
+        self.assertTrue(active_verifier_schemas.issubset(a0x_freeze._IMPLEMENTATION_PATHS))
+        self.assertTrue(active_verifier_schemas.issubset(path_sets["a0"]))
+        self.assertTrue(active_verifier_schemas.issubset(path_sets["r1"]))
+
     def test_complete_artifacts_validate_the_strict_task_two_schemas(self) -> None:
         historical = self.root / "historical"
         historical.mkdir()

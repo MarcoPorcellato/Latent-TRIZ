@@ -149,6 +149,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "requirements-schema.lock",
     "schemas/a0x-execution-authorization-v3.schema.json",
     "schemas/a0x-gate-b-authorization.schema.json",
+    "schemas/a0x-gh-2.97.0-verification-result.schema.json",
     "schemas/a0x-hosted-gate-a-evidence.schema.json",
     "schemas/a0x-hosted-gate-a-lane-receipt.schema.json",
     "schemas/a0x-hosted-gate-a-transport.schema.json",
