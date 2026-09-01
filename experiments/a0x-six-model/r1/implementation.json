@@ -193,9 +193,9 @@
       "sha256": "e18dc826f46145dfd122ea96611cc790833a823c84d1609f82004c6a231006ae"
     },
     {
-      "bytes": 22207,
+      "bytes": 23794,
       "path": "src/latent_triz/a0x_hosted_verifier.py",
-      "sha256": "0cb6d457f2f31b53f935d622f3fe16ac3ce856819d2073a346892877c442ee15"
+      "sha256": "b8bc7e8492acca0f846021f3b0fc8de1cdfc6aa0a0655f75aa5030cc1c96397c"
     },
     {
       "bytes": 22231,
@@ -348,9 +348,9 @@
       "sha256": "b41e05a253b5c3587eb0718eedc78ee202fe906173a13628e85f249c4ebbeb62"
     },
     {
-      "bytes": 30369,
+      "bytes": 33986,
       "path": "tests/test_a0x_hosted_verifier.py",
-      "sha256": "62e5f9293050a19b237513d6c55de01cbd1dedd8961c71c2973fd65cf6a65ddf"
+      "sha256": "c8f23db6c427f48ecb7a94169ccd9a47ad5b77e7f0098f3b0a8d6bbba8342a66"
     },
     {
       "bytes": 2434,
