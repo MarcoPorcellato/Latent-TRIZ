@@ -428,3 +428,13 @@ read, and the historical 1,800-second/8-GiB/128-MiB ceilings. This does not
 describe A0X, whose current envelope is 3,600 seconds outer, 3,300 seconds
 scientific work, and 300 seconds reserved for sealing and cleanup. Until then, no
 model, tokenizer, generation, or sealed target access is authorized.
+
+A0X offline Gate B builder checkpoint (2026-09-01): implement and freeze the
+target-free builder that can later create an independent Python 3.11
+environment from the exact 39-wheel manifest and APFS-clone one exact
+model-card snapshot. The local wheelhouse manifest SHA-256 is
+`fe541aa83b5dbd9770da1f50d2cd88eb192586406398d9cffa5507f9f352ca72`
+and binds 150,397,774 bytes. This checkpoint authorizes synthetic fixtures,
+tests, documentation, target-free regeneration, and local commits only. Stop
+before any real environment, installation, snapshot, Gate B/C, model,
+tokenizer, target, network, CCP, push, or publication.

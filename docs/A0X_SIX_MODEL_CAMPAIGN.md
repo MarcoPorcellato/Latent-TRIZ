@@ -337,6 +337,24 @@ bytes, the five pinned packages, required APIs, card bytes, runtime-file
 commitment, and pair identity. The descriptor binds that receipt before any
 authorization or role mapping is produced.
 
+The offline prerequisite builder now makes that process explicit and
+reproducible. It binds the clean source HEAD, the exact 39-wheel manifest, the
+base Python and bootstrap `pip`, the model card, and the allowlisted source
+snapshot. It creates the environment with `venv --copies`, installs only
+hash-locked wheels with no index or dependency resolution, removes bootstrap
+`pip`, requires the final exact 39-distribution set, and materializes the card
+files only through APFS `clonefile(2)`. It writes a local prerequisite receipt
+last; it does not write the Hosted Gate A verification receipt, readiness,
+descriptor, authorization, mapping, or scientific output.
+
+The verified local wheelhouse manifest is
+`fe541aa83b5dbd9770da1f50d2cd88eb192586406398d9cffa5507f9f352ca72`
+(39 wheels; 150,397,774 bytes). The wheel bytes remain ignored and local.
+Their verification is not a Gate B authorization and is not portable public
+evidence. This implementation tranche uses only synthetic fixtures; no real
+environment, package installation, model snapshot, tokenizer, target, or
+scientific action is performed.
+
 The same correction also enforces a model card's non-null `pad_side` before
 model construction and makes a post-claim failure to persist the pre-run
 observation terminal recovery evidence without starting the child. No bundle,

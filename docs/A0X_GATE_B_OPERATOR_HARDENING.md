@@ -106,14 +106,55 @@ SHA-256. Verification rejects missing or extra entries, duplicate
 distributions, filename/metadata disagreement, unaccepted tags, noncanonical
 JSON, byte drift, symlinks, hardlinks and non-regular files.
 
-No complete exact offline wheelhouse is currently proven for the accepted A0X
-Python environment. Therefore this boundary is ready for a future wheelhouse;
-it does not retroactively prove rebuildability of the copied environment used
-by the historical recovery.
+One ignored local wheelhouse has now passed this boundary for Python 3.11. Its
+canonical manifest SHA-256 is
+`fe541aa83b5dbd9770da1f50d2cd88eb192586406398d9cffa5507f9f352ca72`;
+it binds 39 wheels totalling 150,397,774 bytes. The repository does not embed
+or publish those wheels, so this is local preparatory evidence rather than a
+portable public runtime. It neither retroactively proves the copied
+environment used by the historical recovery nor authorizes an installation.
+
+## Boundary 3.5: reproducible offline prerequisite builder
+
+`scripts/a0x_build_gate_b_runtime.py` and
+`latent_triz.a0x_gate_b_builder` connect the already verified wheelhouse and
+APFS primitives without merging their authorities. `--plan` is a no-write
+surface. Build mode is a separately authorized material action.
+
+The builder requires a clean exact source HEAD, the raw wheelhouse-manifest
+hash, an independent regular base Python with exact hash and Python 3.11
+version, a bound bootstrap `pip` version, the exact model-card hash, an exact
+allowlisted source snapshot, and absent attempt and model destinations. It
+then uses shell-free commands to:
+
+1. create a virtual environment with `venv --copies`;
+2. install only hash-locked wheelhouse distributions with `--no-index`,
+   `--require-hashes`, and `--no-deps`;
+3. remove bootstrap `pip` and prove the final environment contains exactly the
+   39 locked distributions;
+4. clone only the model-card files through Darwin `clonefile(2)`; and
+5. revalidate source state, all input bytes, output path components,
+   interpreter bytes, installed metadata, and materialized snapshot before an
+   exclusive local receipt write.
+
+The bootstrap installer is an explicit tool, not a retained runtime package.
+Its version is bound by the request and receipt. Package content in the final
+environment comes only from the verified wheelhouse. An extra, duplicate, or
+missing distribution is terminal.
+
+The builder never repairs or deletes an incomplete attempt. It refuses
+symlink or hardlink swaps, path escape, occupied outputs, command failure,
+source drift, malformed metadata, unexpected files, full-copy fallback, and
+receipt reuse. A failed material attempt requires new absent destinations and
+a new exact authorization.
+
+Repository tests exercise this path only with tiny synthetic wheels, a fake
+Python executable, injected shell-free child results, and tiny model files.
+They do not install the real environment or access a real model snapshot.
 
 ## Boundary 4: immutable preparation
 
-Only after Boundaries 1--3 and the pair-specific authorization are satisfied
+Only after Boundaries 1--3.5 and the pair-specific authorization are satisfied
 may the ordinary preparer write readiness, descriptor, authorization and local
 mapping. The existing live-readiness validators then recheck independent
 regular Python and model files at every material boundary and immediately

@@ -1082,3 +1082,39 @@ dossier/consumer combination before a material boundary.
 architecture fitness tests, and the documentation audit. These checks are
 target-free and do not authorize Gate C, model/tokenizer access, target reads,
 CCP heavy work, network, publication, or scientific execution.
+
+## 40. Verified wheels still did not define a reproducible Gate B environment
+
+**Problem.** The wheelhouse verifier proved exact local wheel bytes, and the
+APFS primitive proved exact copy-on-write files, but no single transaction
+bound them to a clean source HEAD, an exact interpreter, a final installed
+distribution set, a model card, and an overwrite-refusing local receipt.
+Using `venv` naively would also retain bootstrap `pip`, producing an
+environment larger than the frozen 39-distribution contract. A generic pip
+install could resolve online or accept unbound package bytes.
+
+**Correction.** Add a focused offline prerequisite builder. Planning verifies
+the exact clean source, canonical wheelhouse manifest, 39 wheel files, base
+Python hash/version, bootstrap pip version, canonical model card, and exact
+source snapshot without writing. The material path uses `venv --copies`, then
+one shell-free `pip --isolated install` with `--no-index`, `--require-hashes`,
+`--no-deps`, and the verified wheelhouse. It removes bootstrap pip and accepts
+the environment only when an isolated metadata probe reports exactly the 39
+locked distributions and no importable pip. Model files are cloned only by the
+existing no-fallback APFS boundary. Inputs, source state, output ancestors,
+interpreter bytes, distribution metadata, and model bytes are checked again
+before an exclusive receipt write.
+
+**Regression evidence.** Synthetic tests cover exact command construction,
+manifest/card/Python hashes, 39-package cardinality, deterministic
+requirements, dirty or wrong source, child failure, malformed or extra and
+duplicate distributions, model-source drift, source-root and attempt-root
+symlink swaps, occupied outputs, exact allowlist cloning, and canonical CLI
+planning. Adjacent APFS and wheelhouse tests remain green.
+
+**Status.** Implementation is target-free and uses only temporary synthetic
+fixtures. The local wheelhouse manifest
+`fe541aa83b5dbd9770da1f50d2cd88eb192586406398d9cffa5507f9f352ca72`
+binds 39 wheels totalling 150,397,774 bytes, but no real environment has been
+created and no real snapshot has been cloned. Gate B/C, model, tokenizer,
+target, network, CCP, push, and publication remain unauthorized.
