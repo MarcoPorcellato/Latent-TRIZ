@@ -1,151 +1,157 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "artifact_class",
-    "authorization_chain",
-    "claim_ids",
-    "empirical",
-    "evidence_eligible",
-    "expert_validated",
-    "external_outputs",
-    "manifest_profile",
-    "package_artifacts",
-    "package_status",
-    "pair_binding",
-    "retained_residue",
-    "root_receipt_package_relative_path",
-    "root_receipt_profile",
-    "scientific_status",
-    "source_inputs",
-    "terminal_status"
-  ],
-  "properties": {
-    "artifact_class": {
-      "const": "a0x-publication-manifest"
-    },
-    "empirical": {
-      "const": true
-    },
-    "scientific_status": {
-      "const": "exploratory"
-    },
-    "evidence_eligible": {
-      "const": false
-    },
-    "expert_validated": {
-      "const": false
-    },
-    "claim_ids": {
-      "type": "array",
-      "maxItems": 0
-    },
-    "pair_binding": {
-      "$ref": "#/$defs/pair"
-    },
-    "manifest_profile": {
-      "const": "a0x-terminal-package-v1"
-    },
-    "root_receipt_profile": {
-      "const": "a0x-complete-attempt-root-v2"
-    },
-    "root_receipt_package_relative_path": {
-      "$ref": "#/$defs/path"
-    },
-    "terminal_status": {
-      "enum": ["positive", "null", "non_interpretable", "incompatible", "failed"]
-    },
-    "package_status": {
-      "const": "complete"
-    },
-    "authorization_chain": {
-      "$ref": "#/$defs/authorization_chain"
-    },
-    "package_artifacts": {
-      "type": "array",
-      "minItems": 1,
-      "items": {"$ref": "#/$defs/package_artifact"}
-    },
-    "external_outputs": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/external_output"}
-    },
-    "source_inputs": {
-      "type": "array",
-      "minItems": 2,
-      "maxItems": 2,
-      "items": {"$ref": "#/$defs/source_input"},
-      "allOf": [
-        {"contains": {"properties": {"role": {"const": "dossier"}}, "required": ["role"]}},
-        {"contains": {"properties": {"role": {"const": "authorization"}}, "required": ["role"]}}
-      ]
-    },
-    "retained_residue": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/residue"}
-    }
-  },
   "$defs": {
-    "package_artifact": {
-      "type": "object",
+    "authorization_chain": {
       "additionalProperties": false,
-      "required": ["role", "path", "bytes", "raw_sha256"],
       "properties": {
-        "role": {"enum": ["authorization_record", "qualification_evidence", "model_identity_receipt", "ccp_observation", "preflight_receipt", "activation_receipt", "target_read_receipt", "statistical_result", "terminal_result", "external_assets_locator", "report"]},
-        "path": {"$ref": "#/$defs/path"},
-        "bytes": {"type": "integer", "minimum": 0},
-        "raw_sha256": {"$ref": "#/$defs/sha"}
-      }
+        "authorization_commitment": {
+          "$ref": "#/$defs/authorization_commitment"
+        },
+        "dossier_commitment": {
+          "$ref": "#/$defs/dossier_commitment"
+        }
+      },
+      "required": [
+        "dossier_commitment",
+        "authorization_commitment"
+      ],
+      "type": "object"
     },
-    "external_output": {
-      "type": "object",
+    "authorization_commitment": {
       "additionalProperties": false,
-      "required": ["role", "repository_relative_path", "bytes", "raw_sha256"],
       "properties": {
-        "role": {"enum": ["dense", "index"]},
-        "repository_relative_path": {"$ref": "#/$defs/path"},
-        "bytes": {"type": "integer", "minimum": 0},
-        "raw_sha256": {"$ref": "#/$defs/sha"}
-      }
-    },
-    "source_input": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["role", "repository_relative_path", "bytes", "raw_sha256"],
-      "properties": {
-        "role": {"enum": ["dossier", "authorization"]},
-        "repository_relative_path": {"$ref": "#/$defs/path"},
-        "bytes": {"type": "integer", "minimum": 0},
-        "raw_sha256": {"$ref": "#/$defs/sha"}
-      }
-    },
-    "residue": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["role", "repository_relative_path", "bytes", "raw_sha256"],
-      "properties": {
-        "role": {"enum": ["activation_stage_residue", "package_stage_residue", "failure_residue"]},
-        "repository_relative_path": {"$ref": "#/$defs/path"},
-        "bytes": {"type": "integer", "minimum": 0},
-        "raw_sha256": {"$ref": "#/$defs/sha"}
-      }
-    },
-    "sha": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
-    },
-    "rev": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{40}$"
-    },
-    "path": {
-      "type": "string",
-      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+        "commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "profile": {
+          "const": "a0x-execution-authorization-json-v2"
+        }
+      },
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "type": "object"
     },
     "dense": {
-      "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "cap_bytes": {
+                "const": 4194304
+              },
+              "endpoint_count": {
+                "const": 2
+              },
+              "index_reservation_bytes": {
+                "const": 1048576
+              },
+              "payload_allowance_bytes": {
+                "const": 524288
+              },
+              "vector_count": {
+                "const": 192
+              },
+              "view_site_count": {
+                "const": 2
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "leg": {
+                "const": "a0"
+              }
+            },
+            "required": [
+              "leg"
+            ]
+          },
+          "then": {
+            "properties": {
+              "cap_bytes": {
+                "const": 33554432
+              },
+              "endpoint_count": {
+                "const": 5
+              },
+              "index_reservation_bytes": {
+                "const": 6291456
+              },
+              "payload_allowance_bytes": {
+                "const": 2097152
+              },
+              "vector_count": {
+                "const": 2400
+              },
+              "view_site_count": {
+                "const": 10
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "atomic_dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cap_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cases": {
+          "const": 48
+        },
+        "dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dense_copy_count": {
+          "const": 2
+        },
+        "endpoint_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hidden_width": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "index_copy_count": {
+          "const": 2
+        },
+        "index_reservation_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "payload_allowance_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "scalar_bytes": {
+          "const": 4
+        },
+        "total_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "vector_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "view_site_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
       "required": [
         "leg",
         "cases",
@@ -163,176 +169,104 @@
         "total_bytes",
         "cap_bytes"
       ],
-      "properties": {
-        "leg": {
-          "enum": [
-            "a0",
-            "r1"
-          ]
-        },
-        "cases": {
-          "const": 48
-        },
-        "view_site_count": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "endpoint_count": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "hidden_width": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "scalar_bytes": {
-          "const": 4
-        },
-        "vector_count": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "dense_bytes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "dense_copy_count": {
-          "const": 2
-        },
-        "atomic_dense_bytes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "index_copy_count": {
-          "const": 2
-        },
-        "index_reservation_bytes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "payload_allowance_bytes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "total_bytes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "cap_bytes": {
-          "type": "integer",
-          "minimum": 1
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "leg": {
-                "const": "a0"
-              }
-            },
-            "required": [
-              "leg"
-            ]
-          },
-          "then": {
-            "properties": {
-              "view_site_count": {
-                "const": 10
-              },
-              "endpoint_count": {
-                "const": 5
-              },
-              "vector_count": {
-                "const": 2400
-              },
-              "index_reservation_bytes": {
-                "const": 6291456
-              },
-              "payload_allowance_bytes": {
-                "const": 2097152
-              },
-              "cap_bytes": {
-                "const": 33554432
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "view_site_count": {
-                "const": 2
-              },
-              "endpoint_count": {
-                "const": 2
-              },
-              "vector_count": {
-                "const": 192
-              },
-              "index_reservation_bytes": {
-                "const": 1048576
-              },
-              "payload_allowance_bytes": {
-                "const": 524288
-              },
-              "cap_bytes": {
-                "const": 4194304
-              }
-            }
-          }
-        }
-      ]
+      "type": "object"
     },
-    "pair": {
-      "type": "object",
+    "dossier_commitment": {
       "additionalProperties": false,
-      "required": [
-        "binding_profile",
-        "dense_bound",
-        "leg",
-        "leg_freeze_sha256",
-        "model_id",
-        "model_key",
-        "output_path",
-        "revision",
-        "run_id"
-      ],
       "properties": {
-        "leg": {
-          "enum": [
-            "a0",
-            "r1"
-          ]
-        },
-        "leg_freeze_sha256": {
+        "commitment_sha256": {
           "$ref": "#/$defs/sha"
         },
-        "model_key": {
-          "type": "string",
-          "minLength": 1
-        },
-        "model_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "revision": {
-          "$ref": "#/$defs/rev"
-        },
-        "run_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "output_path": {
-          "$ref": "#/$defs/path"
-        },
-        "dense_bound": {
-          "$ref": "#/$defs/dense"
-        },
-        "binding_profile": {
-          "const": "a0x-pair-scope-v2"
+        "profile": {
+          "const": "a0x-approval-dossier-json-v2"
         }
       },
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "type": "object"
+    },
+    "external_output": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "raw_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "repository_relative_path": {
+          "$ref": "#/$defs/path"
+        },
+        "role": {
+          "enum": [
+            "dense",
+            "index"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "repository_relative_path",
+        "bytes",
+        "raw_sha256"
+      ],
+      "type": "object"
+    },
+    "package_artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "raw_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "role": {
+          "enum": [
+            "authorization_record",
+            "qualification_evidence",
+            "model_identity_receipt",
+            "ccp_observation",
+            "preflight_receipt",
+            "activation_receipt",
+            "target_read_receipt",
+            "statistical_result",
+            "terminal_result",
+            "external_assets_locator",
+            "report"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "bytes",
+        "raw_sha256"
+      ],
+      "type": "object"
+    },
+    "pair": {
+      "additionalProperties": false,
       "allOf": [
         {
+          "else": {
+            "properties": {
+              "dense_bound": {
+                "properties": {
+                  "leg": {
+                    "const": "r1"
+                  }
+                }
+              }
+            }
+          },
           "if": {
             "properties": {
               "leg": {
@@ -353,68 +287,346 @@
                 }
               }
             }
-          },
-          "else": {
-            "properties": {
-              "dense_bound": {
-                "properties": {
-                  "leg": {
-                    "const": "r1"
-                  }
-                }
-              }
-            }
           }
         }
-      ]
-    },
-    "dossier_commitment": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "profile",
-        "commitment_sha256"
       ],
       "properties": {
-        "profile": {
-          "const": "a0x-approval-dossier-json-v2"
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
         },
-        "commitment_sha256": {
-          "$ref": "#/$defs/sha"
+        "dense_bound": {
+          "$ref": "#/$defs/dense",
+          "additionalProperties": false,
+          "properties": {
+            "atomic_dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "cap_bytes": {
+              "enum": [
+                33554432,
+                4194304
+              ]
+            },
+            "cases": {
+              "const": 48,
+              "type": "integer"
+            },
+            "dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "dense_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "endpoint_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "hidden_width": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "index_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "index_reservation_bytes": {
+              "enum": [
+                6291456,
+                1048576
+              ]
+            },
+            "leg": {
+              "enum": [
+                "a0",
+                "r1"
+              ]
+            },
+            "payload_allowance_bytes": {
+              "enum": [
+                2097152,
+                524288
+              ]
+            },
+            "scalar_bytes": {
+              "const": 4,
+              "type": "integer"
+            },
+            "total_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "vector_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "view_site_count": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "leg",
+            "cases",
+            "view_site_count",
+            "endpoint_count",
+            "hidden_width",
+            "scalar_bytes",
+            "vector_count",
+            "dense_bytes",
+            "dense_copy_count",
+            "atomic_dense_bytes",
+            "index_copy_count",
+            "index_reservation_bytes",
+            "payload_allowance_bytes",
+            "total_bytes",
+            "cap_bytes"
+          ],
+          "type": "object"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_key": {
+          "enum": [
+            "gpt2",
+            "gpt_neo_125m",
+            "qwen2_5_0_5b",
+            "qwen3_0_6b_base",
+            "smollm2_135m",
+            "smollm2_360m"
+          ]
+        },
+        "output_path": {
+          "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[a-f0-9]{40}$",
+          "type": "string"
+        },
+        "run_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
         }
-      }
-    },
-    "authorization_commitment": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
-        "profile",
-        "commitment_sha256"
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
       ],
+      "type": "object"
+    },
+    "path": {
+      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$",
+      "type": "string"
+    },
+    "residue": {
+      "additionalProperties": false,
       "properties": {
-        "profile": {
-          "const": "a0x-execution-authorization-json-v2"
+        "bytes": {
+          "minimum": 0,
+          "type": "integer"
         },
-        "commitment_sha256": {
+        "raw_sha256": {
           "$ref": "#/$defs/sha"
+        },
+        "repository_relative_path": {
+          "$ref": "#/$defs/path"
+        },
+        "role": {
+          "enum": [
+            "activation_stage_residue",
+            "package_stage_residue",
+            "failure_residue"
+          ]
         }
-      }
+      },
+      "required": [
+        "role",
+        "repository_relative_path",
+        "bytes",
+        "raw_sha256"
+      ],
+      "type": "object"
+    },
+    "rev": {
+      "pattern": "^[a-f0-9]{40}$",
+      "type": "string"
+    },
+    "sha": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "source_input": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "raw_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "repository_relative_path": {
+          "$ref": "#/$defs/path"
+        },
+        "role": {
+          "enum": [
+            "dossier",
+            "authorization"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "repository_relative_path",
+        "bytes",
+        "raw_sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_class": {
+      "const": "a0x-publication-manifest"
     },
     "authorization_chain": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "dossier_commitment",
-        "authorization_commitment"
-      ],
-      "properties": {
-        "dossier_commitment": {
-          "$ref": "#/$defs/dossier_commitment"
+      "$ref": "#/$defs/authorization_chain"
+    },
+    "claim_ids": {
+      "maxItems": 0,
+      "type": "array"
+    },
+    "empirical": {
+      "const": true
+    },
+    "evidence_eligible": {
+      "const": false
+    },
+    "expert_validated": {
+      "const": false
+    },
+    "external_outputs": {
+      "items": {
+        "$ref": "#/$defs/external_output"
+      },
+      "type": "array"
+    },
+    "manifest_profile": {
+      "const": "a0x-terminal-package-v1"
+    },
+    "package_artifacts": {
+      "items": {
+        "$ref": "#/$defs/package_artifact"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "package_status": {
+      "const": "complete"
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair"
+    },
+    "retained_residue": {
+      "items": {
+        "$ref": "#/$defs/residue"
+      },
+      "type": "array"
+    },
+    "root_receipt_package_relative_path": {
+      "$ref": "#/$defs/path"
+    },
+    "root_receipt_profile": {
+      "const": "a0x-complete-attempt-root-v2"
+    },
+    "scientific_status": {
+      "const": "exploratory"
+    },
+    "source_inputs": {
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "dossier"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          }
         },
-        "authorization_commitment": {
-          "$ref": "#/$defs/authorization_commitment"
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "authorization"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          }
         }
-      }
+      ],
+      "items": {
+        "$ref": "#/$defs/source_input"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "terminal_status": {
+      "enum": [
+        "positive",
+        "null",
+        "non_interpretable",
+        "incompatible",
+        "failed"
+      ]
     }
-  }
+  },
+  "required": [
+    "artifact_class",
+    "authorization_chain",
+    "claim_ids",
+    "empirical",
+    "evidence_eligible",
+    "expert_validated",
+    "external_outputs",
+    "manifest_profile",
+    "package_artifacts",
+    "package_status",
+    "pair_binding",
+    "retained_residue",
+    "root_receipt_package_relative_path",
+    "root_receipt_profile",
+    "scientific_status",
+    "source_inputs",
+    "terminal_status"
+  ],
+  "type": "object"
 }

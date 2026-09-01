@@ -15,6 +15,7 @@ from latent_triz.a0x_contract import (
     PairBinding,
     canonical_commitment,
     compute_dense_bound,
+    derive_pair_output_path,
 )
 
 
@@ -68,9 +69,66 @@ def pair_binding(leg: Leg = Leg.A0, model_key: str = "gpt2", hidden_width: int =
             model_id="openai-community/gpt2",
             revision="b" * 40,
             run_id=f"a0x-{leg.value}-{model_key}-run-1",
-            output_path=f"results/a0x/{leg.value}/{model_key}/",
+            output_path=derive_pair_output_path(leg, model_key, f"a0x-{leg.value}-{model_key}-run-1"),
         dense_bound=dense,
     ).as_mapping()
+
+
+def hosted_gate_a_fixture_documents() -> tuple[dict[str, object], dict[str, object]]:
+    """Project both Hosted positives from one real-shaped canonical pair."""
+    from latent_triz.a0x_hosted_gate_a import canonical_json_bytes
+    from latent_triz.a0x_gate_contract import (
+        GateBAuthorizationInputs,
+        HashBoundPath,
+        HostedInputBindings,
+        VerificationReceiptInputs,
+        VerifierIdentity,
+        build_gate_b_authorization,
+        build_verification_receipt,
+    )
+
+    pair = PairBinding.from_mapping(pair_binding())
+    source_head = "a" * 40
+    hosted_inputs = HostedInputBindings(
+        manifest=HashBoundPath(
+            f".a0x-runtime/gate-a/evidence/{source_head}/hosted-gate-a-evidence.json", sha(1),
+        ),
+        attestation_bundle=HashBoundPath(
+            f".a0x-runtime/gate-a/evidence/{source_head}/hosted-gate-a-attestation.bundle.jsonl", sha(2),
+        ),
+        trusted_root=HashBoundPath(
+            f".a0x-runtime/gate-a/evidence/{source_head}/github-trusted-root.jsonl", sha(3),
+        ),
+        transport=HashBoundPath(
+            f".a0x-runtime/gate-a/evidence/{source_head}/hosted-gate-a-transport.json", sha(4),
+        ),
+    )
+    verifier = VerifierIdentity(policy_raw_sha256=sha(6))
+    authorization = build_gate_b_authorization(
+        pair,
+        GateBAuthorizationInputs(
+            authorization_id="a0x-a0-gpt2-run-1-gate-b",
+            source_head=source_head,
+            source_tree="b" * 40,
+            source_sha=source_head,
+            job_workflow_sha=source_head,
+            hosted_inputs=hosted_inputs,
+            verifier=verifier,
+        ),
+    )
+    authorization_raw = canonical_json_bytes(authorization)
+    receipt = build_verification_receipt(
+        pair,
+        VerificationReceiptInputs(
+            source_head=source_head,
+            source_tree="b" * 40,
+            authorization_raw_sha256=hashlib.sha256(authorization_raw).hexdigest(),
+            hosted_inputs=hosted_inputs,
+            verifier=verifier,
+            verified_at="2026-08-31T12:04:00Z",
+        ),
+    )
+    return authorization, receipt
 
 
 def common() -> dict[str, object]:
@@ -259,6 +317,12 @@ def artifact(name: str) -> dict[str, object]:
         "a0x-gate-b-authorization.schema.json": "gate-b-authorization.json",
     }
     if name in hosted_fixture_names:
+        if name in {
+            "a0x-hosted-gate-a-verification-receipt.schema.json",
+            "a0x-gate-b-authorization.schema.json",
+        }:
+            authorization, receipt = hosted_gate_a_fixture_documents()
+            return receipt if name == "a0x-hosted-gate-a-verification-receipt.schema.json" else authorization
         fixture_path = (
             Path(__file__).resolve().parent / "fixtures" / "a0x" / "hosted-gate-a"
             / "positive" / hosted_fixture_names[name]

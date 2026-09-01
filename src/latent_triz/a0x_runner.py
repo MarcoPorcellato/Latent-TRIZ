@@ -24,6 +24,7 @@ from .a0x_contract import (
     assert_authorization_chain,
     assert_leg_freeze_binding,
     compute_dense_bound,
+    derive_pair_output_path,
     sha256_file,
     strict_json_object,
 )
@@ -1327,7 +1328,7 @@ def verify_a0x_no_model(root: str | Path) -> dict[str, Any]:
             or pair.dense_bound != expected_dense
         ):
             raise A0XRunnerError("A0X dossier pair binding drifted")
-        expected_output = f"results/a0x/{leg.value}/{model_key}/{pair.run_id}"
+        expected_output = derive_pair_output_path(leg, model_key, pair.run_id)
         if pair.output_path != expected_output:
             raise A0XRunnerError("A0X dossier output path is not pair-isolated")
         expected_authorization = (

@@ -14,6 +14,15 @@ from typing import Any, Callable, Mapping, Sequence
 
 from jsonschema import Draft202012Validator
 
+from latent_triz.a0x_contract import A0XContractError, PairBinding
+from latent_triz.a0x_gate_contract import (
+    A0XGateContractError,
+    HashBoundPath,
+    HostedInputBindings,
+    VerificationReceiptInputs,
+    VerifierIdentity,
+    build_verification_receipt,
+)
 from latent_triz.a0x_hosted_gate_a import A0XHostedGateAError, canonical_json_bytes, parse_manifest_bytes
 
 
@@ -215,6 +224,10 @@ def _verify_hosted_gate_a_after_verifier_preflight(
         raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
     authorization_raw = authorization_path.read_bytes()
     authorization = _load_schema_object(authorization_raw, "a0x-gate-b-authorization.schema.json")
+    try:
+        pair = PairBinding.from_mapping(authorization["pair_binding"])
+    except (A0XContractError, KeyError, TypeError) as error:
+        raise A0XHostedVerifierError(INPUT_INVALID) from error
     policy_raw = policy_path.read_bytes()
     policy = _load_schema_object(policy_raw, "a0x-hosted-gate-a-verifier-policy.schema.json")
     _validate_authorization(authorization, policy, policy_raw)
@@ -290,19 +303,25 @@ def _verify_hosted_gate_a_after_verifier_preflight(
     _require_independent(executable, None)
     if _sha256(executable.read_bytes()) != pinned_verifier.raw_sha256:
         raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
-    receipt = {
-        "artifact_class": "a0x-hosted-gate-a-verification-receipt",
-        "receipt_profile": "a0x-hosted-gate-a-verification-receipt-v1",
-        "verification_status": "verified",
-        "repository": authorization["repository"],
-        "qualified_source_head": authorization["source_head"],
-        "qualified_source_tree": authorization["source_tree"],
-        "pair_binding": authorization["pair_binding"],
-        "authorization_raw_sha256": _sha256(authorization_raw),
-        "hosted_inputs": authorization["hosted_inputs"],
-        "verifier": authorization["verifier"],
-        "verified_at": timestamp,
-    }
+    try:
+        receipt = build_verification_receipt(
+            pair,
+            VerificationReceiptInputs(
+                source_head=authorization["source_head"],
+                source_tree=authorization["source_tree"],
+                authorization_raw_sha256=_sha256(authorization_raw),
+                hosted_inputs=HostedInputBindings(
+                    manifest=HashBoundPath(**authorization["hosted_inputs"]["manifest"]),
+                    attestation_bundle=HashBoundPath(**authorization["hosted_inputs"]["attestation_bundle"]),
+                    trusted_root=HashBoundPath(**authorization["hosted_inputs"]["trusted_root"]),
+                    transport=HashBoundPath(**authorization["hosted_inputs"]["transport"]),
+                ),
+                verifier=VerifierIdentity(policy_raw_sha256=authorization["verifier"]["policy_raw_sha256"]),
+                verified_at=timestamp,
+            ),
+        )
+    except (A0XGateContractError, KeyError, TypeError) as error:
+        raise A0XHostedVerifierError(INPUT_INVALID) from error
     raw_receipt = canonical_json_bytes(receipt)
     if len(raw_receipt) > _MAX_CONTROL_BYTES:
         raise A0XHostedVerifierError(INPUT_INVALID)

@@ -1,22 +1,438 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-gate-b-authorization.schema.json",
-  "type": "object", "additionalProperties": false,
-"required": ["artifact_class", "authorization_profile", "authorization_status", "repository", "source_head", "source_tree", "job_workflow_sha", "source_sha", "pair_binding", "hosted_inputs", "verifier", "verification_receipt_path", "max_verification_count", "stop_boundary", "authorization_id"],
-  "properties": {
-    "artifact_class": {"const": "a0x-gate-b-authorization"}, "authorization_profile": {"const": "a0x-gate-b-authorization-v1"}, "authorization_status": {"const": "authorized"}, "repository": {"const": "MarcoPorcellato/Latent-TRIZ"},
-    "source_head": {"$ref": "#/$defs/revision"}, "source_tree": {"$ref": "#/$defs/revision"}, "job_workflow_sha": {"$ref": "#/$defs/revision"}, "source_sha": {"$ref": "#/$defs/revision"}, "pair_binding": {"$ref": "#/$defs/pair"}, "hosted_inputs": {"$ref": "#/$defs/hosted_inputs"}, "verifier": {"$ref": "#/$defs/verifier"},
-    "verification_receipt_path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-b-verifications/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]{1,128}/[A-Za-z0-9._-]{1,128}/gate-a-verification-receipt\\.json$"}, "max_verification_count": {"type": "integer", "const": 1}, "stop_boundary": {"const": "after_gate_b_runtime_bundle"}, "authorization_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}
-  },
   "$defs": {
-    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
-    "hosted_inputs": {"type": "object", "additionalProperties": false, "required": ["manifest", "attestation_bundle", "trusted_root", "transport"], "properties": {"manifest": {"$ref": "#/$defs/manifest_input"}, "attestation_bundle": {"$ref": "#/$defs/bundle_input"}, "trusted_root": {"$ref": "#/$defs/root_input"}, "transport": {"$ref": "#/$defs/transport_input"}}},
-    "manifest_input": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-evidence\\.json$"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "bundle_input": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-attestation\\.bundle\\.jsonl$"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "root_input": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/github-trusted-root\\.jsonl$"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "transport_input": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-transport\\.json$"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "verifier": {"type": "object", "additionalProperties": false, "required": ["role", "version", "sha256", "policy_raw_sha256"], "properties": {"role": {"const": "github_cli_verifier"}, "version": {"const": "gh version 2.97.0 (2026-07-31)"}, "sha256": {"const": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"}, "policy_raw_sha256": {"$ref": "#/$defs/sha"}}},
-    "pair": {"type": "object", "additionalProperties": false, "required": ["binding_profile", "leg", "leg_freeze_sha256", "model_key", "model_id", "revision", "run_id", "output_path", "dense_bound"], "properties": {"binding_profile": {"const": "a0x-pair-scope-v2"}, "leg": {"enum": ["a0", "r1"]}, "leg_freeze_sha256": {"$ref": "#/$defs/sha"}, "model_key": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}, "model_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$"}, "revision": {"$ref": "#/$defs/revision"}, "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}, "output_path": {"type": "string", "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9._-]{1,128}/$"}, "dense_bound": {"$ref": "#/$defs/dense"}}},
-    "dense": {"type": "object", "additionalProperties": false, "required": ["leg", "cases", "view_site_count", "endpoint_count", "hidden_width", "scalar_bytes", "vector_count", "dense_bytes", "dense_copy_count", "atomic_dense_bytes", "index_copy_count", "index_reservation_bytes", "payload_allowance_bytes", "total_bytes", "cap_bytes"], "properties": {"leg": {"enum": ["a0", "r1"]}, "cases": {"type": "integer", "const": 48}, "view_site_count": {"type": "integer", "minimum": 1}, "endpoint_count": {"type": "integer", "minimum": 1}, "hidden_width": {"type": "integer", "minimum": 1}, "scalar_bytes": {"type": "integer", "const": 4}, "vector_count": {"type": "integer", "minimum": 1}, "dense_bytes": {"type": "integer", "minimum": 1}, "dense_copy_count": {"type": "integer", "const": 2}, "atomic_dense_bytes": {"type": "integer", "minimum": 1}, "index_copy_count": {"type": "integer", "const": 2}, "index_reservation_bytes": {"enum": [6291456, 1048576]}, "payload_allowance_bytes": {"enum": [2097152, 524288]}, "total_bytes": {"type": "integer", "minimum": 1}, "cap_bytes": {"enum": [33554432, 4194304]}}}
-  }
+    "bundle_input": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-attestation\\.bundle\\.jsonl$",
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "dense": {
+      "additionalProperties": false,
+      "properties": {
+        "atomic_dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cap_bytes": {
+          "enum": [
+            33554432,
+            4194304
+          ]
+        },
+        "cases": {
+          "const": 48,
+          "type": "integer"
+        },
+        "dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dense_copy_count": {
+          "const": 2,
+          "type": "integer"
+        },
+        "endpoint_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hidden_width": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "index_copy_count": {
+          "const": 2,
+          "type": "integer"
+        },
+        "index_reservation_bytes": {
+          "enum": [
+            6291456,
+            1048576
+          ]
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "payload_allowance_bytes": {
+          "enum": [
+            2097152,
+            524288
+          ]
+        },
+        "scalar_bytes": {
+          "const": 4,
+          "type": "integer"
+        },
+        "total_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "vector_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "view_site_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "leg",
+        "cases",
+        "view_site_count",
+        "endpoint_count",
+        "hidden_width",
+        "scalar_bytes",
+        "vector_count",
+        "dense_bytes",
+        "dense_copy_count",
+        "atomic_dense_bytes",
+        "index_copy_count",
+        "index_reservation_bytes",
+        "payload_allowance_bytes",
+        "total_bytes",
+        "cap_bytes"
+      ],
+      "type": "object"
+    },
+    "hosted_inputs": {
+      "additionalProperties": false,
+      "properties": {
+        "attestation_bundle": {
+          "$ref": "#/$defs/bundle_input"
+        },
+        "manifest": {
+          "$ref": "#/$defs/manifest_input"
+        },
+        "transport": {
+          "$ref": "#/$defs/transport_input"
+        },
+        "trusted_root": {
+          "$ref": "#/$defs/root_input"
+        }
+      },
+      "required": [
+        "manifest",
+        "attestation_bundle",
+        "trusted_root",
+        "transport"
+      ],
+      "type": "object"
+    },
+    "manifest_input": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-evidence\\.json$",
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "pair": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        },
+        "dense_bound": {
+          "$ref": "#/$defs/dense",
+          "additionalProperties": false,
+          "properties": {
+            "atomic_dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "cap_bytes": {
+              "enum": [
+                33554432,
+                4194304
+              ]
+            },
+            "cases": {
+              "const": 48,
+              "type": "integer"
+            },
+            "dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "dense_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "endpoint_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "hidden_width": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "index_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "index_reservation_bytes": {
+              "enum": [
+                6291456,
+                1048576
+              ]
+            },
+            "leg": {
+              "enum": [
+                "a0",
+                "r1"
+              ]
+            },
+            "payload_allowance_bytes": {
+              "enum": [
+                2097152,
+                524288
+              ]
+            },
+            "scalar_bytes": {
+              "const": 4,
+              "type": "integer"
+            },
+            "total_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "vector_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "view_site_count": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "leg",
+            "cases",
+            "view_site_count",
+            "endpoint_count",
+            "hidden_width",
+            "scalar_bytes",
+            "vector_count",
+            "dense_bytes",
+            "dense_copy_count",
+            "atomic_dense_bytes",
+            "index_copy_count",
+            "index_reservation_bytes",
+            "payload_allowance_bytes",
+            "total_bytes",
+            "cap_bytes"
+          ],
+          "type": "object"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_key": {
+          "enum": [
+            "gpt2",
+            "gpt_neo_125m",
+            "qwen2_5_0_5b",
+            "qwen3_0_6b_base",
+            "smollm2_135m",
+            "smollm2_360m"
+          ]
+        },
+        "output_path": {
+          "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[a-f0-9]{40}$",
+          "type": "string"
+        },
+        "run_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "revision": {
+      "pattern": "^[a-f0-9]{40}$",
+      "type": "string"
+    },
+    "root_input": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/github-trusted-root\\.jsonl$",
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "sha": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "transport_input": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-transport\\.json$",
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "verifier": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_raw_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "role": {
+          "const": "github_cli_verifier"
+        },
+        "sha256": {
+          "const": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+        },
+        "version": {
+          "const": "gh version 2.97.0 (2026-07-31)"
+        }
+      },
+      "required": [
+        "role",
+        "version",
+        "sha256",
+        "policy_raw_sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-gate-b-authorization.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_class": {
+      "const": "a0x-gate-b-authorization"
+    },
+    "authorization_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "authorization_profile": {
+      "const": "a0x-gate-b-authorization-v1"
+    },
+    "authorization_status": {
+      "const": "authorized"
+    },
+    "hosted_inputs": {
+      "$ref": "#/$defs/hosted_inputs"
+    },
+    "job_workflow_sha": {
+      "$ref": "#/$defs/revision"
+    },
+    "max_verification_count": {
+      "const": 1,
+      "type": "integer"
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair"
+    },
+    "repository": {
+      "const": "MarcoPorcellato/Latent-TRIZ"
+    },
+    "source_head": {
+      "$ref": "#/$defs/revision"
+    },
+    "source_sha": {
+      "$ref": "#/$defs/revision"
+    },
+    "source_tree": {
+      "$ref": "#/$defs/revision"
+    },
+    "stop_boundary": {
+      "const": "after_gate_b_runtime_bundle"
+    },
+    "verification_receipt_path": {
+      "pattern": "^\\.a0x-runtime/gate-b-verifications/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]{1,128}/[A-Za-z0-9._-]{1,128}/gate-a-verification-receipt\\.json$",
+      "type": "string"
+    },
+    "verifier": {
+      "$ref": "#/$defs/verifier"
+    }
+  },
+  "required": [
+    "artifact_class",
+    "authorization_profile",
+    "authorization_status",
+    "repository",
+    "source_head",
+    "source_tree",
+    "job_workflow_sha",
+    "source_sha",
+    "pair_binding",
+    "hosted_inputs",
+    "verifier",
+    "verification_receipt_path",
+    "max_verification_count",
+    "stop_boundary",
+    "authorization_id"
+  ],
+  "type": "object"
 }

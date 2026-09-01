@@ -49,6 +49,46 @@ SCHEMA_FILES = (
 )
 
 
+# Literal mutations intentionally remain independent from compiler output.
+SCHEMA_MUTATIONS = {
+    "a0x-model-card.schema.json": lambda value: value["runtime_files"][0].__setitem__("sha256", "short"),
+    "a0x-protected-tree.schema.json": lambda value: value.__setitem__("protected_tree_sha256", "short"),
+    "a0x-selection-manifest.schema.json": lambda value: value.__setitem__("selection_corpus_sha256", "short"),
+    "a0x-protocol.schema.json": lambda value: value.__setitem__("claim_ids", ["claim"]),
+    "a0x-implementation.schema.json": lambda value: value["identity"].__setitem__("source_base_commit", "short"),
+    "a0x-freeze-manifest.schema.json": lambda value: value.__setitem__("protocol_sha256", "short"),
+    "a0x-material-execution-contract.schema.json": lambda value: value["ccp"]["matrix_plan_binding"].__setitem__("outer_digest", "sha256:" + "0" * 64),
+    "a0x-attempt-claim.schema.json": lambda value: value.__setitem__("state", "reused"),
+    "a0x-authorization-dossier.schema.json": lambda value: value["pair_binding"].__setitem__("model_key", ""),
+    "a0x-execution-authorization.schema.json": lambda value: value["pair_binding"].__setitem__("revision", "short"),
+    "a0x-guard-launch.schema.json": lambda value: value["timeouts"].__setitem__("outer_timeout_seconds", 3599),
+    "a0x-qualification-evidence.schema.json": lambda value: value.__setitem__("qualification_receipt_raw_sha256", "short"),
+    "a0x-qualification-authorization.schema.json": lambda value: value.__setitem__("generation", 0),
+    "a0x-model-identity-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("run_id", ""),
+    "a0x-ccp-observation.schema.json": lambda value: value.__setitem__("read_counter", -1),
+    "a0x-preflight-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("leg", "other"),
+    "a0x-activation-stage-occupancy-receipt.schema.json": lambda value: value["included_paths"].append("activations.safetensors"),
+    "a0x-activation-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("output_path", "/absolute"),
+    "a0x-target-read-receipt.schema.json": lambda value: value.__setitem__("content_reads", 2),
+    "a0x-output-occupancy-receipt.schema.json": lambda value: value.__setitem__("occupancy_profile", "legacy"),
+    "a0x-representation-record.schema.json": lambda value: value.__setitem__("representation_path", "/absolute"),
+    "a0x-statistical-result.schema.json": lambda value: value["pair_binding"].__setitem__("binding_profile", "legacy"),
+    "a0x-terminal-result.schema.json": lambda value: value.__setitem__("statistical_result", None),
+    "a0x-external-assets-locator.schema.json": lambda value: value["assets"][0].__setitem__("raw_sha256", "short"),
+    "a0x-publication-manifest.schema.json": lambda value: value.__setitem__("manifest_profile", "legacy"),
+    "a0x-hosted-gate-a-transport.schema.json": lambda value: value.__setitem__("run_attempt", 2),
+    "a0x-hosted-gate-a-verifier-policy.schema.json": lambda value: value.__setitem__("required_ref", "refs/heads/feature"),
+    "a0x-hosted-gate-a-verification-receipt.schema.json": lambda value: value.__setitem__("verification_status", "pending"),
+    "a0x-gate-b-authorization.schema.json": lambda value: value.__setitem__("max_verification_count", 2),
+}
+
+TERMINAL_NESTED_RESULT_MUTATIONS = (
+    ("status-passed", lambda value: value["outcome_rule"].__setitem__("passed", False)),
+    ("literal-final-index", lambda value: value["descriptive_final_block"].__setitem__("tuple_index", 6)),
+    ("r1-dense", lambda value: value["pair_binding"].__setitem__("dense_bound", pair_binding(Leg.R1)["dense_bound"])),
+)
+
+
 class A0XSchemasTests(unittest.TestCase):
     def setUp(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -63,38 +103,7 @@ class A0XSchemasTests(unittest.TestCase):
                 self.assertEqual([], validate(artifact(name), schema))
 
     def test_every_schema_rejects_one_required_invariant_mutation(self) -> None:
-        mutations = {
-            "a0x-model-card.schema.json": lambda value: value["runtime_files"][0].__setitem__("sha256", "short"),
-            "a0x-protected-tree.schema.json": lambda value: value.__setitem__("protected_tree_sha256", "short"),
-            "a0x-selection-manifest.schema.json": lambda value: value.__setitem__("selection_corpus_sha256", "short"),
-            "a0x-protocol.schema.json": lambda value: value.__setitem__("claim_ids", ["claim"]),
-            "a0x-implementation.schema.json": lambda value: value["identity"].__setitem__("source_base_commit", "short"),
-            "a0x-freeze-manifest.schema.json": lambda value: value.__setitem__("protocol_sha256", "short"),
-            "a0x-material-execution-contract.schema.json": lambda value: value["ccp"]["matrix_plan_binding"].__setitem__("outer_digest", "sha256:" + "0" * 64),
-            "a0x-attempt-claim.schema.json": lambda value: value.__setitem__("state", "reused"),
-            "a0x-authorization-dossier.schema.json": lambda value: value["pair_binding"].__setitem__("model_key", ""),
-            "a0x-execution-authorization.schema.json": lambda value: value["pair_binding"].__setitem__("revision", "short"),
-            "a0x-guard-launch.schema.json": lambda value: value["timeouts"].__setitem__("outer_timeout_seconds", 3599),
-            "a0x-qualification-evidence.schema.json": lambda value: value.__setitem__("qualification_receipt_raw_sha256", "short"),
-            "a0x-qualification-authorization.schema.json": lambda value: value.__setitem__("generation", 0),
-            "a0x-model-identity-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("run_id", ""),
-            "a0x-ccp-observation.schema.json": lambda value: value.__setitem__("read_counter", -1),
-            "a0x-preflight-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("leg", "other"),
-            "a0x-activation-stage-occupancy-receipt.schema.json": lambda value: value["included_paths"].append("activations.safetensors"),
-            "a0x-activation-receipt.schema.json": lambda value: value["pair_binding"].__setitem__("output_path", "/absolute"),
-            "a0x-target-read-receipt.schema.json": lambda value: value.__setitem__("content_reads", 2),
-            "a0x-output-occupancy-receipt.schema.json": lambda value: value.__setitem__("occupancy_profile", "legacy"),
-            "a0x-representation-record.schema.json": lambda value: value.__setitem__("representation_path", "/absolute"),
-            "a0x-statistical-result.schema.json": lambda value: value["pair_binding"].__setitem__("binding_profile", "legacy"),
-            "a0x-terminal-result.schema.json": lambda value: value.__setitem__("statistical_result", None),
-            "a0x-external-assets-locator.schema.json": lambda value: value["assets"][0].__setitem__("raw_sha256", "short"),
-            "a0x-publication-manifest.schema.json": lambda value: value.__setitem__("manifest_profile", "legacy"),
-            "a0x-hosted-gate-a-transport.schema.json": lambda value: value.__setitem__("run_attempt", 2),
-            "a0x-hosted-gate-a-verifier-policy.schema.json": lambda value: value.__setitem__("required_ref", "refs/heads/feature"),
-            "a0x-hosted-gate-a-verification-receipt.schema.json": lambda value: value.__setitem__("verification_status", "pending"),
-            "a0x-gate-b-authorization.schema.json": lambda value: value.__setitem__("max_verification_count", 2),
-        }
-        for name, mutate in mutations.items():
+        for name, mutate in SCHEMA_MUTATIONS.items():
             with self.subTest(schema=name):
                 value = copy.deepcopy(artifact(name))
                 mutate(value)
@@ -132,12 +141,7 @@ class A0XSchemasTests(unittest.TestCase):
         self.assertEqual([], validate(result, canonical))
         self.assertEqual([], validate(terminal, terminal_schema))
 
-        mutations = (
-            ("status-passed", lambda value: value["outcome_rule"].__setitem__("passed", False)),
-            ("literal-final-index", lambda value: value["descriptive_final_block"].__setitem__("tuple_index", 6)),
-            ("r1-dense", lambda value: value["pair_binding"].__setitem__("dense_bound", pair_binding(Leg.R1)["dense_bound"])),
-        )
-        for label, mutate in mutations:
+        for label, mutate in TERMINAL_NESTED_RESULT_MUTATIONS:
             with self.subTest(label=label):
                 invalid_result = copy.deepcopy(result)
                 mutate(invalid_result)

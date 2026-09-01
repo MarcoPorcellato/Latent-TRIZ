@@ -1,31 +1,803 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-execution-authorization-v3.schema.json",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["approved_dossier_commitment", "artifact_class", "authorization_status", "claim_ids", "commitment_profile", "empirical", "evidence_eligible", "expert_validated", "pair_binding", "scientific_status", "repository", "implementation_source_head", "source_head", "source_tree", "material_contract_raw_sha256", "ccp", "authorization_inlet_path", "guard_launch", "guard_preflight_observation", "gate_a_evidence", "max_guard_exec_count", "stop_boundary", "authorization_id", "attempt_id"],
-  "properties": {
-    "artifact_class": {"const": "a0x-execution-authorization"}, "empirical": {"const": true}, "scientific_status": {"const": "exploratory"}, "evidence_eligible": {"const": false}, "expert_validated": {"const": false}, "claim_ids": {"type": "array", "maxItems": 0}, "pair_binding": {"$ref": "#/$defs/pair"}, "authorization_status": {"const": "authorized"}, "commitment_profile": {"const": "a0x-execution-authorization-json-v3"}, "approved_dossier_commitment": {"$ref": "#/$defs/dossier_commitment"}, "repository": {"const": "MarcoPorcellato/Latent-TRIZ"}, "implementation_source_head": {"$ref": "#/$defs/revision"}, "source_head": {"$ref": "#/$defs/revision"}, "source_tree": {"$ref": "#/$defs/revision"}, "material_contract_raw_sha256": {"$ref": "#/$defs/sha"}, "ccp": {"$ref": "#/$defs/ccp"}, "authorization_inlet_path": {"$ref": "#/$defs/runtime_authorization_path"}, "guard_launch": {"$ref": "#/$defs/guard_launch"}, "guard_preflight_observation": {"$ref": "#/$defs/guard_preflight_observation"}, "gate_a_evidence": {"$ref": "#/$defs/gate_a_evidence"}, "max_guard_exec_count": {"const": 1}, "stop_boundary": {"enum": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"]}, "authorization_id": {"type": "string", "minLength": 1}, "attempt_id": {"type": "string", "minLength": 1}
-  },
   "$defs": {
-    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"}, "path": {"type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"},
-    "dense": {"type": "object", "additionalProperties": false, "required": ["leg", "cases", "view_site_count", "endpoint_count", "hidden_width", "scalar_bytes", "vector_count", "dense_bytes", "dense_copy_count", "atomic_dense_bytes", "index_copy_count", "index_reservation_bytes", "payload_allowance_bytes", "total_bytes", "cap_bytes"], "properties": {"leg": {"enum": ["a0", "r1"]}, "cases": {"const": 48}, "view_site_count": {"type": "integer", "minimum": 1}, "endpoint_count": {"type": "integer", "minimum": 1}, "hidden_width": {"type": "integer", "minimum": 1}, "scalar_bytes": {"const": 4}, "vector_count": {"type": "integer", "minimum": 1}, "dense_bytes": {"type": "integer", "minimum": 1}, "dense_copy_count": {"const": 2}, "atomic_dense_bytes": {"type": "integer", "minimum": 1}, "index_copy_count": {"const": 2}, "index_reservation_bytes": {"enum": [6291456, 1048576]}, "payload_allowance_bytes": {"enum": [2097152, 524288]}, "total_bytes": {"type": "integer", "minimum": 1}, "cap_bytes": {"enum": [33554432, 4194304]}}},
-    "pair": {"type": "object", "additionalProperties": false, "required": ["binding_profile", "dense_bound", "leg", "leg_freeze_sha256", "model_id", "model_key", "output_path", "revision", "run_id"], "properties": {"leg": {"enum": ["a0", "r1"]}, "leg_freeze_sha256": {"$ref": "#/$defs/sha"}, "model_key": {"type": "string", "minLength": 1}, "model_id": {"type": "string", "minLength": 1}, "revision": {"$ref": "#/$defs/revision"}, "run_id": {"type": "string", "minLength": 1}, "output_path": {"$ref": "#/$defs/path"}, "dense_bound": {"$ref": "#/$defs/dense"}, "binding_profile": {"const": "a0x-pair-scope-v2"}}},
-    "runtime_authorization_path": {"type": "string", "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))authorizations/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\\.json$"},
-    "dossier_commitment": {"type": "object", "additionalProperties": false, "required": ["profile", "commitment_sha256"], "properties": {"profile": {"const": "a0x-approval-dossier-json-v2"}, "commitment_sha256": {"$ref": "#/$defs/sha"}}},
-    "ccp": {"type": "object", "additionalProperties": false, "required": ["executable_name", "source_commit", "qualified_source_tree", "sha256", "version"], "properties": {"executable_name": {"const": "commit-ci-preflight"}, "source_commit": {"$ref": "#/$defs/revision"}, "qualified_source_tree": {"$ref": "#/$defs/revision"}, "sha256": {"$ref": "#/$defs/sha"}, "version": {"type": "string", "pattern": "^commit-ci-preflight [^\\s]+$"}}},
-    "guard_launch": {"type": "object", "additionalProperties": false, "required": ["launch_profile", "ccp", "python", "cwd_kind", "source_head", "child_script", "launch_descriptor", "environment_template", "resource", "timeouts", "argv_template"], "properties": {"launch_profile": {"const": "a0x-guard-launch-v2"}, "ccp": {"$ref": "#/$defs/runtime_role_ccp"}, "python": {"$ref": "#/$defs/runtime_role_python"}, "cwd_kind": {"const": "repository_root"}, "source_head": {"$ref": "#/$defs/revision"}, "child_script": {"$ref": "#/$defs/child_script"}, "launch_descriptor": {"$ref": "#/$defs/runtime_file"}, "environment_template": {"const": ["HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1"]}, "resource": {"$ref": "#/$defs/guard_resource"}, "timeouts": {"$ref": "#/$defs/timeouts"}, "argv_template": {"type": "array", "minItems": 26, "maxItems": 26, "items": {"type": "string", "minLength": 1}}}},
-    "runtime_role_ccp": {"type": "object", "additionalProperties": false, "required": ["role", "sha256"], "properties": {"role": {"const": "ccp"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "guard_preflight_observation": {"type": "object", "additionalProperties": false, "required": ["profile", "path"], "properties": {"profile": {"const": "a0x-guard-preflight-observation-v1"}, "path": {"type": "string", "pattern": "^\\.a0x-runtime/observations/[A-Za-z0-9._/-]+/guard-preflight-observation\\.json$"}}},
-    "runtime_role_python": {"type": "object", "additionalProperties": false, "required": ["role", "sha256"], "properties": {"role": {"const": "python"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "child_script": {"type": "object", "additionalProperties": false, "required": ["role", "path", "sha256"], "properties": {"role": {"const": "child"}, "path": {"const": "scripts/a0x_material_child.py"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "runtime_file": {"type": "object", "additionalProperties": false, "required": ["role", "path", "sha256"], "properties": {"role": {"const": "descriptor"}, "path": {"type": "string", "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))(?:authorizations|launches|claims|observations|qualification|bin)/[A-Za-z0-9._/-]+$"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "guard_resource": {"type": "object", "additionalProperties": false, "required": ["profile", "workload_family", "executor", "cache_state", "execution_mode", "target_platform", "memory_limit_bytes"], "properties": {"profile": {"const": "a0x-material"}, "workload_family": {"const": "latent-triz-a0x-v1"}, "executor": {"const": "native"}, "cache_state": {"const": "warm"}, "execution_mode": {"const": "native"}, "target_platform": {"const": "macos-arm64"}, "memory_limit_bytes": {"const": 8589934592}}},
-    "timeouts": {"type": "object", "additionalProperties": false, "required": ["outer_timeout_seconds", "internal_budget_seconds", "cleanup_margin_seconds", "admission_timeout_seconds"], "properties": {"outer_timeout_seconds": {"const": 3600}, "internal_budget_seconds": {"const": 3300}, "cleanup_margin_seconds": {"const": 300}, "admission_timeout_seconds": {"const": 300}}},
-    "gate_a_evidence": {"type": "object", "additionalProperties": false, "required": ["evidence_profile", "provider", "repository", "source_head", "source_tree", "gate_b_authorization_raw_sha256", "hosted_inputs", "verification_receipt", "verifier"], "properties": {"evidence_profile": {"const": "a0x-gate-a-evidence-binding-v2"}, "provider": {"const": "github-hosted-attestation-v1"}, "repository": {"const": "MarcoPorcellato/Latent-TRIZ"}, "source_head": {"$ref": "#/$defs/revision"}, "source_tree": {"$ref": "#/$defs/revision"}, "gate_b_authorization_raw_sha256": {"$ref": "#/$defs/sha"}, "hosted_inputs": {"$ref": "#/$defs/hosted_inputs"}, "verification_receipt": {"$ref": "#/$defs/verification_receipt"}, "verifier": {"$ref": "#/$defs/verifier"}}},
-    "hosted_inputs": {"type": "object", "additionalProperties": false, "required": ["manifest", "attestation_bundle", "trusted_root", "transport"], "properties": {"manifest": {"$ref": "#/$defs/manifest_input"}, "attestation_bundle": {"$ref": "#/$defs/bundle_input"}, "trusted_root": {"$ref": "#/$defs/root_input"}, "transport": {"$ref": "#/$defs/transport_input"}}},
-    "binding": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha"}}},
-    "manifest_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-evidence\\.json$"}}}]}, "bundle_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-attestation\\.bundle\\.jsonl$"}}}]}, "root_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/github-trusted-root\\.jsonl$"}}}]}, "transport_input": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-transport\\.json$"}}}]}, "verification_receipt": {"allOf": [{"$ref": "#/$defs/binding"}, {"properties": {"path": {"pattern": "^\\.a0x-runtime/gate-b-verifications/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/gate-a-verification-receipt\\.json$"}}}]},
-    "verifier": {"type": "object", "additionalProperties": false, "required": ["role", "version", "sha256", "policy_raw_sha256"], "properties": {"role": {"const": "github_cli_verifier"}, "version": {"const": "gh version 2.97.0 (2026-07-31)"}, "sha256": {"const": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"}, "policy_raw_sha256": {"$ref": "#/$defs/sha"}}}
-  }
+    "binding": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "bundle_input": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "properties": {
+            "path": {
+              "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-attestation\\.bundle\\.jsonl$"
+            }
+          }
+        }
+      ]
+    },
+    "ccp": {
+      "additionalProperties": false,
+      "properties": {
+        "executable_name": {
+          "const": "commit-ci-preflight"
+        },
+        "qualified_source_tree": {
+          "$ref": "#/$defs/revision"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "source_commit": {
+          "$ref": "#/$defs/revision"
+        },
+        "version": {
+          "pattern": "^commit-ci-preflight [^\\s]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "executable_name",
+        "source_commit",
+        "qualified_source_tree",
+        "sha256",
+        "version"
+      ],
+      "type": "object"
+    },
+    "child_script": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "const": "scripts/a0x_material_child.py"
+        },
+        "role": {
+          "const": "child"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "dense": {
+      "additionalProperties": false,
+      "properties": {
+        "atomic_dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cap_bytes": {
+          "enum": [
+            33554432,
+            4194304
+          ]
+        },
+        "cases": {
+          "const": 48
+        },
+        "dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dense_copy_count": {
+          "const": 2
+        },
+        "endpoint_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hidden_width": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "index_copy_count": {
+          "const": 2
+        },
+        "index_reservation_bytes": {
+          "enum": [
+            6291456,
+            1048576
+          ]
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "payload_allowance_bytes": {
+          "enum": [
+            2097152,
+            524288
+          ]
+        },
+        "scalar_bytes": {
+          "const": 4
+        },
+        "total_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "vector_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "view_site_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "leg",
+        "cases",
+        "view_site_count",
+        "endpoint_count",
+        "hidden_width",
+        "scalar_bytes",
+        "vector_count",
+        "dense_bytes",
+        "dense_copy_count",
+        "atomic_dense_bytes",
+        "index_copy_count",
+        "index_reservation_bytes",
+        "payload_allowance_bytes",
+        "total_bytes",
+        "cap_bytes"
+      ],
+      "type": "object"
+    },
+    "dossier_commitment": {
+      "additionalProperties": false,
+      "properties": {
+        "commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "profile": {
+          "const": "a0x-approval-dossier-json-v2"
+        }
+      },
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "type": "object"
+    },
+    "gate_a_evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_profile": {
+          "const": "a0x-gate-a-evidence-binding-v2"
+        },
+        "gate_b_authorization_raw_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "hosted_inputs": {
+          "$ref": "#/$defs/hosted_inputs"
+        },
+        "provider": {
+          "const": "github-hosted-attestation-v1"
+        },
+        "repository": {
+          "const": "MarcoPorcellato/Latent-TRIZ"
+        },
+        "source_head": {
+          "$ref": "#/$defs/revision"
+        },
+        "source_tree": {
+          "$ref": "#/$defs/revision"
+        },
+        "verification_receipt": {
+          "$ref": "#/$defs/verification_receipt"
+        },
+        "verifier": {
+          "$ref": "#/$defs/verifier"
+        }
+      },
+      "required": [
+        "evidence_profile",
+        "provider",
+        "repository",
+        "source_head",
+        "source_tree",
+        "gate_b_authorization_raw_sha256",
+        "hosted_inputs",
+        "verification_receipt",
+        "verifier"
+      ],
+      "type": "object"
+    },
+    "guard_launch": {
+      "additionalProperties": false,
+      "properties": {
+        "argv_template": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 26,
+          "minItems": 26,
+          "type": "array"
+        },
+        "ccp": {
+          "$ref": "#/$defs/runtime_role_ccp"
+        },
+        "child_script": {
+          "$ref": "#/$defs/child_script"
+        },
+        "cwd_kind": {
+          "const": "repository_root"
+        },
+        "environment_template": {
+          "const": [
+            "HF_HUB_OFFLINE=1",
+            "TRANSFORMERS_OFFLINE=1",
+            "HF_DATASETS_OFFLINE=1",
+            "TOKENIZERS_PARALLELISM=false",
+            "PYTHONNOUSERSITE=1"
+          ]
+        },
+        "launch_descriptor": {
+          "$ref": "#/$defs/runtime_file"
+        },
+        "launch_profile": {
+          "const": "a0x-guard-launch-v2"
+        },
+        "python": {
+          "$ref": "#/$defs/runtime_role_python"
+        },
+        "resource": {
+          "$ref": "#/$defs/guard_resource"
+        },
+        "source_head": {
+          "$ref": "#/$defs/revision"
+        },
+        "timeouts": {
+          "$ref": "#/$defs/timeouts"
+        }
+      },
+      "required": [
+        "launch_profile",
+        "ccp",
+        "python",
+        "cwd_kind",
+        "source_head",
+        "child_script",
+        "launch_descriptor",
+        "environment_template",
+        "resource",
+        "timeouts",
+        "argv_template"
+      ],
+      "type": "object"
+    },
+    "guard_preflight_observation": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^\\.a0x-runtime/observations/[A-Za-z0-9._/-]+/guard-preflight-observation\\.json$",
+          "type": "string"
+        },
+        "profile": {
+          "const": "a0x-guard-preflight-observation-v1"
+        }
+      },
+      "required": [
+        "profile",
+        "path"
+      ],
+      "type": "object"
+    },
+    "guard_resource": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_state": {
+          "const": "warm"
+        },
+        "execution_mode": {
+          "const": "native"
+        },
+        "executor": {
+          "const": "native"
+        },
+        "memory_limit_bytes": {
+          "const": 8589934592
+        },
+        "profile": {
+          "const": "a0x-material"
+        },
+        "target_platform": {
+          "const": "macos-arm64"
+        },
+        "workload_family": {
+          "const": "latent-triz-a0x-v1"
+        }
+      },
+      "required": [
+        "profile",
+        "workload_family",
+        "executor",
+        "cache_state",
+        "execution_mode",
+        "target_platform",
+        "memory_limit_bytes"
+      ],
+      "type": "object"
+    },
+    "hosted_inputs": {
+      "additionalProperties": false,
+      "properties": {
+        "attestation_bundle": {
+          "$ref": "#/$defs/bundle_input"
+        },
+        "manifest": {
+          "$ref": "#/$defs/manifest_input"
+        },
+        "transport": {
+          "$ref": "#/$defs/transport_input"
+        },
+        "trusted_root": {
+          "$ref": "#/$defs/root_input"
+        }
+      },
+      "required": [
+        "manifest",
+        "attestation_bundle",
+        "trusted_root",
+        "transport"
+      ],
+      "type": "object"
+    },
+    "manifest_input": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "properties": {
+            "path": {
+              "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-evidence\\.json$"
+            }
+          }
+        }
+      ]
+    },
+    "pair": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        },
+        "dense_bound": {
+          "$ref": "#/$defs/dense",
+          "additionalProperties": false,
+          "properties": {
+            "atomic_dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "cap_bytes": {
+              "enum": [
+                33554432,
+                4194304
+              ]
+            },
+            "cases": {
+              "const": 48,
+              "type": "integer"
+            },
+            "dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "dense_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "endpoint_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "hidden_width": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "index_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "index_reservation_bytes": {
+              "enum": [
+                6291456,
+                1048576
+              ]
+            },
+            "leg": {
+              "enum": [
+                "a0",
+                "r1"
+              ]
+            },
+            "payload_allowance_bytes": {
+              "enum": [
+                2097152,
+                524288
+              ]
+            },
+            "scalar_bytes": {
+              "const": 4,
+              "type": "integer"
+            },
+            "total_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "vector_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "view_site_count": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "leg",
+            "cases",
+            "view_site_count",
+            "endpoint_count",
+            "hidden_width",
+            "scalar_bytes",
+            "vector_count",
+            "dense_bytes",
+            "dense_copy_count",
+            "atomic_dense_bytes",
+            "index_copy_count",
+            "index_reservation_bytes",
+            "payload_allowance_bytes",
+            "total_bytes",
+            "cap_bytes"
+          ],
+          "type": "object"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_key": {
+          "enum": [
+            "gpt2",
+            "gpt_neo_125m",
+            "qwen2_5_0_5b",
+            "qwen3_0_6b_base",
+            "smollm2_135m",
+            "smollm2_360m"
+          ]
+        },
+        "output_path": {
+          "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[a-f0-9]{40}$",
+          "type": "string"
+        },
+        "run_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "path": {
+      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[a-f0-9]{40}$",
+      "type": "string"
+    },
+    "root_input": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "properties": {
+            "path": {
+              "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/github-trusted-root\\.jsonl$"
+            }
+          }
+        }
+      ]
+    },
+    "runtime_authorization_path": {
+      "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))authorizations/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\\.json$",
+      "type": "string"
+    },
+    "runtime_file": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^\\.a0x-runtime/(?!.*(?:/|^)\\.{1,2}(?:/|$))(?:authorizations|launches|claims|observations|qualification|bin)/[A-Za-z0-9._/-]+$",
+          "type": "string"
+        },
+        "role": {
+          "const": "descriptor"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "runtime_role_ccp": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "const": "ccp"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "role",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "runtime_role_python": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "const": "python"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "role",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "sha": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "timeouts": {
+      "additionalProperties": false,
+      "properties": {
+        "admission_timeout_seconds": {
+          "const": 300
+        },
+        "cleanup_margin_seconds": {
+          "const": 300
+        },
+        "internal_budget_seconds": {
+          "const": 3300
+        },
+        "outer_timeout_seconds": {
+          "const": 3600
+        }
+      },
+      "required": [
+        "outer_timeout_seconds",
+        "internal_budget_seconds",
+        "cleanup_margin_seconds",
+        "admission_timeout_seconds"
+      ],
+      "type": "object"
+    },
+    "transport_input": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "properties": {
+            "path": {
+              "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/hosted-gate-a-transport\\.json$"
+            }
+          }
+        }
+      ]
+    },
+    "verification_receipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/binding"
+        },
+        {
+          "properties": {
+            "path": {
+              "pattern": "^\\.a0x-runtime/gate-b-verifications/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/gate-a-verification-receipt\\.json$"
+            }
+          }
+        }
+      ]
+    },
+    "verifier": {
+      "additionalProperties": false,
+      "properties": {
+        "policy_raw_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "role": {
+          "const": "github_cli_verifier"
+        },
+        "sha256": {
+          "const": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+        },
+        "version": {
+          "const": "gh version 2.97.0 (2026-07-31)"
+        }
+      },
+      "required": [
+        "role",
+        "version",
+        "sha256",
+        "policy_raw_sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-execution-authorization-v3.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "approved_dossier_commitment": {
+      "$ref": "#/$defs/dossier_commitment"
+    },
+    "artifact_class": {
+      "const": "a0x-execution-authorization"
+    },
+    "attempt_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "authorization_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "authorization_inlet_path": {
+      "$ref": "#/$defs/runtime_authorization_path"
+    },
+    "authorization_status": {
+      "const": "authorized"
+    },
+    "ccp": {
+      "$ref": "#/$defs/ccp"
+    },
+    "claim_ids": {
+      "maxItems": 0,
+      "type": "array"
+    },
+    "commitment_profile": {
+      "const": "a0x-execution-authorization-json-v3"
+    },
+    "empirical": {
+      "const": true
+    },
+    "evidence_eligible": {
+      "const": false
+    },
+    "expert_validated": {
+      "const": false
+    },
+    "gate_a_evidence": {
+      "$ref": "#/$defs/gate_a_evidence"
+    },
+    "guard_launch": {
+      "$ref": "#/$defs/guard_launch"
+    },
+    "guard_preflight_observation": {
+      "$ref": "#/$defs/guard_preflight_observation"
+    },
+    "implementation_source_head": {
+      "$ref": "#/$defs/revision"
+    },
+    "material_contract_raw_sha256": {
+      "$ref": "#/$defs/sha"
+    },
+    "max_guard_exec_count": {
+      "const": 1
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair"
+    },
+    "repository": {
+      "const": "MarcoPorcellato/Latent-TRIZ"
+    },
+    "scientific_status": {
+      "const": "exploratory"
+    },
+    "source_head": {
+      "$ref": "#/$defs/revision"
+    },
+    "source_tree": {
+      "$ref": "#/$defs/revision"
+    },
+    "stop_boundary": {
+      "enum": [
+        "before_model_load",
+        "after_first_terminal_outcome",
+        "after_one_sealed_target_read"
+      ]
+    }
+  },
+  "required": [
+    "approved_dossier_commitment",
+    "artifact_class",
+    "authorization_status",
+    "claim_ids",
+    "commitment_profile",
+    "empirical",
+    "evidence_eligible",
+    "expert_validated",
+    "pair_binding",
+    "scientific_status",
+    "repository",
+    "implementation_source_head",
+    "source_head",
+    "source_tree",
+    "material_contract_raw_sha256",
+    "ccp",
+    "authorization_inlet_path",
+    "guard_launch",
+    "guard_preflight_observation",
+    "gate_a_evidence",
+    "max_guard_exec_count",
+    "stop_boundary",
+    "authorization_id",
+    "attempt_id"
+  ],
+  "type": "object"
 }

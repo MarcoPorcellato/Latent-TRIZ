@@ -21,6 +21,7 @@ from latent_triz.a0x_freeze import (  # noqa: E402
     verify_protected_tree_metadata_only,
 )
 from latent_triz.validator import validate  # noqa: E402
+from latent_triz.a0x_contract import PairBinding, derive_pair_output_path  # noqa: E402
 
 
 class A0XFreezeTests(unittest.TestCase):
@@ -60,6 +61,17 @@ class A0XFreezeTests(unittest.TestCase):
             cases_path=self.FIXTURES / "public-cases-mini.jsonl",
             corpus_manifest_path=self.FIXTURES / "public-manifest-mini.json",
         )
+
+    def test_frozen_dossier_pairs_use_canonical_output_derivation(self) -> None:
+        dossiers = sorted((self.ROOT / "experiments/a0x-six-model/approval-dossiers").glob("*/*.json"))
+        self.assertEqual(12, len(dossiers))
+        for path in dossiers:
+            with self.subTest(path=path):
+                binding = PairBinding.from_dossier(json.loads(path.read_text(encoding="utf-8")))
+                self.assertEqual(
+                    binding.output_path,
+                    derive_pair_output_path(binding.leg, binding.model_key, binding.run_id),
+                )
 
     def test_selection_fails_closed_when_a_family_does_not_have_two_cases(self) -> None:
         cases = (self.FIXTURES / "public-cases-mini.jsonl").read_text(encoding="utf-8").splitlines()

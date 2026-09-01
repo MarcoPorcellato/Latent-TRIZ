@@ -231,22 +231,35 @@ def _synthetic_runtime_readiness(root: Path, pair: PairBinding, source_head: str
 
 def _synthetic_gate_a_verifier(request) -> bytes:
     """Minimal callback: writes one schema-valid receipt, no process or network."""
+    from latent_triz.a0x_gate_contract import (
+        HashBoundPath,
+        HostedInputBindings,
+        VerificationReceiptInputs,
+        VerifierIdentity,
+        build_verification_receipt,
+    )
+    from latent_triz.a0x_hosted_gate_a import canonical_json_bytes
+
     authorization_raw = request.authorization_path.read_bytes()
     authorization = json.loads(authorization_raw)
-    receipt = {
-        "artifact_class": "a0x-hosted-gate-a-verification-receipt",
-        "receipt_profile": "a0x-hosted-gate-a-verification-receipt-v1",
-        "verification_status": "verified",
-        "repository": authorization["repository"],
-        "qualified_source_head": authorization["source_head"],
-        "qualified_source_tree": authorization["source_tree"],
-        "pair_binding": authorization["pair_binding"],
-        "authorization_raw_sha256": hashlib.sha256(authorization_raw).hexdigest(),
-        "hosted_inputs": authorization["hosted_inputs"],
-        "verifier": authorization["verifier"],
-        "verified_at": "2026-08-31T00:00:00Z",
-    }
-    raw = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+    pair = PairBinding.from_mapping(authorization["pair_binding"])
+    receipt = build_verification_receipt(
+        pair,
+        VerificationReceiptInputs(
+            source_head=authorization["source_head"],
+            source_tree=authorization["source_tree"],
+            authorization_raw_sha256=hashlib.sha256(authorization_raw).hexdigest(),
+            hosted_inputs=HostedInputBindings(
+                manifest=HashBoundPath(**authorization["hosted_inputs"]["manifest"]),
+                attestation_bundle=HashBoundPath(**authorization["hosted_inputs"]["attestation_bundle"]),
+                trusted_root=HashBoundPath(**authorization["hosted_inputs"]["trusted_root"]),
+                transport=HashBoundPath(**authorization["hosted_inputs"]["transport"]),
+            ),
+            verifier=VerifierIdentity(policy_raw_sha256=authorization["verifier"]["policy_raw_sha256"]),
+            verified_at="2026-08-31T00:00:00Z",
+        ),
+    )
+    raw = canonical_json_bytes(receipt)
     output = request.repository_root / authorization["verification_receipt_path"]
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(raw)
@@ -459,6 +472,41 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         gate = json.loads(request.gate_b_authorization.read_text())
         self.assertFalse((root / gate["verification_receipt_path"]).exists())
         self.assertFalse((root / ".a0x-runtime/launches").exists())
+
+    def test_synthetic_gate_a_verifier_uses_canonical_production_receipt_bytes(self) -> None:
+        """Runtime test callback must not retain a second receipt serializer."""
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        raw = _synthetic_gate_a_verifier(type("Request", (), {
+            "repository_root": root,
+            "authorization_path": request.gate_b_authorization,
+        })())
+        self.assertTrue(raw.endswith(b"\n"))
+        self.assertEqual(raw, (root / json.loads(request.gate_b_authorization.read_text())["verification_receipt_path"]).read_bytes())
+
+    def test_schema_valid_dense_drift_refuses_before_injected_gate_a_verifier(self) -> None:
+        """Runtime preparation cannot spend injected Gate A verifier on invalid pair semantics."""
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_runtime_bundle
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        gate = json.loads(request.gate_b_authorization.read_text())
+        gate["pair_binding"]["dense_bound"]["total_bytes"] += 1
+        request.gate_b_authorization.write_bytes(
+            __import__("latent_triz.a0x_hosted_gate_a", fromlist=["canonical_json_bytes"]).canonical_json_bytes(gate),
+        )
+        verifier = Mock(side_effect=AssertionError("verifier reached"))
+        with self._synthetic_ccp_hash(request), patch(
+            "latent_triz.a0x_runtime_bundle.planned_material_dossiers",
+            return_value={("a0", "gpt2"): request.fixed_dossier},
+        ), self.assertRaisesRegex(A0XRuntimeBundleError, "pair binding is invalid"):
+            prepare_runtime_bundle(
+                root, request, source_state_probe=lambda: ("a" * 40, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=Mock(side_effect=AssertionError("readiness reached")),
+                gate_a_verifier=verifier,
+            )
+        verifier.assert_not_called()
 
     def test_static_preflight_never_consumes_gate_b_receipt_or_readiness(self) -> None:
         """Preflight must not spend the one-shot verifier or create future bytes."""

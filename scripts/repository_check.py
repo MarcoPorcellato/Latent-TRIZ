@@ -70,6 +70,7 @@ def validate(schema: str, data: str) -> None:
 def main() -> int:
     _ensure_writable_tempdir()
     run(PYTHON, "scripts/a0x_contract_check.py", "--phase", "synthetic")
+    run(PYTHON, "scripts/a0x_compatibility_check.py", "--root", ".")
     run(
         PYTHON,
         "-m",

@@ -23,6 +23,7 @@ from .a0x_contract import (
     build_leg_freeze_binding,
     canonical_json_sha256,
     compute_dense_bound,
+    derive_pair_output_path,
     sha256_file,
 )
 from .validator import validate
@@ -779,7 +780,7 @@ def freeze_a0x_campaign(
                 if not isinstance(hidden_size, int) or isinstance(hidden_size, bool):
                     raise A0XFreezeError(f"A0X card lacks hidden size: {model_key}")
                 run_id = f"a0x-{leg.value}-{model_key}-{str(card['revision'])[:8]}-attempt-01"
-                output_path = f"results/a0x/{leg.value}/{model_key}/{run_id}"
+                output_path = derive_pair_output_path(leg, model_key, run_id)
                 pair = PairBinding(
                     binding_profile="a0x-pair-scope-v2",
                     leg=leg,

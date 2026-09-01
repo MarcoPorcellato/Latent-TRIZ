@@ -365,6 +365,10 @@ def _gate_b_authorization(root: Path, request: RuntimePreparationRequest) -> tup
     except A0XContractError as error:
         raise A0XRuntimeBundleError("Gate B authorization is not strict JSON") from error
     _validate_schema(value, _GATE_B_AUTHORIZATION_SCHEMA, "Gate B authorization")
+    try:
+        value["pair_binding"] = PairBinding.from_mapping(value["pair_binding"]).as_mapping()
+    except (A0XContractError, KeyError, TypeError) as error:
+        raise A0XRuntimeBundleError("Gate B authorization pair binding is invalid") from error
     return path, raw, value
 
 
