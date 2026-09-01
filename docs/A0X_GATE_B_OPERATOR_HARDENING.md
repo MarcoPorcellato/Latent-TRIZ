@@ -122,14 +122,21 @@ APFS primitives without merging their authorities. `--plan` is a no-write
 surface. Build mode is a separately authorized material action.
 
 The builder requires a clean exact source HEAD, the raw wheelhouse-manifest
-hash, an independent regular base Python with exact hash and Python 3.11
-version, a bound bootstrap `pip` version, the exact model-card hash, an exact
-allowlisted source snapshot, and absent attempt and model destinations. It
-then uses shell-free commands to:
+hash, and a canonical `a0x-python-runtime-manifest-v1` that allowlists every
+independent regular file in the selected base runtime. That manifest binds the
+interpreter, standard library, `venv`, `ensurepip`, and bundled bootstrap
+installer rather than treating the launcher hash as proof of the runtime. The
+request also binds the exact Python 3.11 version, bootstrap `pip` version,
+model-card hash, allowlisted source snapshot, and absent attempt and model
+destinations. Before any child execution it APFS-clones the complete verified
+base runtime and all 39 wheels into private, attempt-owned paths. No external
+executable or wheel path is consumed after that binding. It then uses
+shell-free commands to:
 
 1. create a virtual environment with `venv --copies`;
-2. install only hash-locked wheelhouse distributions with `--no-index`,
-   `--require-hashes`, and `--no-deps`;
+2. verify the installer created inside the environment, then install only
+   hash-locked wheelhouse distributions with `--no-index`, `--no-cache-dir`,
+   `--only-binary :all:`, `--require-hashes`, and `--no-deps`;
 3. remove bootstrap `pip` and prove the final environment contains exactly the
    39 locked distributions;
 4. clone only the model-card files through Darwin `clonefile(2)`; and
@@ -138,15 +145,22 @@ then uses shell-free commands to:
    exclusive local receipt write.
 
 The bootstrap installer is an explicit tool, not a retained runtime package.
-Its version is bound by the request and receipt. Package content in the final
-environment comes only from the verified wheelhouse. An extra, duplicate, or
-missing distribution is terminal.
+Its bundled bytes, reported version, and environment-local version are bound
+before use; it is then removed. Package content added to the final environment
+comes only from the verified wheelhouse. An extra, duplicate, or missing
+distribution is terminal. Read-only probes disable bytecode writes; all child
+commands have a 3,600-second fail-closed timeout.
 
 The builder never repairs or deletes an incomplete attempt. It refuses
-symlink or hardlink swaps, path escape, occupied outputs, command failure,
-source drift, malformed metadata, unexpected files, full-copy fallback, and
-receipt reuse. A failed material attempt requires new absent destinations and
-a new exact authorization.
+symlink or hardlink swaps, noncanonical external paths, path escape, occupied
+outputs, base-runtime or source drift, command failure, malformed metadata,
+unexpected files, full-copy fallback, and receipt reuse. A failed material
+attempt requires new absent destinations and a new exact authorization.
+
+The CLI has no implicit material default. Operators must select exactly one of
+`--plan` or `--build`; omission is refused before probing or writing. Planning
+performs no external execution. Build mode executes only the owned APFS-bound
+runtime and installs only from the owned APFS-bound wheelhouse.
 
 Repository tests exercise this path only with tiny synthetic wheels, a fake
 Python executable, injected shell-free child results, and tiny model files.

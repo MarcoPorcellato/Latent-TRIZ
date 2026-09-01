@@ -21,16 +21,30 @@ The builder must:
 
 - consume one canonical `a0x-offline-wheelhouse-v1` manifest whose raw SHA-256 is supplied by the operator;
 - require exactly 39 distributions for the A0X Python 3.11 environment;
+- require a canonical `a0x-python-runtime-manifest-v1` that allowlists every
+  regular independent file in the selected Python runtime, including the
+  interpreter, `venv`, standard library, `ensurepip`, and bundled installer;
+- bind the runtime-manifest bytes, complete allowlisted tree, interpreter
+  bytes, Python version, and bootstrap installer version before and after each
+  use of the base runtime;
+- APFS-clone the complete verified base runtime and all 39 verified wheels into
+  private, overwrite-refusing attempt paths before any child execution;
+- execute and install only from those owned, reverified paths;
 - invoke `venv --copies` without a shell;
 - bind the bootstrap `pip` version, use it only as the offline installer, remove
   it, and reject the environment unless the final installed set is exactly the
   39 wheelhouse distributions;
-- install with `pip --isolated install --no-index --find-links ... --require-hashes --no-deps`;
+- verify the actual virtual-environment bootstrap installer before package
+  installation;
+- install with `pip --isolated install --no-index --find-links ...
+  --no-cache-dir --only-binary :all: --require-hashes --no-deps`;
 - derive the hash-locked requirements from the already verified wheelhouse manifest rather than resolving dependencies;
 - verify the complete installed distribution set and exact versions through an isolated metadata probe;
 - materialize only the runtime files named by the exact model card through `clone_regular_file`, which has no full-copy fallback;
 - verify source and destination size and SHA-256 for every model file;
-- refuse symlinks, hardlinks, occupied outputs, unexpected files, path escape, version drift, hash drift, subprocess failure, malformed probe output, or source drift;
+- refuse symlinks, hardlinks, noncanonical external paths, occupied outputs,
+  unexpected files, path escape, version drift, hash drift, base-runtime drift,
+  subprocess failure, malformed probe output, or source drift;
 - use explicit, absent destination paths. A failed attempt is not silently resumed or repaired.
 
 The builder must not:
@@ -56,15 +70,27 @@ The builder must not:
 - model-card allowlist materialization through an injected or real APFS clone boundary;
 - a canonical local build receipt.
 
-All external execution is dependency-injected in tests. Production defaults use `subprocess.run(..., shell=False)` and the existing APFS boundary.
+All external execution is dependency-injected in tests. Production defaults
+use `subprocess.run(..., shell=False)` with a 3,600-second child timeout and the
+existing APFS boundary. Read-only Python probes use isolated, no-bytecode mode.
 
 ### CLI
 
-`scripts/a0x_build_gate_b_runtime.py` accepts exact paths, expected hashes, and destination paths. `--plan` performs only static validation and prints canonical JSON. The build mode is deliberately available for a later, separately authorized material action; it is not executed in this implementation tranche.
+`scripts/a0x_build_gate_b_runtime.py` accepts exact paths, expected hashes, and
+destination paths. It disables repository bytecode writes before importing
+local modules. The CLI requires exactly one explicit mode: `--plan` or
+`--build`. `--plan` validates static inputs, executes no external code, writes
+nothing, and prints canonical JSON. Build mode is deliberately available for a
+later, separately authorized material action; it is not executed in this
+implementation tranche.
 
 ### Receipt
 
-The receipt records only local prerequisite facts: source HEAD, wheelhouse manifest hash, base Python hash and version, shell-free commands, exact installed distributions, model-card hash, per-file clone evidence, output paths, and output Python hash. It carries no scientific status and is not public evidence.
+The receipt records only local prerequisite facts: source HEAD, wheelhouse
+manifest hash, base-runtime manifest hash and file count, base Python hash and
+version, shell-free commands, exact installed distributions, model-card hash,
+per-file clone evidence, output paths, and output Python hash. It carries no
+scientific status and is not public evidence.
 
 ## Transaction and failure model
 
@@ -80,8 +106,17 @@ Tests use only temporary synthetic wheels, tiny model-card files, a fake indepen
 
 - manifest-hash and 39-distribution binding;
 - deterministic hash-locked requirements;
-- exact shell-free `venv --copies` and offline pip commands;
-- no runner call before static validation succeeds;
+- exact shell-free `venv --copies`, bootstrap-installer probe, and offline pip
+  commands;
+- APFS binding of the complete base runtime and wheelhouse into owned paths,
+  with execution and installation restricted to those reverified paths;
+- full base-runtime manifest binding and refusal of interpreter, standard
+  library, `venv`, or `ensurepip` drift around execution;
+- refusal of model-card byte/path disagreement and no external runner call
+  before static validation succeeds;
+- no Python bytecode writes during planning;
+- no runner call in planning and no material runner call before owned input
+  binding succeeds;
 - exact installed distribution validation;
 - runtime allowlist cloning and post-clone byte verification;
 - refusal of source drift, unexpected installed distributions, occupied destinations, failed commands, malformed metadata, and clone failure;

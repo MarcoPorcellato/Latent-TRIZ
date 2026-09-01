@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Plan or build exact offline prerequisites for one later A0X Gate B."""
-from __future__ import annotations
+import sys
+sys.dont_write_bytecode = True
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Sequence, TextIO
 
@@ -22,7 +22,9 @@ from latent_triz.a0x_gate_b_builder import (  # noqa: E402
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", action="store_true", help="validate and print the no-write plan")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--plan", action="store_true", help="validate and print the no-write plan")
+    mode.add_argument("--build", action="store_true", help="perform one separately authorized material build")
     parser.add_argument("--source-head", required=True)
     parser.add_argument("--attempt-id", required=True)
     parser.add_argument("--wheelhouse", required=True)
@@ -32,6 +34,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-python-sha256", required=True)
     parser.add_argument("--base-python-version", required=True)
     parser.add_argument("--bootstrap-pip-version", required=True)
+    parser.add_argument("--base-runtime-root", required=True)
+    parser.add_argument("--base-runtime-manifest", required=True)
+    parser.add_argument("--base-runtime-manifest-sha256", required=True)
     parser.add_argument("--model-card", required=True)
     parser.add_argument("--model-card-sha256", required=True)
     parser.add_argument("--model-source-root", required=True)
@@ -64,6 +69,9 @@ def main(
         base_python_sha256=arguments.base_python_sha256,
         base_python_version=arguments.base_python_version,
         bootstrap_pip_version=arguments.bootstrap_pip_version,
+        base_runtime_root=Path(arguments.base_runtime_root),
+        base_runtime_manifest=Path(arguments.base_runtime_manifest),
+        base_runtime_manifest_sha256=arguments.base_runtime_manifest_sha256,
         model_card=arguments.model_card,
         model_card_sha256=arguments.model_card_sha256,
         model_source_root=Path(arguments.model_source_root),
@@ -76,7 +84,7 @@ def main(
             if source_state_probe is not None:
                 keywords["source_state_probe"] = source_state_probe
             result = plan_gate_b_runtime(repository, request, **keywords)
-        else:
+        elif arguments.build:
             keywords = {}
             if runner is not None:
                 keywords["runner"] = runner
@@ -85,6 +93,8 @@ def main(
             if source_state_probe is not None:
                 keywords["source_state_probe"] = source_state_probe
             result = build_gate_b_runtime(repository, request, **keywords)
+        else:  # pragma: no cover - argparse enforces the exclusive mode
+            raise A0XGateBBuilderError("an explicit builder mode is required")
     except (A0XGateBBuilderError, OSError, ValueError):
         print(_canonical({
             "error": {"code": "A0X_GATE_B_BUILDER_REFUSED"},

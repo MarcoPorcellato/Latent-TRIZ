@@ -4,7 +4,12 @@
 
 **Goal:** Implement a fail-closed, reproducible Python 3.11 and APFS snapshot prerequisite builder for later A0X Gate B use.
 
-**Architecture:** A focused library owns static validation, deterministic planning, shell-free execution, exact post-install verification, clonefile materialization, and a local receipt. A thin CLI exposes plan and build modes. Existing Hosted Gate A and runtime-bundle modules remain unchanged authorities.
+**Architecture:** A focused library owns static validation, deterministic
+no-execution planning, complete base-runtime and wheelhouse APFS binding,
+shell-free execution only from owned paths, exact post-install verification,
+model clonefile materialization, and a local receipt. A thin CLI requires an
+explicit plan or build mode. Existing Hosted Gate A and runtime-bundle modules
+remain unchanged authorities.
 
 **Tech Stack:** Python 3.11 standard library, `venv`, `pip`, existing A0X wheelhouse/APFS/model-card contracts, `unittest`.
 
@@ -25,7 +30,10 @@
 - Create: `tests/test_a0x_gate_b_builder.py`
 - Create: `src/latent_triz/a0x_gate_b_builder.py`
 
-1. Write failing tests for manifest hash, 39-distribution cardinality, hash-locked requirements, exact command construction, path confinement, and no-write planning.
+1. Write failing tests for wheelhouse and base-runtime manifest hashes,
+   39-distribution cardinality, hash-locked requirements, exact command
+   construction, path confinement, no-execution/no-write planning, and explicit
+   CLI mode selection.
 2. Run the focused test and confirm RED because the module is absent.
 3. Implement only strict parsing, plan records, and canonical requirements generation.
 4. Run the focused test and confirm GREEN.
@@ -36,7 +44,9 @@
 - Modify: `tests/test_a0x_gate_b_builder.py`
 - Modify: `src/latent_triz/a0x_gate_b_builder.py`
 
-1. Add failing tests for shell-free runner calls, exact installed distributions, APFS allowlist materialization, final revalidation, exclusive receipt creation, and fail-closed errors.
+1. Add failing tests for shell-free runner calls, APFS-bound Python and wheels,
+   exact installed distributions, APFS model allowlist materialization, final
+   bound-input revalidation, exclusive receipt creation, and fail-closed errors.
 2. Confirm RED on the missing behavior.
 3. Implement the minimal execution path with injected runner and clone callback.
 4. Confirm GREEN, then run adjacent APFS and wheelhouse suites.
@@ -83,4 +93,3 @@
 3. Commit the final target-free state locally.
 4. Report exact HEAD, tree, tests, and regenerated hashes.
 5. Stop. Do not create a real environment or model snapshot; do not run Gate B/C or publish.
-
