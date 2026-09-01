@@ -71,7 +71,7 @@ check: a0x-compatibility-check
 	PYTHONPATH=$(PYTHONPATH) python3 scripts/repository_check.py
 
 schema-cross-validate:
-	PYTHONPATH=$(PYTHONPATH) $(LAB01_PYTHON) scripts/schema_cross_validate.py
+	PYTHONPATH=$(PYTHONPATH) "$(LAB01_PYTHON)" scripts/schema_cross_validate.py
 
 a0x-synthetic-verify:
 	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_contract_check.py --phase synthetic

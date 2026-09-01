@@ -215,6 +215,13 @@ def run_material_lifecycle(
             attempt_state=AttemptState.SEALED, sealed_from_state=sealed_from_state,
         )
 
+    def record_target_read_evidence(reader: Any) -> None:
+        """Advance only after reader-owned evidence proves a complete attempt."""
+        nonlocal attempt_state, target_content_reads, target_read_evidence
+        target_read_evidence = _target_read_evidence(dependencies, reader)
+        target_content_reads = target_read_evidence["content_reads"]
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.TARGET_RESERVED)
+
     def first_failure(error: BaseException) -> dict[str, Any]:
         nonlocal terminal_outcome, attempt_state
         if terminal_outcome is None:
@@ -305,14 +312,12 @@ def run_material_lifecycle(
         )
         sealed_activation = invoke("activation_sealing", dependencies.activation_sealer, activation)
         reader = invoke("reader_construction", dependencies.target_reader_factory, sealed_activation)
-        attempt_state = reduce_attempt(attempt_state, AttemptEvent.TARGET_RESERVED)
         stage = "target_read"
         target_started = deadline.check(stage)
         try:
             target = dependencies.target_read(reader, deadline.check)
         except InternalDeadlineExceeded as error:
-            target_read_evidence = _target_read_evidence(dependencies, reader)
-            target_content_reads = target_read_evidence["content_reads"]
+            record_target_read_evidence(reader)
             record_timing(name=stage, phase="scientific", started=target_started, finished=error.elapsed_nanoseconds)
             raise
         except A0XMaterialRuntimeError:
@@ -320,16 +325,13 @@ def run_material_lifecycle(
             # content. Its class must not bypass the reader-owned evidence
             # probe or turn a single permitted read into a false zero-read
             # receipt.
-            target_read_evidence = _target_read_evidence(dependencies, reader)
-            target_content_reads = target_read_evidence["content_reads"]
+            record_target_read_evidence(reader)
             raise
         except BaseException:
-            target_read_evidence = _target_read_evidence(dependencies, reader)
-            target_content_reads = target_read_evidence["content_reads"]
+            record_target_read_evidence(reader)
             record_timing(name=stage, phase="scientific", started=target_started, finished=deadline.observe())
             raise
-        target_read_evidence = _target_read_evidence(dependencies, reader)
-        target_content_reads = target_read_evidence["content_reads"]
+        record_target_read_evidence(reader)
         if target_read_evidence["status"] != "pass" or target_content_reads != 1:
             record_timing(name=stage, phase="scientific", started=target_started, finished=deadline.observe())
             raise A0XMaterialRuntimeError("successful target boundary evidence is not one passing content read")

@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -54,6 +56,7 @@ class A0XFreezeTests(unittest.TestCase):
             "src/latent_triz/a0x_schema_projection.py",
             "scripts/a0x_compatibility_check.py",
             "scripts/a0x_compile_pair_schemas.py",
+            "Makefile",
             "schemas/a0x-pair-binding.fragment.json",
             "schemas/a0x-pair-projections.json",
             "tests/test_a0x_pair_compatibility.py",
@@ -70,6 +73,30 @@ class A0XFreezeTests(unittest.TestCase):
                 self.assertTrue(path.is_file())
                 self.assertFalse(path.is_symlink())
                 self.assertEqual(1, path.stat().st_nlink)
+
+    def test_schema_cross_validate_accepts_pinned_style_interpreter_path_with_spaces(self) -> None:
+        interpreter = self.root / "pinned schema venv/bin/python"
+        interpreter.parent.mkdir(parents=True)
+        invocation_log = self.root / "interpreter-invocation.json"
+        interpreter.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$@\" > \"$A0X_FAKE_INTERPRETER_LOG\"\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        interpreter.chmod(0o700)
+        environment = dict(os.environ)
+        environment["A0X_FAKE_INTERPRETER_LOG"] = str(invocation_log)
+        completed = subprocess.run(
+            ["make", "-s", "schema-cross-validate", f"LAB01_PYTHON={interpreter}"],
+            cwd=self.ROOT,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual(["scripts/schema_cross_validate.py"], invocation_log.read_text(encoding="utf-8").splitlines())
 
     def test_file_binding_rejects_hardlink_in_temporary_tree(self) -> None:
         source = self.root / "source.py"

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from latent_triz.a0x_pair import A0XContractError, PairBinding
 from latent_triz.validator import validate
 
 
@@ -44,9 +45,12 @@ class CompatibilityOracleError(ValueError):
 @dataclass(frozen=True)
 class CompatibilityFailure:
     dossier_path: str
-    consumer_schema: str
-    issue_path: str
-    message: str
+    leg: str
+    model_key: str
+    run_id: str
+    consumer: str
+    pointer: str
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -84,7 +88,25 @@ def check_frozen_pair_compatibility(root: Path) -> CompatibilityReport:
 
     failures: list[CompatibilityFailure] = []
     passed_case_count = 0
-    for dossier_path, pair_binding in dossiers:
+    for dossier_path, dossier in dossiers:
+        raw_pair = dossier["pair_binding"]
+        leg, model_key, run_id = _pair_coordinates(raw_pair)
+        try:
+            pair_binding = PairBinding.from_dossier(dossier).as_mapping()
+        except A0XContractError as error:
+            failures.extend(
+                CompatibilityFailure(
+                    dossier_path=_relative(repository, dossier_path),
+                    leg=leg,
+                    model_key=model_key,
+                    run_id=run_id,
+                    consumer=consumer_schema,
+                    pointer="pair_binding",
+                    reason=str(error),
+                )
+                for consumer_schema, _schema, _template in consumers
+            )
+            continue
         for consumer_schema, schema, template in consumers:
             envelope = copy.deepcopy(template)
             envelope["pair_binding"] = pair_binding
@@ -95,9 +117,12 @@ def check_frozen_pair_compatibility(root: Path) -> CompatibilityReport:
             failures.extend(
                 CompatibilityFailure(
                     dossier_path=_relative(repository, dossier_path),
-                    consumer_schema=consumer_schema,
-                    issue_path=issue.path.removeprefix("root."),
-                    message=issue.message,
+                    leg=leg,
+                    model_key=model_key,
+                    run_id=run_id,
+                    consumer=consumer_schema,
+                    pointer=issue.path.removeprefix("root."),
+                    reason=issue.message,
                 )
                 for issue in issues
             )
@@ -107,9 +132,9 @@ def check_frozen_pair_compatibility(root: Path) -> CompatibilityReport:
         passed_case_count=passed_case_count,
         failures=tuple(sorted(failures, key=lambda failure: (
             failure.dossier_path,
-            failure.consumer_schema,
-            failure.issue_path,
-            failure.message,
+            failure.consumer,
+            failure.pointer,
+            failure.reason,
         ))),
     )
 
@@ -119,13 +144,14 @@ def _load_dossier(root: Path, path: Path) -> tuple[Path, Mapping[str, Any]]:
     pair_binding = value.get("pair_binding")
     if not isinstance(pair_binding, Mapping):
         raise CompatibilityOracleError(f"approval dossier lacks object pair_binding: {_relative(root, path)}")
-    return path, pair_binding
+    return path, value
 
 
 def _validate_dossier_coordinates(root: Path, dossiers: tuple[tuple[Path, Mapping[str, Any]], ...]) -> None:
     seen: dict[tuple[str, str], Path] = {}
     mismatches: list[Path] = []
-    for path, pair_binding in dossiers:
+    for path, dossier in dossiers:
+        pair_binding = dossier["pair_binding"]
         relative = path.relative_to(root)
         expected_leg, expected_model_key = relative.parts[-2], path.stem
         leg = pair_binding.get("leg")
@@ -147,6 +173,17 @@ def _validate_dossier_coordinates(root: Path, dossiers: tuple[tuple[Path, Mappin
             "approval dossier pair coordinate disagrees with tracked path: "
             + ", ".join(_relative(root, path) for path in mismatches)
         )
+
+
+def _pair_coordinates(pair_binding: Mapping[str, Any]) -> tuple[str, str, str]:
+    """Extract diagnostic coordinates without creating alternate semantics."""
+    coordinates = tuple(
+        value if isinstance(value, str) else "<invalid>"
+        for value in (
+            pair_binding.get("leg"), pair_binding.get("model_key"), pair_binding.get("run_id"),
+        )
+    )
+    return coordinates[0], coordinates[1], coordinates[2]
 
 
 def _load_consumer(root: Path, schema_path: str, template_path: str) -> tuple[str, Mapping[str, Any], Mapping[str, Any]]:

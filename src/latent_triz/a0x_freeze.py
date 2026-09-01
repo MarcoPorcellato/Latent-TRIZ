@@ -86,6 +86,7 @@ _LEG_SOURCES = {
 }
 
 _IMPLEMENTATION_PATHS = tuple(sorted({
+    "Makefile",
     "schemas/a0x-activation-receipt.schema.json",
     "schemas/a0x-activation-stage-occupancy-receipt.schema.json",
     "schemas/a0x-attempt-claim.schema.json",

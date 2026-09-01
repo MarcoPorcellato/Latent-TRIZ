@@ -12,7 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from latent_triz.a0x_contract import Leg, PairBinding
-from tests.a0x_test_support import pair_binding
+from tests.a0x_test_support import authorization_documents, pair_binding
 
 
 class _Clock:
@@ -214,6 +214,56 @@ class A0XMaterialRuntimeTests(unittest.TestCase):
             result["terminal_outcome"]["termination"],
         )
         self.assertNotIn("reader_construction", events)
+
+    def test_deadline_after_reader_reservation_seals_real_preanalysis_terminal(self) -> None:
+        """An empty reservation is not a completed target-read receipt."""
+        from latent_triz.a0x_execution import seal_terminal_attempt
+
+        events: list[str] = []
+        pair = self._pair()
+        _dossier, _authorization, chain = authorization_documents(pair.as_mapping())
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            receipt_path = workspace / "target-read-receipt.json"
+            terminal_path = workspace / "terminal-result.json"
+            dependencies = self._dependencies(events)
+
+            def reserve_reader(_sealed, _check):
+                events.append("reader_construction")
+                receipt_path.touch(exist_ok=False)
+                return object()
+
+            def forbidden_target_read(_reader, _check):
+                self.fail("deadline must prevent target callback/open")
+
+            def strict_failure_sealer(state, _stage, _error, sealed_pair):
+                return seal_terminal_attempt(
+                    state=state,
+                    status="failed",
+                    pair_binding=sealed_pair.as_mapping(),
+                    authorization_chain=chain,
+                    terminal_path=terminal_path,
+                )
+
+            result = self._run(
+                pair=pair,
+                dependencies=replace(
+                    dependencies,
+                    target_reader_factory=reserve_reader,
+                    target_read=forbidden_target_read,
+                    failure_sealer=strict_failure_sealer,
+                ),
+                clock=_Clock(0.0, *([0.0] * 16), 3_300.0),
+            )
+
+            self.assertTrue(terminal_path.is_file())
+            self.assertEqual(b"", receipt_path.read_bytes())
+        self.assertEqual("sealed_failure", result["lifecycle_status"])
+        self.assertEqual(0, result["target_content_reads"])
+        self.assertEqual("activation", result["terminal_outcome"]["sealed_from_state"])
+        self.assertEqual(0, result["terminal_outcome"]["analysis_target_content_reads"])
+        self.assertIsNone(result["terminal_outcome"]["target_read_receipt_sha256"])
+        self.assertNotIn("target_read", events)
 
     def test_timeout_after_target_preserves_one_read_and_never_retries(self) -> None:
         events: list[str] = []

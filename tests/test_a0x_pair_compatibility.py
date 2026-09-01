@@ -37,6 +37,7 @@ def _copy_oracle_tree(destination: Path) -> None:
         "scripts/a0x_compatibility_check.py",
         "src/latent_triz/__init__.py",
         "src/latent_triz/a0x_compatibility.py",
+        "src/latent_triz/a0x_pair.py",
         "src/latent_triz/validator.py",
         "schemas/a0x-gate-b-authorization.schema.json",
         "schemas/a0x-hosted-gate-a-verification-receipt.schema.json",
@@ -129,6 +130,41 @@ class A0XPairCompatibilityTests(unittest.TestCase):
             self.assertIn("failures", completed.stdout)
             self.assertEqual(before, after)
             self.assertFalse((root / "src/latent_triz/__pycache__").exists())
+
+    def test_schema_valid_run_id_drift_fails_semantic_oracle_with_coordinates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _copy_oracle_tree(root)
+            dossier = root / "experiments/a0x-six-model/approval-dossiers/a0/gpt2.json"
+            payload = json.loads(dossier.read_text(encoding="utf-8"))
+            payload["pair_binding"]["run_id"] = "schema-valid-different-run"
+            dossier.write_text(json.dumps(payload), encoding="utf-8")
+
+            report = check_frozen_pair_compatibility(root)
+            self.assertEqual(24, report.expected_case_count)
+            self.assertEqual(22, report.passed_case_count)
+            self.assertEqual(2, len(report.failures))
+            for failure in report.failures:
+                self.assertEqual("a0", failure.leg)
+                self.assertEqual("gpt2", failure.model_key)
+                self.assertEqual("schema-valid-different-run", failure.run_id)
+                self.assertIn("schemas/a0x-", failure.consumer)
+                self.assertEqual("pair_binding", failure.pointer)
+                self.assertIn("derived output path", failure.reason)
+
+            completed = subprocess.run(
+                [sys.executable, str(root / "scripts/a0x_compatibility_check.py"), "--root", str(root)],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(1, completed.returncode)
+            self.assertIn("leg=a0", completed.stdout)
+            self.assertIn("model_key=gpt2", completed.stdout)
+            self.assertIn("run_id=schema-valid-different-run", completed.stdout)
+            self.assertIn("pointer=pair_binding", completed.stdout)
+            self.assertIn("reason=pair binding output path differs from derived output path", completed.stdout)
 
     def test_cli_exit_code_matches_real_root_report(self) -> None:
         report = check_frozen_pair_compatibility(ROOT)

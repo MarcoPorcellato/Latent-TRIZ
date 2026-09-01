@@ -31,8 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     for failure in report.failures:
         print(
-            f"{failure.dossier_path}: {failure.consumer_schema}: "
-            f"{failure.issue_path}: {failure.message}"
+            f"{failure.dossier_path}: leg={failure.leg}; model_key={failure.model_key}; "
+            f"run_id={failure.run_id}; consumer={failure.consumer}; "
+            f"pointer={failure.pointer}; reason={failure.reason}"
         )
     return 0 if report.passed_case_count == report.expected_case_count else 1
 
