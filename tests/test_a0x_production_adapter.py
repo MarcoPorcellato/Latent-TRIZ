@@ -7,6 +7,7 @@ any material capability; they never load a model or open a sealed target.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import sys
@@ -211,6 +212,11 @@ class A0XProductionAdapterTests(unittest.TestCase):
             self.assertNotEqual("unavailable_package", dependencies.package_builder.__name__)
             self.assertNotEqual("no_package_verifier", dependencies.package_verifier.__name__)
             self.assertNotEqual("no_package_verifier", dependencies.protected_tree_postflight.__name__)
+
+    def test_default_assembly_has_no_stage_to_state_mapping(self) -> None:
+        from latent_triz.a0x_production_adapter import _default_dependencies
+
+        self.assertNotIn("state_for_stage", inspect.getsource(_default_dependencies))
 
     def test_model_load_revalidates_live_readiness_after_binding(self) -> None:
         from latent_triz.a0x_production_adapter import (

@@ -17,6 +17,7 @@ from time import monotonic as _monotonic
 from typing import Any, Callable, Mapping
 
 from .a0x_contract import Leg, PairBinding
+from .a0x_execution import AttemptEvent, AttemptState, reduce_attempt
 from .a0x_material_contract import INTERNAL_BUDGET_SECONDS
 
 
@@ -53,11 +54,11 @@ class MaterialLifecycleDependencies:
     target_read: Callable[[Any, Callable[[str], None]], Any]
     target_read_evidence: Callable[[Any], Mapping[str, Any]]
     analysis_by_leg: Mapping[Leg, Callable[[Any, Callable[[str], None]], Any]]
-    terminal_sealer: Callable[[Any, Callable[[str], None]], Mapping[str, Any]]
+    terminal_sealer: Callable[[Any, AttemptState, Callable[[str], None]], Mapping[str, Any]]
     package_builder: Callable[[Mapping[str, Any], Callable[[str], None]], Path]
     package_verifier: Callable[[Path, Callable[[str], None]], None]
     protected_tree_postflight: Callable[[Path, Callable[[str], None]], None]
-    failure_sealer: Callable[[str, BaseException, PairBinding], Mapping[str, Any]]
+    failure_sealer: Callable[[AttemptState, str, BaseException, PairBinding], Mapping[str, Any]]
     release_model: Callable[[Any, Callable[[str], None]], None]
 
 
@@ -104,6 +105,7 @@ def run_material_lifecycle(
     target_read_evidence: Mapping[str, Any] | None = None
     terminal_outcome: Mapping[str, Any] | None = None
     package_path: Path | None = None
+    attempt_state = AttemptState.PREFLIGHT
     stage = "static_preflight"
     stage_timings: list[dict[str, int | str]] = []
 
@@ -172,7 +174,7 @@ def run_material_lifecycle(
         return None
 
     def cleanup_terminal(
-        *, lifecycle_status: str, terminal: Mapping[str, Any],
+        *, lifecycle_status: str, terminal: Mapping[str, Any], sealed_from_state: AttemptState,
     ) -> dict[str, Any]:
         """Use the reserved outer-guard margin after a terminal is selected.
 
@@ -210,16 +212,17 @@ def run_material_lifecycle(
             package_path=package_path, target_content_reads=target_content_reads,
             target_read_evidence=target_read_evidence,
             post_terminal_failure=post_terminal_failure, stage_timings=stage_timings,
+            attempt_state=AttemptState.SEALED, sealed_from_state=sealed_from_state,
         )
 
     def first_failure(error: BaseException) -> dict[str, Any]:
-        nonlocal terminal_outcome
+        nonlocal terminal_outcome, attempt_state
         if terminal_outcome is None:
             failed_stage = stage
             try:
                 sealed = cleanup_invoke(
                     "failure_seal",
-                    lambda _check: dependencies.failure_sealer(failed_stage, error, pair),
+                    lambda _check: dependencies.failure_sealer(attempt_state, failed_stage, error, pair),
                 )
             except BaseException as sealing_error:
                 # Release a just-constructed model even when evidence sealing
@@ -265,7 +268,12 @@ def run_material_lifecycle(
             lifecycle_status = "sealed_failure"
         else:
             lifecycle_status = "post_terminal_failure"
-        return cleanup_terminal(lifecycle_status=lifecycle_status, terminal=terminal_outcome)
+        sealed_from_state = attempt_state
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.TERMINAL_SELECTED)
+        return cleanup_terminal(
+            lifecycle_status=lifecycle_status, terminal=terminal_outcome,
+            sealed_from_state=sealed_from_state,
+        )
 
     try:
         invoke("static_preflight", dependencies.static_preflight, preflight_context)
@@ -291,11 +299,13 @@ def run_material_lifecycle(
             record_timing(name=stage, phase="scientific", started=model_started, finished=error.elapsed_nanoseconds)
             raise
         record_timing(name=stage, phase="scientific", started=model_started, finished=model_finished)
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.ACTIVATION_STARTED)
         activation = invoke(
             "activation", _leg_callback(dependencies.activation_by_leg, pair.leg, "activation"), model,
         )
         sealed_activation = invoke("activation_sealing", dependencies.activation_sealer, activation)
         reader = invoke("reader_construction", dependencies.target_reader_factory, sealed_activation)
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.TARGET_RESERVED)
         stage = "target_read"
         target_started = deadline.check(stage)
         try:
@@ -329,17 +339,23 @@ def run_material_lifecycle(
             record_timing(name=stage, phase="scientific", started=target_started, finished=error.elapsed_nanoseconds)
             raise
         record_timing(name=stage, phase="scientific", started=target_started, finished=target_finished)
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.ANALYSIS_STARTED)
         analysis = invoke(
             "frozen_analysis", _leg_callback(dependencies.analysis_by_leg, pair.leg, "analysis"), target,
         )
         # Analysis ends at the 3,300 second deadline. Once it has returned and
         # the last boundary check passed, terminal sealing is cleanup work
         # covered by the final 300 seconds of the outer guard.
-        terminal = cleanup_invoke("terminal_seal", dependencies.terminal_sealer, analysis)
+        terminal = cleanup_invoke("terminal_seal", dependencies.terminal_sealer, analysis, attempt_state)
         if not isinstance(terminal, Mapping):
             raise A0XMaterialRuntimeError("terminal sealer did not return a terminal mapping")
         terminal_outcome = dict(terminal)
-        return cleanup_terminal(lifecycle_status="completed", terminal=terminal_outcome)
+        sealed_from_state = attempt_state
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.TERMINAL_SELECTED)
+        return cleanup_terminal(
+            lifecycle_status="completed", terminal=terminal_outcome,
+            sealed_from_state=sealed_from_state,
+        )
     except BaseException as error:
         return first_failure(error)
 
@@ -350,6 +366,8 @@ def _result(
     target_read_evidence: Mapping[str, Any] | None,
     post_terminal_failure: Mapping[str, str] | None,
     stage_timings: list[Mapping[str, int | str]],
+    attempt_state: AttemptState,
+    sealed_from_state: AttemptState,
 ) -> dict[str, Any]:
     if terminal_outcome is None:
         raise A0XMaterialRuntimeError("material lifecycle ended without a terminal outcome")
@@ -362,6 +380,8 @@ def _result(
         "target_read_evidence": None if target_read_evidence is None else dict(target_read_evidence),
         "post_terminal_failure": None if post_terminal_failure is None else dict(post_terminal_failure),
         "stage_timings": [dict(item) for item in stage_timings],
+        "attempt_state": attempt_state.value,
+        "sealed_from_state": sealed_from_state.value,
     }
 
 

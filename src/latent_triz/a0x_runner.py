@@ -28,7 +28,7 @@ from .a0x_contract import (
     sha256_file,
     strict_json_object,
 )
-from .a0x_execution import AttemptState, seal_terminal_attempt, validate_authorization_chain
+from .a0x_execution import AttemptEvent, AttemptState, reduce_attempt, seal_terminal_attempt, validate_authorization_chain
 from .a0x_freeze import (
     A0XFreezeError,
     verify_a0_selection_manifest,
@@ -83,7 +83,7 @@ class A0XRunnerDependencies:
     package_builder: Callable[[Any], Path]
     package_verifier: Callable[[Path], None]
     protected_tree_postflight: Callable[[Path], None]
-    failure_sealer: Callable[[str, BaseException, PairBinding, Mapping[str, Any]], Mapping[str, Any]]
+    failure_sealer: Callable[[AttemptState, str, BaseException, PairBinding, Mapping[str, Any]], Mapping[str, Any]]
     release_model: Callable[[Any], None]
     # New production adapters must opt into the explicit material lifecycle.
     # Keeping it optional preserves the legacy synthetic seam until Task 3
@@ -1186,6 +1186,7 @@ def _run_injected_lifecycle(
     model: Any | None = None
     release_attempted = False
     stage = "static_preflight"
+    attempt_state = AttemptState.PREFLIGHT
     try:
         if pre_run_context is None:
             raise A0XRunnerError("claimed lifecycle requires a persisted pre-run context")
@@ -1195,12 +1196,15 @@ def _run_injected_lifecycle(
         stage = "model_construction"
         model = dependencies.model_factory(tokenizer)
         stage = "activation"
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.ACTIVATION_STARTED)
         activation = dependencies.activation(model)
         stage = "activation_sealing"
         sealed_activation = dependencies.activation_sealer(activation)
         stage = "sealed_target_capability"
         target = dependencies.target_capability_factory(sealed_activation)
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.TARGET_RESERVED)
         stage = "frozen_analysis"
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.ANALYSIS_STARTED)
         analysis = dependencies.analysis(target)
         stage = "terminal_package"
         package = dependencies.package_builder(analysis)
@@ -1214,14 +1218,16 @@ def _run_injected_lifecycle(
         release_attempted = True
         dependencies.release_model(model)
         model = None
+        attempt_state = reduce_attempt(attempt_state, AttemptEvent.TERMINAL_SELECTED)
         return {
             "status": "completed", "pair_binding": pair.as_mapping(),
             "authorization_chain": dict(chain), "package_path": str(package),
             "attempt_claim_path": str(attempt_claim_path), "dossier_status": dossier.get("dossier_status"),
+            "attempt_state": attempt_state.value,
         }
     except BaseException as error:
         try:
-            terminal = dependencies.failure_sealer(stage, error, pair, chain)
+            terminal = dependencies.failure_sealer(attempt_state, stage, error, pair, chain)
         except BaseException as sealing_error:
             raise A0XRunnerError("could not seal first terminal lifecycle outcome") from sealing_error
         if not isinstance(terminal, Mapping):

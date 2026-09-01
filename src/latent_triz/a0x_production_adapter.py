@@ -545,26 +545,29 @@ def _default_dependencies(context: ProductionContext) -> MaterialLifecycleDepend
             return result
         return analysis
 
-    def terminal_sealer(result: Any, _check: Callable[[str], None]) -> Mapping[str, Any]:
+    def terminal_sealer(result: Any, attempt_state: AttemptState, _check: Callable[[str], None]) -> Mapping[str, Any]:
+        if attempt_state is not AttemptState.ANALYSIS:
+            raise A0XProductionAdapterError("terminal sealing requires analysis lifecycle state")
         status = result.get("status") if isinstance(result, Mapping) else None
         if status not in {"positive", "null", "non_interpretable"}:
             raise A0XProductionAdapterError("frozen analysis returned no terminal status")
         return seal_terminal_attempt(
-            state=AttemptState.ANALYSIS, status=status,
+            state=attempt_state, status=status,
             target_receipt_path=workspace / "target-read-receipt.json", statistical_result=result if status in {"positive", "null"} else None,
             pair_binding=context.pair.as_mapping(), authorization_chain=chain,
             terminal_path=workspace / "terminal-result.json",
         )
 
-    def failure_sealer(stage: str, _error: BaseException, _pair: PairBinding) -> Mapping[str, Any]:
-        if stage in {"static_preflight", "model_identity", "tokenizer_construction", "model_construction"}:
-            state_for_stage, target_receipt_path = AttemptState.PREFLIGHT, None
-        elif stage in {"target_read", "frozen_analysis"} and (workspace / "target-read-receipt.json").is_file():
-            state_for_stage, target_receipt_path = AttemptState.ANALYSIS, workspace / "target-read-receipt.json"
-        else:
-            state_for_stage, target_receipt_path = AttemptState.ACTIVATION, None
+    def failure_sealer(
+        attempt_state: AttemptState, _stage: str, _error: BaseException, _pair: PairBinding,
+    ) -> Mapping[str, Any]:
+        target_receipt_path = (
+            workspace / "target-read-receipt.json"
+            if attempt_state is AttemptState.ANALYSIS and (workspace / "target-read-receipt.json").is_file()
+            else None
+        )
         return seal_terminal_attempt(
-            state=state_for_stage, status="failed", pair_binding=context.pair.as_mapping(), authorization_chain=chain,
+            state=attempt_state, status="failed", pair_binding=context.pair.as_mapping(), authorization_chain=chain,
             target_receipt_path=target_receipt_path, terminal_path=workspace / "terminal-result.json",
         )
 

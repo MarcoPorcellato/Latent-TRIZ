@@ -72,7 +72,7 @@ class A0XMaterialRuntimeTests(unittest.TestCase):
             reader["reads"] += 1
             return {"frozen_rows": ["synthetic"]}
 
-        def failure_sealer(stage_name, error, _pair):
+        def failure_sealer(_attempt_state, stage_name, error, _pair):
             events.append("failure_sealer")
             return {
                 "status": "failed",
@@ -92,7 +92,7 @@ class A0XMaterialRuntimeTests(unittest.TestCase):
             target_read=target_read,
             target_read_evidence=target_evidence,
             analysis_by_leg={Leg.A0: analysis("a0"), Leg.R1: analysis("r1")},
-            terminal_sealer=lambda _analysis, _check: stage("terminal_seal", {"status": "null"}),
+            terminal_sealer=lambda _analysis, _state, _check: stage("terminal_seal", {"status": "null"}),
             package_builder=lambda _terminal, _check: stage("terminal_package", Path("/synthetic/package")),
             package_verifier=lambda _package, _check: stage("independent_package_verification", None),
             protected_tree_postflight=lambda _package, _check: stage("protected_tree_postflight", None),
@@ -139,6 +139,25 @@ class A0XMaterialRuntimeTests(unittest.TestCase):
             ],
             [entry["stage"] for entry in result["stage_timings"]],
         )
+
+    def test_lifecycle_passes_reducer_state_to_terminal_sealer(self) -> None:
+        from latent_triz.a0x_execution import AttemptState
+
+        events: list[str] = []
+        states: list[AttemptState] = []
+        dependencies = self._dependencies(events)
+
+        def terminal_sealer(_analysis, state, _check):
+            states.append(state)
+            return {"status": "null"}
+
+        result = self._run(
+            pair=self._pair(),
+            dependencies=replace(dependencies, terminal_sealer=terminal_sealer),
+        )
+        self.assertEqual("completed", result["lifecycle_status"])
+        self.assertEqual([AttemptState.ANALYSIS], states)
+        self.assertEqual(AttemptState.SEALED.value, result["attempt_state"])
 
     def test_each_pre_terminal_failure_frontier_is_sealed_once(self) -> None:
         frontiers = (
