@@ -13,6 +13,7 @@ from latent_triz.a0x_schema_projection import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_PAIR_DOMAIN_IMPORT_ALLOWLIST = frozenset({"__future__", "dataclasses", "enum", "re", "typing"})
 
 
 def _module_tree(name: str) -> ast.Module:
@@ -31,6 +32,10 @@ def _imported_modules(name: str) -> set[str]:
 
 def _imports_module(imports: set[str], target: str) -> bool:
     return any(module == target or module.endswith(f".{target}") for module in imports)
+
+
+def _pair_domain_imports_are_pure(imports: set[str]) -> bool:
+    return imports <= _PAIR_DOMAIN_IMPORT_ALLOWLIST
 
 
 class A0XArchitectureTests(unittest.TestCase):
@@ -72,11 +77,17 @@ class A0XArchitectureTests(unittest.TestCase):
                 self.assertIn("reduce_attempt(", source)
 
     def test_pair_domain_imports_no_io_adapter(self) -> None:
-        prohibited = {
-            "a0x_ccp_executor", "a0x_freeze", "a0x_hosted_gate_a", "a0x_material_runtime",
-            "a0x_production_adapter", "a0x_runner", "a0x_wheelhouse",
+        self.assertTrue(_pair_domain_imports_are_pure(_imported_modules("a0x_pair.py")))
+
+    def test_pair_domain_purity_rejects_every_current_a0x_adapter(self) -> None:
+        a0x_modules = {
+            path.stem
+            for path in (ROOT / "src/latent_triz").glob("a0x_*.py")
         }
-        self.assertFalse(prohibited & _imported_modules("a0x_pair.py"))
+        self.assertTrue(a0x_modules)
+        for module in sorted(a0x_modules):
+            with self.subTest(module=module):
+                self.assertFalse(_pair_domain_imports_are_pure({module}))
 
     def test_contract_and_material_contract_have_no_import_cycle(self) -> None:
         contract_imports = _imported_modules("a0x_contract.py")
