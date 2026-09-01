@@ -1,3 +1,42 @@
+A0X Hosted Gate A local implementation checkpoint (2026-08-31): resume only
+from isolated branch `agent/a0x-hosted-gate-a-design`. Tasks 1–9 are complete;
+Task 9's stale package refusal is Historical evidence and Task 10 alone may
+regenerate. Verify branch, HEAD, ancestry, tree, and dirty state before acting.
+Canonical specification:
+`docs/superpowers/specs/2026-08-31-a0x-hosted-gate-a-design.md`.
+Canonical implementation plan:
+`docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md`.
+Terra handoff: `docs/A0X_HOSTED_GATE_A_TERRA_HANDOFF.md`.
+Sol architecture/security review:
+`docs/A0X_HOSTED_GATE_A_SOL_ARCHITECTURE_REVIEW.md`.
+
+Hosted Gate A has seven lanes: `repository-python311`,
+`schema-cross-validation-python311`, `repository-python312`,
+`schema-cross-validation-python312`, `a0x-no-model`, `a0x-synthetic`, and
+`documentation-audit`. It accepts four hosted inputs (32 KiB manifest, 1 MiB
+bundle, 2 MiB trusted root, 16 KiB transport) and Gate B creates the fifth
+verification receipt (32 KiB). No rerun and no CCP Gate A fallback are allowed;
+CCP Gate C remains independent. The first real post-merge hosted Gate A run is
+acceptance only. The trusted-root snapshot cannot identify revocations
+published after that snapshot. Capture, publication, Gate B, and Gate C each
+need separate authorization.
+
+Execute Tasks 10–11 in order under the frozen Sol rulings. Terra owns
+integration; Luna distills inventories, determinism and documentation checks.
+Do not weaken or regenerate around an intermediate failure. Task 10 alone
+regenerates two inventories, two freezes, twelve dossiers, and the no-model
+receipt from its recorded implementation anchor.
+
+Stop before Task 12. Push, PR, merge, hosted-run acceptance, evidence capture,
+offline verification of real hosted bytes, publication, Gate B/C, model,
+tokenizer, target, CCP heavy work, Docker, scientific execution, retry, and
+claim promotion require their own exact authorization. Preserve historical
+packages and receipts byte-identically. Continue until Task 11 produces a clean
+exact-head local candidate and publication dossier, then request Sol/operator
+review.
+
+--- Historical checkpoint below; retained as evidence, not current authority ---
+
 A0X post-bootstrap hosted-integration checkpoint (2026-08-30): verify live
 state before acting. Public `main`
 `d2a475f58db668a2ce0a4ec48082189422b19eab`, tree

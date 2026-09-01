@@ -920,3 +920,136 @@ campaign remains `sealed_gate_pending`; Gate B bundle preparation and Gate C
 material execution each still require their own later exact authorization. No
 model, tokenizer, protected target, scientific retry, or claim promotion is
 authorized here.
+
+## 35. Hosted-attestation adapter required a frozen result-shape boundary
+
+**Problem.** Offline Gate B bound GitHub CLI bytes, version, flags, and
+high-level result semantics, but lacked an exact parser contract for
+`gh attestation verify --format json`. Permissive parsing would turn future CLI
+or sigstore-go output drift into a silent authorization change.
+
+**Correction.** Add a synthetic-only adapter schema and inert fixture for
+GitHub CLI `2.97.0` with `sigstore-go 1.2.2`. The frozen result media type is
+`application/vnd.dev.sigstore.verificationresult+json;version=0.1`; its
+certificate summary carries flat lower-camel extension fields, while
+`verifiedIdentity` carries the version-pinned nested matcher serialization:
+the literal GitHub CLI SAN prefix matcher and fixed issuer matcher are compared
+as data and are never evaluated as supplied regular expressions.
+The pure verifier binds the GitHub Actions workflow build type, workflow object,
+single source dependency, repository IDs, push/github-hosted internal
+parameters, invocation URL, certificate SAN/issuer, timestamps, and separate
+`job_workflow_sha`/`source_sha` fields. For the current non-reusable same-repo
+contract both fields must independently equal `source_head`; their command-line
+flags remain distinct. Predicate evidence is workflow-controlled consistency
+evidence, not a trust anchor.
+
+It independently binds raw workflow SHA-256 from the canonical manifest,
+rehashes authorization, policy, workflow, executable, and all four inputs after
+the one injected runner, and writes a single fsynced receipt through a checked
+trusted-root directory descriptors with component `mkdirat`/`openat`, then
+`O_EXCL` and `O_NOFOLLOW` on the receipt leaf. Control,
+input, and output paths reject traversal and caller-controlled ancestors. The
+operational wrapper supplies only a fixed locale/path environment to both the
+verifier and absolute `/usr/bin/git`; it never passes inherited GitHub tokens,
+authentication, or proxy variables. Verifier stdout/stderr are each capped at
+1 MiB before parse or receipt handling; the wrapper bounds verification to 300
+seconds and each local Git probe to 30 seconds.
+
+**Regression evidence.** Synthetic tests reject malformed, unknown, duplicate,
+extra, missing, and wrong signed fields; independently wrong signer/source
+revisions; nonzero or malformed runner output; source drift; pre/post control,
+workflow, and input hash drift; traversal; symlink; hardlink; nonregular;
+oversize; output collision; and rerun. Each refusal writes no new receipt and
+reaches no readiness, descriptor, authorization, or mapping stage.
+
+**Status.** The pure verifier, schema, fixture, mutation suite, and shell-free
+wrapper are local only. The wrapper has injected runner and source-state seams;
+its focused test reaches neither seam on an invalid packet. No network, GitHub
+API, GitHub CLI verification, Gate B preparation, Gate C action, model,
+tokenizer, target, Docker, CCP, or scientific execution occurred.
+
+## 36. Post-verification rehash initially omitted ancestor revalidation
+
+**Problem.** The verifier rehashed each hosted input and the workflow after the
+injected GitHub CLI child returned, but the second pass reused previously
+constructed paths. A concurrent replacement of an input or workflow parent
+directory with a symlink to byte-identical content could therefore preserve
+every hash while changing the trusted path resolution.
+
+**Correction.** The post-child pass now resolves all four authorization-bound
+input paths again through the checked repository-root boundary. Workflow
+validation checks every caller-controlled ancestor before inspecting the leaf.
+This applies both before the child and during the final manifest revalidation.
+
+**Regression evidence.** New synthetic cases replace the workflow parent before
+the runner and replace either the evidence parent or workflow parent during the
+runner. All three cases reached the runner or produced a receipt before the
+correction. They now fail closed, and the post-run cases produce no receipt.
+
+**Status.** Corrected locally with TDD. This remains synthetic, target-free
+evidence; no real GitHub CLI verification or material boundary was crossed.
+
+## 37. Hosted qualification and local execution had been conflated
+
+**Problem.** Historical A0X packages used a local CCP qualification receipt for
+the pre-material Gate A boundary. Public GitHub-hosted repository checks then
+duplicated ordinary target-free work without producing a provider shape that
+new dossiers could verify offline.
+
+**Correction.** Hosted Gate A now has seven exact lanes:
+`repository-python311`, `schema-cross-validation-python311`,
+`repository-python312`, `schema-cross-validation-python312`, `a0x-no-model`,
+`a0x-synthetic`, and `documentation-audit`. It carries four hosted inputs with
+hard 32 KiB/1 MiB/2 MiB/16 KiB caps; Gate B creates the fifth 32 KiB verification
+receipt only after hash-bound offline verification. There is no rerun or CCP
+Gate A fallback. CCP Gate C remains an independent local coordinator and
+execution envelope.
+
+**Limitations.** The first real post-merge hosted Gate A run is acceptance, not
+permission to adapt the verifier. A trusted-root snapshot cannot reveal
+revocations published after that snapshot. Signed provenance does not prove
+branch-protection non-bypass, review state, or a SLSA level. Capture,
+publication, Gate B, and Gate C are separate authorization boundaries.
+
+**Status.** Target-free local implementation and documentation only. Earlier
+CCP receipts and pre-migration package hashes remain **Historical evidence**
+with their original bytes and meanings. No hosted capture, GitHub CLI
+verification, Gate B, Gate C, model, tokenizer, target, CCP heavy, Docker,
+network, publication, or scientific execution occurred in this correction.
+
+## 38. Hosted verifier tests assumed macOS-only paths
+
+**Symptom.** GitHub Actions run `33459576482` failed three verifier tests on
+both Python 3.11 and Python 3.12. The fixtures assumed `/private/tmp` and the
+Homebrew path `/opt/homebrew/bin/gh`, neither of which is a portable contract
+for Ubuntu hosted runners.
+
+**Rejected correction.** Mocking the SHA-256 calculation would have made a
+synthetic executable appear to be the pinned GitHub CLI. That would weaken the
+security property the public verifier entry point is intended to prove, so the
+approach was not used.
+
+**Correction.** The public entry point still accepts only the exact pinned
+GitHub CLI as a regular independent file with the frozen version and SHA-256.
+After that check succeeds, it passes a private immutable verifier capability to
+the already validated orchestration. Tests may exercise only that private
+post-validation orchestration with a real temporary regular file and its real
+hash. A separate public-boundary regression proves the same synthetic file is
+rejected before the runner is invoked. All affected fixtures now use portable
+temporary files and directories.
+
+The verifier revalidates the executable path and hash after the child returns,
+before the exclusive receipt write. The operational wrapper continues to call
+only the public entry point; production code does not import or construct the
+private test capability.
+
+**Regression evidence.** The new public rejection test observes zero runner
+calls and no receipt. The private orchestration cases retain pre-run and
+post-run drift, input, path, output-collision, and rerun refusals without
+mocking the frozen version, frozen SHA-256, or hash function. Independent Luna
+and Terra reviews found no blocking issue in the correction.
+
+**Status.** Corrected locally with TDD. This is target-free portability and
+security-boundary evidence only. GitHub-hosted requalification remains pending;
+no network, evidence capture, Gate B/C, model, tokenizer, target, CCP, Docker,
+push, rerun, merge, or scientific execution occurred.

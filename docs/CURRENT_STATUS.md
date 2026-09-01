@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-08-30
+last_verified: 2026-08-31
 ---
 
 # Current laboratory status
@@ -121,7 +121,31 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
-### A0X hosted-integration boundary (current)
+### A0X Hosted Gate A implementation boundary (current local checkpoint)
+
+Tasks 1–9 of the Hosted Gate A migration are locally complete. Task 9 ended
+with the deliberate stale-freeze `NO-GO`; Task 10 is the only regeneration
+boundary. The seven hosted lanes are `repository-python311`,
+`schema-cross-validation-python311`, `repository-python312`,
+`schema-cross-validation-python312`, `a0x-no-model`, `a0x-synthetic`, and
+`documentation-audit`.
+
+Current Gate A binds four hosted inputs—manifest, attestation bundle, trusted
+root, and transport—with caps 32 KiB, 1 MiB, 2 MiB, and 16 KiB. Gate B may
+create the fifth verification receipt, capped at 32 KiB, only after offline
+verification. There is no rerun and no CCP Gate A fallback. CCP Gate C remains
+a separate local coordinator. All old CCP Gate A receipts are **Historical
+evidence**, not current hosted qualification.
+
+The first real post-merge hosted Gate A run is acceptance only. Capture,
+publication, Gate B, and Gate C each require separate authorization; the
+trusted-root snapshot cannot expose revocations published after that snapshot.
+The state remains `sealed_gate_pending`. No real GitHub CLI verification,
+network capture, Gate B runtime bundle, Gate C execution, model, tokenizer,
+target read, CCP heavy command, push, PR, merge, or evidence publication is
+authorized by this checkpoint.
+
+### Historical A0X hosted-integration boundary
 
 Public `main` `d2a475f58db668a2ce0a4ec48082189422b19eab` now installs the
 pinned schema oracle for GitHub-hosted Python 3.11 and 3.12 repository checks.
@@ -131,7 +155,7 @@ that bridge is not a hosted PASS. PR #109 is being reconstructed against this
 main without rewriting history. Its A0X Gate B hardening remains anchored at
 implementation commit `74d6bc048e656f3ced2d4bc6db4b0492dfd16359` and
 generated binding commit `50cf959e7a9b50d68ee58a11ac063e6681761abe`.
-The current A0/A0-R1 freeze SHA-256 values are
+The historical A0/A0-R1 freeze SHA-256 values in that package are
 `7b4920328414ae93eda793b00770ca1dae080656bf62600b233e8c1afd6448ff` and
 `9713376406522581cec9c32cc71f0e4c215066e47fe875e4c332ee49ff8b00e1`.
 

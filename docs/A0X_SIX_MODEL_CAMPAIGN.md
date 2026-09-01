@@ -18,6 +18,35 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
+## Current Hosted Gate A migration checkpoint
+
+Tasks 1–9 of
+`docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md` are
+locally complete through provider separation, Gate B lifecycle hardening, the
+shared five-file Gate C boundary, and the explicit stale-freeze `NO-GO`. Task
+10 records a documentation/implementation anchor and performs the one
+controlled, target-free regeneration. The resulting dossiers retain that
+immutable `implementation_source_head`; a later packaging or merge commit must
+not rewrite it. Earlier implementation commits, freeze hashes, PR #109 wording,
+and CCP Gate A receipts are **Historical evidence**; none qualifies this
+branch.
+
+Hosted Gate A has exactly seven target-free lanes: `repository-python311`,
+`schema-cross-validation-python311`, `repository-python312`,
+`schema-cross-validation-python312`, `a0x-no-model`, `a0x-synthetic`, and
+`documentation-audit`. It binds four hosted inputs (manifest, attestation
+bundle, trusted root, and transport) before Gate B may create the fifth
+verification receipt. The respective caps are 32 KiB, 1 MiB, 2 MiB, 16 KiB,
+and 32 KiB. Hosted qualification is one-run/no rerun; a local CCP Gate A
+fallback is prohibited. CCP Gate C remains separately required for local
+execution and never shares a producer identity with Hosted Gate A.
+
+External publication, capture, the first real hosted run as acceptance, Gate B,
+and Gate C each require a new separate authorization. Gate B/C, model,
+tokenizer, target, and scientific execution remain unauthorized; status is
+`sealed_gate_pending`. See the [Hosted Gate A operator runbook](A0X_HOSTED_GATE_A_OPERATOR_RUNBOOK.md)
+for refusal, retention, trusted-root revocation, governance, and restart limits.
+
 ## Frozen scientific legs
 
 | Leg | Inherited experiment | Frozen endpoint | Public selection source | Dense-output cap |
@@ -269,7 +298,7 @@ hardening does not change the bytes or status of any already prepared bundle.
 Because it changes frozen implementation inputs, it requires a new exact-head
 Gate A qualification before it can govern a future material attempt.
 
-The current hosted-integration implementation anchor is
+The historical hosted-integration implementation anchor was
 `74d6bc048e656f3ced2d4bc6db4b0492dfd16359`. Public `main` is now
 `d2a475f58db668a2ce0a4ec48082189422b19eab`, tree
 `4d2b1221dd63a89d6c6c4433061a7d8ed130b76e`, after PR #110 installed the

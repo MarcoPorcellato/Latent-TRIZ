@@ -388,6 +388,7 @@ class A0XPreflightTests(A0XTempTestCase):
             "contract_version": "a0x-material-execution-contract-v2",
             "repository": "MarcoPorcellato/Latent-TRIZ",
             "ccp": ccp,
+            "gate_a": json.loads((ROOT / "experiments/a0x-six-model/material-execution-contract.json").read_text())["gate_a"],
             "offline": {"network": False, "generation": False, "local_cpu_float32": True},
             "max_run_count": 1,
             "stop_boundaries": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"],

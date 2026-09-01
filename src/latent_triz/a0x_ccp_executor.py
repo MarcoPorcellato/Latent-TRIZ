@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     PairBinding,
@@ -38,6 +40,7 @@ from .a0x_material_contract import (
     INTERNAL_BUDGET_SECONDS,
     OUTER_TIMEOUT_SECONDS,
     derive_runtime_paths,
+    validate_gate_a_evidence,
     validate_guard_launch_pair_binding,
     validate_qualification_evidence,
 )
@@ -57,10 +60,51 @@ _CAPTURE_LIMIT_BYTES = 65_536
 _SUPERVISION_TIMEOUT_SECONDS = OUTER_TIMEOUT_SECONDS + CLEANUP_MARGIN_SECONDS
 _PREFLIGHT_TIMEOUT_SECONDS = 30
 _PREFLIGHT_CAPTURE_LIMIT_BYTES = 65_536
+_GATE_A_FILE_ORDER = (
+    "manifest",
+    "attestation_bundle",
+    "trusted_root",
+    "transport",
+    "verification_receipt",
+)
 
 
 class A0XCcpExecutorError(RuntimeError):
     """The fixed material launcher rejected its execution boundary."""
+
+
+def rehash_gate_a_evidence(
+    *, repository_root: Path, evidence: Mapping[str, Any], source_head: str,
+) -> dict[str, Path]:
+    """Rehash the five current Gate-A files without provenance interpretation.
+
+    This is deliberately a pure local file boundary: it neither invokes GitHub
+    tooling nor compares the hosted verifier with the independent CCP producer.
+    Each caller invokes it at its own material boundary, so a second call closes
+    the interval between an earlier binding and a later side effect.
+    """
+    try:
+        parsed = validate_gate_a_evidence(evidence)
+    except A0XContractError as error:
+        raise A0XCcpExecutorError("Gate A evidence is invalid") from error
+    if parsed["source_head"] != source_head:
+        raise A0XCcpExecutorError("Gate A evidence source HEAD differs from authorization")
+    bindings: dict[str, Mapping[str, Any]] = dict(parsed["hosted_inputs"])
+    bindings["verification_receipt"] = parsed["verification_receipt"]
+    if tuple(sorted(bindings)) != tuple(sorted(_GATE_A_FILE_ORDER)):
+        raise A0XCcpExecutorError("Gate A evidence file set is invalid")
+    files: dict[str, Path] = {}
+    for role in _GATE_A_FILE_ORDER:
+        binding = bindings[role]
+        path = _unique_repository_file(repository_root, binding.get("path"), f"Gate A {role}")
+        try:
+            raw = path.read_bytes()
+        except OSError as error:
+            raise A0XCcpExecutorError(f"Gate A {role} bytes are unavailable") from error
+        if _sha256_bytes(raw) != binding.get("sha256"):
+            raise A0XCcpExecutorError(f"Gate A {role} raw SHA-256 differs")
+        files[role] = path
+    return files
 
 
 @dataclass(frozen=True)
@@ -227,8 +271,9 @@ def launch_fixed_dossier(
         implementation_source_head=implementation_source_head,
         root=root,
     )
+    authorization_profile = _authorization_profile(authorization)
     authorization_commitment = canonical_commitment(
-        authorization, EXECUTION_AUTHORIZATION_PROFILE,
+        authorization, authorization_profile,
     ).as_mapping()
     material_contract_path = _repository_file(root, "experiments/a0x-six-model/material-execution-contract.json")
     material_contract_raw = material_contract_path.read_bytes()
@@ -254,14 +299,7 @@ def launch_fixed_dossier(
     _validate_file_hash(child_path, launch.child_script_sha256, "child script")
     _validate_file_hash(ccp_path, launch.ccp_sha256, "CCP executable")
     _validate_file_hash(python_path, launch.python_sha256, "Python executable")
-    qualification_path = expected_paths.qualification_receipt_path
-    if qualification_path is None:  # pragma: no cover - a checked source head always derives it
-        raise A0XCcpExecutorError("local qualification receipt path is unavailable")
-    _validate_local_qualification_receipt(
-        _repository_file(root, qualification_path),
-        evidence=_mapping(authorization, "qualification_evidence", "execution authorization"),
-        source_head=source_head,
-    )
+    _rehash_gate_a_at_boundary(root, authorization, source_head)
     if guard_preflight_producer is None:
         raise A0XCcpExecutorError("fresh guard preflight producer is required before a material claim")
     _validate_file_hash(ccp_path, launch.ccp_sha256, "CCP executable")
@@ -281,6 +319,9 @@ def launch_fixed_dossier(
         material_contract_path=material_contract_path,
         material_contract_raw=material_contract_raw,
     )
+    # The guard preflight is an untrusted time interval.  Reopen the current
+    # Gate-A byte boundary before reserving the one-shot claim.
+    _rehash_gate_a_at_boundary(root, authorization, source_head)
     if source_head_probe() != source_head:
         raise A0XCcpExecutorError("repository source HEAD drifted before attempt claim")
 
@@ -307,7 +348,7 @@ def launch_fixed_dossier(
         source_head=source_head, pair=pair, dossier=relative_dossier,
         authorization_raw=authorization_raw, launch=launch, claim_path=expected_paths.claim_path,
         authorization_commitment=authorization_commitment,
-        qualification_evidence=authorization["qualification_evidence"], argv=argv,
+        gate_a_evidence=_authorization_gate_a_evidence(authorization), argv=argv,
         guard_preflight_path=guard_preflight_path, guard_preflight_raw_sha256=guard_preflight_raw_sha256,
     )
     pre_run_raw_sha256 = _sha256_bytes(_canonical_json(pre_run))
@@ -321,6 +362,7 @@ def launch_fixed_dossier(
         _validate_file_hash(child_path, launch.child_script_sha256, "child script")
         _validate_file_hash(ccp_path, launch.ccp_sha256, "CCP executable")
         _validate_file_hash(python_path, launch.python_sha256, "Python executable")
+        _rehash_gate_a_at_boundary(root, authorization, source_head)
         if source_head_probe() != source_head:
             raise A0XCcpExecutorError("repository source HEAD drifted after attempt claim")
         _assert_bound_authorization_and_contract(
@@ -382,7 +424,7 @@ def _validate_authorization(
     source_head: str, implementation_source_head: str, root: Path,
 ) -> A0XGuardLaunch:
     try:
-        canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE)
+        canonical_commitment(authorization, _authorization_profile(authorization))
         auth_pair = PairBinding.from_mapping(_mapping(authorization, "pair_binding", "execution authorization"))
     except (A0XContractError, ValueError, TypeError) as error:
         raise A0XCcpExecutorError("execution authorization is not schema-valid") from error
@@ -430,20 +472,65 @@ def _validate_authorization(
     ccp = authorization.get("ccp")
     if not isinstance(ccp, Mapping) or ccp.get("sha256") != launch.ccp_sha256:
         raise A0XCcpExecutorError("guard launch CCP identity differs from authorization")
-    try:
-        qualification = validate_qualification_evidence(_mapping(authorization, "qualification_evidence", "execution authorization"))
-    except A0XContractError as error:
-        raise A0XCcpExecutorError("qualification evidence is invalid") from error
-    qualification_ccp = qualification["ccp"]
-    if (
-        qualification["qualified_source_head"] != source_head
-        or qualification_ccp["binary_sha256"] != ccp.get("sha256")
-        or qualification_ccp["source_commit"] != ccp.get("source_commit")
-        or qualification_ccp["qualified_source_tree"] != ccp.get("qualified_source_tree")
-        or qualification_ccp["version"] != ccp.get("version")
-    ):
-        raise A0XCcpExecutorError("qualification evidence differs from execution authorization")
+    if _authorization_profile(authorization) == CURRENT_EXECUTION_AUTHORIZATION_PROFILE:
+        try:
+            evidence = validate_gate_a_evidence(
+                _mapping(authorization, "gate_a_evidence", "execution authorization"),
+            )
+        except A0XContractError as error:
+            raise A0XCcpExecutorError("Gate A evidence is invalid") from error
+        if evidence["source_head"] != source_head:
+            raise A0XCcpExecutorError("Gate A evidence source head differs from execution authorization")
+    else:
+        try:
+            qualification = validate_qualification_evidence(_mapping(authorization, "qualification_evidence", "execution authorization"))
+        except A0XContractError as error:
+            raise A0XCcpExecutorError("qualification evidence is invalid") from error
+        qualification_ccp = qualification["ccp"]
+        if (
+            qualification["qualified_source_head"] != source_head
+            or qualification_ccp["binary_sha256"] != ccp.get("sha256")
+            or qualification_ccp["source_commit"] != ccp.get("source_commit")
+            or qualification_ccp["qualified_source_tree"] != ccp.get("qualified_source_tree")
+            or qualification_ccp["version"] != ccp.get("version")
+        ):
+            raise A0XCcpExecutorError("qualification evidence differs from execution authorization")
     return launch
+
+
+def _authorization_profile(authorization: Mapping[str, Any]) -> str:
+    profile = authorization.get("commitment_profile")
+    if profile not in {EXECUTION_AUTHORIZATION_PROFILE, CURRENT_EXECUTION_AUTHORIZATION_PROFILE}:
+        raise A0XCcpExecutorError("execution authorization profile is unsupported")
+    return profile
+
+
+def _authorization_gate_a_evidence(authorization: Mapping[str, Any]) -> Mapping[str, Any]:
+    if _authorization_profile(authorization) == CURRENT_EXECUTION_AUTHORIZATION_PROFILE:
+        return _mapping(authorization, "gate_a_evidence", "execution authorization")
+    return _mapping(authorization, "qualification_evidence", "execution authorization")
+
+
+def _rehash_gate_a_at_boundary(root: Path, authorization: Mapping[str, Any], source_head: str) -> None:
+    """Dispatch current five-file rehashing without widening the legacy loader."""
+    if _authorization_profile(authorization) == CURRENT_EXECUTION_AUTHORIZATION_PROFILE:
+        rehash_gate_a_evidence(
+            repository_root=root,
+            evidence=_mapping(authorization, "gate_a_evidence", "execution authorization"),
+            source_head=source_head,
+        )
+        return
+    qualification_path = derive_runtime_paths(
+        PairBinding.from_mapping(_mapping(authorization, "pair_binding", "execution authorization")),
+        source_head=source_head,
+    ).qualification_receipt_path
+    if qualification_path is None:  # pragma: no cover - checked source heads always derive it
+        raise A0XCcpExecutorError("local qualification receipt path is unavailable")
+    _validate_local_qualification_receipt(
+        _repository_file(root, qualification_path),
+        evidence=_mapping(authorization, "qualification_evidence", "execution authorization"),
+        source_head=source_head,
+    )
 
 
 def _validate_runtime_mapping(
@@ -792,12 +879,12 @@ def _terminal_observation(
 
 def _pre_run_observation(
     *, source_head: str, pair: PairBinding, dossier: str, authorization_raw: bytes,
-    launch: A0XGuardLaunch, claim_path: str, authorization_commitment: Mapping[str, Any], qualification_evidence: Any,
+    launch: A0XGuardLaunch, claim_path: str, authorization_commitment: Mapping[str, Any], gate_a_evidence: Any,
     argv: Sequence[str], guard_preflight_path: str, guard_preflight_raw_sha256: str,
 ) -> dict[str, Any]:
     """Record the private process binding before the OS can start a child."""
-    if not isinstance(qualification_evidence, Mapping):
-        raise A0XCcpExecutorError("qualification evidence is unavailable for pre-run observation")
+    if not isinstance(gate_a_evidence, Mapping):
+        raise A0XCcpExecutorError("Gate A evidence is unavailable for pre-run observation")
     return {
         "artifact_class": "a0x-guard-pre-run-observation",
         "source_head": source_head,
@@ -806,8 +893,15 @@ def _pre_run_observation(
         "claim_path": claim_path,
         "authorization_raw_sha256": _sha256_bytes(authorization_raw),
         "authorization_commitment": dict(authorization_commitment),
-        "qualification_receipt_id": qualification_evidence.get("qualification_receipt_id"),
-        "qualification_receipt_raw_sha256": qualification_evidence.get("qualification_receipt_raw_sha256"),
+        "gate_a_verification_receipt_raw_sha256": (
+            gate_a_evidence.get("verification_receipt", {}).get("sha256")
+            if isinstance(gate_a_evidence.get("verification_receipt"), Mapping)
+            else gate_a_evidence.get("qualification_receipt_raw_sha256")
+        ),
+        # Historical observations retain their legacy fields; current Gate A
+        # observations leave them absent rather than manufacturing CCP meaning.
+        "qualification_receipt_id": gate_a_evidence.get("qualification_receipt_id"),
+        "qualification_receipt_raw_sha256": gate_a_evidence.get("qualification_receipt_raw_sha256"),
         "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
         "guard_preflight_observation_path": guard_preflight_path,
         "guard_preflight_observation_raw_sha256": guard_preflight_raw_sha256,
@@ -835,7 +929,7 @@ def _assert_bound_authorization_and_contract(
     try:
         observed_authorization = _strict_object(observed_authorization_raw, "execution authorization")
         observed_commitment = canonical_commitment(
-            observed_authorization, EXECUTION_AUTHORIZATION_PROFILE,
+            observed_authorization, _authorization_profile(observed_authorization),
         ).as_mapping()
     except (A0XCcpExecutorError, A0XContractError, TypeError, ValueError) as error:
         raise A0XCcpExecutorError("execution authorization commitment is invalid") from error
@@ -1047,6 +1141,31 @@ def _repository_file(root: Path, relative: str) -> Path:
     return resolved
 
 
+def _unique_repository_file(root: Path, relative: Any, label: str) -> Path:
+    """Return one regular, non-aliased repository file without following links."""
+    path = root / _relative_runtime_path(relative)
+    current = path
+    while current != root:
+        try:
+            status = current.lstat()
+        except OSError as error:
+            raise A0XCcpExecutorError(f"{label} is unavailable") from error
+        if stat.S_ISLNK(status.st_mode):
+            raise A0XCcpExecutorError(f"{label} uses a symlink")
+        current = current.parent
+    try:
+        status = path.lstat()
+    except OSError as error:
+        raise A0XCcpExecutorError(f"{label} is unavailable") from error
+    if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+        raise A0XCcpExecutorError(f"{label} is not an independent regular file")
+    try:
+        path.resolve(strict=True).relative_to(root.resolve(strict=True))
+    except (OSError, ValueError) as error:
+        raise A0XCcpExecutorError(f"{label} escapes the repository") from error
+    return path
+
+
 def _repository_file_for_write(root: Path, relative: str) -> Path:
     path = root / _relative_runtime_path(relative)
     current = path.parent
@@ -1093,5 +1212,6 @@ def _sha256_bytes(value: bytes) -> str:
 __all__ = [
     "A0XCcpExecutorError", "GuardPreflightOutput", "GuardPreflightProducer",
     "ProcessExecutor", "ProcessResult", "SubprocessGuardPreflightProducer",
-    "launch_fixed_dossier", "qualification_evidence_from_receipt", "runtime_mapping_path",
+    "launch_fixed_dossier", "qualification_evidence_from_receipt", "rehash_gate_a_evidence",
+    "runtime_mapping_path",
 ]

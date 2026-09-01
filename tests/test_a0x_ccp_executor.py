@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
@@ -19,6 +20,7 @@ from latent_triz.a0x_ccp_executor import (
 )
 from latent_triz.a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
+    CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
     Leg,
     PairBinding,
@@ -212,7 +214,7 @@ class A0XCcpExecutorTests(unittest.TestCase):
         self.assertTrue((root / runtime.claim_path).is_file())
         authorization_raw = (root / bundle.receipt["authorization_path"]).read_bytes()
         authorization_commitment = canonical_commitment(
-            json.loads(authorization_raw), EXECUTION_AUTHORIZATION_PROFILE,
+            json.loads(authorization_raw), CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
         ).as_mapping()
         claim = json.loads((root / runtime.claim_path).read_text())
         pre_run = json.loads((root / runtime.observation_directory / "pre-run-observation.json").read_text())
@@ -538,6 +540,120 @@ class A0XCcpExecutorTests(unittest.TestCase):
                     self._launch(root, fake)
                 self.assertFalse((root / runtime.claim_path).exists())
                 self.assertEqual([], fake.calls)
+
+    def test_current_gate_a_five_file_matrix_refuses_before_claim_or_guard(self) -> None:
+        """Every current hosted input is an independent local Gate-C boundary."""
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        for role in ("manifest", "attestation_bundle", "trusted_root", "transport", "verification_receipt"):
+            for mutation in ("missing", "mutated", "symlink", "hardlink", "nonregular"):
+                with self.subTest(role=role, mutation=mutation):
+                    bundle = prepare_constructible_runtime_bundle()
+                    self.addCleanup(bundle.close)
+                    root = bundle.root
+                    authorization = json.loads((root / bundle.receipt["authorization_path"]).read_text())
+                    evidence = authorization["gate_a_evidence"]
+                    binding = evidence["verification_receipt"] if role == "verification_receipt" else evidence["hosted_inputs"][role]
+                    path = root / binding["path"]
+                    if mutation == "missing":
+                        path.unlink()
+                    elif mutation == "mutated":
+                        path.write_bytes(b"mutated")
+                    elif mutation == "symlink":
+                        target = root / "untrusted-gate-a-bytes"
+                        target.write_bytes(path.read_bytes())
+                        path.unlink()
+                        path.symlink_to(target)
+                    elif mutation == "hardlink":
+                        alias = root / "untrusted-gate-a-alias"
+                        os.link(path, alias)
+                    else:
+                        path.unlink()
+                        path.mkdir()
+                    fake = _FakeProcess(ProcessResult(
+                        returncode=0, stdout_sha256=_sha(b""), stdout_bytes=0,
+                        stderr_sha256=_sha(b""), stderr_bytes=0,
+                    ))
+                    pair = PairBinding.from_mapping(bundle.receipt["pair_binding"])
+                    runtime = derive_runtime_paths(pair, source_head=bundle.receipt["source_head"])
+                    ccp_sha256 = json.loads((root / "experiments/a0x-six-model/material-execution-contract.json").read_text())["ccp"]["sha256"]
+                    actual_sha256_file = __import__("latent_triz.a0x_ccp_executor", fromlist=["sha256_file"]).sha256_file
+                    with (
+                        patch("latent_triz.a0x_ccp_executor.planned_material_dossiers", return_value={("a0", "gpt2"): bundle.request.fixed_dossier}),
+                        patch("latent_triz.a0x_ccp_executor.sha256_file", side_effect=lambda candidate: ccp_sha256 if Path(candidate).resolve() == bundle.request.ccp_executable.resolve() else actual_sha256_file(candidate)),
+                        self.assertRaises(A0XCcpExecutorError),
+                    ):
+                        launch_fixed_dossier(
+                            repository_root=root, fixed_dossier=bundle.request.fixed_dossier,
+                            source_head_probe=lambda: "a" * 40, process_executor=fake,
+                            guard_preflight_producer=_FakeGuardPreflight(),
+                        )
+                    self.assertFalse((root / runtime.claim_path).exists())
+                    self.assertEqual([], fake.calls)
+
+    def test_current_gate_a_replacement_during_preflight_refuses_before_claim(self) -> None:
+        """The preflight-to-claim race is closed by a second five-file rehash."""
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        for role in ("manifest", "attestation_bundle", "trusted_root", "transport", "verification_receipt"):
+            with self.subTest(role=role):
+                bundle = prepare_constructible_runtime_bundle()
+                self.addCleanup(bundle.close)
+                root = bundle.root
+                authorization = json.loads((root / bundle.receipt["authorization_path"]).read_text())
+                evidence = authorization["gate_a_evidence"]
+                binding = evidence["verification_receipt"] if role == "verification_receipt" else evidence["hosted_inputs"][role]
+                path = root / binding["path"]
+
+                class _MutatingPreflight(_FakeGuardPreflight):
+                    def produce(self, *, ccp_path: Path, repository_root: Path):
+                        replacement = path.with_name(path.name + ".replacement")
+                        replacement.write_bytes(b"post-preflight replacement")
+                        os.replace(replacement, path)
+                        return super().produce(ccp_path=ccp_path, repository_root=repository_root)
+
+                fake = _FakeProcess(ProcessResult(
+                    returncode=0, stdout_sha256=_sha(b""), stdout_bytes=0,
+                    stderr_sha256=_sha(b""), stderr_bytes=0,
+                ))
+                pair = PairBinding.from_mapping(bundle.receipt["pair_binding"])
+                runtime = derive_runtime_paths(pair, source_head=bundle.receipt["source_head"])
+                contract = json.loads((root / "experiments/a0x-six-model/material-execution-contract.json").read_text())
+                actual_sha256_file = __import__("latent_triz.a0x_ccp_executor", fromlist=["sha256_file"]).sha256_file
+                with (
+                    patch("latent_triz.a0x_ccp_executor.planned_material_dossiers", return_value={("a0", "gpt2"): bundle.request.fixed_dossier}),
+                    patch("latent_triz.a0x_ccp_executor.sha256_file", side_effect=lambda candidate: contract["ccp"]["sha256"] if Path(candidate).resolve() == bundle.request.ccp_executable.resolve() else actual_sha256_file(candidate)),
+                    self.assertRaisesRegex(A0XCcpExecutorError, "raw SHA-256"),
+                ):
+                    launch_fixed_dossier(
+                        repository_root=root, fixed_dossier=bundle.request.fixed_dossier,
+                        source_head_probe=lambda: "a" * 40, process_executor=fake,
+                        guard_preflight_producer=_MutatingPreflight(),
+                    )
+                self.assertFalse((root / runtime.claim_path).exists())
+                self.assertEqual([], fake.calls)
+
+    def test_current_hosted_verifier_and_ccp_producer_bind_independently(self) -> None:
+        """Hosted Gate A identity is not reinterpreted as the CCP identity."""
+        from latent_triz.a0x_ccp_executor import rehash_gate_a_evidence
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        bundle = prepare_constructible_runtime_bundle()
+        self.addCleanup(bundle.close)
+        authorization = json.loads((bundle.root / bundle.receipt["authorization_path"]).read_text())
+        hosted = authorization["gate_a_evidence"]["verifier"]
+        ccp = authorization["ccp"]
+        self.assertEqual("github_cli_verifier", hosted["role"])
+        self.assertEqual("commit-ci-preflight", ccp["executable_name"])
+        self.assertNotEqual(hosted["sha256"], ccp["sha256"])
+        self.assertEqual(
+            {"manifest", "attestation_bundle", "trusted_root", "transport", "verification_receipt"},
+            set(rehash_gate_a_evidence(
+                repository_root=bundle.root,
+                evidence=authorization["gate_a_evidence"],
+                source_head=authorization["source_head"],
+            )),
+        )
 
     def test_runtime_role_mapping_is_distinct_for_all_twelve_pair_source_run_combinations(self) -> None:
         models = ("smollm2_360m", "qwen3_0_6b_base", "gpt2", "smollm2_135m", "gpt_neo_125m", "qwen2_5_0_5b")

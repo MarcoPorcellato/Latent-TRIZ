@@ -1,0 +1,31 @@
+[
+  {
+    "attestation": {"bundle": {}, "bundle_url": "offline", "initiator": "github-actions"},
+    "verificationResult": {
+      "mediaType": "application/vnd.dev.sigstore.verificationresult+json;version=0.1",
+      "verifiedIdentity": {
+        "subjectAlternativeName": {"subjectAlternativeName": "", "regexp": "^https://github\\.com/MarcoPorcellato/Latent-TRIZ/\\.github/workflows/a0x-hosted-gate-a\\.yml"},
+        "issuer": {"issuer": "", "regexp": ".*"},
+        "runnerEnvironment": "github-hosted"
+      },
+      "statement": {
+        "_type": "https://in-toto.io/Statement/v1",
+        "subject": [{"name": "hosted-gate-a-evidence.json", "digest": {"sha256": "1111111111111111111111111111111111111111111111111111111111111111"}}],
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "predicate": {
+          "buildDefinition": {
+            "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+            "externalParameters": {"workflow": {"ref": "refs/heads/main", "repository": "https://github.com/MarcoPorcellato/Latent-TRIZ", "path": ".github/workflows/a0x-hosted-gate-a.yml"}},
+            "internalParameters": {"github": {"event_name": "push", "runner_environment": "github-hosted", "repository_id": "1001", "repository_owner_id": "1000"}},
+            "resolvedDependencies": [{"uri": "git+https://github.com/MarcoPorcellato/Latent-TRIZ@refs/heads/main", "digest": {"gitCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]
+          },
+          "runDetails": {"builder": {"id": "https://github.com/MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml@refs/heads/main"}, "metadata": {"invocationId": "https://github.com/MarcoPorcellato/Latent-TRIZ/actions/runs/2002/attempts/1"}}
+        }
+      },
+      "signature": {"certificate": {
+        "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev", "subjectAlternativeName": "https://github.com/MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml@refs/heads/main", "issuer": "https://token.actions.githubusercontent.com", "buildSignerURI": "https://github.com/MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml@refs/heads/main", "buildSignerDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "runnerEnvironment": "github-hosted", "sourceRepositoryURI": "https://github.com/MarcoPorcellato/Latent-TRIZ", "sourceRepositoryDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sourceRepositoryRef": "refs/heads/main", "buildConfigURI": "https://github.com/MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml@refs/heads/main", "buildConfigDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "buildTrigger": "push"
+      }},
+      "verifiedTimestamps": [{"type": "Tlog", "uri": "https://rekor.sigstore.dev", "timestamp": "2026-08-31T12:00:00Z"}]
+    }
+  }
+]

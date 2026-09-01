@@ -1,0 +1,182 @@
+{
+  "artifact_class": "a0x-hosted-gate-a-local-candidate-dossier-v1",
+  "status": "local_target_free_qualification_complete",
+  "created_on": "2026-09-01",
+  "repository": "MarcoPorcellato/Latent-TRIZ",
+  "scope": "Tasks 1-11 local deterministic qualification only",
+  "candidate_content_anchor": {
+    "head": "6dde04f594c1b8cc8413b6fc2530025eaa5cb6d8",
+    "tree": "ba9e8d843725337b7ff71dbd7e7f340e5f2cea1b",
+    "implementation_source_head": "67bd73de22fcdede7bea85abad50e3c122d8aa23",
+    "implementation_source_tree": "db355f3414052375dbce2a8b2376cb36d4a10469"
+  },
+  "self_reference_rule": "This dossier records the frozen pre-dossier content anchor. A later authorization must separately bind the final commit and tree containing this dossier with this dossier raw SHA-256; this document never predicts its own commit identity.",
+  "canonical_inputs": {
+    "spec": {
+      "path": "docs/superpowers/specs/2026-08-31-a0x-hosted-gate-a-design.md",
+      "sha256": "4a1a8bff1bc59f8e72cc4996087fd69b59956360400e0586815556fb8a3d6881"
+    },
+    "plan": {
+      "path": "docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md",
+      "sha256": "300d29e2b7f3fe9f44d1f2c74deada77b68e59f2b88671121bac591c8694190a"
+    },
+    "workflow": {
+      "path": ".github/workflows/a0x-hosted-gate-a.yml",
+      "sha256": "5f74199107481c73adc2fa1efbd462c2a9d8b1d5009164892a2917d02ae595e4"
+    },
+    "action_manifest": {
+      "path": ".github/a0x-hosted-gate-a-actions.json",
+      "sha256": "f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd"
+    },
+    "lane_manifest": {
+      "path": ".github/a0x-hosted-gate-a-lanes.json",
+      "sha256": "06a3c748ae9491ed4cfbf53f5f8eecdd23ab4ac2a9f7ca465b57874b838aa236"
+    },
+    "requirements_input": {
+      "path": "requirements-schema.in",
+      "sha256": "37caf5bff910fbd7dda44433b92df25fbfd989aea829e9bc4ce37e70df1f1782"
+    },
+    "requirements_lock": {
+      "path": "requirements-schema.lock",
+      "sha256": "0bbafebbe4fdb6028f5e8565eae397d18d6ace90e7e5e2c5b9472aa924162be7"
+    },
+    "verifier_policy_schema": {
+      "path": "schemas/a0x-hosted-gate-a-verifier-policy.schema.json",
+      "sha256": "dc746e9c1985ac17dc918c7837891510b2c18a6c81e06aaeb8de2660bb0999d1"
+    },
+    "verification_result_schema": {
+      "path": "schemas/a0x-gh-2.97.0-verification-result.schema.json",
+      "sha256": "ae6b10ae31d9667a6a9c76ee219384d3c9bcb640d2098b006adc4be60be6f0d2"
+    },
+    "offline_verifier": {
+      "path": "src/latent_triz/a0x_hosted_verifier.py",
+      "sha256": "b8bc7e8492acca0f846021f3b0fc8de1cdfc6aa0a0655f75aa5030cc1c96397c",
+      "github_cli_version": "2.97.0",
+      "github_cli_sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+    },
+    "verifier_policy_fixture": {
+      "path": "tests/fixtures/a0x/hosted-gate-a/positive/verifier-policy.json",
+      "sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4"
+    },
+    "material_execution_contract": {
+      "path": "experiments/a0x-six-model/material-execution-contract.json",
+      "sha256": "9d743d1913664290451be62dbd21fa27b7bb6b5285a4cdea75e43c576cac2156"
+    },
+    "offline_verifier_wrapper": {
+      "path": "scripts/a0x_verify_hosted_gate_a.py",
+      "sha256": "4d3d764a2224c3777aeb3ea5875aa03d151fa15742af93d1cee6058b92b9a49b"
+    }
+  },
+  "review_corrections": {
+    "p1": {
+      "fact": "The hosted verifier-policy schema was omitted from both implementation inventories; it is now a frozen trust input.",
+      "implementation_commit": "130bb731edce198d7ef19801a0d0ad6c529c683d",
+      "regeneration_commit": "9ed865d741ceecb7294737d3ed26412eeb88f3eb"
+    },
+    "p2": {
+      "fact": "Hosted Gate A lanes now run hermetically from the pinned schema environment; workflow and lane manifest bytes were regenerated and frozen.",
+      "implementation_commit": "13b80ed371cb2803a58f5f78f2d9fdeb6e3b7031",
+      "regeneration_commit": "9ed865d741ceecb7294737d3ed26412eeb88f3eb"
+    },
+    "hosted_portability": {
+      "fact": "The public verifier still enforces the exact GitHub CLI pin, while portable temporary fixtures exercise only private post-validation orchestration.",
+      "implementation_commit": "67bd73de22fcdede7bea85abad50e3c122d8aa23",
+      "regeneration_commit": "6dde04f594c1b8cc8413b6fc2530025eaa5cb6d8",
+      "github_failure_run": "33459576482",
+      "independent_reviews": ["luna_approved", "terra_approved"]
+    },
+    "sol_semantic_receipt_ruling": {
+      "ruling_class": "no_model_receipt_semantic_binding",
+      "decision": "Applied as a hash-bound local qualification ruling; it does not authorize material or remote work.",
+      "sha256": "aac8acb48cf8fdfda1d406cab21fe797e26bfb565013f8fd3db50ddf416171a3"
+    }
+  },
+  "regenerated_package": {
+    "count": 17,
+    "processed": 17,
+    "changed": 16,
+    "unchanged": 1,
+    "regular_non_symlink_link_count_one": true,
+    "second_regeneration_patch_sha256": "793e99b4c0a251d5e8626b831f915a4f6698685d1fa83643c1f9d958ccfdf745",
+    "artifacts": {
+      "a0_implementation": "623f5ae7d6389472f85bcac5bcfa7b6e3d37efec1479638d54c97e9885028c2c",
+      "r1_implementation": "4b935473b4d06897abbdbe39ff6ee13d54803ea097d1e35950a2f146dde03ec7",
+      "a0_freeze": "70d0f4ba97b775afdf9fe1dcfccdbb2def84f0f958f8c443a2a375b5c0128972",
+      "r1_freeze": "74098994548e0c68297c2f4b762df1a9986a53ab0ced90922f45af382ad1d788",
+      "a0_gpt2_dossier": "69c0b0167ce5441ad806c3267c9dc70e8634d33be1710dee780beb2c1b4cca6b",
+      "a0_gpt_neo_dossier": "d02e91486c8791e3eea51fb68683433b8df6d348599f7e8f1095fb4895519ff0",
+      "a0_qwen2_5_dossier": "9c14e665ab35df00d7b858003820aa13f98afa366626378640f4fa4b5375250b",
+      "a0_qwen3_dossier": "b274feb0c83d7574d0b87ec0e41ff941a4b007b0430d3461ca765ee3c104c3e5",
+      "a0_smollm2_135m_dossier": "5044cbd31e498039095cc94c87dca5610c5b588c72a07a87663d25b6b2bfeafe",
+      "a0_smollm2_360m_dossier": "5c223446d0653b0e8290b968035c983f7e0b1e215ffad4c8ad8fff494d58159d",
+      "r1_gpt2_dossier": "ea7069f9b29ec4abe649243e661dc0a0587023a177016a5d3dad766c74f8852a",
+      "r1_gpt_neo_dossier": "319fc58e1045631d0f5824f241fe01b72f70c460c6bfc2db33ec29c9860bb65b",
+      "r1_qwen2_5_dossier": "3927962b84d90094739bc8e57dc70b604ccfd72a10e041fe9c005ae07445fe53",
+      "r1_qwen3_dossier": "137709733dd59aa3325747ac66e3fd602d4e5303fcb984440582c2518b139b20",
+      "r1_smollm2_135m_dossier": "be2dd1d37bd7be27cdf797e58501f46ea293cd300e56b7e28f0fe45dffeaf9b1",
+      "r1_smollm2_360m_dossier": "e5bc5b57d818301cd51417aeb1cb577c26d77cfef38c62ffdca2a8740460384f",
+      "no_model_receipt": "d5e8c044110623a8f54bd10e4ba37f7d960c84a86f272a67b06d5975e91d3beb"
+    }
+  },
+  "local_ladder": {
+    "hosted_unit_tests": {"tests": 25, "skipped": 0, "status": "pass"},
+    "hosted_gate_a_target": {"tests": 191, "skipped": 1, "status": "pass"},
+    "frozen_no_model_target": {"tests": 11, "skipped": 0, "status": "pass"},
+    "synthetic_target": {"tests": 344, "skipped": 1, "status": "pass"},
+    "schema_cross_validation": {"tracked_pairs": 155, "mutations_rejected": 19, "status": "pass", "python_override": "LAB01_PYTHON=python3"},
+    "documentation_audit": {"status": "pass"},
+    "repository_check": {"tests": 1176, "skipped": 12, "status": "pass"},
+    "diff_check": {"status": "pass"}
+  },
+  "static_material_boundary_audit": {
+    "scope": "Hosted workflow, manifest builder, offline verifier wrapper and module, Gate B bundle/preflight, and their focused tests",
+    "prohibited_runtime_imports": [],
+    "executed_material_or_network_operations": [],
+    "verified_inert_seams": [
+      "Synthetic spies show zero model, tokenizer, sealed-target, CCP, Docker, and subprocess seams during Gate B preparation tests.",
+      "Frozen and synthetic contract checks report zero model loads, tokenizer constructions, sealed-target reads, CCP invocations, and remote mutations.",
+      "The only subprocess-capable current wrapper is the non-executed offline Gate B adapter; it accepts a verifier-provided shell-free argv and uses a scrubbed environment."
+    ]
+  },
+  "candidate_state_before_dossier": {
+    "git_status_porcelain": "",
+    "tracked_worktree_clean": true,
+    "preserved_untracked_review": false
+  },
+  "review_state": {
+    "task_10_independent_review": "approved",
+    "task_11_independent_reviews": "approved",
+    "architecture_security_review": {
+      "status": "approved",
+      "path": "docs/qualification/a0x-hosted-gate-a-architecture-security-review-3274e23.md",
+      "sha256": "bb8d291a4bb786097ba301a4ccf4aa444414326ff006b3787dcc7ccf2e05c514"
+    },
+    "scientific_material_boundary_review": {
+      "status": "approved",
+      "path": "docs/qualification/a0x-hosted-gate-a-scientific-boundary-review-3274e23.md",
+      "sha256": "0dd2154963f5be12340ee3d34d7b458c287fb1cb0bdd0ddf6e8b6fd7c84e795b"
+    },
+    "historical_scientific_review": {
+      "status": "non_authoritative",
+      "reviewed_candidate": "157b4b1",
+      "path": "docs/qualification/a0x-hosted-gate-a-scientific-boundary-review-157b4b1-historical.md",
+      "sha256": "943657c674965750082c83794b84b360b8a0cf8906f8e15cb0984be9a284c27f"
+    },
+    "sol_architecture_security_review_before_task_12": "required"
+  },
+  "stop_boundary": {
+    "task_12_requires": [
+      "fresh exact-head and ruleset review",
+      "separate Sol review",
+      "separate operator authorization"
+    ],
+    "forbidden_without_new_authorization": [
+      "network or GitHub access",
+      "push, pull request, merge, publication, or hosted evidence capture",
+      "Gate B runtime materialization",
+      "Gate C CCP heavy execution or Docker",
+      "model load or tokenizer construction",
+      "sealed-target read, generation, inference, scoring, or scientific claim"
+    ]
+  }
+}

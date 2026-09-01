@@ -84,7 +84,7 @@ _LEG_SOURCES = {
     },
 }
 
-_IMPLEMENTATION_PATHS = (
+_IMPLEMENTATION_PATHS = tuple(sorted({
     "schemas/a0x-authorization-dossier.schema.json",
     "schemas/a0x-ccp-observation.schema.json",
     "schemas/a0x-execution-authorization.schema.json",
@@ -142,7 +142,33 @@ _IMPLEMENTATION_PATHS = (
     "tests/test_a0x_verify.py",
     "tests/test_a0x_wheelhouse.py",
     "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-27adf8d.json",
-)
+    ".github/a0x-hosted-gate-a-actions.json",
+    ".github/a0x-hosted-gate-a-lanes.json",
+    ".github/workflows/a0x-hosted-gate-a.yml",
+    "requirements-schema.in",
+    "requirements-schema.lock",
+    "schemas/a0x-execution-authorization-v3.schema.json",
+    "schemas/a0x-gate-b-authorization.schema.json",
+    "schemas/a0x-gh-2.97.0-verification-result.schema.json",
+    "schemas/a0x-hosted-gate-a-evidence.schema.json",
+    "schemas/a0x-hosted-gate-a-lane-receipt.schema.json",
+    "schemas/a0x-hosted-gate-a-transport.schema.json",
+    "schemas/a0x-hosted-gate-a-verification-receipt.schema.json",
+    "schemas/a0x-hosted-gate-a-verifier-policy.schema.json",
+    "scripts/a0x_hosted_gate_a.py",
+    "scripts/a0x_materialize_no_model_receipt.py",
+    "scripts/a0x_verify_hosted_gate_a.py",
+    "src/latent_triz/a0x_hosted_gate_a.py",
+    "src/latent_triz/a0x_hosted_verifier.py",
+    "tests/test_a0x_hosted_gate_a.py",
+    "tests/test_a0x_hosted_gate_a_workflow.py",
+    "tests/test_a0x_hosted_verifier.py",
+    "tests/fixtures/a0x/hosted-gate-a/positive/gate-b-authorization.json",
+    "tests/fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json",
+    "tests/fixtures/a0x/hosted-gate-a/positive/transport.json",
+    "tests/fixtures/a0x/hosted-gate-a/positive/verification-receipt.json",
+    "tests/fixtures/a0x/hosted-gate-a/positive/verifier-policy.json",
+}))
 
 _DOSSIER_FILENAMES = {
     "smollm2_360m": "smollm2_360m.json",

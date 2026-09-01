@@ -16,6 +16,25 @@ source and exact bytes. These source changes do not alter or retroactively
 upgrade it. Any future use of this hardening requires a new exact-head Gate A
 qualification and a new pair-specific Gate B authorization.
 
+## Hosted Gate A prerequisite (current)
+
+For current A0X dossiers, Gate A is the signed GitHub-hosted provider, not a
+CCP receipt. It has seven target-free lanes: `repository-python311`,
+`schema-cross-validation-python311`, `repository-python312`,
+`schema-cross-validation-python312`, `a0x-no-model`, `a0x-synthetic`, and
+`documentation-audit`. The four hosted inputs are a manifest (32 KiB),
+attestation bundle (1 MiB), trusted root (2 MiB), and transport record (16
+KiB). Gate B creates the fifth verification receipt (32 KiB) only after the
+offline verifier succeeds.
+
+The first real post-merge hosted Gate A run is an acceptance test and has no
+rerun or CCP Gate A fallback. CCP Gate C is retained as a distinct local
+coordinator. Historical CCP receipts remain **Historical evidence** only.
+Capture, publication, Gate B, and Gate C require separate authorization. The
+trusted-root snapshot cannot discover revocations published after that snapshot.
+The [Hosted Gate A operator runbook](A0X_HOSTED_GATE_A_OPERATOR_RUNBOOK.md)
+defines the frozen verifier inputs, refusal codes, retention, and restart rule.
+
 ## Why the process is split
 
 Gate B previously combined four questions too late in the workflow:

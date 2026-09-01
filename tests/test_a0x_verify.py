@@ -158,6 +158,42 @@ class A0XVerifyTests(A0XTempTestCase):
             qualification_receipt_loader=lambda _: self._qualification_receipt(fixture),
         )
 
+    def test_current_gate_a_files_refuse_during_fresh_package_verification(self) -> None:
+        """Current package verification never falls back to a CCP receipt loader."""
+        from latent_triz.a0x_verify import A0XVerificationError, _qualification_evidence
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        for role in ("manifest", "attestation_bundle", "trusted_root", "transport", "verification_receipt"):
+            for mutation in ("missing", "mutated", "symlink", "hardlink", "nonregular"):
+                with self.subTest(role=role, mutation=mutation):
+                    bundle = prepare_constructible_runtime_bundle()
+                    self.addCleanup(bundle.close)
+                    authorization = json.loads((bundle.root / bundle.receipt["authorization_path"]).read_text())
+                    evidence = authorization["gate_a_evidence"]
+                    binding = evidence["verification_receipt"] if role == "verification_receipt" else evidence["hosted_inputs"][role]
+                    path = bundle.root / binding["path"]
+                    if mutation == "missing":
+                        path.unlink()
+                    elif mutation == "mutated":
+                        path.write_bytes(b"mutated")
+                    elif mutation == "symlink":
+                        target = bundle.root / "untrusted-gate-a-verify-bytes"
+                        target.write_bytes(path.read_bytes())
+                        path.unlink()
+                        path.symlink_to(target)
+                    elif mutation == "hardlink":
+                        os.link(path, bundle.root / "untrusted-gate-a-verify-alias")
+                    else:
+                        path.unlink()
+                        path.mkdir()
+                    with self.assertRaises(A0XVerificationError):
+                        _qualification_evidence(
+                            bundle.root,
+                            {"qualification_evidence": evidence},
+                            authorization,
+                            lambda _value: self.fail("legacy loader must not run"),
+                        )
+
     def test_verifies_complete_package_from_external_root_anchor(self) -> None:
         from latent_triz.a0x_report import build_terminal_package
         from latent_triz.a0x_verify import verify_a0x_package

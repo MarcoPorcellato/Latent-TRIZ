@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 
@@ -235,6 +236,52 @@ class A0XProductionAdapterTests(unittest.TestCase):
                 loader=lambda *_args, **_kwargs: load_calls.append(object()),
             )
         self.assertEqual([], load_calls, "model loader must not run after live alias drift")
+
+    def test_current_gate_a_files_refuse_immediately_before_model_loader(self) -> None:
+        """The model boundary repeats all current Gate-A file commitments."""
+        from latent_triz.a0x_production_adapter import (
+            A0XProductionAdapterError,
+            _bind_context,
+            _load_model_after_live_readiness,
+        )
+        from tests.test_a0x_runtime_bundle import prepare_constructible_runtime_bundle
+
+        for role in ("manifest", "attestation_bundle", "trusted_root", "transport", "verification_receipt"):
+            for mutation in ("missing", "mutated", "symlink", "hardlink", "nonregular"):
+                with self.subTest(role=role, mutation=mutation):
+                    bundle = prepare_constructible_runtime_bundle()
+                    self.addCleanup(bundle.close)
+                    descriptor = json.loads((bundle.root / bundle.receipt["descriptor_path"]).read_text())
+                    context = _bind_context(root=bundle.root, descriptor=descriptor)
+                    authorization = json.loads((bundle.root / bundle.receipt["authorization_path"]).read_text())
+                    evidence = authorization["gate_a_evidence"]
+                    binding = evidence["verification_receipt"] if role == "verification_receipt" else evidence["hosted_inputs"][role]
+                    path = bundle.root / binding["path"]
+                    if mutation == "missing":
+                        path.unlink()
+                    elif mutation == "mutated":
+                        path.write_bytes(b"mutated")
+                    elif mutation == "symlink":
+                        target = bundle.root / "untrusted-gate-a-model-bytes"
+                        target.write_bytes(path.read_bytes())
+                        path.unlink()
+                        path.symlink_to(target)
+                    elif mutation == "hardlink":
+                        os.link(path, bundle.root / "untrusted-gate-a-model-alias")
+                    else:
+                        path.unlink()
+                        path.mkdir()
+                    loader_calls: list[object] = []
+                    card = SimpleNamespace(runtime_root="artifacts/models/gpt2-synthetic")
+                    with self.assertRaises(A0XProductionAdapterError):
+                        _load_model_after_live_readiness(
+                            context=context,
+                            card=card,
+                            identity=card,
+                            expected_card=card,
+                            loader=lambda *_args, **_kwargs: loader_calls.append(object()),
+                        )
+                    self.assertEqual([], loader_calls)
 
     def test_release_helper_clears_loaded_adapter_references_without_model_imports(self) -> None:
         from latent_triz.a0x_production_adapter import _release_model_references

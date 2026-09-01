@@ -28,12 +28,32 @@ from .a0x_material_contract import (
     CLEANUP_MARGIN_SECONDS,
     INTERNAL_BUDGET_SECONDS,
     OUTER_TIMEOUT_SECONDS,
+    validate_gate_a_evidence,
     validate_qualification_evidence,
 )
+from .a0x_ccp_executor import A0XCcpExecutorError, rehash_gate_a_evidence
 
 
 class A0XReportError(ValueError):
     """Raised when an immutable A0X package cannot be safely constructed."""
+
+
+def _gate_a_evidence_for_package(
+    repository_root: Path, authorization: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Return the profile-bound Gate-A input after its local byte boundary."""
+    try:
+        if authorization.get("commitment_profile") == "a0x-execution-authorization-json-v3":
+            evidence = validate_gate_a_evidence(authorization["gate_a_evidence"])
+            rehash_gate_a_evidence(
+                repository_root=repository_root,
+                evidence=evidence,
+                source_head=str(authorization["source_head"]),
+            )
+            return evidence
+        return validate_qualification_evidence(authorization["qualification_evidence"])
+    except (A0XCcpExecutorError, KeyError, A0XContractError, ValueError) as error:
+        raise A0XReportError("authorization Gate A evidence is invalid") from error
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -163,12 +183,7 @@ def build_terminal_package(
         bound_raw: dict[str, bytes] = {}
         _write_package_bytes(stage, "authorization_record", authorization_raw, ledger)
         _validate_mapping(authorization, _ROLE_SCHEMAS["authorization_record"], "authorization record")
-        try:
-            qualification_evidence = validate_qualification_evidence(
-                authorization["qualification_evidence"],
-            )
-        except (KeyError, A0XContractError) as error:
-            raise A0XReportError("authorization qualification evidence is invalid") from error
+        qualification_evidence = _gate_a_evidence_for_package(root, authorization)
         qualification_raw = _stable_json_bytes(qualification_evidence)
         bound_documents["qualification_evidence"] = qualification_evidence
         bound_raw["qualification_evidence"] = qualification_raw

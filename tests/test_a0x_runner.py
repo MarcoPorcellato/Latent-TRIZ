@@ -3,14 +3,31 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
+import os
+import sys
+import tempfile
 import unittest
+from io import StringIO
+from pathlib import Path
 
 
 _RUNTIME_IMAGES = {
     "python311": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:25de19baba5938c80de18c930342ccdcdf3c6759051196c3c713bd3e434d2f0e",
     "python312": "ghcr.io/marcoporcellato/latent-triz-verify@sha256:e984457d591121c52517027f49bb55371f68075caace763b8859db136e434dd0",
 }
+
+
+def _materializer_module() -> object:
+    """Load Task 9's standalone writer without granting it a package API."""
+    path = Path(__file__).resolve().parents[1] / "scripts/a0x_materialize_no_model_receipt.py"
+    specification = importlib.util.spec_from_file_location("a0x_materialize_no_model_receipt", path)
+    if specification is None or specification.loader is None:
+        raise AssertionError("receipt materializer is unavailable")
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    return module
 
 
 def _canonical_receipt_id(receipt: dict[str, object]) -> str:
@@ -191,6 +208,122 @@ def matrix_dry_run_envelope() -> dict[str, object]:
 
 
 class A0XRunnerPublicSurfaceTests(unittest.TestCase):
+    def test_hosted_gate_a_target_is_target_free(self) -> None:
+        """Catch a hosted Gate A target that reaches a material or remote command."""
+        makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(encoding="utf-8")
+        start = makefile.index("a0x-hosted-gate-a-verify:")
+        end = makefile.find("\n\n", start)
+        recipe = makefile[start:] if end == -1 else makefile[start:end]
+        self.assertIn("tests.test_a0x_hosted_gate_a", recipe)
+        self.assertIn("tests.test_a0x_hosted_gate_a_workflow", recipe)
+        self.assertIn("tests.test_a0x_hosted_verifier", recipe)
+        for forbidden in ("a0x_material.py", "a0x_prepare_runtime.py", "a0x_material_child.py", "commit-ci-preflight", "docker", "gh attestation"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, recipe)
+
+    def test_no_model_receipt_materializer_is_deterministic_and_overwrite_refusing(self) -> None:
+        """Catch a writer that changes bytes, overwrites implicitly, or accepts unsafe output objects."""
+        materializer = _materializer_module()
+        receipt = {
+            "artifact_class": "a0x-no-model-verification-receipt",
+            "phase": "frozen_no_model",
+            "model_loaded": False,
+            "tokenizer_constructed": False,
+            "sealed_target_content_reads": 0,
+            "ccp_invoked": False,
+            "remote_mutations": False,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "results/a0x/preexecution/a0x-no-model-verification-receipt.json"
+            calls: list[Path] = []
+
+            def builder(candidate_root: Path) -> dict[str, object]:
+                calls.append(candidate_root)
+                return receipt
+
+            stderr = StringIO()
+            self.assertEqual(0, materializer.main([
+                "--root", str(root), "--output", "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
+            ], receipt_builder=builder, stderr=stderr))
+            first = output.read_bytes()
+            self.assertEqual(
+                b'{"artifact_class":"a0x-no-model-verification-receipt","ccp_invoked":false,"model_loaded":false,"phase":"frozen_no_model","remote_mutations":false,"sealed_target_content_reads":0,"tokenizer_constructed":false}\n',
+                first,
+            )
+            self.assertEqual([root.resolve()], calls)
+            self.assertEqual(2, materializer.main([
+                "--root", str(root), "--output", "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
+            ], receipt_builder=builder, stderr=StringIO()))
+            self.assertEqual(first, output.read_bytes())
+            self.assertEqual(0, materializer.main([
+                "--root", str(root), "--output", "results/a0x/preexecution/a0x-no-model-verification-receipt.json", "--replace-existing",
+            ], receipt_builder=builder, stderr=StringIO()))
+            self.assertEqual(first, output.read_bytes())
+
+            for case in ("symlink", "hardlink", "directory"):
+                with self.subTest(case=case):
+                    if output.exists() or output.is_symlink():
+                        if output.is_dir():
+                            output.rmdir()
+                        else:
+                            output.unlink()
+                    if case == "symlink":
+                        target = root / "target.json"
+                        target.write_bytes(first)
+                        output.symlink_to(target)
+                    elif case == "hardlink":
+                        target = root / "target.json"
+                        target.write_bytes(first)
+                        os.link(target, output)
+                    else:
+                        output.mkdir()
+                    self.assertEqual(2, materializer.main([
+                        "--root", str(root), "--output", "results/a0x/preexecution/a0x-no-model-verification-receipt.json", "--replace-existing",
+                    ], receipt_builder=builder, stderr=StringIO()))
+                    if output.is_dir():
+                        output.rmdir()
+                    else:
+                        output.unlink()
+
+    def test_no_model_receipt_materializer_leaves_no_partial_output_when_checker_refuses(self) -> None:
+        """Catch creating output before target-free frozen verification succeeds."""
+        materializer = _materializer_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "results/a0x/preexecution/a0x-no-model-verification-receipt.json"
+            output.parent.mkdir(parents=True)
+            output.write_bytes(b"pre-existing-receipt\n")
+
+            def refuse(_candidate_root: Path) -> dict[str, object]:
+                raise RuntimeError("stale freeze")
+
+            self.assertEqual(2, materializer.main([
+                "--root", str(root), "--output", "results/a0x/preexecution/a0x-no-model-verification-receipt.json", "--replace-existing",
+            ], receipt_builder=refuse, stderr=StringIO()))
+            self.assertEqual(b"pre-existing-receipt\n", output.read_bytes())
+
+    def test_no_model_receipt_materializer_rejects_parent_links_and_nonfinite_values(self) -> None:
+        """Catch path redirection or a non-canonical JSON value at the sole writer."""
+        materializer = _materializer_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            redirect = root / "redirect"
+            redirect.mkdir()
+            results = root / "results"
+            results.symlink_to(redirect, target_is_directory=True)
+            self.assertEqual(2, materializer.main([
+                "--root", str(root), "--output", "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
+            ], receipt_builder=lambda _root: {"safe": True}, stderr=StringIO()))
+            self.assertFalse((redirect / "a0x/preexecution/a0x-no-model-verification-receipt.json").exists())
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(2, materializer.main([
+                "--root", str(root), "--output", "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
+            ], receipt_builder=lambda _root: {"value": float("nan")}, stderr=StringIO()))
+            self.assertFalse((root / "results/a0x/preexecution/a0x-no-model-verification-receipt.json").exists())
+
     def test_single_matrix_config_owns_all_preflight_and_run_vectors(self) -> None:
         from latent_triz.a0x_runner import QualificationRuntimeResolution, _qualification_argvs
 
@@ -283,6 +416,7 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
         schema_path = __import__("pathlib").Path(__file__).resolve().parents[1] / "schemas/a0x-material-execution-contract.schema.json"
         schema = json.loads(schema_path.read_text())
         ccp, plan = schema["$defs"]["ccp"]["properties"], schema["$defs"]["plan_binding"]["properties"]
+        live_contract = json.loads((schema_path.parent.parent / "experiments/a0x-six-model/material-execution-contract.json").read_text())
         contract = {
             "artifact_class": "a0x-material-execution-contract",
             "contract_version": "a0x-material-execution-contract-v2",
@@ -298,6 +432,7 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
                 "location_roles": ccp["location_roles"]["const"],
                 "matrix_plan_binding": {name: plan[name]["const"] for name in plan},
             },
+            "gate_a": live_contract["gate_a"],
             "offline": {"network": False, "generation": False, "local_cpu_float32": True},
             "max_run_count": 1,
             "stop_boundaries": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"],
