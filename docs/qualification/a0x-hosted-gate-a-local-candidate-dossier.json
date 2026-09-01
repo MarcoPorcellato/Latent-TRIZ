@@ -5,10 +5,10 @@
   "repository": "MarcoPorcellato/Latent-TRIZ",
   "scope": "Tasks 1-11 local deterministic qualification only",
   "candidate_content_anchor": {
-    "head": "9ed865d741ceecb7294737d3ed26412eeb88f3eb",
-    "tree": "e16f9ab7bcc39df172ff9c98366b84aa602c6553",
-    "implementation_source_head": "13b80ed371cb2803a58f5f78f2d9fdeb6e3b7031",
-    "implementation_source_tree": "82ce3b7cb53526fb6f01695148aef97bd6b8c6d3"
+    "head": "6dde04f594c1b8cc8413b6fc2530025eaa5cb6d8",
+    "tree": "ba9e8d843725337b7ff71dbd7e7f340e5f2cea1b",
+    "implementation_source_head": "67bd73de22fcdede7bea85abad50e3c122d8aa23",
+    "implementation_source_tree": "db355f3414052375dbce2a8b2376cb36d4a10469"
   },
   "self_reference_rule": "This dossier records the frozen pre-dossier content anchor. A later authorization must separately bind the final commit and tree containing this dossier with this dossier raw SHA-256; this document never predicts its own commit identity.",
   "canonical_inputs": {
@@ -50,7 +50,7 @@
     },
     "offline_verifier": {
       "path": "src/latent_triz/a0x_hosted_verifier.py",
-      "sha256": "0cb6d457f2f31b53f935d622f3fe16ac3ce856819d2073a346892877c442ee15",
+      "sha256": "b8bc7e8492acca0f846021f3b0fc8de1cdfc6aa0a0655f75aa5030cc1c96397c",
       "github_cli_version": "2.97.0",
       "github_cli_sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
     },
@@ -78,6 +78,13 @@
       "implementation_commit": "13b80ed371cb2803a58f5f78f2d9fdeb6e3b7031",
       "regeneration_commit": "9ed865d741ceecb7294737d3ed26412eeb88f3eb"
     },
+    "hosted_portability": {
+      "fact": "The public verifier still enforces the exact GitHub CLI pin, while portable temporary fixtures exercise only private post-validation orchestration.",
+      "implementation_commit": "67bd73de22fcdede7bea85abad50e3c122d8aa23",
+      "regeneration_commit": "6dde04f594c1b8cc8413b6fc2530025eaa5cb6d8",
+      "github_failure_run": "33459576482",
+      "independent_reviews": ["luna_approved", "terra_approved"]
+    },
     "sol_semantic_receipt_ruling": {
       "ruling_class": "no_model_receipt_semantic_binding",
       "decision": "Applied as a hash-bound local qualification ruling; it does not authorize material or remote work.",
@@ -90,35 +97,35 @@
     "changed": 16,
     "unchanged": 1,
     "regular_non_symlink_link_count_one": true,
-    "second_regeneration_patch_sha256": "6e6046fe7b8609f8729cc1072441b2cfedebaf9ade013ae03651968940c91e34",
+    "second_regeneration_patch_sha256": "793e99b4c0a251d5e8626b831f915a4f6698685d1fa83643c1f9d958ccfdf745",
     "artifacts": {
-      "a0_implementation": "8fa41b1331d7747e1f48d31d0bd711de90ff15f02e9ccd6e4f488ea72364e961",
-      "r1_implementation": "bbee27b5471de05f817395a65ffbe994188bac4b9f2ee6b745f6292f309f34df",
-      "a0_freeze": "621d480dbc37ad43cc59f4652aeee87e59b6bb6d2915a55a213bd4b798d670c6",
-      "r1_freeze": "afc8d97e30c8d36a875bd1d3e58d20a848fa4653639fd28714a9bbcf19061344",
-      "a0_gpt2_dossier": "6e1c9cda84e70cf4720df6113924778e4e01e5c797ae0619e1c25239bb2184b3",
-      "a0_gpt_neo_dossier": "434104269160c191050c3f234ee98dec9280dbfabb446d8158f156235b040356",
-      "a0_qwen2_5_dossier": "7e086aad44d171c0e791733c8d46750af6ec9dd77664ba53f581babadbe9b3f1",
-      "a0_qwen3_dossier": "559736efa024f53ac1bf1e7cd8b65d1bb805acea09d76d51277b517f6b4a2358",
-      "a0_smollm2_135m_dossier": "12ad7767bfaaa06a4a499947059d7a757cdc29505fa746295b1901bb8d000786",
-      "a0_smollm2_360m_dossier": "c411b32bd5c2c88218003d1df3569a0a72de4c200039286851c9bce85c9188ad",
-      "r1_gpt2_dossier": "b379e4198f559856313cc7ded8b86bc996fedcc801cd97c4a9a66caf9b0fa368",
-      "r1_gpt_neo_dossier": "15a77255cdf99543c6b39477cb3e30ac30523be12077a2b1753884ec5cc7f12e",
-      "r1_qwen2_5_dossier": "0767d7b7e7dd32501c99f9fd392fdfa56716af42ca18485f02c94f31adba209a",
-      "r1_qwen3_dossier": "211a422e7cc6afc8ec7868e39e615f7467e8e335605992e2db9c459e5602e931",
-      "r1_smollm2_135m_dossier": "00c3c265e228f4e7babae144a8054367a417ad1c4f546fff436f7be8449d28e7",
-      "r1_smollm2_360m_dossier": "b8f5d8035eac91496606f35763ae8271c42d4d9bffee367c618601bc6c6e8d89",
+      "a0_implementation": "623f5ae7d6389472f85bcac5bcfa7b6e3d37efec1479638d54c97e9885028c2c",
+      "r1_implementation": "4b935473b4d06897abbdbe39ff6ee13d54803ea097d1e35950a2f146dde03ec7",
+      "a0_freeze": "70d0f4ba97b775afdf9fe1dcfccdbb2def84f0f958f8c443a2a375b5c0128972",
+      "r1_freeze": "74098994548e0c68297c2f4b762df1a9986a53ab0ced90922f45af382ad1d788",
+      "a0_gpt2_dossier": "69c0b0167ce5441ad806c3267c9dc70e8634d33be1710dee780beb2c1b4cca6b",
+      "a0_gpt_neo_dossier": "d02e91486c8791e3eea51fb68683433b8df6d348599f7e8f1095fb4895519ff0",
+      "a0_qwen2_5_dossier": "9c14e665ab35df00d7b858003820aa13f98afa366626378640f4fa4b5375250b",
+      "a0_qwen3_dossier": "b274feb0c83d7574d0b87ec0e41ff941a4b007b0430d3461ca765ee3c104c3e5",
+      "a0_smollm2_135m_dossier": "5044cbd31e498039095cc94c87dca5610c5b588c72a07a87663d25b6b2bfeafe",
+      "a0_smollm2_360m_dossier": "5c223446d0653b0e8290b968035c983f7e0b1e215ffad4c8ad8fff494d58159d",
+      "r1_gpt2_dossier": "ea7069f9b29ec4abe649243e661dc0a0587023a177016a5d3dad766c74f8852a",
+      "r1_gpt_neo_dossier": "319fc58e1045631d0f5824f241fe01b72f70c460c6bfc2db33ec29c9860bb65b",
+      "r1_qwen2_5_dossier": "3927962b84d90094739bc8e57dc70b604ccfd72a10e041fe9c005ae07445fe53",
+      "r1_qwen3_dossier": "137709733dd59aa3325747ac66e3fd602d4e5303fcb984440582c2518b139b20",
+      "r1_smollm2_135m_dossier": "be2dd1d37bd7be27cdf797e58501f46ea293cd300e56b7e28f0fe45dffeaf9b1",
+      "r1_smollm2_360m_dossier": "e5bc5b57d818301cd51417aeb1cb577c26d77cfef38c62ffdca2a8740460384f",
       "no_model_receipt": "d5e8c044110623a8f54bd10e4ba37f7d960c84a86f272a67b06d5975e91d3beb"
     }
   },
   "local_ladder": {
-    "hosted_unit_tests": {"tests": 24, "skipped": 0, "status": "pass"},
-    "hosted_gate_a_target": {"tests": 190, "skipped": 1, "status": "pass"},
+    "hosted_unit_tests": {"tests": 25, "skipped": 0, "status": "pass"},
+    "hosted_gate_a_target": {"tests": 191, "skipped": 1, "status": "pass"},
     "frozen_no_model_target": {"tests": 11, "skipped": 0, "status": "pass"},
-    "synthetic_target": {"tests": 343, "skipped": 1, "status": "pass"},
+    "synthetic_target": {"tests": 344, "skipped": 1, "status": "pass"},
     "schema_cross_validation": {"tracked_pairs": 155, "mutations_rejected": 19, "status": "pass", "python_override": "LAB01_PYTHON=python3"},
     "documentation_audit": {"status": "pass"},
-    "repository_check": {"tests": 1175, "skipped": 12, "status": "pass"},
+    "repository_check": {"tests": 1176, "skipped": 12, "status": "pass"},
     "diff_check": {"status": "pass"}
   },
   "static_material_boundary_audit": {
@@ -132,9 +139,9 @@
     ]
   },
   "candidate_state_before_dossier": {
-    "git_status_porcelain": "?? docs/qualification/a0x-hosted-gate-a-scientific-boundary-review.md",
+    "git_status_porcelain": "",
     "tracked_worktree_clean": true,
-    "preserved_untracked_review": true
+    "preserved_untracked_review": false
   },
   "review_state": {
     "task_10_independent_review": "approved",
