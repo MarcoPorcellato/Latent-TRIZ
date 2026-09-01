@@ -69,6 +69,19 @@ def load(relative: str) -> dict[str, object]:
 
 
 class A0XFrozenPackageTests(unittest.TestCase):
+    def test_implementation_inventory_is_sorted_unique_and_regular(self) -> None:
+        from latent_triz import a0x_freeze
+
+        paths = a0x_freeze._IMPLEMENTATION_PATHS
+        self.assertEqual(tuple(sorted(paths)), paths)
+        self.assertEqual(len(paths), len(set(paths)))
+        for relative in paths:
+            with self.subTest(path=relative):
+                path = ROOT / relative
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+                self.assertEqual(1, path.stat().st_nlink)
+
     def test_frozen_protocols_copy_scientific_rules_by_value(self) -> None:
         for leg, source_path, fields, endpoints in (
             ("a0", "experiments/a0-automated-weak-proxy/protocol.json", A0_PROTOCOL_FIELDS, [0, 2, 4, 6]),

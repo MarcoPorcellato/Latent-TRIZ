@@ -82,6 +82,81 @@ class HostedVerifierContractTest(unittest.TestCase):
             "1" * 64,
         )
 
+    def test_positive_hosted_fixture_snapshots_match_canonical_pair_builders(self) -> None:
+        """Changing builder output or either checked-in Hosted snapshot must fail."""
+        from tests.a0x_test_support import hosted_gate_a_fixture_documents
+
+        authorization, receipt = hosted_gate_a_fixture_documents()
+        fixture_root = Path(__file__).parent / "fixtures/a0x/hosted-gate-a/positive"
+        expected = {
+            "gate-b-authorization.json": authorization,
+            "verification-receipt.json": receipt,
+        }
+        for name, document in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    fixture_root.joinpath(name).read_bytes(),
+                    canonical_json_bytes(document),
+                )
+        receipt = json.loads(fixture_root.joinpath("verification-receipt.json").read_bytes())
+        self.assertEqual(
+            hashlib.sha256(fixture_root.joinpath("gate-b-authorization.json").read_bytes()).hexdigest(),
+            receipt["authorization_raw_sha256"],
+        )
+
+    def test_gate_builder_rejects_divergent_identity_and_wrong_hosted_input_paths(self) -> None:
+        """Pure Gate B projection refuses malformed transport before any mapping exists."""
+        from dataclasses import replace
+
+        from latent_triz.a0x_contract import PairBinding
+        from latent_triz.a0x_gate_contract import (
+            A0XGateContractError,
+            GateBAuthorizationInputs,
+            HashBoundPath,
+            HostedInputBindings,
+            VerifierIdentity,
+            build_gate_b_authorization,
+        )
+        from tests.a0x_test_support import pair_binding, sha
+
+        head = "a" * 40
+        pair = PairBinding.from_mapping(pair_binding())
+        hosted = HostedInputBindings(
+            manifest=HashBoundPath(f".a0x-runtime/gate-a/evidence/{head}/hosted-gate-a-evidence.json", sha(1)),
+            attestation_bundle=HashBoundPath(f".a0x-runtime/gate-a/evidence/{head}/hosted-gate-a-attestation.bundle.jsonl", sha(2)),
+            trusted_root=HashBoundPath(f".a0x-runtime/gate-a/evidence/{head}/github-trusted-root.jsonl", sha(3)),
+            transport=HashBoundPath(f".a0x-runtime/gate-a/evidence/{head}/hosted-gate-a-transport.json", sha(4)),
+        )
+
+        def inputs(**changes):
+            values = {
+                "authorization_id": "a0x-a0-gpt2-run-1-gate-b",
+                "source_head": head,
+                "source_tree": "b" * 40,
+                "source_sha": head,
+                "job_workflow_sha": head,
+                "hosted_inputs": hosted,
+                "verifier": VerifierIdentity(policy_raw_sha256=sha(6)),
+            }
+            values.update(changes)
+            return GateBAuthorizationInputs(**values)
+
+        for field, value in (("source_sha", "c" * 40), ("job_workflow_sha", "d" * 40)):
+            with self.subTest(field=field), self.assertRaises(A0XGateContractError):
+                build_gate_b_authorization(pair, inputs(**{field: value}))
+        for label, field, path in (
+            ("absolute", "manifest", "/tmp/hosted-gate-a-evidence.json"),
+            ("traversal", "manifest", "../hosted-gate-a-evidence.json"),
+            ("wrong-kind", "manifest", f".a0x-runtime/gate-a/evidence/{head}/github-trusted-root.jsonl"),
+            ("wrong-name", "transport", f".a0x-runtime/gate-a/evidence/{head}/other.json"),
+            ("wrong-head", "attestation_bundle", f".a0x-runtime/gate-a/evidence/{'c' * 40}/hosted-gate-a-attestation.bundle.jsonl"),
+        ):
+            with self.subTest(label=label), self.assertRaises(A0XGateContractError):
+                build_gate_b_authorization(
+                    pair,
+                    inputs(hosted_inputs=replace(hosted, **{field: HashBoundPath(path, sha(7))})),
+                )
+
     def test_verifier_writes_one_receipt_after_one_bound_runner_call(self) -> None:
         """Missing any preflight must prevent the one authenticated runner call."""
         from latent_triz.a0x_hosted_verifier import GateBVerificationRequest, _verify_hosted_gate_a_after_verifier_preflight
@@ -379,6 +454,34 @@ class HostedVerifierContractTest(unittest.TestCase):
                         runner=runner, source_state_probe=lambda _root: ("a" * 40, "b" * 40, True), clock=lambda: "2026-08-31T12:04:00Z",
                     )
                 self.assertFalse((root / ".a0x-runtime/gate-b-verifications").exists())
+
+    def test_schema_valid_dense_reservation_mismatch_refuses_before_runner(self) -> None:
+        """Schema-valid dense arithmetic drift must never reach the verifier runner."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError, GateBVerificationRequest
+        from tests.a0x_test_support import pair_binding
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            authorization_path, policy_path, manifest_path, _bundle, _trusted, _transport = self._packet(root)
+            authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+            authorization["pair_binding"] = pair_binding()
+            authorization["pair_binding"]["dense_bound"]["total_bytes"] += 1
+            authorization_path.write_bytes(canonical_json_bytes(authorization))
+            result = json.loads(self._result_fixture())
+            result[0]["verificationResult"]["statement"]["subject"][0]["digest"]["sha256"] = self._sha(manifest_path)
+            calls: list[tuple[str, ...]] = []
+
+            with self.assertRaises(A0XHostedVerifierError) as raised:
+                self._verify_post_pin(
+                    GateBVerificationRequest(root, authorization_path, root / "synthetic-tools/gh", policy_path),
+                    runner=lambda argv, _cwd: calls.append(tuple(argv)) or (
+                        0, json.dumps(result, sort_keys=True, separators=(",", ":")).encode(), b"",
+                    ),
+                    source_state_probe=lambda _root: ("a" * 40, "b" * 40, True),
+                    clock=lambda: "2026-08-31T12:04:00Z",
+                )
+            self.assertEqual("A0X_GATE_B_INPUT_INVALID", raised.exception.code)
+            self.assertEqual([], calls)
 
     def test_cli_wraps_only_injected_shell_free_verifier(self) -> None:
         """CLI constructs no shell and exposes only a stable refusal code."""

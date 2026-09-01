@@ -1,3 +1,10 @@
+Current A0X lifecycle, hashes, and active boundary: see the sole ledger in
+`docs/A0X_SIX_MODEL_CAMPAIGN.md`. Architecture authority:
+`docs/A0X_ARCHITECTURE_CONVERGENCE.md`. Earlier A0X checkpoint blocks below are
+historical.
+
+--- Historical checkpoint below; retained with original hashes and outcomes ---
+
 A0X Hosted Gate A local implementation checkpoint (2026-08-31): resume only
 from isolated branch `agent/a0x-hosted-gate-a-design`. Tasks 1–9 are complete;
 Task 9's stale package refusal is Historical evidence and Task 10 alone may

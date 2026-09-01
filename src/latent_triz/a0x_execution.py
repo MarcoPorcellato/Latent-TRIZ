@@ -71,6 +71,35 @@ class AttemptState(StrEnum):
     SEALED = "sealed"
 
 
+class AttemptEvent(StrEnum):
+    ACTIVATION_STARTED = "activation_started"
+    TARGET_RESERVED = "target_reserved"
+    ANALYSIS_STARTED = "analysis_started"
+    TERMINAL_SELECTED = "terminal_selected"
+
+
+_ATTEMPT_TRANSITIONS = {
+    (AttemptState.PREFLIGHT, AttemptEvent.ACTIVATION_STARTED): AttemptState.ACTIVATION,
+    (AttemptState.ACTIVATION, AttemptEvent.TARGET_RESERVED): AttemptState.ANALYSIS,
+    (AttemptState.ANALYSIS, AttemptEvent.ANALYSIS_STARTED): AttemptState.ANALYSIS,
+    (AttemptState.PREFLIGHT, AttemptEvent.TERMINAL_SELECTED): AttemptState.SEALED,
+    (AttemptState.ACTIVATION, AttemptEvent.TERMINAL_SELECTED): AttemptState.SEALED,
+    (AttemptState.ANALYSIS, AttemptEvent.TERMINAL_SELECTED): AttemptState.SEALED,
+}
+
+
+def reduce_attempt(state: AttemptState, event: AttemptEvent) -> AttemptState:
+    """Apply one legal lifecycle event without performing I/O."""
+    if not isinstance(state, AttemptState) or not isinstance(event, AttemptEvent):
+        raise A0XExecutionError("A0X attempt transition requires state and event enums")
+    try:
+        return _ATTEMPT_TRANSITIONS[state, event]
+    except KeyError as error:
+        raise A0XExecutionError(
+            f"illegal A0X attempt transition: {state.value} / {event.value}",
+        ) from error
+
+
 @dataclass(frozen=True)
 class FrozenSelectionCapability:
     """Validated public selection identity, with no sealed-target capability.
@@ -295,20 +324,20 @@ class OneShotTargetReader:
 
 
 def advance_attempt(state: AttemptState | str) -> AttemptState:
-    """Advance the linear execution state; terminal attempts are never retried."""
+    """Compatibility wrapper for the canonical linear lifecycle path."""
     try:
         current = AttemptState(state)
     except ValueError as error:
         raise A0XExecutionError("unknown A0X attempt state") from error
-    transitions = {
-        AttemptState.PREFLIGHT: AttemptState.ACTIVATION,
-        AttemptState.ACTIVATION: AttemptState.ANALYSIS,
-        AttemptState.ANALYSIS: AttemptState.SEALED,
-    }
     try:
-        return transitions[current]
+        event = {
+            AttemptState.PREFLIGHT: AttemptEvent.ACTIVATION_STARTED,
+            AttemptState.ACTIVATION: AttemptEvent.TARGET_RESERVED,
+            AttemptState.ANALYSIS: AttemptEvent.TERMINAL_SELECTED,
+        }[current]
     except KeyError as error:
         raise A0XExecutionError("sealed A0X attempt cannot be retried") from error
+    return reduce_attempt(current, event)
 
 
 def seal_terminal_attempt(
@@ -332,8 +361,7 @@ def seal_terminal_attempt(
         current = AttemptState(state)
     except ValueError as error:
         raise A0XExecutionError("unknown A0X attempt state") from error
-    if current is AttemptState.SEALED:
-        raise A0XExecutionError("sealed A0X attempt cannot be finalized again")
+    reduce_attempt(current, AttemptEvent.TERMINAL_SELECTED)
     if status not in {"positive", "null", "non_interpretable", "incompatible", "failed"}:
         raise A0XExecutionError("unknown A0X terminal status")
     if not isinstance(pair_binding, Mapping):
@@ -722,6 +750,7 @@ def _persist_exclusive(destination: Path, artifact: Mapping[str, Any], *, label:
 
 __all__ = [
     "A0XExecutionError",
+    "AttemptEvent",
     "AttemptState",
     "FrozenSelectionCapability",
     "OneShotTargetReader",
@@ -730,5 +759,6 @@ __all__ = [
     "load_a0_public_selection",
     "load_r1_public_selection",
     "seal_terminal_attempt",
+    "reduce_attempt",
     "validate_authorization_chain",
 ]

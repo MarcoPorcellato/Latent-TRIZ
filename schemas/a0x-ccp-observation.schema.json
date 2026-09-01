@@ -1,33 +1,456 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["artifact_class", "observation_profile", "pair_binding", "source_head", "ccp", "source", "resource", "admission", "runtime", "commands"],
-  "properties": {
-    "artifact_class": {"const": "a0x-guard-preflight-observation"},
-    "observation_profile": {"const": "a0x-guard-preflight-observation-v1"},
-    "pair_binding": {"$ref": "#/$defs/pair"},
-    "source_head": {"$ref": "#/$defs/rev"},
-    "ccp": {"$ref": "#/$defs/ccp"},
-    "source": {"$ref": "#/$defs/source"},
-    "resource": {"$ref": "#/$defs/resource"},
-    "admission": {"$ref": "#/$defs/admission"},
-    "runtime": {"$ref": "#/$defs/runtime"},
-    "commands": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/command"}}
-  },
   "$defs": {
-    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "rev": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
-    "locator": {"type":"string","pattern":"^(?!/)(?!.*\\.\\.)(?!.*file://)[A-Za-z0-9._/-]+$"},
-    "ccp": {"type":"object","additionalProperties":false,"required":["role","source_commit","qualified_source_tree","sha256","version"],"properties":{"role":{"const":"ccp"},"source_commit":{"const":"27adf8d0820b3cd96f9c5e149de9b580ae41f639"},"qualified_source_tree":{"const":"d8e0364d1313fde0898a44517ae6d233d9e10763"},"sha256":{"const":"c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4"},"version":{"const":"commit-ci-preflight 0.1.0"}}},
-    "source": {"type":"object","additionalProperties":false,"required":["head","clean"],"properties":{"head":{"$ref":"#/$defs/rev"},"clean":{"const":true}}},
-    "resource": {"type":"object","additionalProperties":false,"required":["decision"],"properties":{"decision":{"const":"admit"}}},
-    "admission": {"type":"object","additionalProperties":false,"required":["active","queue_count","slot_state"],"properties":{"active":{"const":false},"queue_count":{"const":0},"slot_state":{"const":"free"}}},
-    "runtime": {"type":"object","additionalProperties":false,"required":["intended_runtime_responsive","active_container_count"],"properties":{"intended_runtime_responsive":{"const":true},"active_container_count":{"const":0}}},
-    "command": {"type":"object","additionalProperties":false,"required":["role","exit_code","output_sha256","output_bytes"],"properties":{"role":{"enum":["ccp_version","resource_status","admission_status","git_source_state","docker_context","docker_active_count"]},"exit_code":{"const":0},"output_sha256":{"$ref":"#/$defs/sha"},"output_bytes":{"type":"integer","minimum":0}}},
-    "dense": {"type": "object", "additionalProperties": false, "required": ["leg", "cases", "view_site_count", "endpoint_count", "hidden_width", "scalar_bytes", "vector_count", "dense_bytes", "dense_copy_count", "atomic_dense_bytes", "index_copy_count", "index_reservation_bytes", "payload_allowance_bytes", "total_bytes", "cap_bytes"], "properties": {"leg": {"enum": ["a0", "r1"]}, "cases": {"const": 48}, "view_site_count": {"type": "integer", "minimum": 1}, "endpoint_count": {"type": "integer", "minimum": 1}, "hidden_width": {"type": "integer", "minimum": 1}, "scalar_bytes": {"const": 4}, "vector_count": {"type": "integer", "minimum": 1}, "dense_bytes": {"type": "integer", "minimum": 1}, "dense_copy_count": {"const": 2}, "atomic_dense_bytes": {"type": "integer", "minimum": 1}, "index_copy_count": {"const": 2}, "index_reservation_bytes": {"type": "integer", "minimum": 1}, "payload_allowance_bytes": {"type": "integer", "minimum": 1}, "total_bytes": {"type": "integer", "minimum": 1}, "cap_bytes": {"type": "integer", "minimum": 1}}},
-    "pair": {"type": "object", "additionalProperties": false, "required": ["binding_profile", "dense_bound", "leg", "leg_freeze_sha256", "model_id", "model_key", "output_path", "revision", "run_id"], "properties": {"binding_profile": {"const": "a0x-pair-scope-v2"}, "dense_bound": {"$ref": "#/$defs/dense"}, "leg": {"enum": ["a0", "r1"]}, "leg_freeze_sha256": {"$ref": "#/$defs/sha"}, "model_id": {"type": "string", "minLength": 1}, "model_key": {"type": "string", "minLength": 1}, "output_path": {"$ref": "#/$defs/locator"}, "revision": {"$ref": "#/$defs/rev"}, "run_id": {"type": "string", "minLength": 1}}},
-    "commitment": {"type": "object", "additionalProperties": false, "required": ["profile", "commitment_sha256"], "properties": {"profile": {"enum": ["a0x-approval-dossier-json-v2", "a0x-execution-authorization-json-v2"]}, "commitment_sha256": {"$ref": "#/$defs/sha"}}},
-    "authorization_chain": {"type": "object", "additionalProperties": false, "required": ["dossier_commitment", "authorization_commitment"], "properties": {"dossier_commitment": {"$ref": "#/$defs/commitment"}, "authorization_commitment": {"$ref": "#/$defs/commitment"}}}
-  }
+    "admission": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "const": false
+        },
+        "queue_count": {
+          "const": 0
+        },
+        "slot_state": {
+          "const": "free"
+        }
+      },
+      "required": [
+        "active",
+        "queue_count",
+        "slot_state"
+      ],
+      "type": "object"
+    },
+    "authorization_chain": {
+      "additionalProperties": false,
+      "properties": {
+        "authorization_commitment": {
+          "$ref": "#/$defs/commitment"
+        },
+        "dossier_commitment": {
+          "$ref": "#/$defs/commitment"
+        }
+      },
+      "required": [
+        "dossier_commitment",
+        "authorization_commitment"
+      ],
+      "type": "object"
+    },
+    "ccp": {
+      "additionalProperties": false,
+      "properties": {
+        "qualified_source_tree": {
+          "const": "d8e0364d1313fde0898a44517ae6d233d9e10763"
+        },
+        "role": {
+          "const": "ccp"
+        },
+        "sha256": {
+          "const": "c8021e2322e172686c0a0c07d2b0260eafb5812d085d2306dbbde3fe4e964bd4"
+        },
+        "source_commit": {
+          "const": "27adf8d0820b3cd96f9c5e149de9b580ae41f639"
+        },
+        "version": {
+          "const": "commit-ci-preflight 0.1.0"
+        }
+      },
+      "required": [
+        "role",
+        "source_commit",
+        "qualified_source_tree",
+        "sha256",
+        "version"
+      ],
+      "type": "object"
+    },
+    "command": {
+      "additionalProperties": false,
+      "properties": {
+        "exit_code": {
+          "const": 0
+        },
+        "output_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "role": {
+          "enum": [
+            "ccp_version",
+            "resource_status",
+            "admission_status",
+            "git_source_state",
+            "docker_context",
+            "docker_active_count"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "exit_code",
+        "output_sha256",
+        "output_bytes"
+      ],
+      "type": "object"
+    },
+    "commitment": {
+      "additionalProperties": false,
+      "properties": {
+        "commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "profile": {
+          "enum": [
+            "a0x-approval-dossier-json-v2",
+            "a0x-execution-authorization-json-v2"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "commitment_sha256"
+      ],
+      "type": "object"
+    },
+    "dense": {
+      "additionalProperties": false,
+      "properties": {
+        "atomic_dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cap_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cases": {
+          "const": 48
+        },
+        "dense_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dense_copy_count": {
+          "const": 2
+        },
+        "endpoint_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hidden_width": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "index_copy_count": {
+          "const": 2
+        },
+        "index_reservation_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "payload_allowance_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "scalar_bytes": {
+          "const": 4
+        },
+        "total_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "vector_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "view_site_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "leg",
+        "cases",
+        "view_site_count",
+        "endpoint_count",
+        "hidden_width",
+        "scalar_bytes",
+        "vector_count",
+        "dense_bytes",
+        "dense_copy_count",
+        "atomic_dense_bytes",
+        "index_copy_count",
+        "index_reservation_bytes",
+        "payload_allowance_bytes",
+        "total_bytes",
+        "cap_bytes"
+      ],
+      "type": "object"
+    },
+    "locator": {
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*file://)[A-Za-z0-9._/-]+$",
+      "type": "string"
+    },
+    "pair": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        },
+        "dense_bound": {
+          "$ref": "#/$defs/dense",
+          "additionalProperties": false,
+          "properties": {
+            "atomic_dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "cap_bytes": {
+              "enum": [
+                33554432,
+                4194304
+              ]
+            },
+            "cases": {
+              "const": 48,
+              "type": "integer"
+            },
+            "dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "dense_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "endpoint_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "hidden_width": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "index_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "index_reservation_bytes": {
+              "enum": [
+                6291456,
+                1048576
+              ]
+            },
+            "leg": {
+              "enum": [
+                "a0",
+                "r1"
+              ]
+            },
+            "payload_allowance_bytes": {
+              "enum": [
+                2097152,
+                524288
+              ]
+            },
+            "scalar_bytes": {
+              "const": 4,
+              "type": "integer"
+            },
+            "total_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "vector_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "view_site_count": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "leg",
+            "cases",
+            "view_site_count",
+            "endpoint_count",
+            "hidden_width",
+            "scalar_bytes",
+            "vector_count",
+            "dense_bytes",
+            "dense_copy_count",
+            "atomic_dense_bytes",
+            "index_copy_count",
+            "index_reservation_bytes",
+            "payload_allowance_bytes",
+            "total_bytes",
+            "cap_bytes"
+          ],
+          "type": "object"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_key": {
+          "enum": [
+            "gpt2",
+            "gpt_neo_125m",
+            "qwen2_5_0_5b",
+            "qwen3_0_6b_base",
+            "smollm2_135m",
+            "smollm2_360m"
+          ]
+        },
+        "output_path": {
+          "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[a-f0-9]{40}$",
+          "type": "string"
+        },
+        "run_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "resource": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "const": "admit"
+        }
+      },
+      "required": [
+        "decision"
+      ],
+      "type": "object"
+    },
+    "rev": {
+      "pattern": "^[a-f0-9]{40}$",
+      "type": "string"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "active_container_count": {
+          "const": 0
+        },
+        "intended_runtime_responsive": {
+          "const": true
+        }
+      },
+      "required": [
+        "intended_runtime_responsive",
+        "active_container_count"
+      ],
+      "type": "object"
+    },
+    "sha": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "clean": {
+          "const": true
+        },
+        "head": {
+          "$ref": "#/$defs/rev"
+        }
+      },
+      "required": [
+        "head",
+        "clean"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admission": {
+      "$ref": "#/$defs/admission"
+    },
+    "artifact_class": {
+      "const": "a0x-guard-preflight-observation"
+    },
+    "ccp": {
+      "$ref": "#/$defs/ccp"
+    },
+    "commands": {
+      "items": {
+        "$ref": "#/$defs/command"
+      },
+      "maxItems": 6,
+      "minItems": 6,
+      "type": "array"
+    },
+    "observation_profile": {
+      "const": "a0x-guard-preflight-observation-v1"
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair"
+    },
+    "resource": {
+      "$ref": "#/$defs/resource"
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "source_head": {
+      "$ref": "#/$defs/rev"
+    }
+  },
+  "required": [
+    "artifact_class",
+    "observation_profile",
+    "pair_binding",
+    "source_head",
+    "ccp",
+    "source",
+    "resource",
+    "admission",
+    "runtime",
+    "commands"
+  ],
+  "type": "object"
 }

@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from latent_triz.a0x_contract import Leg, PairBinding
+from latent_triz.a0x_contract import Leg, PairBinding, derive_pair_output_path
 from latent_triz.a0x_preflight import (
     A0XPreflightError,
     load_model_card,
@@ -138,7 +138,9 @@ class A0XPreflightTests(A0XTempTestCase):
         arguments, _documents = self._authorization_bound_preflight_arguments()
         alternate_pair_data = pair_binding()
         alternate_pair_data["run_id"] = "a0x-a0-gpt2-run-2"
-        alternate_pair_data["output_path"] = "results/a0x/a0/gpt2/alternate/"
+        alternate_pair_data["output_path"] = derive_pair_output_path(
+            alternate_pair_data["leg"], alternate_pair_data["model_key"], alternate_pair_data["run_id"],
+        )
         alternate_pair = PairBinding.from_mapping(alternate_pair_data)
         alternate_dossier, alternate_authorization, alternate_chain = authorization_documents(alternate_pair.as_mapping())
         alternate_authorization_path = self.temp_path / "alternate-authorization.json"

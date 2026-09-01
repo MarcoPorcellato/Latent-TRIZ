@@ -384,6 +384,34 @@ class A0XExecutionTests(A0XTempTestCase):
         with self.assertRaisesRegex(A0XExecutionError, "sealed"):
             advance_attempt(AttemptState.SEALED)
 
+    def test_reducer_is_the_complete_lifecycle_transition_table(self) -> None:
+        from latent_triz.a0x_execution import AttemptEvent, AttemptState, reduce_attempt
+
+        transitions = (
+            (AttemptState.PREFLIGHT, AttemptEvent.ACTIVATION_STARTED, AttemptState.ACTIVATION),
+            (AttemptState.ACTIVATION, AttemptEvent.TARGET_RESERVED, AttemptState.ANALYSIS),
+            (AttemptState.ANALYSIS, AttemptEvent.ANALYSIS_STARTED, AttemptState.ANALYSIS),
+            (AttemptState.ANALYSIS, AttemptEvent.TERMINAL_SELECTED, AttemptState.SEALED),
+            (AttemptState.PREFLIGHT, AttemptEvent.TERMINAL_SELECTED, AttemptState.SEALED),
+            (AttemptState.ACTIVATION, AttemptEvent.TERMINAL_SELECTED, AttemptState.SEALED),
+        )
+        for state, event, expected in transitions:
+            with self.subTest(state=state, event=event):
+                self.assertIs(expected, reduce_attempt(state, event))
+
+        invalid = (
+            (AttemptState.PREFLIGHT, AttemptEvent.TARGET_RESERVED),
+            (AttemptState.PREFLIGHT, AttemptEvent.ANALYSIS_STARTED),
+            (AttemptState.ACTIVATION, AttemptEvent.ACTIVATION_STARTED),
+            (AttemptState.ACTIVATION, AttemptEvent.ANALYSIS_STARTED),
+            (AttemptState.ANALYSIS, AttemptEvent.TARGET_RESERVED),
+            (AttemptState.SEALED, AttemptEvent.TERMINAL_SELECTED),
+        )
+        for state, event in invalid:
+            with self.subTest(state=state, event=event):
+                with self.assertRaisesRegex(A0XExecutionError, "transition"):
+                    reduce_attempt(state, event)
+
     def test_terminal_taxonomy_pair_binding_and_exclusive_first_terminal(self) -> None:
         from latent_triz.a0x_execution import AttemptState, seal_terminal_attempt
         receipt_path, pair = self._successful_receipt(), pair_binding()

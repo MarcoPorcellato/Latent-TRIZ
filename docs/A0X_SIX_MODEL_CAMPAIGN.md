@@ -18,7 +18,59 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
-## Current Hosted Gate A migration checkpoint
+## Current architecture-convergence checkpoint — 2026-09-01
+
+This is the sole canonical current A0X status ledger. Architecture authority is
+[A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md). All later A0X
+checkpoint blocks in this file and elsewhere are historical evidence only.
+
+The corrected implementation anchor is
+`425f27fcec2f89507c3b1cc696f8523f93b8ade9`
+(`fix: close A0X convergence review findings`). The target-free artifact closure
+is `64cd504a24f620e69a12befb792c9e1d8e0749f8`
+(`chore: regenerate corrected A0X contracts`). The two generated freezes are:
+
+| Leg | Freeze file SHA-256 |
+| --- | --- |
+| A0 | `d643f600c2fb050ae763e1039837b885d711219bf3ba152f4bd2bb6e38284371` |
+| A0-R1 | `9f543186dd74dbe8f252664ee5bdb40a48e28f324aee3df504962ce0689d9e08` |
+
+The twelve-dossier ledger identity is
+`e4c8a72082a6bb721ee4c388c6ea8b4319fd0523d664e75fa07d61446d7bc8ae`: SHA-256
+of compact, key-sorted JSON containing the ordered `dossiers` rows below, each
+with its repository-relative `path` and SHA-256. The canonical no-model receipt SHA-256 is
+`d5e8c044110623a8f54bd10e4ba37f7d960c84a86f272a67b06d5975e91d3beb`.
+
+| Dossier | SHA-256 |
+| --- | --- |
+| `a0/gpt2.json` | `c3f1051ccf79773673b631e274571f3fcfd1f870db3324684c55b1b80901295d` |
+| `a0/gpt_neo_125m.json` | `56a0cc38b0c02dc64435c6ca65e1e342360747ed0ead3be974b61034802ed01b` |
+| `a0/qwen2_5_0_5b.json` | `5e676e79215088c97ecf2d94159f9d264884e379af09c0135db5b1c270ebf9e9` |
+| `a0/qwen3_0_6b_base.json` | `35d09e372fdc76ee3f08312bfcae0530cee8ad7cde9faa12a87932f64b1960e7` |
+| `a0/smollm2_135m.json` | `d8e24cbe8079e9e0a0e9e725320c8506329ea93079f66b9f04d2c5fdf4042f28` |
+| `a0/smollm2_360m.json` | `23ad4e9a48bd405bfaaca325db42d2417c2724935c5642919a34eb95fafa55bb` |
+| `r1/gpt2.json` | `a830c55c36e58a13f13e2fd0153c831a62c292dafd4ad6de63e924f7d65618d2` |
+| `r1/gpt_neo_125m.json` | `e85da9f789cd98c5287908046a9296d470e7b1b00710c05475a7afb07e643d88` |
+| `r1/qwen2_5_0_5b.json` | `bc418625eb91488c62124d5872fa712e4684a264bf26148dfa960d4ef5acfc8e` |
+| `r1/qwen3_0_6b_base.json` | `35b47eaf6a09fbe992702c6230142f0e5f69dfbbbc20a10e6d79e2dd936c87df` |
+| `r1/smollm2_135m.json` | `808e3f320472e51f54ab7cc9bec8951b56522ed5e9bb6ea881c0f98daaf7acbc` |
+| `r1/smollm2_360m.json` | `47b5188380c2b9e28d8526f3ea0730b418a3b2fcbd800309570d78d1cab52d5d` |
+
+Target-free closure evidence: schema compiler `19` files; compatibility oracle
+`24/24`; no-model package `12` tests; synthetic suite `389` tests with `1`
+skip; schema cross-validation `155` tracked pairs and `19` rejected mutations;
+repository check `1,221` tests with `2` skips. All recorded no-material
+counters are zero: model loads, tokenizer constructions, sealed-target reads,
+CCP invocations, and remote mutations.
+
+Current boundary: contract convergence remains target-free. Gate A and Gate B
+remain blocked pending a new explicit authorization that binds this exact
+closure; Gate C, model/tokenizer access, target reads, CCP heavy work, network,
+publication, and scientific execution remain unauthorized. The final
+documentation-only commit follows the artifact closure; it is not a self-hashed
+scientific binding and does not alter the implementation anchor or artifacts.
+
+## Historical Hosted Gate A migration checkpoint
 
 Tasks 1–9 of
 `docs/superpowers/plans/2026-08-31-a0x-hosted-gate-a-implementation.md` are
@@ -344,7 +396,7 @@ remains `sealed_gate_pending`. Fresh local and GitHub-hosted verification is
 required on the reconstructed PR #109 head; publication does not authorize
 Gate B or C.
 
-## Current checkpoint
+## Historical 2026-08-25 checkpoint
 
 The campaign remains `sealed_gate_pending`. The material composition is no
 longer a refusal stub: it now has a fixed outer launcher, an acyclic

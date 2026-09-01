@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from latent_triz.a0x_contract import A0XContractError, PairBinding
+from latent_triz.a0x_pair import A0XContractError, PairBinding
 from latent_triz.validator import validate
 
 

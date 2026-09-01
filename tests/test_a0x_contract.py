@@ -23,6 +23,7 @@ from latent_triz.a0x_contract import (
     canonical_commitment,
     canonical_json_sha256,
     compute_dense_bound,
+    derive_pair_output_path,
     endpoint_indices,
     sha256_file,
     strict_json_object,
@@ -113,6 +114,69 @@ class A0XContractTests(A0XTempTestCase):
             mutate(value)
             with self.subTest(value=value), self.assertRaisesRegex(A0XContractError, "pair binding|dense bound"):
                 PairBinding.from_mapping(value)
+
+    def test_pair_rejects_model_root_output(self) -> None:
+        value = pair_binding()
+        value["output_path"] = f"results/a0x/{value['leg']}/{value['model_key']}/"
+        with self.assertRaisesRegex(A0XContractError, "derived output path"):
+            PairBinding.from_mapping(value)
+
+    def test_pair_rejects_noncanonical_output_paths(self) -> None:
+        value = pair_binding()
+        canonical = value["output_path"]
+        invalid_paths = (
+            canonical + "-different",
+            f"results/a0x/r1/{value['model_key']}/{value['run_id']}",
+            f"results/a0x/{value['leg']}/smollm2_135m/{value['run_id']}",
+            canonical + "/",
+        )
+        for output_path in invalid_paths:
+            rejected = copy.deepcopy(value)
+            rejected["output_path"] = output_path
+            with self.subTest(output_path=output_path), self.assertRaisesRegex(
+                A0XContractError, "derived output path",
+            ):
+                PairBinding.from_mapping(rejected)
+
+        traversal = copy.deepcopy(value)
+        traversal["output_path"] = f"results/a0x/{value['leg']}/{value['model_key']}/../{value['run_id']}"
+        with self.assertRaisesRegex(A0XContractError, "pair binding"):
+            PairBinding.from_mapping(traversal)
+
+    def test_pair_derivation_rejects_unsafe_segments(self) -> None:
+        self.assertEqual(
+            "results/a0x/a0/gpt2/run-1",
+            derive_pair_output_path(Leg.A0, "gpt2", "run-1"),
+        )
+        for model_key, run_id in (
+            ("../gpt2", "run-1"),
+            ("gpt2", "../run-1"),
+            ("gpt2/other", "run-1"),
+            ("gpt2", "run-1/other"),
+            ("gpt2", ""),
+        ):
+            with self.subTest(model_key=model_key, run_id=run_id), self.assertRaisesRegex(
+                A0XContractError, "safe pair segment",
+            ):
+                derive_pair_output_path("a0", model_key, run_id)
+
+    def test_all_tracked_dossier_pairs_reserialize_byte_identically(self) -> None:
+        dossier_root = Path(__file__).resolve().parents[1] / "experiments/a0x-six-model/approval-dossiers"
+        dossiers = sorted(dossier_root.glob("*/*.json"))
+        self.assertEqual(12, len(dossiers))
+        for path in dossiers:
+            with self.subTest(path=path):
+                original = json.loads(path.read_text(encoding="utf-8"))["pair_binding"]
+                parsed = PairBinding.from_mapping(original)
+                original_bytes = json.dumps(original, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                reserialized_bytes = json.dumps(
+                    parsed.as_mapping(), sort_keys=True, separators=(",", ":"),
+                ).encode("utf-8")
+                self.assertEqual(original_bytes, reserialized_bytes)
+                self.assertEqual(
+                    parsed.output_path,
+                    derive_pair_output_path(parsed.leg, parsed.model_key, parsed.run_id),
+                )
 
     def test_dense_bound_rejects_wrong_case_count_and_cap_overflow(self) -> None:
         with self.assertRaisesRegex(A0XContractError, "dense output reservation exceeds frozen contract"):
@@ -205,7 +269,7 @@ class A0XContractTests(A0XTempTestCase):
         self.assertEqual([], validate(authorization, self._schema("a0x-execution-authorization.schema.json")))
         first = canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE)
         self.assertEqual(
-            "e721a5a7a01657373eed69f627d3510705588396eac76549f9b7f3f2b6b4c7ec",
+            "48debe880fc4a24b0ebaf35a67ff0b6bd278e4a28333f88090f9e9403de8fef8",
             first.commitment_sha256,
         )
         compact_variant = strict_json_object(
@@ -219,14 +283,14 @@ class A0XContractTests(A0XTempTestCase):
             canonical_commitment(compact_variant, APPROVAL_DOSSIER_PROFILE),
         )
         mutated = copy.deepcopy(dossier)
-        mutated["pair_binding"]["output_path"] = "results/a0x/a0/gpt2/semantic-mutation/"
+        mutated["pair_binding"]["output_path"] = "results/a0x/a0/gpt2/semantic-mutation"
         self.assertEqual([], validate(mutated, self._schema("a0x-authorization-dossier.schema.json")))
         self.assertNotEqual(first, canonical_commitment(mutated, APPROVAL_DOSSIER_PROFILE))
         self.assertNotEqual(
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE), first,
         )
         self.assertEqual(
-            "dddc839d81942e4e9ff6d18667978c94ed6e4939928e0fd829181653397e6465",
+            "9314b1e47bcb63086fbcf7365b1b32bb375f89411b16378d5bcfa2e2451ae470",
             canonical_commitment(authorization, EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256,
         )
         for invalid_document, profile in (
@@ -267,7 +331,7 @@ class A0XContractTests(A0XTempTestCase):
     def test_legacy_v2_authorization_retains_its_schema_and_commitment_bytes(self) -> None:
         _, authorization, _ = self._authorization_documents()
         self.assertEqual(
-            "dddc839d81942e4e9ff6d18667978c94ed6e4939928e0fd829181653397e6465",
+            "9314b1e47bcb63086fbcf7365b1b32bb375f89411b16378d5bcfa2e2451ae470",
             canonical_commitment(authorization, LEGACY_EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256,
         )
         with self.assertRaisesRegex(A0XContractError, "schema"):

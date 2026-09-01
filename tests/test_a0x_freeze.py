@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -21,6 +23,7 @@ from latent_triz.a0x_freeze import (  # noqa: E402
     verify_protected_tree_metadata_only,
 )
 from latent_triz.validator import validate  # noqa: E402
+from latent_triz.a0x_contract import PairBinding, derive_pair_output_path  # noqa: E402
 
 
 class A0XFreezeTests(unittest.TestCase):
@@ -31,6 +34,77 @@ class A0XFreezeTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary_directory.name)
         self.addCleanup(self._temporary_directory.cleanup)
+
+    def test_implementation_inventory_is_stable_and_binds_task_one_to_six_surface(self) -> None:
+        required = {
+            "schemas/a0x-activation-receipt.schema.json",
+            "schemas/a0x-activation-stage-occupancy-receipt.schema.json",
+            "schemas/a0x-attempt-claim.schema.json",
+            "schemas/a0x-external-assets-locator.schema.json",
+            "schemas/a0x-model-identity-receipt.schema.json",
+            "schemas/a0x-output-occupancy-receipt.schema.json",
+            "schemas/a0x-preflight-receipt.schema.json",
+            "schemas/a0x-representation-record.schema.json",
+            "schemas/a0x-statistical-result.schema.json",
+            "schemas/a0x-target-read-receipt.schema.json",
+            "schemas/a0x-terminal-result.schema.json",
+            "scripts/repository_check.py",
+            "tests/a0x_test_support.py",
+            "src/latent_triz/a0x_pair.py",
+            "src/latent_triz/a0x_compatibility.py",
+            "src/latent_triz/a0x_gate_contract.py",
+            "src/latent_triz/a0x_schema_projection.py",
+            "scripts/a0x_compatibility_check.py",
+            "scripts/a0x_compile_pair_schemas.py",
+            "Makefile",
+            "schemas/a0x-pair-binding.fragment.json",
+            "schemas/a0x-pair-projections.json",
+            "tests/test_a0x_pair_compatibility.py",
+            "tests/test_a0x_schema_projection.py",
+            "tests/test_a0x_architecture.py",
+        }
+        paths = a0x_freeze._IMPLEMENTATION_PATHS
+        self.assertEqual(tuple(sorted(paths)), paths)
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertTrue(required.issubset(paths))
+        for relative in paths:
+            path = self.ROOT / relative
+            with self.subTest(path=relative):
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+                self.assertEqual(1, path.stat().st_nlink)
+
+    def test_schema_cross_validate_accepts_pinned_style_interpreter_path_with_spaces(self) -> None:
+        interpreter = self.root / "pinned schema venv/bin/python"
+        interpreter.parent.mkdir(parents=True)
+        invocation_log = self.root / "interpreter-invocation.json"
+        interpreter.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$@\" > \"$A0X_FAKE_INTERPRETER_LOG\"\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        interpreter.chmod(0o700)
+        environment = dict(os.environ)
+        environment["A0X_FAKE_INTERPRETER_LOG"] = str(invocation_log)
+        completed = subprocess.run(
+            ["make", "-s", "schema-cross-validate", f"LAB01_PYTHON={interpreter}"],
+            cwd=self.ROOT,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual(["scripts/schema_cross_validate.py"], invocation_log.read_text(encoding="utf-8").splitlines())
+
+    def test_file_binding_rejects_hardlink_in_temporary_tree(self) -> None:
+        source = self.root / "source.py"
+        bound = self.root / "bound.py"
+        source.write_text("x = 1\n", encoding="utf-8")
+        bound.hardlink_to(source)
+        with self.assertRaisesRegex(A0XFreezeError, "hardlink"):
+            a0x_freeze._file_binding(self.root, "bound.py")
 
     def test_selection_uses_public_cases_only_and_is_deterministic(self) -> None:
         manifest = build_a0_selection_manifest(
@@ -60,6 +134,17 @@ class A0XFreezeTests(unittest.TestCase):
             cases_path=self.FIXTURES / "public-cases-mini.jsonl",
             corpus_manifest_path=self.FIXTURES / "public-manifest-mini.json",
         )
+
+    def test_frozen_dossier_pairs_use_canonical_output_derivation(self) -> None:
+        dossiers = sorted((self.ROOT / "experiments/a0x-six-model/approval-dossiers").glob("*/*.json"))
+        self.assertEqual(12, len(dossiers))
+        for path in dossiers:
+            with self.subTest(path=path):
+                binding = PairBinding.from_dossier(json.loads(path.read_text(encoding="utf-8")))
+                self.assertEqual(
+                    binding.output_path,
+                    derive_pair_output_path(binding.leg, binding.model_key, binding.run_id),
+                )
 
     def test_selection_fails_closed_when_a_family_does_not_have_two_cases(self) -> None:
         cases = (self.FIXTURES / "public-cases-mini.jsonl").read_text(encoding="utf-8").splitlines()

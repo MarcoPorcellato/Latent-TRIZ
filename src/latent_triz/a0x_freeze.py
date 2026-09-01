@@ -23,6 +23,7 @@ from .a0x_contract import (
     build_leg_freeze_binding,
     canonical_json_sha256,
     compute_dense_bound,
+    derive_pair_output_path,
     sha256_file,
 )
 from .validator import validate
@@ -85,6 +86,10 @@ _LEG_SOURCES = {
 }
 
 _IMPLEMENTATION_PATHS = tuple(sorted({
+    "Makefile",
+    "schemas/a0x-activation-receipt.schema.json",
+    "schemas/a0x-activation-stage-occupancy-receipt.schema.json",
+    "schemas/a0x-attempt-claim.schema.json",
     "schemas/a0x-authorization-dossier.schema.json",
     "schemas/a0x-ccp-observation.schema.json",
     "schemas/a0x-execution-authorization.schema.json",
@@ -94,6 +99,9 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "schemas/a0x-qualification-authorization.schema.json",
     "schemas/a0x-qualification-evidence.schema.json",
     "scripts/a0x_contract_check.py",
+    "scripts/a0x_compatibility_check.py",
+    "scripts/a0x_compile_pair_schemas.py",
+    "scripts/repository_check.py",
     "scripts/a0x_material.py",
     "scripts/a0x_material_child.py",
     "scripts/a0x_prepare_runtime.py",
@@ -101,6 +109,10 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "src/latent_triz/a0x_a0_analysis.py",
     "src/latent_triz/a0x_apfs.py",
     "src/latent_triz/a0x_contract.py",
+    "src/latent_triz/a0x_pair.py",
+    "src/latent_triz/a0x_compatibility.py",
+    "src/latent_triz/a0x_gate_contract.py",
+    "src/latent_triz/a0x_schema_projection.py",
     "src/latent_triz/a0x_ccp_executor.py",
     "src/latent_triz/a0x_execution.py",
     "src/latent_triz/a0x_freeze.py",
@@ -121,6 +133,10 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "tests/test_a0x_a0_analysis.py",
     "tests/test_a0x_apfs.py",
     "tests/test_a0x_contract.py",
+    "tests/test_a0x_pair_compatibility.py",
+    "tests/test_a0x_schema_projection.py",
+    "tests/test_a0x_architecture.py",
+    "tests/a0x_test_support.py",
     "tests/test_a0x_contract_check.py",
     "tests/test_a0x_ccp_executor.py",
     "tests/test_a0x_execution.py",
@@ -148,6 +164,16 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "requirements-schema.in",
     "requirements-schema.lock",
     "schemas/a0x-execution-authorization-v3.schema.json",
+    "schemas/a0x-external-assets-locator.schema.json",
+    "schemas/a0x-pair-binding.fragment.json",
+    "schemas/a0x-pair-projections.json",
+    "schemas/a0x-model-identity-receipt.schema.json",
+    "schemas/a0x-output-occupancy-receipt.schema.json",
+    "schemas/a0x-preflight-receipt.schema.json",
+    "schemas/a0x-representation-record.schema.json",
+    "schemas/a0x-statistical-result.schema.json",
+    "schemas/a0x-target-read-receipt.schema.json",
+    "schemas/a0x-terminal-result.schema.json",
     "schemas/a0x-gate-b-authorization.schema.json",
     "schemas/a0x-gh-2.97.0-verification-result.schema.json",
     "schemas/a0x-hosted-gate-a-evidence.schema.json",
@@ -779,7 +805,7 @@ def freeze_a0x_campaign(
                 if not isinstance(hidden_size, int) or isinstance(hidden_size, bool):
                     raise A0XFreezeError(f"A0X card lacks hidden size: {model_key}")
                 run_id = f"a0x-{leg.value}-{model_key}-{str(card['revision'])[:8]}-attempt-01"
-                output_path = f"results/a0x/{leg.value}/{model_key}/{run_id}"
+                output_path = derive_pair_output_path(leg, model_key, run_id)
                 pair = PairBinding(
                     binding_profile="a0x-pair-scope-v2",
                     leg=leg,
@@ -920,6 +946,8 @@ def _file_binding(repository: Path, relative: str) -> dict[str, Any]:
     path = repository / relative
     if not path.is_file() or path.is_symlink():
         raise A0XFreezeError(f"implementation binding is unavailable: {relative}")
+    if path.stat().st_nlink != 1:
+        raise A0XFreezeError(f"implementation binding is a hardlink: {relative}")
     return {"path": relative, "bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 

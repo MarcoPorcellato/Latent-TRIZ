@@ -741,6 +741,36 @@ class A0XRunnerPublicSurfaceTests(unittest.TestCase):
                 reserve_attempt_claim(claim, {"attempt_id": "incomplete"})
             self.assertFalse(claim.exists())
 
+    def test_legacy_failure_sealer_receives_reducer_state_not_stage_string(self) -> None:
+        from latent_triz.a0x_execution import AttemptState
+        from latent_triz.a0x_runner import A0XRunnerDependencies, _GUARD_EXEC_ACTIVE, _run_injected_lifecycle
+        from tests.a0x_test_support import authorization_documents, pair_binding
+
+        from latent_triz.a0x_contract import Leg, PairBinding
+
+        pair = PairBinding.from_mapping(pair_binding(Leg.A0, "gpt2"))
+        dossier, authorization, chain = authorization_documents(pair.as_mapping())
+        received: list[object] = []
+        dependencies = A0XRunnerDependencies(
+            static_preflight=lambda _context: (_ for _ in ()).throw(RuntimeError("preflight")),
+            tokenizer_factory=lambda: object(), model_factory=lambda _tokenizer: object(),
+            activation=lambda _model: object(), activation_sealer=lambda activation: activation,
+            target_capability_factory=lambda activation: activation, analysis=lambda target: target,
+            package_builder=lambda _analysis: Path("/unused"), package_verifier=lambda _package: None,
+            protected_tree_postflight=lambda _package: None,
+            failure_sealer=lambda state, *_args: received.append(state) or {"status": "failed"},
+            release_model=lambda _model: None,
+        )
+        token = _GUARD_EXEC_ACTIVE.set(True)
+        try:
+            _run_injected_lifecycle(
+                pair=pair, chain=chain, dependencies=dependencies, attempt_claim_path=Path("/unused"),
+                dossier=dossier, authorization=authorization, claim_reserved=True, pre_run_context={"synthetic": True},
+            )
+        finally:
+            _GUARD_EXEC_ACTIVE.reset(token)
+        self.assertEqual([AttemptState.PREFLIGHT], received)
+
     def test_matrix_configuration_bindings_validate_without_a_second_probe_file(self) -> None:
         from pathlib import Path
         from latent_triz.a0x_runner import _validate_policy_binding

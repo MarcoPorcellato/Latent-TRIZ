@@ -121,7 +121,14 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
-### A0X Hosted Gate A implementation boundary (current local checkpoint)
+### A0X contract-convergence checkpoint (current)
+
+Current A0X lifecycle and hash authority is the sole ledger in
+[A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md). Architecture authority
+is [A0X architecture convergence](./A0X_ARCHITECTURE_CONVERGENCE.md). Earlier
+A0X checkpoint blocks below are historical.
+
+### Historical A0X Hosted Gate A implementation boundary
 
 Tasks 1–9 of the Hosted Gate A migration are locally complete. Task 9 ended
 with the deliberate stale-freeze `NO-GO`; Task 10 is the only regeneration

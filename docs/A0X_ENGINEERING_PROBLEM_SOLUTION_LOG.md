@@ -1053,3 +1053,32 @@ and Terra reviews found no blocking issue in the correction.
 security-boundary evidence only. GitHub-hosted requalification remains pending;
 no network, evidence capture, Gate B/C, model, tokenizer, target, CCP, Docker,
 push, rerun, merge, or scientific execution occurred.
+
+## 39. Parallel pair contracts hid a production-hosted incompatibility
+
+**Symptom.** The architecture review found a 24/24 failure: all twelve frozen
+approval dossiers were rejected by both hosted consumer schemas. Schema-only
+validation had passed because the schemas accepted a model-root path, while
+real dossiers correctly used the run-specific pair destination. Positive hosted
+fixtures were built from that semantically invalid synthetic path, so they did
+not represent a real dossier projection.
+
+**Root cause.** `PairBinding`, consumer schema definitions, fixture helpers,
+and lifecycle stage strings were maintained as parallel truths. The runner and
+material adapter independently interpreted lifecycle state. The contract and
+material-contract modules also formed a domain-level import cycle, making the
+boundary difficult to audit.
+
+**Correction.** `PairBinding` and its pair derivations are the sole domain
+authority. The schema compiler registers every PairBinding projection; hosted
+positive fixtures are projected by the canonical envelope builders; the runner
+and material adapter use the canonical reducer; and adapter-side checks no
+longer import the contract module through the material contract. Repository
+verification invokes the compatibility oracle, which reports every frozen
+dossier/consumer combination before a material boundary.
+
+**Proof required before a future Gate A/B action.** On the selected exact
+`HEAD`, run the 12 dossier × 2 hosted-consumer compatibility oracle, the
+architecture fitness tests, and the documentation audit. These checks are
+target-free and do not authorize Gate C, model/tokenizer access, target reads,
+CCP heavy work, network, publication, or scientific execution.
