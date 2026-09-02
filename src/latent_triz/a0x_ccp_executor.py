@@ -28,6 +28,7 @@ from .a0x_contract import (
     CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
+    Leg,
     PairBinding,
     canonical_commitment,
     sha256_file,
@@ -44,12 +45,13 @@ from .a0x_material_contract import (
     validate_guard_launch_pair_binding,
     validate_qualification_evidence,
 )
-from .a0x_runner import planned_material_dossiers
+from .a0x_runner import A0XRunnerError, planned_material_dossiers, vertical_slice_dossier_path
 from .a0x_runtime_readiness import (
     A0XRuntimeReadinessError,
     runtime_readiness_path,
     validate_runtime_readiness_live,
 )
+from .a0x_vertical_slice import A0XVerticalSliceError, load_vertical_slice
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -241,9 +243,86 @@ def launch_fixed_dossier(
     root = Path(repository_root).resolve(strict=True)
     relative_dossier = _fixed_dossier_path(fixed_dossier)
     _assert_fixed_dossier(relative_dossier)
+    return _launch_validated_dossier(
+        root=root,
+        relative_dossier=relative_dossier,
+        source_head_probe=source_head_probe,
+        process_executor=process_executor,
+        guard_preflight_producer=guard_preflight_producer,
+    )
+
+
+def launch_vertical_slice_dossier(
+    *,
+    repository_root: str | Path,
+    implementation_source_head: str,
+    leg: str,
+    model_key: str,
+    source_head_probe: Callable[[], str],
+    process_executor: ProcessExecutor | None = None,
+    guard_preflight_producer: GuardPreflightProducer | None = None,
+) -> dict[str, Any]:
+    """Load one selector-derived vertical package before material delegation."""
+    root = Path(repository_root).resolve(strict=True)
+    package_head = _revision(implementation_source_head, "vertical package source head")
+    try:
+        selected_leg = Leg(leg)
+        relative_dossier = vertical_slice_dossier_path(package_head, selected_leg, model_key)
+    except (A0XRunnerError, TypeError, ValueError) as error:
+        raise A0XCcpExecutorError("vertical slice selector is invalid") from error
+    try:
+        package = load_vertical_slice(root, relative_dossier)
+    except A0XVerticalSliceError as error:
+        raise A0XCcpExecutorError("vertical slice package is invalid") from error
+    if not isinstance(package, Mapping):
+        raise A0XCcpExecutorError("vertical slice package is invalid")
+    try:
+        package_pair = PairBinding.from_mapping(_mapping(package, "pair", "vertical slice package"))
+        dossier = _mapping(package, "dossier", "vertical slice package")
+        dossier_pair = PairBinding.from_mapping(_mapping(dossier, "pair_binding", "vertical slice dossier"))
+    except (A0XContractError, ValueError, TypeError) as error:
+        raise A0XCcpExecutorError("vertical slice package is invalid") from error
+    if (
+        package.get("dossier_relative") != relative_dossier
+        or package_pair.leg is not selected_leg
+        or package_pair.model_key != model_key
+        or dossier_pair.as_mapping() != package_pair.as_mapping()
+        or dossier.get("implementation_source_head") != package_head
+    ):
+        raise A0XCcpExecutorError("vertical slice package selector binding differs")
+    dossier_sha256 = _vertical_dossier_sha256(package, root=root, relative_dossier=relative_dossier)
+    source_head = _revision(source_head_probe(), "repository source head")
+    if source_head != package_head:
+        raise A0XCcpExecutorError("repository source HEAD differs from vertical package")
+    return _launch_validated_dossier(
+        root=root,
+        relative_dossier=relative_dossier,
+        source_head_probe=source_head_probe,
+        process_executor=process_executor,
+        guard_preflight_producer=guard_preflight_producer,
+        expected_dossier=dossier,
+        expected_dossier_sha256=dossier_sha256,
+    )
+
+
+def _launch_validated_dossier(
+    *,
+    root: Path,
+    relative_dossier: str,
+    source_head_probe: Callable[[], str],
+    process_executor: ProcessExecutor | None,
+    guard_preflight_producer: GuardPreflightProducer | None,
+    expected_dossier: Mapping[str, Any] | None = None,
+    expected_dossier_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Consume an already selected dossier without selecting its namespace."""
     dossier_path = _repository_file(root, relative_dossier)
     dossier_raw = dossier_path.read_bytes()
     dossier = _strict_object(dossier_raw, "dossier")
+    if expected_dossier is not None and dossier != dict(expected_dossier):
+        raise A0XCcpExecutorError("vertical slice dossier bytes drifted")
+    if expected_dossier_sha256 is not None and _sha256_bytes(dossier_raw) != expected_dossier_sha256:
+        raise A0XCcpExecutorError("vertical slice dossier bytes drifted")
     try:
         canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE)
         pair = PairBinding.from_mapping(_mapping(dossier, "pair_binding", "dossier"))
@@ -1105,6 +1184,28 @@ def _validate_process_result(value: ProcessResult) -> None:
         raise A0XCcpExecutorError("guard process capture exceeded the fixed limit")
 
 
+def _vertical_dossier_sha256(
+    package: Mapping[str, Any], *, root: Path, relative_dossier: str,
+) -> str:
+    """Rebind the loader's dossier digest before common material processing."""
+    try:
+        manifest = _mapping(package, "manifest", "vertical slice package")
+        members = _mapping(manifest, "members", "vertical slice manifest")
+        binding = _mapping(members, "approval-dossier.json", "vertical slice manifest")
+        digest = binding.get("sha256")
+    except A0XCcpExecutorError:
+        raise A0XCcpExecutorError("vertical slice dossier binding is invalid") from None
+    if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+        raise A0XCcpExecutorError("vertical slice dossier binding is invalid")
+    try:
+        raw = _repository_file(root, relative_dossier).read_bytes()
+    except A0XCcpExecutorError:
+        raise A0XCcpExecutorError("vertical slice dossier binding is invalid") from None
+    if _sha256_bytes(raw) != digest:
+        raise A0XCcpExecutorError("vertical slice dossier bytes drifted")
+    return digest
+
+
 def _fixed_dossier_path(value: str) -> str:
     if not isinstance(value, str) or not value.endswith(".json"):
         raise A0XCcpExecutorError("fixed dossier path is invalid")
@@ -1212,6 +1313,6 @@ def _sha256_bytes(value: bytes) -> str:
 __all__ = [
     "A0XCcpExecutorError", "GuardPreflightOutput", "GuardPreflightProducer",
     "ProcessExecutor", "ProcessResult", "SubprocessGuardPreflightProducer",
-    "launch_fixed_dossier", "qualification_evidence_from_receipt", "rehash_gate_a_evidence",
+    "launch_fixed_dossier", "launch_vertical_slice_dossier", "qualification_evidence_from_receipt", "rehash_gate_a_evidence",
     "runtime_mapping_path",
 ]
