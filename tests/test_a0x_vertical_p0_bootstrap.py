@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import py_compile
+import re
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,57 @@ REVIEW_RELATIVE = Path(
     "a0x-vertical-slice-local-review-77dcae52542d21e9bf16e4f17102abf70e68ffc3.md"
 )
 PYTHON = Path(sys.executable).resolve()
+PREEXEC_SOURCE = """\
+import hashlib
+import hmac
+import os
+import stat
+import sys
+
+MAXIMUM = 64 * 1024 * 1024
+CODE = "A0X_VERTICAL_P0_BOOTSTRAP_IDENTITY_MISMATCH"
+
+def refuse():
+    print(f"a0x-vertical-p0-preexec: {CODE}", file=sys.stderr)
+    raise SystemExit(2)
+
+path = sys.argv[1]
+expected_sha256 = sys.argv[2]
+if len(expected_sha256) != 64 or any(c not in "0123456789abcdef" for c in expected_sha256):
+    refuse()
+try:
+    before = os.lstat(path)
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or not 0 < before.st_size <= MAXIMUM:
+        refuse()
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        opened = os.fstat(descriptor)
+        raw = b"".join(iter(lambda: os.read(descriptor, 1024 * 1024), b""))
+        final = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+except (AttributeError, OSError):
+    refuse()
+identity = (before.st_dev, before.st_ino, before.st_size)
+if identity != (opened.st_dev, opened.st_ino, opened.st_size) or identity != (final.st_dev, final.st_ino, final.st_size):
+    refuse()
+if len(raw) != before.st_size or not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), expected_sha256):
+    refuse()
+sys.argv = [
+    path,
+    *sys.argv[3:],
+    "--preexec-bootstrap-device", str(opened.st_dev),
+    "--preexec-bootstrap-inode", str(opened.st_ino),
+    "--preexec-bootstrap-bytes", str(opened.st_size),
+]
+globals_for_script = {
+    "__name__": "__main__",
+    "__file__": path,
+    "__package__": None,
+    "__cached__": None,
+}
+exec(compile(raw, path, "exec", dont_inherit=True, optimize=0), globals_for_script, globals_for_script)
+"""
 
 
 def _sha256(path: Path) -> str:
@@ -62,18 +114,19 @@ def _ledger_paths() -> list[str]:
 
 
 class SyntheticRepository:
-    def __init__(self, parent: Path):
+    def __init__(self, parent: Path, *, cleanup_failure: bool = False):
         self.root = parent / "repository"
         self.root.mkdir()
         self.import_marker = parent / "repository-imported"
         self.malicious_marker = parent / "malicious-bytecode-executed"
         self.shadow_marker = parent / "path-shadow-executed"
+        self.bootstrap_replacement_marker = parent / "bootstrap-replacement-executed"
         self.paths = _ledger_paths()
         for index, relative in enumerate(self.paths):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(f"fixture-{index:03d}\n".encode("ascii"))
-        self._write_repository_sources()
+        self._write_repository_sources(cleanup_failure=cleanup_failure)
         package = self.root / "src/latent_triz/__init__.py"
         package.write_text("\"\"\"Synthetic package.\"\"\"\n", encoding="utf-8")
         bootstrap = self.root / SCRIPT_RELATIVE
@@ -87,7 +140,7 @@ class SyntheticRepository:
         _git(self.root, "add", ".")
         _git(self.root, "commit", "-q", "-m", "synthetic bootstrap fixture")
 
-    def _write_repository_sources(self) -> None:
+    def _write_repository_sources(self, *, cleanup_failure: bool) -> None:
         contract = self.root / "src/latent_triz/a0x_contract.py"
         contract.write_text(
             textwrap.dedent(
@@ -102,6 +155,23 @@ class SyntheticRepository:
             encoding="utf-8",
         )
         vertical = self.root / "src/latent_triz/a0x_vertical_slice.py"
+        cleanup_block = ""
+        if cleanup_failure:
+            cleanup_block = textwrap.indent(
+                textwrap.dedent(
+                    """\
+                    from pathlib import Path
+                    import shutil
+                    import sys
+                    import tempfile
+                    cache = Path(sys.pycache_prefix)
+                    shutil.rmtree(cache)
+                    replacement = Path(tempfile.mkdtemp(prefix="a0x-p0-cleanup-target-"))
+                    cache.symlink_to(replacement, target_is_directory=True)
+                    """
+                ),
+                "    ",
+            )
         vertical.write_text(
             textwrap.dedent(
                 """\
@@ -113,13 +183,21 @@ class SyntheticRepository:
                     implementation_source_head: str
                     output_root: str
                 def generate_vertical_slice(root, request):
+                """
+            )
+            + cleanup_block
+            + textwrap.indent(
+                textwrap.dedent(
+                    """\
                     return {
                         "artifact_class": "synthetic-a0x-vertical-receipt",
                         "implementation_source_head": request.implementation_source_head,
                         "pair": {"leg": request.leg.value, "model_key": request.model_key},
                         "output_root": request.output_root,
                     }
-                """
+                    """
+                ),
+                "    ",
             ),
             encoding="utf-8",
         )
@@ -161,6 +239,7 @@ class SyntheticRepository:
         head: str | None = None,
         tree: str | None = None,
         digest: str | None = None,
+        bootstrap_sha256: str | None = None,
         isolated: bool = True,
         environment: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
@@ -168,15 +247,25 @@ class SyntheticRepository:
         arguments = [str(PYTHON)]
         if isolated:
             arguments.extend(("-I", "-S", "-B"))
+        expected_bootstrap = (
+            _sha256(self.root / SCRIPT_RELATIVE)
+            if bootstrap_sha256 is None
+            else bootstrap_sha256
+        )
         arguments.extend(
             (
+                "-c", PREEXEC_SOURCE,
                 str(self.root / SCRIPT_RELATIVE),
+                expected_bootstrap,
                 "--repository-root", str(self.root),
                 "--expected-head", actual_head if head is None else head,
                 "--expected-tree", actual_tree if tree is None else tree,
                 "--expected-python", str(PYTHON),
                 "--expected-python-sha256", _sha256(PYTHON),
                 "--expected-ledger-sha256", self.ledger_digest() if digest is None else digest,
+                "--expected-bootstrap-sha256", expected_bootstrap,
+                "--expected-preexec-sha256",
+                hashlib.sha256(PREEXEC_SOURCE.encode("utf-8")).hexdigest(),
             )
         )
         child_environment = dict(os.environ)
@@ -223,8 +312,91 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def fixture(self) -> SyntheticRepository:
-        return SyntheticRepository(Path(self.temporary.name))
+    def fixture(self, *, cleanup_failure: bool = False) -> SyntheticRepository:
+        return SyntheticRepository(
+            Path(self.temporary.name), cleanup_failure=cleanup_failure,
+        )
+
+    def test_replaced_bootstrap_is_rejected_before_any_replacement_byte_executes(self) -> None:
+        fixture = self.fixture()
+        expected_sha256 = _sha256(fixture.root / SCRIPT_RELATIVE)
+        (fixture.root / SCRIPT_RELATIVE).write_text(
+            textwrap.dedent(
+                f"""\
+                from pathlib import Path
+                Path({str(fixture.bootstrap_replacement_marker)!r}).write_text(
+                    "executed", encoding="utf-8"
+                )
+                """
+            ),
+            encoding="utf-8",
+        )
+        _git(fixture.root, "update-index", "--assume-unchanged", SCRIPT_RELATIVE.as_posix())
+        self.assertEqual("", _git(fixture.root, "status", "--porcelain"))
+
+        completed = fixture.command(bootstrap_sha256=expected_sha256)
+
+        self.assertEqual(2, completed.returncode)
+        self.assertIn(
+            "A0X_VERTICAL_P0_BOOTSTRAP_IDENTITY_MISMATCH", completed.stderr,
+        )
+        self.assertFalse(fixture.bootstrap_replacement_marker.exists())
+
+    def test_cleanup_failure_preserves_published_receipt_and_marks_uncertainty(self) -> None:
+        fixture = self.fixture(cleanup_failure=True)
+
+        completed = fixture.command(
+            bootstrap_sha256=_sha256(fixture.root / SCRIPT_RELATIVE),
+        )
+
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_PRIVATE_CLEANUP_UNCERTAIN", completed.stderr)
+        self.assertTrue(completed.stdout)
+        receipt = json.loads(completed.stdout)
+        terminal = receipt["p0_authorization_preflight"]["terminal"]
+        self.assertEqual("published", terminal["package_publication"])
+        self.assertEqual("uncertain", terminal["private_cleanup"])
+        self.assertFalse(terminal["retry_permitted"])
+        self.assertEqual(
+            "shutil.rmtree", terminal["private_cleanup_error"]["operation"],
+        )
+        self.assertEqual(
+            "symlink",
+            terminal["private_cleanup_error"]["observed_object"]["object_type"],
+        )
+        cleanup_path = Path(terminal["private_cleanup_path"])
+        cleanup_target = cleanup_path.resolve()
+        cleanup_path.unlink()
+        shutil.rmtree(cleanup_target)
+
+    def test_authorities_bind_one_full_preexec_through_cleanup_trust_window(self) -> None:
+        required = (
+            "before pre-execution Python/bootstrap verification and process launch "
+            "through terminal receipt emission and private-bootstrap cleanup"
+        )
+        paths = (
+            ROOT / "docs/A0X_VERTICAL_SLICE.md",
+            ROOT / REVIEW_RELATIVE,
+            ROOT / "artifacts/checkpoints/A0X_VERTICAL_SLICE_RESTART_2026-09-02.md",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                normalized = re.sub(r"\s+", " ", path.read_text(encoding="utf-8"))
+                self.assertIn(required, normalized)
+
+    def test_authorization_commands_embed_the_exact_preexec_source(self) -> None:
+        prefix = "python3.13 -I -S -B -c '\n"
+        suffix = "\n' /Users/marco1/.codex/worktrees/"
+        expected_sha256 = hashlib.sha256(PREEXEC_SOURCE.encode("utf-8")).hexdigest()
+        for path in (
+            ROOT / REVIEW_RELATIVE,
+            ROOT / "artifacts/checkpoints/A0X_VERTICAL_SLICE_RESTART_2026-09-02.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text(encoding="utf-8")
+                embedded = text.split(prefix, 1)[1].split(suffix, 1)[0] + "\n"
+                self.assertEqual(PREEXEC_SOURCE, embedded)
+                self.assertIn(f"--expected-preexec-sha256 {expected_sha256}", text)
 
     def test_wrong_head_or_tree_refuses_before_repository_import(self) -> None:
         fixture = self.fixture()
@@ -325,6 +497,17 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
         self.assertEqual(
             _sha256(fixture.root / SCRIPT_RELATIVE), preflight["launcher"]["sha256"],
         )
+        self.assertEqual(
+            hashlib.sha256(PREEXEC_SOURCE.encode("utf-8")).hexdigest(),
+            preflight["preexec_verifier"]["source_sha256"],
+        )
+        self.assertEqual(
+            preflight["launcher"]["bytes"],
+            preflight["preexec_verifier"]["bootstrap_descriptor"]["bytes"],
+        )
+        self.assertEqual("published", preflight["terminal"]["package_publication"])
+        self.assertEqual("complete", preflight["terminal"]["private_cleanup"])
+        self.assertFalse(preflight["terminal"]["retry_permitted"])
         self.assertEqual("a0", receipt["pair"]["leg"])
         self.assertEqual("smollm2_360m", receipt["pair"]["model_key"])
 

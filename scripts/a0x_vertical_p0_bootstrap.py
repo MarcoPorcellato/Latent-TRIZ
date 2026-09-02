@@ -42,11 +42,13 @@ PYTHON_IDENTITY_MISMATCH = "A0X_VERTICAL_P0_PYTHON_IDENTITY_MISMATCH"
 SOURCE_IDENTITY_MISMATCH = "A0X_VERTICAL_P0_SOURCE_IDENTITY_MISMATCH"
 CHECKOUT_DIRTY = "A0X_VERTICAL_P0_CHECKOUT_DIRTY"
 LAUNCHER_IDENTITY_MISMATCH = "A0X_VERTICAL_P0_LAUNCHER_IDENTITY_MISMATCH"
+BOOTSTRAP_IDENTITY_MISMATCH = "A0X_VERTICAL_P0_BOOTSTRAP_IDENTITY_MISMATCH"
 BYTECODE_PRESENT = "A0X_VERTICAL_P0_BYTECODE_PRESENT"
 LEDGER_MISMATCH = "A0X_VERTICAL_P0_LEDGER_MISMATCH"
 OUTPUT_EXISTS = "A0X_VERTICAL_P0_OUTPUT_EXISTS"
 IMPORT_FAILED = "A0X_VERTICAL_P0_IMPORT_FAILED"
 INTERNAL_ERROR = "A0X_VERTICAL_P0_INTERNAL_ERROR"
+PRIVATE_CLEANUP_UNCERTAIN = "A0X_VERTICAL_P0_PRIVATE_CLEANUP_UNCERTAIN"
 
 
 class A0XVerticalP0BootstrapError(ValueError):
@@ -55,6 +57,14 @@ class A0XVerticalP0BootstrapError(ValueError):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
+
+
+class A0XVerticalP0TerminalError(A0XVerticalP0BootstrapError):
+    """Raised with a terminal receipt when private cleanup is uncertain."""
+
+    def __init__(self, code: str, receipt: dict[str, Any]):
+        super().__init__(code)
+        self.receipt = receipt
 
 
 @dataclass(frozen=True)
@@ -228,7 +238,21 @@ def _verify_python_identity(expected_path: str, expected_sha256: str) -> dict[st
     observed_sha256 = hashlib.sha256(raw).hexdigest()
     if observed_sha256 != expected_sha256:
         raise A0XVerticalP0BootstrapError(PYTHON_IDENTITY_MISMATCH)
-    return {"path": expected_path, "sha256": observed_sha256, "bytes": len(raw)}
+    return {
+        "path": expected_path,
+        "sha256": observed_sha256,
+        "bytes": len(raw),
+        "implementation": sys.implementation.name,
+        "cache_tag": sys.implementation.cache_tag,
+        "version": sys.version,
+        "flags": {
+            "isolated": sys.flags.isolated,
+            "ignore_environment": sys.flags.ignore_environment,
+            "no_site": sys.flags.no_site,
+            "no_user_site": sys.flags.no_user_site,
+            "dont_write_bytecode": sys.flags.dont_write_bytecode,
+        },
+    }
 
 
 def _read_absolute_regular(path: Path, maximum: int, code: str) -> bytes:
@@ -313,7 +337,9 @@ def _require_source_state(root: Path, expected_head: str, expected_tree: str) ->
         raise A0XVerticalP0BootstrapError(CHECKOUT_DIRTY)
 
 
-def _verify_launcher(root: Path) -> dict[str, Any]:
+def _verify_launcher(root: Path, expected_sha256: str) -> dict[str, Any]:
+    if DIGEST.fullmatch(expected_sha256) is None:
+        raise A0XVerticalP0BootstrapError(INVALID_ARGUMENT)
     expected = root / SCRIPT_RELATIVE
     try:
         if Path(__file__).resolve(strict=True) != expected.resolve(strict=True):
@@ -324,10 +350,39 @@ def _verify_launcher(root: Path) -> dict[str, Any]:
         raise
     except (OSError, RuntimeError) as error:
         raise A0XVerticalP0BootstrapError(LAUNCHER_IDENTITY_MISMATCH) from error
+    if launcher.sha256 != expected_sha256:
+        raise A0XVerticalP0BootstrapError(BOOTSTRAP_IDENTITY_MISMATCH)
     return {
         "path": SCRIPT_RELATIVE,
         "sha256": launcher.sha256,
         "bytes": len(launcher.raw),
+    }
+
+
+def _preexec_evidence(
+    arguments: argparse.Namespace,
+    launcher_identity: dict[str, Any],
+) -> dict[str, Any]:
+    if DIGEST.fullmatch(arguments.expected_preexec_sha256) is None:
+        raise A0XVerticalP0BootstrapError(INVALID_ARGUMENT)
+    values = (
+        arguments.preexec_bootstrap_device,
+        arguments.preexec_bootstrap_inode,
+        arguments.preexec_bootstrap_bytes,
+    )
+    if any(re.fullmatch(r"[0-9]+", value) is None for value in values):
+        raise A0XVerticalP0BootstrapError(BOOTSTRAP_IDENTITY_MISMATCH)
+    device, inode, byte_count = (int(value) for value in values)
+    if inode < 1 or byte_count != launcher_identity["bytes"]:
+        raise A0XVerticalP0BootstrapError(BOOTSTRAP_IDENTITY_MISMATCH)
+    return {
+        "profile": "authorization-bound-inline-python-c-v1",
+        "source_sha256": arguments.expected_preexec_sha256,
+        "bootstrap_descriptor": {
+            "device": device,
+            "inode": inode,
+            "bytes": byte_count,
+        },
     }
 
 
@@ -426,6 +481,56 @@ def _create_private_pycache() -> Path:
         raise A0XVerticalP0BootstrapError(RUNTIME_UNISOLATED) from error
 
 
+def _terminal_receipt(
+    receipt: dict[str, Any] | None,
+    preflight: dict[str, Any],
+    *,
+    package_publication: str,
+    private_cleanup: str,
+    pycache: Path | None = None,
+    cleanup_error: OSError | None = None,
+) -> dict[str, Any]:
+    terminal_receipt = (
+        receipt
+        if receipt is not None
+        else {"artifact_class": "a0x-vertical-p0-terminal-receipt"}
+    )
+    terminal: dict[str, Any] = {
+        "package_publication": package_publication,
+        "private_cleanup": private_cleanup,
+        "retry_permitted": False,
+    }
+    if pycache is not None:
+        terminal["private_cleanup_path"] = str(pycache)
+    if cleanup_error is not None and pycache is not None:
+        observation: dict[str, Any] | None = None
+        try:
+            metadata = pycache.lstat()
+            observation = {
+                "device": metadata.st_dev,
+                "inode": metadata.st_ino,
+                "mode": stat.S_IMODE(metadata.st_mode),
+                "link_count": metadata.st_nlink,
+                "object_type": (
+                    "symlink"
+                    if stat.S_ISLNK(metadata.st_mode)
+                    else "directory"
+                    if stat.S_ISDIR(metadata.st_mode)
+                    else "other"
+                ),
+            }
+        except OSError:
+            pass
+        terminal["private_cleanup_error"] = {
+            "operation": "shutil.rmtree",
+            "errno": cleanup_error.errno,
+            "observed_object": observation,
+        }
+    preflight["terminal"] = terminal
+    terminal_receipt["p0_authorization_preflight"] = preflight
+    return terminal_receipt
+
+
 def _prepare_source_import(root: Path) -> None:
     source_root = (root / "src").resolve(strict=True)
     for entry in sys.path:
@@ -463,14 +568,34 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         arguments.expected_python, arguments.expected_python_sha256,
     )
     _require_source_state(root, arguments.expected_head, arguments.expected_tree)
-    launcher_identity = _verify_launcher(root)
+    launcher_identity = _verify_launcher(root, arguments.expected_bootstrap_sha256)
+    preexec_evidence = _preexec_evidence(arguments, launcher_identity)
     _reject_repository_bytecode(root)
     ledger = _verify_ledger(root, arguments.expected_ledger_sha256)
     output_relative = _output_relative(arguments.expected_head)
     if (root / output_relative).exists():
         raise A0XVerticalP0BootstrapError(OUTPUT_EXISTS)
 
+    preflight = {
+        "profile": PROFILE,
+        "source": {"head": arguments.expected_head, "tree": arguments.expected_tree},
+        "python": python_identity,
+        "preexec_verifier": preexec_evidence,
+        "launcher": launcher_identity,
+        "input_ledger": {
+            "path": LEDGER_DOCUMENT_RELATIVE,
+            "document_sha256": ledger.document_sha256,
+            "sha256": ledger.sha256,
+            "count": ledger.count,
+            "total_bytes": ledger.total_bytes,
+        },
+        "pair": {"leg": LEG, "model_key": MODEL_KEY},
+        "maximum_generation_count": 1,
+        "repository_bytecode_loaded": False,
+    }
     pycache = _create_private_pycache()
+    receipt: dict[str, Any] | None = None
+    publication_state = "not_started"
     try:
         _require_source_state(root, arguments.expected_head, arguments.expected_tree)
         _reject_repository_bytecode(root)
@@ -489,7 +614,9 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
             implementation_source_head=arguments.expected_head,
             output_root=output_relative,
         )
+        publication_state = "uncertain"
         receipt = generate_vertical_slice(root, request)
+        publication_state = "published"
         if not isinstance(receipt, dict) or "p0_authorization_preflight" in receipt:
             raise A0XVerticalP0BootstrapError(INTERNAL_ERROR)
         observed_head = _git_output(
@@ -500,26 +627,45 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         ).decode("ascii", "strict").strip()
         if observed_head != arguments.expected_head or observed_tree != arguments.expected_tree:
             raise A0XVerticalP0BootstrapError(SOURCE_IDENTITY_MISMATCH)
-        receipt["p0_authorization_preflight"] = {
-            "profile": PROFILE,
-            "source": {"head": observed_head, "tree": observed_tree},
-            "python": python_identity,
-            "launcher": launcher_identity,
-            "input_ledger": {
-                "path": LEDGER_DOCUMENT_RELATIVE,
-                "document_sha256": ledger.document_sha256,
-                "sha256": ledger.sha256,
-                "count": ledger.count,
-                "total_bytes": ledger.total_bytes,
-            },
-            "pair": {"leg": LEG, "model_key": MODEL_KEY},
-            "maximum_generation_count": 1,
-            "repository_bytecode_loaded": False,
-        }
-        return receipt
-    finally:
+        preflight["source"] = {"head": observed_head, "tree": observed_tree}
+    except BaseException:
         sys.pycache_prefix = None
+        try:
+            shutil.rmtree(pycache)
+        except OSError as cleanup_error:
+            terminal_receipt = _terminal_receipt(
+                receipt,
+                preflight,
+                package_publication=publication_state,
+                private_cleanup="uncertain",
+                pycache=pycache,
+                cleanup_error=cleanup_error,
+            )
+            raise A0XVerticalP0TerminalError(
+                PRIVATE_CLEANUP_UNCERTAIN, terminal_receipt,
+            ) from cleanup_error
+        raise
+    sys.pycache_prefix = None
+    try:
         shutil.rmtree(pycache)
+    except OSError as cleanup_error:
+        terminal_receipt = _terminal_receipt(
+            receipt,
+            preflight,
+            package_publication=publication_state,
+            private_cleanup="uncertain",
+            pycache=pycache,
+            cleanup_error=cleanup_error,
+        )
+        raise A0XVerticalP0TerminalError(
+            PRIVATE_CLEANUP_UNCERTAIN, terminal_receipt,
+        ) from cleanup_error
+    return _terminal_receipt(
+        receipt,
+        preflight,
+        package_publication=publication_state,
+        private_cleanup="complete",
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -530,6 +676,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-python", required=True)
     parser.add_argument("--expected-python-sha256", required=True)
     parser.add_argument("--expected-ledger-sha256", required=True)
+    parser.add_argument("--expected-bootstrap-sha256", required=True)
+    parser.add_argument("--expected-preexec-sha256", required=True)
+    parser.add_argument("--preexec-bootstrap-device", required=True)
+    parser.add_argument("--preexec-bootstrap-inode", required=True)
+    parser.add_argument("--preexec-bootstrap-bytes", required=True)
     return parser
 
 
@@ -537,6 +688,17 @@ def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
         receipt = run(arguments)
+    except A0XVerticalP0TerminalError as error:
+        print(
+            json.dumps(
+                error.receipt,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ),
+        )
+        print(f"a0x-vertical-p0: {error.code}", file=sys.stderr)
+        return 2
     except A0XVerticalP0BootstrapError as error:
         print(f"a0x-vertical-p0: {error.code}", file=sys.stderr)
         return 2

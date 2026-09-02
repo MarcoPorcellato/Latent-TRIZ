@@ -72,10 +72,12 @@ current pair-scoped evidence.
 ## Transaction namespace trust boundary
 
 P0 authorization is valid only while no untrusted process running as the same
-user can mutate the repository or output namespace. This assumption applies
-from the generator's first source-state check through its terminal success or
-cleanup. Private `0700` staging excludes other users; it does not exclude
-another process with the same user ID.
+user can mutate the repository or output namespace. This single exclusion
+window begins before pre-execution Python/bootstrap verification and process
+launch through terminal receipt emission and private-bootstrap cleanup. It
+therefore covers every pre-generator verification, repository import, staging
+and publication operation. Private `0700` staging excludes other users; it
+does not exclude another process with the same user ID.
 
 Darwin provides the required exclusive atomic publish rename, but it does not
 provide an atomic unlink or directory removal conditioned on an expected inode
@@ -90,6 +92,10 @@ only for names whose ownership remains established.
 The operator must isolate or stop untrusted same-user namespace mutators for
 the complete transaction. If that condition cannot be established, P0 is
 NO-GO; file modes and post hoc identity checks are not substitutes.
+If private-bootstrap cleanup is uncertain, the trust window has no proven clean
+close. The terminal receipt must preserve publication success separately from
+cleanup uncertainty, mark retry prohibited, and require separately authorized
+recovery without deleting or overwriting the published package.
 
 ## Ordered gates for one leg-model pair
 

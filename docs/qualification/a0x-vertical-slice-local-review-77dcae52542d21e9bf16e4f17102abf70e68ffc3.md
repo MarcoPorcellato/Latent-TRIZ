@@ -19,9 +19,12 @@ and no generated package is qualified.
 
 P0 remains fail-closed unless the operator can exclude every untrusted process
 running as the same user from repository and output-namespace mutation for the
-complete transaction. Darwin cannot atomically remove a name conditioned on an
-expected inode. Detected ownership loss must preserve the possible replacement
-and return `A0X_VERTICAL_SLICE_PUBLICATION_OWNERSHIP_LOST`.
+complete transaction. The single exclusion window begins before pre-execution
+Python/bootstrap verification and process launch through terminal receipt
+emission and private-bootstrap cleanup. Darwin cannot atomically remove a name
+conditioned on an expected inode. Detected ownership loss must preserve the
+possible replacement and return
+`A0X_VERTICAL_SLICE_PUBLICATION_OWNERSHIP_LOST`.
 
 ## Exact reviewed state
 
@@ -70,25 +73,35 @@ delegation before any authorization lookup, preflight, claim, or guard call.
 The historical launcher still accepts only the twelve historical dossier
 paths.
 
-The only proposed P0 entry point is
-`scripts/a0x_vertical_p0_bootstrap.py`. Before importing repository modules or
-creating staging state, it requires the immutable authorized HEAD and tree,
-the exact clean checkout, an absolute regular single-link Python executable
-with its authorized SHA-256, isolated source-only flags `-I -S -B`, and the
-exact 137-entry descriptor ledger below. It rejects repository bytecode,
-native extension artifacts, ambient repository imports, and any ledger
-cardinality, type, link-count, byte-count, or digest mismatch. Its terminal
-receipt binds source identity, Python identity, bootstrap identity, and the
-verified ledger.
+The only proposed P0 action starts with the exact authorization-bound inline
+pre-execution launcher in the command below. Under the already authenticated
+absolute Python and `-I -S -B`, that launcher descriptor-opens
+`scripts/a0x_vertical_p0_bootstrap.py`, requires regular single-link stable
+bytes, compares them with the immutable authorized bootstrap SHA-256, and only
+then compiles and executes those verified bytes. The bootstrap independently
+requires the same expected hash before importing repository modules or creating
+staging state. It then verifies the immutable authorized HEAD/tree, exact clean
+checkout, Python identity, source-only isolation, and exact 137-entry
+descriptor ledger. It rejects repository bytecode, native extension artifacts,
+ambient repository imports, and any ledger cardinality, type, link-count,
+byte-count, or digest mismatch.
 
-The bootstrap and its test intentionally remain outside the 137 package-input
+The terminal receipt binds source, Python, bootstrap, and ledger identities.
+It also records whether package publication completed and whether private
+bootstrap cleanup completed. If cleanup is uncertain after publication, the
+bootstrap emits the successful generation receipt with `published`,
+`uncertain`, and `retry_permitted: false`, then exits with a terminal cleanup
+error. That outcome is not qualification evidence, does not prove the trust
+window closed, preserves the published package, and must never be retried.
+
+The bootstrap and its tests intentionally remain outside the 137 package-input
 inventory. The authorized clean HEAD/tree binds their committed bytes, and the
 bootstrap records its own SHA-256 in the terminal receipt. The package-input
 ledger continues to cover exactly the bytes consumed by the generator.
 
 ## Fresh deterministic evidence
 
-The corrected target-free command completed with `Ran 81 tests ... OK`:
+The corrected target-free command completed with `Ran 85 tests ... OK`:
 
 ```text
 rtk env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_a0x_vertical_slice tests.test_a0x_vertical_material tests.test_a0x_vertical_p0_bootstrap tests.test_a0x_freeze tests.test_a0x_schema_projection -v
@@ -100,16 +113,19 @@ ownership-loss preservation, exact five-file validation, cross-leg/model/head
 substitution, changed package bytes, zero claim/preflight/guard calls, trusted
 inventory registration, schema projection parity, immutable bootstrap source
 identity, isolated hash-bound Python, conflicting valid ignored bytecode, PATH
-shadowing, and ledger cardinality/type/link/digest refusal.
+shadowing, pre-execution bootstrap replacement without marker execution,
+ledger cardinality/type/link/digest refusal, exact inline-source parity across
+authorization documents, full trust-window wording, and post-publication
+cleanup uncertainty with the successful receipt preserved.
 
 `rtk env PYTHONDONTWRITEBYTECODE=1 make a0x-vertical-slice-verify` independently
-completed with `Ran 48 tests ... OK`. Five active package schemas passed Draft
+completed with `Ran 52 tests ... OK`. Five active package schemas passed Draft
 2020-12 meta-validation: protocol, implementation, freeze manifest,
 authorization dossier, and vertical-slice manifest.
 
 The full target-free synthetic aggregate produced a zero-material receipt with
 `model_loaded: false`, `tokenizer_constructed: false`,
-`sealed_target_content_reads: 0`, and `ccp_invoked: false`. It then ran 496
+`sealed_target_content_reads: 0`, and `ccp_invoked: false`. It then ran 500
 tests and ended with the expected historical stale-package boundary: three
 failures, one dependent error, and one skip. Both frozen legs report
 implementation-path drift; byte-identical historical regeneration differs;
@@ -312,18 +328,72 @@ ledger, invokes the reviewed generator once, and prints its receipt as
 canonical JSON.
 
 ```bash
-rtk env -i PATH=/usr/bin:/bin LC_ALL=C /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 -I -S -B scripts/a0x_vertical_p0_bootstrap.py --repository-root . --expected-head EXACT_FINAL_40_HEX_HEAD --expected-tree EXACT_FINAL_40_HEX_TREE --expected-python /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 --expected-python-sha256 3a1f077a333905eaac57197c9f2060ed95e05208daf83da4827d92e0474574d8 --expected-ledger-sha256 37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa
+rtk env -i PATH=/usr/bin:/bin LC_ALL=C /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 -I -S -B -c '
+import hashlib
+import hmac
+import os
+import stat
+import sys
+
+MAXIMUM = 64 * 1024 * 1024
+CODE = "A0X_VERTICAL_P0_BOOTSTRAP_IDENTITY_MISMATCH"
+
+def refuse():
+    print(f"a0x-vertical-p0-preexec: {CODE}", file=sys.stderr)
+    raise SystemExit(2)
+
+path = sys.argv[1]
+expected_sha256 = sys.argv[2]
+if len(expected_sha256) != 64 or any(c not in "0123456789abcdef" for c in expected_sha256):
+    refuse()
+try:
+    before = os.lstat(path)
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or not 0 < before.st_size <= MAXIMUM:
+        refuse()
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        opened = os.fstat(descriptor)
+        raw = b"".join(iter(lambda: os.read(descriptor, 1024 * 1024), b""))
+        final = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+except (AttributeError, OSError):
+    refuse()
+identity = (before.st_dev, before.st_ino, before.st_size)
+if identity != (opened.st_dev, opened.st_ino, opened.st_size) or identity != (final.st_dev, final.st_ino, final.st_size):
+    refuse()
+if len(raw) != before.st_size or not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), expected_sha256):
+    refuse()
+sys.argv = [
+    path,
+    *sys.argv[3:],
+    "--preexec-bootstrap-device", str(opened.st_dev),
+    "--preexec-bootstrap-inode", str(opened.st_ino),
+    "--preexec-bootstrap-bytes", str(opened.st_size),
+]
+globals_for_script = {
+    "__name__": "__main__",
+    "__file__": path,
+    "__package__": None,
+    "__cached__": None,
+}
+exec(compile(raw, path, "exec", dont_inherit=True, optimize=0), globals_for_script, globals_for_script)
+' /Users/marco1/.codex/worktrees/latent-triz-a0x-hosted-capture-20260901/scripts/a0x_vertical_p0_bootstrap.py fde8ca234ed9287f478bcfe2ea90aaa58822d6677e146cc74a6e886d1e3073a0 --repository-root /Users/marco1/.codex/worktrees/latent-triz-a0x-hosted-capture-20260901 --expected-head EXACT_FINAL_40_HEX_HEAD --expected-tree EXACT_FINAL_40_HEX_TREE --expected-python /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 --expected-python-sha256 3a1f077a333905eaac57197c9f2060ed95e05208daf83da4827d92e0474574d8 --expected-ledger-sha256 37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa --expected-bootstrap-sha256 fde8ca234ed9287f478bcfe2ea90aaa58822d6677e146cc74a6e886d1e3073a0 --expected-preexec-sha256 a0cc17b6d256ff03abfcd58e158d31ab0bffc1db497a2c400ed04bb16fc7483b
 ```
 
-Authorization must bind the final clean HEAD/tree, this exact command and
+Authorization must bind the final clean HEAD/tree, this exact inline launcher
+source and command, inline-source SHA-256
+`a0cc17b6d256ff03abfcd58e158d31ab0bffc1db497a2c400ed04bb16fc7483b`,
 worktree, absolute Python path and SHA-256, bootstrap path and committed
 SHA-256, bootstrap profile `a0x-vertical-p0-bootstrap-v1`, pair
 `A0 / smollm2_360m`, generator profile `a0x-vertical-slice-v1`, output root,
-137-entry input-ledger digest, one invocation maximum, and no untrusted
-same-UID repository/namespace mutator for the entire transaction.
+137-entry input-ledger digest, one invocation maximum, and the full same-UID
+exclusion window defined above. The operator must revalidate the absolute
+Python path/hash after that window starts and before launching this command.
 
 Stop after the first terminal return, whether success, refusal, interruption,
-or opaque failure. Do not retry. Do not invoke the vertical material target,
+cleanup uncertainty, or opaque failure. Do not retry. Do not invoke the
+vertical material target,
 Gate A, Gate B, Gate C, model/tokenizer/target/scoring code, CCP, Docker,
 network/GitHub, batch regeneration, no-model receipt regeneration, push, PR,
 merge, publication, or A0-R1. A successful P0 only permits read-only inspection
