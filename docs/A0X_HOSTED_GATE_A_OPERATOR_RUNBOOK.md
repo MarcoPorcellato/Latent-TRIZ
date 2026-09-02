@@ -13,6 +13,23 @@ C, load a model or tokenizer, read a target, use CCP heavy work, use Docker, or
 contact GitHub. Each listed external step needs its own separate authorization
 bound to the exact source and files involved.
 
+## Capture-wrapper recovery checkpoint — 2026-09-02
+
+The target-free capture library and shell-free adapter are restored locally.
+Both wrapper test modules are part of the A0X synthetic aggregate, and the
+request/transport schemas, library, adapter, and both tests are trusted
+implementation inputs for both leg inventories. No real CLI runner is enabled:
+the production entry point refuses until a separately authorized capture
+qualifies its exact pinned CLI help and output shapes.
+
+Tracked inventories, freezes, twelve dossiers, and the no-model receipt predate
+these trusted inputs. They are deliberately stale and cannot authorize any
+next step. One new explicit target-free authorization must name the exact
+implementation head, one regeneration, both inventories and freezes, all
+twelve dossiers, the no-model receipt, full deterministic suite, independent
+review, and local closure. It grants no hosted capture, network, GitHub CLI,
+publication, Gate B/C, CCP, Docker, model, tokenizer, target, or material work.
+
 ## Scope and non-interchangeable gates
 
 Gate A is a signed, GitHub-hosted qualification of one protected `main` commit.
@@ -136,4 +153,3 @@ authorization ID, current stage, and refusal/expiry status. Revalidate objects,
 paths, link counts, raw hashes, and authorization before resuming the next
 unconsumed boundary. Never rerun a consumed hosted attempt, overwrite a receipt,
 or reinterpret a historical CCP Gate A result as hosted evidence.
-

@@ -3,6 +3,20 @@ Current A0X lifecycle, hashes, and active boundary: see the sole ledger in
 `docs/A0X_ARCHITECTURE_CONVERGENCE.md`. Earlier A0X checkpoint blocks below are
 historical.
 
+Current capture-wrapper recovery checkpoint (2026-09-02): the target-free
+Hosted Gate A capture library, shell-free adapter, request/transport schemas,
+and both capture test modules are in the active A0X implementation inventory
+definition; both test modules are in the synthetic aggregate. Existing tracked
+inventories, freezes, twelve dossiers, and no-model receipt predate this
+trusted surface and are intentionally stale. Do not regenerate.
+
+Require one new explicit authorization bound to the exact implementation HEAD
+for one target-free regeneration of both inventories/freezes, all twelve
+dossiers, and the no-model receipt, followed by the full deterministic suite,
+independent review, and local closure. This authorization must not be inferred
+to permit real GitHub/CLI capture, network, publication, Gate B/C, CCP, Docker,
+model, tokenizer, target, or scientific execution.
+
 --- Historical checkpoint below; retained with original hashes and outcomes ---
 
 A0X Hosted Gate A local implementation checkpoint (2026-08-31): resume only

@@ -1129,3 +1129,26 @@ fixtures. The local wheelhouse manifest
 binds 39 wheels totalling 150,397,774 bytes, but no real environment has been
 created and no real snapshot has been cloned. Gate B/C, model, tokenizer,
 target, network, CCP, push, and publication remain unauthorized.
+
+## 41. Lost capture-wrapper paths were outside frozen A0X trust surface
+
+**Problem.** macOS restart removed the volatile recovery clone containing the
+target-free Hosted Gate A capture boundary. Reconstructing its source, schemas,
+adapter, and tests without adding them to both A0X implementation inventories
+would allow a later frozen package to omit capture-critical behavior. Omitting
+either capture test module from the synthetic aggregate would also leave a
+trusted input unexercised by the required target-free lane.
+
+**Correction.** Both capture schemas, the capture library, shell-free adapter,
+and both capture test modules are now required by both inventory definitions.
+The synthetic aggregate runs both capture test modules. The production adapter
+remains fail-closed with no real subprocess runner; no live GitHub or CLI
+contract was enabled by the recovery.
+
+**Status.** The existing inventories, freezes, twelve dossiers, and no-model
+receipt are intentionally stale because they predate this trusted surface. No
+regeneration occurred. A new explicit authorization is required for one
+target-free regeneration, all twelve dossiers, full deterministic suite,
+independent review, and local closure. No capture, network, GitHub CLI, Gate
+B/C, CCP, Docker, model, tokenizer, target, publication, or scientific work is
+authorized.

@@ -18,9 +18,24 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
+## Current Hosted Gate A capture-wrapper recovery checkpoint — 2026-09-02
+
+The recovered target-free capture library, shell-free adapter, request and
+transport schemas, and both capture test modules are now trusted inputs in
+both implementation inventory definitions. The synthetic aggregate includes
+both capture test modules. Existing generated inventories, freezes, twelve
+dossiers, and no-model receipt predate that source and are intentionally stale.
+
+Do not regenerate from this checkpoint. A new explicit authorization must bind
+the exact implementation head and allow exactly one target-free regeneration,
+both leg inventories/freezes, twelve dossiers, no-model receipt, full
+deterministic suite, independent review, and local closure. It does not permit
+real GitHub/CLI capture, network, publication, Gate B/C, CCP, Docker, model,
+tokenizer, target, or scientific execution.
+
 ## Current offline Gate B builder checkpoint — 2026-09-01
 
-This is the sole canonical current A0X status ledger. Architecture authority is
+This document is the sole canonical A0X status ledger. Architecture authority is
 [A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md); operator
 authority is [A0X Gate B hardening](A0X_GATE_B_OPERATOR_HARDENING.md). All later
 A0X checkpoint blocks in this file are historical evidence only.
