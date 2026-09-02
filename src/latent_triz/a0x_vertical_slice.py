@@ -22,17 +22,12 @@ from .a0x_contract import (
     PairBinding,
     compute_dense_bound,
     derive_pair_output_path,
-    sha256_file,
 )
 from .a0x_freeze import (
-    A0XFreezeError,
     _COMMON,
     _IMPLEMENTATION_PATHS,
     _LEG_SOURCES,
     _copy_fields,
-    _file_binding,
-    _leg_identity,
-    _load_model_cards,
 )
 from .validator import validate
 
@@ -100,6 +95,70 @@ class _PublicationTransaction:
     state: str = "staged"
 
 
+@dataclass(frozen=True)
+class _BoundFile:
+    relative: str
+    raw: bytes
+    sha256: str
+
+    def as_binding(self) -> dict[str, Any]:
+        return {"path": self.relative, "bytes": len(self.raw), "sha256": self.sha256}
+
+
+class _RepositoryReader:
+    """Single-read, descriptor-relative access to repository prerequisites."""
+
+    def __init__(self, repository: Path):
+        self.repository = repository
+        self.root_fd: int | None = None
+        self.cache: dict[str, _BoundFile] = {}
+
+    def __enter__(self) -> "_RepositoryReader":
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+        try:
+            self.root_fd = os.open(self.repository, flags)
+        except OSError as error:
+            raise A0XVerticalSliceError(VALIDATION_FAILED) from error
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        if self.root_fd is not None:
+            os.close(self.root_fd)
+            self.root_fd = None
+
+    def read(self, relative: str) -> _BoundFile:
+        normalized = _safe_prerequisite_relative(relative)
+        cached = self.cache.get(normalized)
+        if cached is not None:
+            return cached
+        if self.root_fd is None:
+            raise A0XVerticalSliceError(VALIDATION_FAILED)
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+        descriptors: list[int] = []
+        try:
+            current = os.dup(self.root_fd)
+            descriptors.append(current)
+            parts = PurePosixPath(normalized).parts
+            for part in parts[:-1]:
+                child = os.open(part, flags, dir_fd=current)
+                descriptors.append(child)
+                current = child
+            raw = _read_regular_at(current, parts[-1], _MAX_DOCUMENT_BYTES, VALIDATION_FAILED)
+        except A0XVerticalSliceError:
+            raise
+        except OSError as error:
+            raise A0XVerticalSliceError(VALIDATION_FAILED) from error
+        finally:
+            _close_descriptors(tuple(descriptors))
+        binding = _BoundFile(normalized, raw, _sha256(raw))
+        self.cache[normalized] = binding
+        _after_prerequisite_read(normalized, raw)
+        return binding
+
+    def object(self, relative: str) -> dict[str, Any]:
+        return _parse_json_object(self.read(relative).raw)
+
+
 def _before_publish(transaction: _PublicationTransaction) -> None:
     """Test seam immediately before exclusive publication."""
 
@@ -112,6 +171,10 @@ def _before_owned_rmdir(transaction: _PublicationTransaction, name: str) -> None
     """Test seam immediately before removing an owned stage directory."""
 
 
+def _after_prerequisite_read(relative: str, raw: bytes) -> None:
+    """Test seam after prerequisite bytes and digest become immutable inputs."""
+
+
 def generate_vertical_slice(root: str | Path, request: VerticalSliceRequest) -> dict[str, Any]:
     """Build and atomically publish one target-free leg/model package.
 
@@ -122,9 +185,13 @@ def generate_vertical_slice(root: str | Path, request: VerticalSliceRequest) -> 
     repository = _repository_root(root)
     destination_relative = _validate_request(request)
     source_tree = _git_tree_for_head(repository, request.implementation_source_head)
-    documents, pair = _build_documents(repository, request, source_tree, destination_relative)
-    encoded = {name: _canonical_json_bytes(value) for name, value in documents.items()}
-    _validate_built_documents(repository, documents, encoded, destination_relative)
+    _require_checkout_state(repository, request.implementation_source_head, source_tree, frozenset())
+    with _RepositoryReader(repository) as prerequisites:
+        documents, pair = _build_documents(
+            prerequisites, request, source_tree, destination_relative,
+        )
+        encoded = {name: _canonical_json_bytes(value) for name, value in documents.items()}
+        _validate_built_documents(prerequisites, documents, encoded, destination_relative)
 
     parent = _open_package_parent(repository, destination_relative, create=True)
     transaction: _PublicationTransaction | None = None
@@ -144,6 +211,16 @@ def generate_vertical_slice(root: str | Path, request: VerticalSliceRequest) -> 
         _assert_owned_stage(transaction)
         if _exists_at(parent.fd, parent.destination_name):
             raise A0XVerticalSliceError(OUTPUT_EXISTS)
+        allowed_stage = frozenset(
+            f"{destination_relative.parent.as_posix()}/{transaction.stage_name}/{name}"
+            for name in _MEMBER_NAMES
+        )
+        _require_checkout_state(
+            repository,
+            request.implementation_source_head,
+            source_tree,
+            allowed_stage,
+        )
         try:
             _darwin_publish_exclusive_at(parent.fd, transaction.stage_name, parent.destination_name)
         except FileExistsError as error:
@@ -201,6 +278,11 @@ def load_vertical_slice(root: str | Path, dossier_relative: str) -> dict[str, An
         raise A0XVerticalSliceError(INVALID_REQUEST)
     head, leg_value, model_key = match.groups()
     package_relative = PurePosixPath(dossier_relative).parent
+    expected_tree = _git_tree_for_head(repository, head)
+    allowed_package = frozenset(
+        f"{package_relative.as_posix()}/{name}" for name in _MEMBER_NAMES
+    )
+    _require_checkout_state(repository, head, expected_tree, allowed_package)
     parent = _open_package_parent(repository, package_relative, create=False, package_is_parent=True)
     try:
         _revalidate_chain(parent)
@@ -221,20 +303,6 @@ def load_vertical_slice(root: str | Path, dossier_relative: str) -> dict[str, An
     freeze = documents["freeze.json"]
     dossier = documents["approval-dossier.json"]
     manifest = documents["slice-manifest.json"]
-    _validate_schema(repository, manifest, "a0x-vertical-slice-manifest.schema.json")
-    _validate_schema(repository, protocol, "a0x-protocol.schema.json")
-    _validate_schema(repository, implementation, "a0x-implementation.schema.json")
-    _validate_schema(repository, freeze, "a0x-freeze-manifest.schema.json")
-    _validate_schema(repository, dossier, "a0x-authorization-dossier.schema.json")
-
-    expected_relative = _package_relative(head, Leg(leg_value), model_key)
-    if package_relative != expected_relative:
-        raise A0XVerticalSliceError(VALIDATION_FAILED)
-    cards = _model_cards_by_key(repository)
-    card = cards.get(model_key)
-    if card is None:
-        raise A0XVerticalSliceError(VALIDATION_FAILED)
-    expected_pair = _pair_binding(Leg(leg_value), card, _sha256(raw["freeze.json"]))
     expected_members = {
         name: {
             "path": f"{package_relative.as_posix()}/{name}",
@@ -242,28 +310,43 @@ def load_vertical_slice(root: str | Path, dossier_relative: str) -> dict[str, An
         }
         for name in _NON_MANIFEST_NAMES
     }
-    expected_tree = _git_tree_for_head(repository, head)
-    if (
-        manifest.get("artifact_class") != "a0x-vertical-slice-manifest"
-        or manifest.get("generator_profile") != GENERATOR_PROFILE
-        or manifest.get("repository") != REPOSITORY
-        or manifest.get("implementation_source_head") != head
-        or manifest.get("implementation_source_tree") != expected_tree
-        or manifest.get("package_scope") != PACKAGE_SCOPE
-        or manifest.get("pair") != expected_pair
-        or manifest.get("members") != expected_members
-        or dossier.get("pair_binding") != expected_pair
-        or dossier.get("implementation_source_head") != head
-        or freeze.get("protocol_sha256") != _sha256(raw["protocol.json"])
-        or freeze.get("implementation_sha256") != _sha256(raw["implementation.json"])
-        or protocol.get("identity") != freeze.get("identity")
-        or implementation.get("identity") != freeze.get("identity")
-    ):
-        raise A0XVerticalSliceError(VALIDATION_FAILED)
-    material_path = repository / "experiments/a0x-six-model/material-execution-contract.json"
-    if dossier.get("material_contract_raw_sha256") != sha256_file(material_path):
-        raise A0XVerticalSliceError(VALIDATION_FAILED)
-    _validate_selected_sources(repository, Leg(leg_value), protocol, implementation)
+    with _RepositoryReader(repository) as prerequisites:
+        _validate_schema(prerequisites, manifest, "a0x-vertical-slice-manifest.schema.json")
+        _validate_schema(prerequisites, protocol, "a0x-protocol.schema.json")
+        _validate_schema(prerequisites, implementation, "a0x-implementation.schema.json")
+        _validate_schema(prerequisites, freeze, "a0x-freeze-manifest.schema.json")
+        _validate_schema(prerequisites, dossier, "a0x-authorization-dossier.schema.json")
+
+        expected_relative = _package_relative(head, Leg(leg_value), model_key)
+        if package_relative != expected_relative:
+            raise A0XVerticalSliceError(VALIDATION_FAILED)
+        cards = _model_cards_by_key(prerequisites)
+        card = cards.get(model_key)
+        if card is None:
+            raise A0XVerticalSliceError(VALIDATION_FAILED)
+        expected_pair = _pair_binding(Leg(leg_value), card, _sha256(raw["freeze.json"]))
+        if (
+            manifest.get("artifact_class") != "a0x-vertical-slice-manifest"
+            or manifest.get("generator_profile") != GENERATOR_PROFILE
+            or manifest.get("repository") != REPOSITORY
+            or manifest.get("implementation_source_head") != head
+            or manifest.get("implementation_source_tree") != expected_tree
+            or manifest.get("package_scope") != PACKAGE_SCOPE
+            or manifest.get("pair") != expected_pair
+            or manifest.get("members") != expected_members
+            or dossier.get("pair_binding") != expected_pair
+            or dossier.get("implementation_source_head") != head
+            or freeze.get("protocol_sha256") != _sha256(raw["protocol.json"])
+            or freeze.get("implementation_sha256") != _sha256(raw["implementation.json"])
+            or protocol.get("identity") != freeze.get("identity")
+            or implementation.get("identity") != freeze.get("identity")
+        ):
+            raise A0XVerticalSliceError(VALIDATION_FAILED)
+        material = prerequisites.read("experiments/a0x-six-model/material-execution-contract.json")
+        if dossier.get("material_contract_raw_sha256") != material.sha256:
+            raise A0XVerticalSliceError(VALIDATION_FAILED)
+        _validate_selected_sources(prerequisites, Leg(leg_value), protocol, implementation)
+    _require_checkout_state(repository, head, expected_tree, allowed_package)
     return {
         "manifest": manifest,
         "protocol": protocol,
@@ -311,22 +394,24 @@ def _package_relative(head: str, leg: Leg, model_key: str) -> PurePosixPath:
 
 
 def _build_documents(
-    repository: Path,
+    prerequisites: _RepositoryReader,
     request: VerticalSliceRequest,
     source_tree: str,
     package_relative: PurePosixPath,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     try:
-        cards = _model_cards_by_key(repository)
+        cards = _model_cards_by_key(prerequisites)
         card = cards.get(request.model_key)
         if card is None:
             raise A0XVerticalSliceError(INVALID_REQUEST)
         spec = _LEG_SOURCES[request.leg]
-        identity = _leg_identity(repository, request.leg, spec)
+        identity = _leg_identity_from_prerequisites(prerequisites, request.leg, spec)
         source_protocol_path = str(spec["protocol"])
         source_implementation_path = str(spec["implementation"])
-        source_protocol = _strict_path_object(repository / source_protocol_path)
-        source_implementation = _strict_path_object(repository / source_implementation_path)
+        source_protocol_file = prerequisites.read(source_protocol_path)
+        source_implementation_file = prerequisites.read(source_implementation_path)
+        source_protocol = _parse_json_object(source_protocol_file.raw)
+        source_implementation = _parse_json_object(source_implementation_file.raw)
         protocol = {
             **_COMMON,
             "artifact_class": "a0x-leg-protocol",
@@ -340,7 +425,7 @@ def _build_documents(
                 "rescues_primary": False,
             },
             "source_protocol_path": source_protocol_path,
-            "source_protocol_raw_sha256": sha256_file(repository / source_protocol_path),
+            "source_protocol_raw_sha256": source_protocol_file.sha256,
             "inherited_rules": _copy_fields(
                 source_protocol, spec["protocol_fields"], f"{request.leg.value} protocol",
             ),
@@ -353,7 +438,7 @@ def _build_documents(
             "identity": identity,
             "implementation_status": "frozen_before_model_output",
             "source_implementation_path": source_implementation_path,
-            "source_implementation_raw_sha256": sha256_file(repository / source_implementation_path),
+            "source_implementation_raw_sha256": source_implementation_file.sha256,
             "inherited_rules": _copy_fields(
                 source_implementation,
                 spec["implementation_fields"],
@@ -363,7 +448,7 @@ def _build_documents(
             "model_output_accessed": False,
             "implementation_paths": list(_IMPLEMENTATION_PATHS),
             "implementation_files": [
-                _file_binding(repository, relative) for relative in _IMPLEMENTATION_PATHS
+                prerequisites.read(relative).as_binding() for relative in _IMPLEMENTATION_PATHS
             ],
         }
         protocol_raw = _canonical_json_bytes(protocol)
@@ -386,9 +471,9 @@ def _build_documents(
             "dossier_status": "approval_requested",
             "implementation_source_head": request.implementation_source_head,
             "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
-            "material_contract_raw_sha256": sha256_file(
-                repository / "experiments/a0x-six-model/material-execution-contract.json"
-            ),
+            "material_contract_raw_sha256": prerequisites.read(
+                "experiments/a0x-six-model/material-execution-contract.json"
+            ).sha256,
             "runtime_authorization_path": (
                 f".a0x-runtime/authorizations/{request.leg.value}/{request.model_key}/"
                 f"{pair['run_id']}.json"
@@ -425,25 +510,50 @@ def _build_documents(
         }, pair
     except A0XVerticalSliceError:
         raise
-    except (A0XFreezeError, KeyError, OSError, TypeError, ValueError) as error:
+    except (KeyError, OSError, TypeError, ValueError) as error:
         raise A0XVerticalSliceError(INVALID_REQUEST) from error
 
 
-def _model_cards_by_key(repository: Path) -> dict[str, dict[str, Any]]:
-    campaign = repository / "experiments/a0x-six-model"
-    registry = _strict_path_object(campaign / "model-registry.json")
-    try:
-        cards = _load_model_cards(repository, campaign, registry)
-    except A0XFreezeError as error:
-        raise A0XVerticalSliceError(INVALID_REQUEST) from error
+def _leg_identity_from_prerequisites(
+    prerequisites: _RepositoryReader,
+    leg: Leg,
+    spec: Mapping[str, Any],
+) -> dict[str, str]:
+    tree = prerequisites.object(str(spec["protected_tree"]))
+    protected_sha = tree.get("protected_tree_sha256")
+    if not isinstance(protected_sha, str) or re.fullmatch(r"[a-f0-9]{64}", protected_sha) is None:
+        raise A0XVerticalSliceError(VALIDATION_FAILED)
+    selection = prerequisites.read(str(spec["selection"]))
+    return {
+        "leg": leg.value,
+        "protocol_id": f"a0x-{leg.value}-six-model-v1",
+        "protected_tree_sha256": protected_sha,
+        "selection_corpus_sha256": selection.sha256,
+        "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609",
+    }
+
+
+def _model_cards_by_key(prerequisites: _RepositoryReader) -> dict[str, dict[str, Any]]:
+    registry = prerequisites.object("experiments/a0x-six-model/model-registry.json")
+    declared = registry.get("cards")
+    if (
+        not isinstance(declared, list)
+        or len(declared) != 6
+        or len(set(value for value in declared if isinstance(value, str))) != 6
+        or not all(isinstance(value, str) for value in declared)
+    ):
+        raise A0XVerticalSliceError(INVALID_REQUEST)
     by_key: dict[str, dict[str, Any]] = {}
-    for relative, card in cards:
+    for relative in declared:
+        card_relative = f"experiments/a0x-six-model/{_safe_prerequisite_relative(relative)}"
+        card = prerequisites.object(card_relative)
         key = card.get("model_key")
         if (
             not isinstance(key, str)
             or _MODEL_KEY.fullmatch(key) is None
             or key in by_key
-            or Path(relative).stem != key
+            or PurePosixPath(relative).stem != key
+            or card.get("card_path") != card_relative
             or not isinstance(card.get("model_id"), str)
             or not card["model_id"]
             or not isinstance(card.get("revision"), str)
@@ -454,7 +564,7 @@ def _model_cards_by_key(repository: Path) -> dict[str, dict[str, Any]]:
         ):
             raise A0XVerticalSliceError(INVALID_REQUEST)
         by_key[key] = card
-    if len(by_key) != len(cards):
+    if len(by_key) != len(declared):
         raise A0XVerticalSliceError(INVALID_REQUEST)
     return by_key
 
@@ -477,7 +587,7 @@ def _pair_binding(leg: Leg, card: Mapping[str, Any], freeze_sha256: str) -> dict
 
 
 def _validate_built_documents(
-    repository: Path,
+    prerequisites: _RepositoryReader,
     documents: Mapping[str, Mapping[str, Any]],
     encoded: Mapping[str, bytes],
     package_relative: PurePosixPath,
@@ -491,7 +601,7 @@ def _validate_built_documents(
         ("approval-dossier.json", "a0x-authorization-dossier.schema.json"),
         ("slice-manifest.json", "a0x-vertical-slice-manifest.schema.json"),
     ):
-        _validate_schema(repository, documents[name], schema_name)
+        _validate_schema(prerequisites, documents[name], schema_name)
     manifest = documents["slice-manifest.json"]
     expected_members = {
         name: {
@@ -504,45 +614,49 @@ def _validate_built_documents(
         raise A0XVerticalSliceError(VALIDATION_FAILED)
 
 
-def _validate_schema(repository: Path, value: Mapping[str, Any], schema_name: str) -> None:
-    schema = _strict_path_object(repository / "schemas" / schema_name)
+def _validate_schema(
+    prerequisites: _RepositoryReader,
+    value: Mapping[str, Any],
+    schema_name: str,
+) -> None:
+    schema = prerequisites.object(f"schemas/{schema_name}")
     issues = validate(dict(value), schema)
     if issues:
         raise A0XVerticalSliceError(VALIDATION_FAILED)
 
 
 def _validate_selected_sources(
-    repository: Path,
+    prerequisites: _RepositoryReader,
     leg: Leg,
     protocol: Mapping[str, Any],
     implementation: Mapping[str, Any],
 ) -> None:
     spec = _LEG_SOURCES[leg]
     try:
-        source_protocol = _strict_path_object(repository / str(spec["protocol"]))
-        source_implementation = _strict_path_object(repository / str(spec["implementation"]))
+        source_protocol_file = prerequisites.read(str(spec["protocol"]))
+        source_implementation_file = prerequisites.read(str(spec["implementation"]))
+        source_protocol = _parse_json_object(source_protocol_file.raw)
+        source_implementation = _parse_json_object(source_implementation_file.raw)
         if (
-            protocol.get("identity") != _leg_identity(repository, leg, spec)
+            protocol.get("identity") != _leg_identity_from_prerequisites(prerequisites, leg, spec)
             or protocol.get("source_protocol_path") != spec["protocol"]
-            or protocol.get("source_protocol_raw_sha256")
-            != sha256_file(repository / str(spec["protocol"]))
+            or protocol.get("source_protocol_raw_sha256") != source_protocol_file.sha256
             or protocol.get("inherited_rules")
             != _copy_fields(source_protocol, spec["protocol_fields"], f"{leg.value} protocol")
             or implementation.get("source_implementation_path") != spec["implementation"]
-            or implementation.get("source_implementation_raw_sha256")
-            != sha256_file(repository / str(spec["implementation"]))
+            or implementation.get("source_implementation_raw_sha256") != source_implementation_file.sha256
             or implementation.get("inherited_rules")
             != _copy_fields(
                 source_implementation, spec["implementation_fields"], f"{leg.value} implementation",
             )
             or implementation.get("implementation_paths") != list(_IMPLEMENTATION_PATHS)
             or implementation.get("implementation_files")
-            != [_file_binding(repository, relative) for relative in _IMPLEMENTATION_PATHS]
+            != [prerequisites.read(relative).as_binding() for relative in _IMPLEMENTATION_PATHS]
         ):
             raise A0XVerticalSliceError(VALIDATION_FAILED)
     except A0XVerticalSliceError:
         raise
-    except (A0XFreezeError, KeyError, OSError, TypeError, ValueError) as error:
+    except (KeyError, OSError, TypeError, ValueError) as error:
         raise A0XVerticalSliceError(VALIDATION_FAILED) from error
 
 
@@ -558,23 +672,18 @@ def _canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
         raise A0XVerticalSliceError(VALIDATION_FAILED) from error
 
 
-def _strict_path_object(path: Path) -> dict[str, Any]:
-    try:
-        parent_fd = os.open(
-            path.parent,
-            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
-        )
-        try:
-            raw = _read_regular_at(
-                parent_fd, path.name, _MAX_DOCUMENT_BYTES, VALIDATION_FAILED,
-            )
-        finally:
-            os.close(parent_fd)
-        return _parse_json_object(raw)
-    except A0XVerticalSliceError:
-        raise
-    except Exception as error:
-        raise A0XVerticalSliceError(VALIDATION_FAILED) from error
+def _safe_prerequisite_relative(relative: str) -> str:
+    if not isinstance(relative, str):
+        raise A0XVerticalSliceError(VALIDATION_FAILED)
+    path = PurePosixPath(relative)
+    if (
+        path.is_absolute()
+        or path.as_posix() != relative
+        or not path.parts
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise A0XVerticalSliceError(VALIDATION_FAILED)
+    return relative
 
 
 def _parse_json_object(raw: bytes) -> dict[str, Any]:
@@ -642,6 +751,66 @@ def _git_tree_for_head(repository: Path, head: str) -> str:
     if _REVISION.fullmatch(value) is None:
         raise A0XVerticalSliceError(INVALID_REQUEST)
     return value
+
+
+def _checkout_state(
+    repository: Path,
+    allowed_untracked: frozenset[str],
+) -> tuple[str, str, bool]:
+    """Return exact checkout identity and whether only owned output is dirty."""
+
+    try:
+        head_raw = _git_output(repository, ("rev-parse", "--verify", "HEAD^{commit}"))
+        tree_raw = _git_output(repository, ("rev-parse", "--verify", "HEAD^{tree}"))
+        status_raw = _git_output(
+            repository,
+            ("status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none"),
+        )
+        head = head_raw.decode("ascii").strip()
+        tree = tree_raw.decode("ascii").strip()
+        records = tuple(
+            value.decode("utf-8") for value in status_raw.split(b"\0") if value
+        )
+    except (UnicodeDecodeError, OSError, subprocess.SubprocessError) as error:
+        raise A0XVerticalSliceError(INVALID_REQUEST) from error
+    allowed_records = {f"?? {relative}" for relative in allowed_untracked}
+    clean = all(record in allowed_records for record in records)
+    return head, tree, clean
+
+
+def _require_checkout_state(
+    repository: Path,
+    expected_head: str,
+    expected_tree: str,
+    allowed_untracked: frozenset[str],
+) -> None:
+    observed_head, observed_tree, clean = _checkout_state(repository, allowed_untracked)
+    if observed_head != expected_head or observed_tree != expected_tree or not clean:
+        raise A0XVerticalSliceError(INVALID_REQUEST)
+
+
+def _git_output(repository: Path, arguments: tuple[str, ...]) -> bytes:
+    environment = {
+        "PATH": "/usr/bin:/bin",
+        "LC_ALL": "C",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_NO_REPLACE_OBJECTS": "1",
+    }
+    try:
+        completed = subprocess.run(
+            ["/usr/bin/git", "-C", os.fspath(repository), *arguments],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=10,
+            env=environment,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise A0XVerticalSliceError(INVALID_REQUEST) from error
+    if completed.returncode != 0:
+        raise A0XVerticalSliceError(INVALID_REQUEST)
+    return completed.stdout
 
 
 def _open_package_parent(

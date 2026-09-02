@@ -6,12 +6,14 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import latent_triz.a0x_vertical_slice as vertical
 from latent_triz.a0x_contract import Leg
 from latent_triz.a0x_freeze import _IMPLEMENTATION_PATHS, _LEG_SOURCES
 from latent_triz.a0x_vertical_slice import (
@@ -106,14 +108,19 @@ class A0XVerticalSliceTests(unittest.TestCase):
         self.publish_patch = mock.patch(
             "latent_triz.a0x_vertical_slice._darwin_publish_exclusive_at", new=_publish_at,
         )
+        self.checkout_patch = mock.patch(
+            "latent_triz.a0x_vertical_slice._checkout_state", return_value=(HEAD, TREE, True),
+        )
         self.tree_patch.start()
         self.publish_patch.start()
+        self.checkout_patch.start()
 
     def tearDown(self) -> None:
         for relative, expected in self.historical.items():
             self.assertEqual(expected, _tree_bytes(self.root, relative))
         self.publish_patch.stop()
         self.tree_patch.stop()
+        self.checkout_patch.stop()
         self.temporary.cleanup()
 
     def request(self, leg: str = "a0", model_key: str = "smollm2_360m", head: str = HEAD) -> VerticalSliceRequest:
@@ -176,6 +183,74 @@ class A0XVerticalSliceTests(unittest.TestCase):
             with self.subTest(request=request), self.assertRaises(A0XVerticalSliceError):
                 generate_vertical_slice(self.root, request)
 
+    def test_generation_rejects_mismatched_or_dirty_checkout_before_input_reads(self) -> None:
+        states = (
+            ("head", ("c" * 40, TREE, True)),
+            ("tree", (HEAD, "c" * 40, True)),
+            ("dirty", (HEAD, TREE, False)),
+        )
+        for label, state in states:
+            with self.subTest(label=label):
+                with mock.patch("latent_triz.a0x_vertical_slice._checkout_state", return_value=state):
+                    with mock.patch(
+                        "latent_triz.a0x_vertical_slice._after_prerequisite_read",
+                    ) as prerequisite_read:
+                        with self.assertRaises(A0XVerticalSliceError):
+                            generate_vertical_slice(self.root, self.request())
+                prerequisite_read.assert_not_called()
+                self.assertFalse(self.package().exists())
+
+    def test_generation_rechecks_checkout_immediately_before_publish(self) -> None:
+        with mock.patch(
+            "latent_triz.a0x_vertical_slice._checkout_state",
+            side_effect=((HEAD, TREE, True), (HEAD, TREE, False)),
+        ) as checkout:
+            with mock.patch(
+                "latent_triz.a0x_vertical_slice._darwin_publish_exclusive_at",
+            ) as publisher:
+                with self.assertRaises(A0XVerticalSliceError):
+                    generate_vertical_slice(self.root, self.request())
+        self.assertEqual(2, checkout.call_count)
+        publisher.assert_not_called()
+        self.assertFalse(self.package().exists())
+
+    def test_generation_binds_real_clean_git_checkout_and_allows_only_owned_stage(self) -> None:
+        self.checkout_patch.stop()
+        self.tree_patch.stop()
+        try:
+            commands = (
+                ("init", "-q"),
+                ("config", "user.name", "A0X Synthetic Test"),
+                ("config", "user.email", "a0x@example.invalid"),
+                ("add", "-A"),
+                ("commit", "-q", "-m", "synthetic prerequisite fixture"),
+            )
+            for arguments in commands:
+                subprocess.run(
+                    ("/usr/bin/git", "-C", str(self.root), *arguments),
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env={"PATH": "/usr/bin:/bin"},
+                )
+            head = subprocess.check_output(
+                ("/usr/bin/git", "-C", str(self.root), "rev-parse", "HEAD"),
+                env={"PATH": "/usr/bin:/bin"},
+                text=True,
+            ).strip()
+            tree = subprocess.check_output(
+                ("/usr/bin/git", "-C", str(self.root), "rev-parse", "HEAD^{tree}"),
+                env={"PATH": "/usr/bin:/bin"},
+                text=True,
+            ).strip()
+            request = self.request(head=head)
+            receipt = generate_vertical_slice(self.root, request)
+            self.assertEqual(head, receipt["implementation_source_head"])
+            self.assertEqual(tree, receipt["implementation_source_tree"])
+        finally:
+            self.tree_patch.start()
+            self.checkout_patch.start()
+
     def test_selector_rejects_missing_or_duplicate_registry_model_key(self) -> None:
         card_path = self.root / "experiments/a0x-six-model/model-cards/qwen2_5_0_5b.json"
         original = card_path.read_bytes()
@@ -198,6 +273,48 @@ class A0XVerticalSliceTests(unittest.TestCase):
         card_path.write_bytes(_canonical(card))
         with self.assertRaises(A0XVerticalSliceError):
             generate_vertical_slice(self.root, self.request())
+
+    def test_generation_rejects_symlink_or_hardlink_prerequisite(self) -> None:
+        card_path = self.root / "experiments/a0x-six-model/model-cards/smollm2_360m.json"
+        original = card_path.read_bytes()
+        for mutation in ("symlink", "hardlink"):
+            with self.subTest(mutation=mutation):
+                card_path.unlink()
+                source = card_path.with_name(f"source-{mutation}.json")
+                source.write_bytes(original)
+                if mutation == "symlink":
+                    card_path.symlink_to(source.name)
+                else:
+                    os.link(source, card_path)
+                with self.assertRaises(A0XVerticalSliceError):
+                    generate_vertical_slice(self.root, self.request())
+                card_path.unlink()
+                source.unlink()
+                card_path.write_bytes(original)
+
+    def test_prerequisite_parse_and_hash_use_same_descriptor_bytes(self) -> None:
+        relative = str(_LEG_SOURCES[Leg.A0]["protocol"])
+        path = self.root / relative
+        original = path.read_bytes()
+        original_value = json.loads(original)
+        replacement = json.loads(original)
+        replacement["calibration_families_per_domain"] = 999
+
+        def replace_after_read(observed_relative: str, _raw: bytes) -> None:
+            if observed_relative == relative:
+                path.write_bytes(_canonical(replacement))
+
+        with mock.patch(
+            "latent_triz.a0x_vertical_slice._after_prerequisite_read",
+            side_effect=replace_after_read,
+        ):
+            generate_vertical_slice(self.root, self.request())
+        protocol = json.loads((self.package() / "protocol.json").read_text())
+        self.assertEqual(hashlib.sha256(original).hexdigest(), protocol["source_protocol_raw_sha256"])
+        self.assertEqual(
+            original_value["calibration_families_per_domain"],
+            protocol["inherited_rules"]["calibration_families_per_domain"],
+        )
 
     def test_occupied_destination_refuses_without_overwrite(self) -> None:
         package = self.package()
@@ -228,6 +345,24 @@ class A0XVerticalSliceTests(unittest.TestCase):
         for relative in invalid:
             with self.subTest(relative=relative), self.assertRaises(A0XVerticalSliceError):
                 load_vertical_slice(self.root, relative)
+
+    def test_load_rejects_mismatched_or_dirty_checkout_before_package_reads(self) -> None:
+        generate_vertical_slice(self.root, self.request())
+        dossier = f"{self.request().output_root}/approval-dossier.json"
+        states = (
+            ("head", ("c" * 40, TREE, True)),
+            ("tree", (HEAD, "c" * 40, True)),
+            ("dirty", (HEAD, TREE, False)),
+        )
+        for label, state in states:
+            with self.subTest(label=label):
+                with mock.patch("latent_triz.a0x_vertical_slice._checkout_state", return_value=state):
+                    with mock.patch(
+                        "latent_triz.a0x_vertical_slice._open_package_parent",
+                    ) as package_open:
+                        with self.assertRaises(A0XVerticalSliceError):
+                            load_vertical_slice(self.root, dossier)
+                package_open.assert_not_called()
 
     def test_load_rejects_symlink_hardlink_or_nonregular_member(self) -> None:
         mutations = ("symlink", "hardlink", "directory")
@@ -327,6 +462,61 @@ class A0XVerticalSliceTests(unittest.TestCase):
         self.assertFalse(self.package().exists())
         self.assertEqual([], list(self.package().parent.glob(".a0x-vertical-slice-*")))
 
+    def test_production_darwin_publisher_uses_required_flags_and_maps_errno(self) -> None:
+        class Rename:
+            argtypes: list[object] = []
+            restype: object = None
+
+            def __init__(self, result: int):
+                self.result = result
+                self.calls: list[tuple[object, ...]] = []
+
+            def __call__(self, *args: object) -> int:
+                self.calls.append(args)
+                return self.result
+
+        self.publish_patch.stop()
+        try:
+            success = Rename(0)
+            with mock.patch.object(vertical.sys, "platform", "darwin"):
+                with mock.patch.object(
+                    vertical.ctypes, "CDLL", return_value=mock.Mock(renameatx_np=success),
+                ):
+                    vertical._darwin_publish_exclusive_at(17, "stage", "destination")
+            self.assertEqual(1, len(success.calls))
+            self.assertEqual(17, success.calls[0][0])
+            self.assertEqual(b"stage", success.calls[0][1])
+            self.assertEqual(17, success.calls[0][2])
+            self.assertEqual(b"destination", success.calls[0][3])
+            self.assertEqual(vertical.RENAME_EXCL | vertical.RENAME_NOFOLLOW_ANY, success.calls[0][4])
+
+            for observed_errno, expected_code in (
+                (errno.EEXIST, OUTPUT_EXISTS),
+                (errno.EPERM, PUBLICATION_FAILED),
+            ):
+                with self.subTest(observed_errno=observed_errno):
+                    failure = Rename(-1)
+                    library = mock.Mock(renameatx_np=failure)
+                    with mock.patch.object(vertical.sys, "platform", "darwin"):
+                        with mock.patch.object(vertical.ctypes, "CDLL", return_value=library):
+                            with mock.patch.object(vertical.ctypes, "get_errno", return_value=observed_errno):
+                                with self.assertRaises(A0XVerticalSliceError) as caught:
+                                    vertical._darwin_publish_exclusive_at(17, "stage", "destination")
+                    self.assertEqual(expected_code, caught.exception.code)
+        finally:
+            self.publish_patch.start()
+
+    def test_production_darwin_publisher_refuses_missing_symbol(self) -> None:
+        self.publish_patch.stop()
+        try:
+            with mock.patch.object(vertical.sys, "platform", "darwin"):
+                with mock.patch.object(vertical.ctypes, "CDLL", return_value=object()):
+                    with self.assertRaises(A0XVerticalSliceError) as caught:
+                        vertical._darwin_publish_exclusive_at(17, "stage", "destination")
+            self.assertEqual(PUBLICATION_UNSUPPORTED, caught.exception.code)
+        finally:
+            self.publish_patch.start()
+
     def test_missing_darwin_primitive_refuses(self) -> None:
         self.publish_patch.stop()
         try:
@@ -345,6 +535,81 @@ class A0XVerticalSliceTests(unittest.TestCase):
         self.assertEqual(PUBLICATION_FAILED, caught.exception.code)
         self.assertFalse(self.package().exists())
         self.assertEqual([], list(self.package().parent.glob(".a0x-vertical-slice-*")))
+
+    def test_ancestor_drift_before_publish_refuses(self) -> None:
+        def drift(transaction: Any) -> None:
+            for parent_fd, name, _identity in transaction.parent.chain:
+                if name == "vertical-slices":
+                    os.rename(
+                        name,
+                        "vertical-slices-moved",
+                        src_dir_fd=parent_fd,
+                        dst_dir_fd=parent_fd,
+                    )
+                    os.mkdir(name, 0o755, dir_fd=parent_fd)
+                    return
+            self.fail("vertical-slices ancestor not found")
+
+        with mock.patch("latent_triz.a0x_vertical_slice._before_publish", new=drift):
+            with self.assertRaises(A0XVerticalSliceError) as caught:
+                generate_vertical_slice(self.root, self.request())
+        self.assertEqual(PUBLICATION_FAILED, caught.exception.code)
+        self.assertFalse(self.package().exists())
+
+    def test_publisher_rename_then_error_removes_only_owned_destination(self) -> None:
+        def rename_then_error(parent_fd: int, stage_name: str, destination_name: str) -> None:
+            os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+            raise OSError(errno.EIO, "synthetic post-rename error")
+
+        with mock.patch(
+            "latent_triz.a0x_vertical_slice._darwin_publish_exclusive_at",
+            new=rename_then_error,
+        ):
+            with self.assertRaises(A0XVerticalSliceError) as caught:
+                generate_vertical_slice(self.root, self.request())
+        self.assertEqual(PUBLICATION_FAILED, caught.exception.code)
+        self.assertFalse(self.package().exists())
+        self.assertEqual([], list(self.package().parent.glob(".a0x-vertical-slice-*")))
+
+    def test_final_cleanup_identity_loss_preserves_replacement(self) -> None:
+        marker = b"cleanup-replacement"
+
+        def occupied(_parent_fd: int, _stage_name: str, _destination_name: str) -> None:
+            raise FileExistsError(errno.EEXIST, "synthetic occupied")
+
+        def replace_before_rmdir(transaction: Any, owned_name: str) -> None:
+            parent_fd = transaction.parent.fd
+            os.rename(
+                owned_name,
+                owned_name + "-moved",
+                src_dir_fd=parent_fd,
+                dst_dir_fd=parent_fd,
+            )
+            os.mkdir(owned_name, 0o700, dir_fd=parent_fd)
+            replacement_fd = os.open(owned_name, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
+            try:
+                descriptor = os.open(
+                    "replacement.txt",
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                    dir_fd=replacement_fd,
+                )
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(marker)
+            finally:
+                os.close(replacement_fd)
+
+        with mock.patch(
+            "latent_triz.a0x_vertical_slice._darwin_publish_exclusive_at", new=occupied,
+        ):
+            with mock.patch(
+                "latent_triz.a0x_vertical_slice._before_owned_rmdir", new=replace_before_rmdir,
+            ):
+                with self.assertRaises(A0XVerticalSliceError) as caught:
+                    generate_vertical_slice(self.root, self.request())
+        self.assertEqual(PUBLICATION_OWNERSHIP_LOST, caught.exception.code)
+        replacement = next(self.package().parent.glob(".a0x-vertical-slice-*/replacement.txt"))
+        self.assertEqual(marker, replacement.read_bytes())
 
     def test_post_publish_ownership_loss_preserves_replacement(self) -> None:
         marker = b"replacement"

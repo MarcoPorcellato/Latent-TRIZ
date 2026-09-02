@@ -69,6 +69,28 @@ file, hash drift, partial write, or cross-binding mismatch is terminal refusal.
 Historical batch freezes and dossiers are neither overwritten nor reused as
 current pair-scoped evidence.
 
+## Transaction namespace trust boundary
+
+P0 authorization is valid only while no untrusted process running as the same
+user can mutate the repository or output namespace. This assumption applies
+from the generator's first source-state check through its terminal success or
+cleanup. Private `0700` staging excludes other users; it does not exclude
+another process with the same user ID.
+
+Darwin provides the required exclusive atomic publish rename, but it does not
+provide an atomic unlink or directory removal conditioned on an expected inode
+identity. Descriptor-relative identity checks therefore detect replacement;
+they cannot make a later name-based cleanup operation race-free against an
+untrusted same-user mutator. If the generator loses ownership of a staged or
+published name, it must fail closed with
+`A0X_VERTICAL_SLICE_PUBLICATION_OWNERSHIP_LOST`, preserve the possible
+replacement, and refuse to accept the package as evidence. Cleanup is claimed
+only for names whose ownership remains established.
+
+The operator must isolate or stop untrusted same-user namespace mutators for
+the complete transaction. If that condition cannot be established, P0 is
+NO-GO; file modes and post hoc identity checks are not substitutes.
+
 ## Ordered gates for one leg-model pair
 
 | Gate | Purpose | Evidence | Stop boundary |
