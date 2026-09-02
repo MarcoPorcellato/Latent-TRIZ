@@ -101,7 +101,9 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 arguments = self._arguments(module, executable, archive, manifest, root / "capture")
                 calls: list[tuple[tuple[str, ...], dict[str, str]]] = []
 
-                def runner(argv: tuple[str, ...], env: dict[str, str]) -> tuple[int, bytes, bytes]:
+                def runner(
+                    argv: tuple[str, ...], env: dict[str, str], _timeout: int, _stdout_limit: int,
+                ) -> tuple[int, bytes, bytes]:
                     calls.append((argv, env))
                     if argv[-1] == "--version":
                         return 0, b"synthetic gh version\n", b""
@@ -148,7 +150,9 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 arguments = self._arguments(module, executable, archive, manifest, root / "capture")
                 calls: list[tuple[str, ...]] = []
 
-                def runner(argv: tuple[str, ...], _env: dict[str, str]) -> tuple[int, bytes, bytes]:
+                def runner(
+                    argv: tuple[str, ...], _env: dict[str, str], _timeout: int, _stdout_limit: int,
+                ) -> tuple[int, bytes, bytes]:
                     calls.append(argv)
                     if argv[-1] == "--version":
                         return 0, b"synthetic gh version\n", b""
@@ -182,7 +186,9 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                         setattr(arguments, field, "not-a-timestamp")
                         calls: list[tuple[str, ...]] = []
 
-                        def runner(argv: tuple[str, ...], _env: dict[str, str]) -> tuple[int, bytes, bytes]:
+                        def runner(
+                            argv: tuple[str, ...], _env: dict[str, str], _timeout: int, _stdout_limit: int,
+                        ) -> tuple[int, bytes, bytes]:
                             calls.append(argv)
                             self.fail(f"unexpected runner call: {argv!r}")
 
@@ -190,6 +196,87 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                             module.capture(arguments, runner=runner, publish_at=self._publish_at)
                         self.assertEqual([], calls)
                         self.assertFalse(arguments.output_root.exists())
+            finally:
+                capture_library.GH_SHA256, capture_library.GH_VERSION = original_sha, original_version
+
+    def test_oversized_runner_output_refuses_before_staging_or_next_operation(self) -> None:
+        """Removing operation caps would retain oversized untrusted transport stdout."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID
+
+        module = _script_module()
+        manifest, archive = _manifest(), _archive(_manifest())
+        limits = {
+            "archive": len(archive),
+            "bundle": capture_library.MAX_BUNDLE_BYTES,
+            "trusted": capture_library.MAX_TRUSTED_ROOT_BYTES,
+        }
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            executable = root / "synthetic-gh"
+            executable.write_bytes(b"synthetic pinned gh\n")
+            original_sha, original_version = capture_library.GH_SHA256, capture_library.GH_VERSION
+            try:
+                module.GH_SHA256 = hashlib.sha256(executable.read_bytes()).hexdigest()
+                module.GH_VERSION = "synthetic gh version"
+                for operation, limit in limits.items():
+                    with self.subTest(operation=operation):
+                        arguments = self._arguments(module, executable, archive, manifest, root / f"capture-{operation}")
+                        calls: list[tuple[tuple[str, ...], int, int]] = []
+
+                        def runner(
+                            argv: tuple[str, ...], _env: dict[str, str], timeout: int, stdout_limit: int,
+                        ) -> tuple[int, bytes, bytes]:
+                            calls.append((argv, timeout, stdout_limit))
+                            if argv[-1] == "--version":
+                                return 0, b"synthetic gh version\n", b""
+                            if operation == "archive" and "/zip" in argv[-1]:
+                                return 0, b"x" * (limit + 1), b""
+                            if operation == "bundle" and argv[1:3] == ("attestation", "download"):
+                                return 0, b"x" * (limit + 1), b""
+                            if operation == "trusted" and argv[1:] == ("attestation", "trusted-root"):
+                                return 0, b"x" * (limit + 1), b""
+                            if "/zip" in argv[-1]:
+                                return 0, archive, b""
+                            if argv[1:3] == ("attestation", "download"):
+                                return 0, b'{"synthetic":"bundle"}\n', b""
+                            return 0, b'{"synthetic":"trusted-root"}\n', b""
+
+                        with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                            module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                        self.assertFalse(arguments.output_root.exists())
+                        self.assertEqual(limit, [entry[2] for entry in calls if entry[0][-1] != "--version"][-1])
+            finally:
+                capture_library.GH_SHA256, capture_library.GH_VERSION = original_sha, original_version
+
+    def test_runner_timeout_contract_is_passed_and_refused_before_output(self) -> None:
+        """Removing timeout propagation would permit an injected runner to wait without a bound."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID
+
+        module = _script_module()
+        manifest, archive = _manifest(), _archive(_manifest())
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            executable = root / "synthetic-gh"
+            executable.write_bytes(b"synthetic pinned gh\n")
+            original_sha, original_version = capture_library.GH_SHA256, capture_library.GH_VERSION
+            try:
+                module.GH_SHA256 = hashlib.sha256(executable.read_bytes()).hexdigest()
+                module.GH_VERSION = "synthetic gh version"
+                arguments = self._arguments(module, executable, archive, manifest, root / "capture-timeout")
+                calls: list[tuple[tuple[str, ...], int, int]] = []
+
+                def runner(
+                    argv: tuple[str, ...], _env: dict[str, str], timeout: int, stdout_limit: int,
+                ) -> tuple[int, bytes, bytes]:
+                    calls.append((argv, timeout, stdout_limit))
+                    raise TimeoutError("synthetic timeout")
+
+                with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                    module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                self.assertEqual([(str(executable), "--version")], [entry[0] for entry in calls])
+                self.assertEqual(module.TRANSPORT_TIMEOUT_SECONDS, calls[0][1])
+                self.assertEqual(module.MAX_VERSION_STDOUT_BYTES, calls[0][2])
+                self.assertFalse(arguments.output_root.exists())
             finally:
                 capture_library.GH_SHA256, capture_library.GH_VERSION = original_sha, original_version
 

@@ -25,7 +25,9 @@ FIXED_ENV = {
     "LC_ALL": "C",
     "PATH": "/usr/bin:/bin",
 }
-Runner = Callable[[tuple[str, ...], dict[str, str]], tuple[int, bytes, bytes]]
+TRANSPORT_TIMEOUT_SECONDS = 30
+MAX_VERSION_STDOUT_BYTES = capture_library.MAX_TRANSPORT_BYTES
+Runner = Callable[[tuple[str, ...], dict[str, str], int, int], tuple[int, bytes, bytes]]
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -48,20 +50,22 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _require_result(value: object) -> tuple[int, bytes, bytes]:
+def _require_result(value: object, stdout_limit: int) -> tuple[int, bytes, bytes]:
     if (
         not isinstance(value, tuple) or len(value) != 3 or type(value[0]) is not int
         or not isinstance(value[1], bytes) or not isinstance(value[2], bytes)
     ):
         raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID)
-    if value[0] != 0:
+    if value[0] != 0 or len(value[1]) > stdout_limit:
         raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID)
     return value
 
 
-def _invoke(runner: Runner, argv: tuple[str, ...]) -> bytes:
+def _invoke(runner: Runner, argv: tuple[str, ...], stdout_limit: int) -> bytes:
     try:
-        _return_code, stdout, _stderr = _require_result(runner(argv, dict(FIXED_ENV)))
+        _return_code, stdout, _stderr = _require_result(
+            runner(argv, dict(FIXED_ENV), TRANSPORT_TIMEOUT_SECONDS, stdout_limit), stdout_limit,
+        )
     except capture_library.A0XHostedCaptureError:
         raise
     except Exception as error:
@@ -77,15 +81,15 @@ def _pinned_cli(path: Path) -> capture_library.PinnedGitHubCLI:
 
 
 def _checked_transport_call(
-    pinned: capture_library.PinnedGitHubCLI, runner: Runner, command: tuple[str, ...],
+    pinned: capture_library.PinnedGitHubCLI, runner: Runner, command: tuple[str, ...], stdout_limit: int,
 ) -> bytes:
     """Rehash and recheck exact CLI version immediately before one transport call."""
     fresh = _pinned_cli(pinned.path)
     if fresh.path != pinned.path or fresh.raw_sha256 != pinned.raw_sha256:
         raise capture_library.A0XHostedCaptureError(capture_library.PIN_INVALID)
-    version = _invoke(runner, (str(pinned.path), "--version"))
+    version = _invoke(runner, (str(pinned.path), "--version"), MAX_VERSION_STDOUT_BYTES)
     capture_library.revalidate_pinned_cli(pinned, pinned.path, version)
-    return _invoke(runner, command)
+    return _invoke(runner, command, stdout_limit)
 
 
 def capture(
@@ -124,15 +128,22 @@ def capture(
         "expires_at": request.expires_at,
         "captured_at": arguments.captured_at,
     })
+    if len(transport.as_document()) > capture_library.MAX_TRANSPORT_BYTES:
+        raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID)
     archive = _checked_transport_call(
         pinned, runner,
         (str(pinned.path), "api", "--method", "GET", f"/repos/{request.repository}/actions/artifacts/{request.artifact_id}/zip"),
+        request.archive_size_bytes,
     )
     bundle = _checked_transport_call(
         pinned, runner,
         (str(pinned.path), "attestation", "download", "--repo", request.repository, "--digest", f"sha256:{request.manifest_sha256}"),
+        capture_library.MAX_BUNDLE_BYTES,
     )
-    trusted_root = _checked_transport_call(pinned, runner, (str(pinned.path), "attestation", "trusted-root"))
+    trusted_root = _checked_transport_call(
+        pinned, runner, (str(pinned.path), "attestation", "trusted-root"),
+        capture_library.MAX_TRUSTED_ROOT_BYTES,
+    )
     with TemporaryDirectory(prefix="a0x-hosted-capture-") as temporary:
         archive_path = Path(temporary) / "archive.zip"
         archive_path.write_bytes(archive)
