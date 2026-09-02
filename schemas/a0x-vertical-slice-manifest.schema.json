@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_class",
+    "generator_profile",
+    "repository",
+    "implementation_source_head",
+    "implementation_source_tree",
+    "package_scope",
+    "pair",
+    "members"
+  ],
+  "properties": {
+    "artifact_class": {
+      "const": "a0x-vertical-slice-manifest"
+    },
+    "generator_profile": {
+      "const": "a0x-vertical-slice-v1"
+    },
+    "repository": {
+      "const": "MarcoPorcellato/Latent-TRIZ"
+    },
+    "implementation_source_head": {
+      "$ref": "#/$defs/revision"
+    },
+    "implementation_source_tree": {
+      "$ref": "#/$defs/revision"
+    },
+    "package_scope": {
+      "const": "one_leg_model_pair_not_campaign_wide_regeneration"
+    },
+    "pair": {
+      "$ref": "#/$defs/pair"
+    },
+    "members": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol.json",
+        "implementation.json",
+        "freeze.json",
+        "approval-dossier.json"
+      ],
+      "properties": {
+        "protocol.json": {
+          "$ref": "#/$defs/member"
+        },
+        "implementation.json": {
+          "$ref": "#/$defs/member"
+        },
+        "freeze.json": {
+          "$ref": "#/$defs/member"
+        },
+        "approval-dossier.json": {
+          "$ref": "#/$defs/member"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^experiments/a0x-six-model/vertical-slices/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/(?:protocol|implementation|freeze|approval-dossier)\\.json$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_profile",
+        "leg",
+        "leg_freeze_sha256",
+        "model_key",
+        "model_id",
+        "revision",
+        "run_id",
+        "output_path",
+        "dense_bound"
+      ],
+      "properties": {
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "model_key": {
+          "enum": [
+            "gpt2",
+            "gpt_neo_125m",
+            "qwen2_5_0_5b",
+            "qwen3_0_6b_base",
+            "smollm2_135m",
+            "smollm2_360m"
+          ]
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "output_path": {
+          "type": "string",
+          "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "dense_bound": {
+          "$ref": "#/$defs/dense_bound"
+        }
+      }
+    },
+    "dense_bound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg",
+        "cases",
+        "view_site_count",
+        "endpoint_count",
+        "hidden_width",
+        "scalar_bytes",
+        "vector_count",
+        "dense_bytes",
+        "dense_copy_count",
+        "atomic_dense_bytes",
+        "index_copy_count",
+        "index_reservation_bytes",
+        "payload_allowance_bytes",
+        "total_bytes",
+        "cap_bytes"
+      ],
+      "properties": {
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "cases": {
+          "const": 48
+        },
+        "view_site_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hidden_width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scalar_bytes": {
+          "const": 4
+        },
+        "vector_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dense_copy_count": {
+          "const": 2
+        },
+        "atomic_dense_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "index_copy_count": {
+          "const": 2
+        },
+        "index_reservation_bytes": {
+          "enum": [
+            6291456,
+            1048576
+          ]
+        },
+        "payload_allowance_bytes": {
+          "enum": [
+            2097152,
+            524288
+          ]
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cap_bytes": {
+          "enum": [
+            33554432,
+            4194304
+          ]
+        }
+      }
+    }
+  }
+}
