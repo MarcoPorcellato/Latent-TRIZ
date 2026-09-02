@@ -33,6 +33,8 @@ FINAL_NAMES = ("hosted-gate-a-evidence.json", "hosted-gate-a-attestation.bundle.
 GH_VERSION = "gh version 2.97.0 (2026-07-31)"
 GH_SHA256 = "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
 MAX_MANIFEST_BYTES, MAX_BUNDLE_BYTES, MAX_TRUSTED_ROOT_BYTES, MAX_TRANSPORT_BYTES, MAX_ARCHIVE_BYTES = 32 * 1024, 1024 * 1024, 2 * 1024 * 1024, 16 * 1024, 8 * 1024 * 1024
+RENAME_EXCL = 0x00000004
+RENAME_NOFOLLOW_ANY = 0x00000010
 _REVISION, _SHA256, _TIMESTAMP = re.compile(r"^[a-f0-9]{40}$"), re.compile(r"^[a-f0-9]{64}$"), re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z$")
 
 class A0XHostedCaptureError(ValueError):
@@ -246,7 +248,11 @@ def _cleanup_transaction(t: _OutputTransaction | None) -> None:
     if t is None: return
     try:
         name = t.stage_name if t.state == "staged" else t.parent.destination_name
-        metadata = os.stat(name, dir_fd=t.parent.fd, follow_symlinks=False)
+        try:
+            metadata = os.stat(name, dir_fd=t.parent.fd, follow_symlinks=False)
+        except FileNotFoundError:
+            metadata = os.stat(t.parent.destination_name, dir_fd=t.parent.fd, follow_symlinks=False)
+            name = t.parent.destination_name
         if (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
         for child in os.listdir(t.stage_fd): os.unlink(child, dir_fd=t.stage_fd)
         os.rmdir(name, dir_fd=t.parent.fd)
@@ -263,7 +269,7 @@ def _darwin_publish_exclusive_at(parent_fd: int, stage_name: str, destination_na
     if sys.platform != "darwin": raise A0XHostedCaptureError(PUBLICATION_UNSUPPORTED)
     try:
         fn = ctypes.CDLL(None, use_errno=True).renameatx_np; fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]; fn.restype = ctypes.c_int
-        result = fn(parent_fd, os.fsencode(stage_name), parent_fd, os.fsencode(destination_name), 0x00000004 | 0x00000001)
+        result = fn(parent_fd, os.fsencode(stage_name), parent_fd, os.fsencode(destination_name), RENAME_EXCL | RENAME_NOFOLLOW_ANY)
     except (AttributeError, OSError) as error: raise A0XHostedCaptureError(PUBLICATION_UNSUPPORTED) from error
     if result:
         if ctypes.get_errno() == errno.EEXIST: raise A0XHostedCaptureError(OUTPUT_EXISTS)

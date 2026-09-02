@@ -493,3 +493,47 @@ class HostedCaptureTest(unittest.TestCase):
                 )
             self.assertFalse((root / "capture").exists())
             self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
+
+    def test_rename_then_raise_removes_owned_destination(self) -> None:
+        """Treating a raised publisher as pre-rename leaks its owned canonical output."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+
+            def publish_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
+                os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                raise OSError("synthetic after rename")
+
+            with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_FAILED):
+                capture.capture_hosted_gate_a(
+                    capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                    publish_at=publish_at,
+                )
+            self.assertFalse((root / "capture").exists())
+
+    def test_darwin_ffi_uses_exact_exclusive_no_follow_flags(self) -> None:
+        """Changing Darwin flags from RENAME_EXCL|RENAME_NOFOLLOW_ANY must fail publication hardening."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        calls: list[tuple[object, ...]] = []
+
+        class FakeFunction:
+            argtypes = None
+            restype = None
+            def __call__(self, *args):
+                calls.append(args)
+                return 0
+
+        class FakeLibrary:
+            renameatx_np = FakeFunction()
+
+        original_platform, original_cdll = capture.sys.platform, capture.ctypes.CDLL
+        capture.sys.platform, capture.ctypes.CDLL = "darwin", lambda *_args, **_kwargs: FakeLibrary()
+        try:
+            capture._darwin_publish_exclusive_at(17, "stage", "destination")
+        finally:
+            capture.sys.platform, capture.ctypes.CDLL = original_platform, original_cdll
+        self.assertEqual(1, len(calls))
+        self.assertEqual(0x14, calls[0][-1])
