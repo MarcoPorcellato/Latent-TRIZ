@@ -537,3 +537,181 @@ class HostedCaptureTest(unittest.TestCase):
             capture.sys.platform, capture.ctypes.CDLL = original_platform, original_cdll
         self.assertEqual(1, len(calls))
         self.assertEqual(0x14, calls[0][-1])
+
+    def test_post_publish_byte_mutation_refuses_and_removes_owned_destination(self) -> None:
+        """Final byte binding must be rechecked through the held staging descriptor after rename."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+
+            def after_publish(transaction) -> None:
+                descriptor = os.open(
+                    "hosted-gate-a-attestation.bundle.jsonl",
+                    os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW,
+                    dir_fd=transaction.stage_fd,
+                )
+                try:
+                    os.write(descriptor, b"tampered\n")
+                finally:
+                    os.close(descriptor)
+
+            original = capture._after_publish
+            capture._after_publish = after_publish
+            try:
+                with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_FAILED):
+                    capture.capture_hosted_gate_a(
+                        capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                        publish_at=self._publish_at,
+                    )
+            finally:
+                capture._after_publish = original
+            self.assertFalse((root / "capture").exists())
+            self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
+
+    def test_three_argument_noop_or_wrong_action_publisher_cleans_owned_stage(self) -> None:
+        """A correctly shaped publisher that does not publish must not strand its owned stage."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+
+            def wrong_action(parent_fd: int, stage_name: str, _destination_name: str) -> None:
+                stage_fd = os.open(stage_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+                try:
+                    descriptor = os.open("unexpected", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=stage_fd)
+                    os.close(descriptor)
+                finally:
+                    os.close(stage_fd)
+
+            for publisher in (lambda _fd, _stage, _destination: None, wrong_action):
+                with self.subTest(publisher=publisher):
+                    request, transport, archive, bundle, trusted = self._inputs(root)
+                    with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_FAILED):
+                        capture.capture_hosted_gate_a(
+                            capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                            publish_at=publisher,
+                        )
+                    self.assertFalse((root / "capture").exists())
+                    self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
+
+    def test_eexist_publish_race_preserves_existing_destination_and_cleans_stage(self) -> None:
+        """A destination created at publication time maps to OUTPUT_EXISTS without deleting it."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+
+            def racing_publish(parent_fd: int, stage_name: str, destination_name: str) -> None:
+                os.mkdir(destination_name, dir_fd=parent_fd)
+                destination_fd = os.open(destination_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+                try:
+                    marker = os.open("racer", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=destination_fd)
+                    os.close(marker)
+                finally:
+                    os.close(destination_fd)
+                raise FileExistsError(17, "synthetic exclusive publication race", destination_name)
+
+            with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.OUTPUT_EXISTS):
+                capture.capture_hosted_gate_a(
+                    capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                    publish_at=racing_publish,
+                )
+            self.assertTrue((root / "capture").is_dir())
+            self.assertTrue((root / "capture" / "racer").is_file())
+            self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
+
+    def test_parent_open_failure_closes_partial_ancestor_descriptors(self) -> None:
+        """Repeated missing-ancestor failures must not leak held descriptor capabilities."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            target = root / "target"
+            target.mkdir()
+            (root / "link").symlink_to(target, target_is_directory=True)
+            (root / "not-directory").write_bytes(b"x")
+            before = len(list(Path("/dev/fd").iterdir()))
+            for destination in (root / "missing" / "capture", root / "link" / "capture", root / "not-directory" / "capture"):
+                for _ in range(4):
+                    with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.CAPTURE_INVALID):
+                        capture._open_output_parent(destination)
+            after = len(list(Path("/dev/fd").iterdir()))
+            self.assertLessEqual(after, before + 1)
+
+    def test_sparse_oversized_archive_is_refused_before_unbounded_read(self) -> None:
+        """Regular archive reads must enforce a descriptor-bound cap before materializing bytes."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            archive = Path(temporary).resolve() / "oversized.zip"
+            with archive.open("wb") as stream:
+                stream.truncate(4097)
+            with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.ARCHIVE_INVALID):
+                capture._read_regular(archive, capture.ARCHIVE_INVALID, 4096)
+
+    def test_ancestor_swap_before_publish_refuses_without_writing_redirect_target(self) -> None:
+        """Revalidation must catch an ancestor replaced after descriptor traversal and before publication."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            held = root / "held"
+            target = root / "redirect-target"
+            (held / "inner").mkdir(parents=True)
+            (target / "inner").mkdir(parents=True)
+            request, transport, archive, bundle, trusted = self._inputs(root)
+            request["output_root"] = str(held / "inner" / "capture")
+            published: list[bool] = []
+
+            def after_parent_chain_open(_parent) -> None:
+                held.rename(root / "moved-held")
+                held.symlink_to(target, target_is_directory=True)
+
+            def publisher(_fd: int, _stage: str, _destination: str) -> None:
+                published.append(True)
+
+            original = capture._after_parent_chain_open
+            capture._after_parent_chain_open = after_parent_chain_open
+            try:
+                with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.CAPTURE_INVALID):
+                    capture.capture_hosted_gate_a(
+                        capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                        publish_at=publisher,
+                    )
+            finally:
+                capture._after_parent_chain_open = original
+            self.assertEqual([], published)
+            self.assertFalse((target / "inner" / "capture").exists())
+            self.assertFalse((root / "moved-held" / "inner" / "capture").exists())
+
+    def test_darwin_publication_primitive_absence_and_nonexist_error_fail_closed(self) -> None:
+        """Missing or failed renameatx_np has no fallback, retry, or success path."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        class MissingLibrary:
+            pass
+
+        class ErrorFunction:
+            argtypes = None
+            restype = None
+            def __call__(self, *_args) -> int:
+                return -1
+
+        class ErrorLibrary:
+            renameatx_np = ErrorFunction()
+
+        original_platform, original_cdll, original_errno = capture.sys.platform, capture.ctypes.CDLL, capture.ctypes.get_errno
+        capture.sys.platform = "darwin"
+        try:
+            capture.ctypes.CDLL = lambda *_args, **_kwargs: MissingLibrary()
+            with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_UNSUPPORTED):
+                capture._darwin_publish_exclusive_at(17, "stage", "destination")
+            capture.ctypes.CDLL = lambda *_args, **_kwargs: ErrorLibrary()
+            capture.ctypes.get_errno = lambda: 5
+            with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_FAILED):
+                capture._darwin_publish_exclusive_at(17, "stage", "destination")
+        finally:
+            capture.sys.platform, capture.ctypes.CDLL, capture.ctypes.get_errno = original_platform, original_cdll, original_errno

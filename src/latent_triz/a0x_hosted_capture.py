@@ -150,7 +150,7 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
         if _exists_at(preflight_parent.fd, preflight_parent.destination_name): raise A0XHostedCaptureError(OUTPUT_EXISTS)
     finally:
         _close_parent(preflight_parent)
-    archive = _read_regular(Path(archive_path), ARCHIVE_INVALID)
+    archive = _read_regular(Path(archive_path), ARCHIVE_INVALID, request.archive_size_bytes)
     if len(archive) != request.archive_size_bytes or _sha(archive) != request.archive_sha256: raise A0XHostedCaptureError(ARCHIVE_INVALID)
     manifest = _extract_manifest(archive)
     if _sha(manifest) != request.manifest_sha256: raise A0XHostedCaptureError(BINDING_MISMATCH)
@@ -169,13 +169,17 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
         stage_fd = os.open(stage_name, flags, dir_fd=parent.fd)
         identity = _fd_identity(stage_fd)
         transaction = _OutputTransaction(parent, stage_name, stage_fd, identity)
-        for name, raw in zip(FINAL_NAMES, (manifest, attestation_bundle, trusted_root, transport.as_document()), strict=True): _write_at(stage_fd, name, raw)
-        _assert_stage_fd(stage_fd); os.fsync(stage_fd)
+        expected = {name: (raw, _sha(raw)) for name, raw in zip(FINAL_NAMES, (manifest, attestation_bundle, trusted_root, transport.as_document()), strict=True)}
+        for name, (raw, _digest) in expected.items(): _write_at(stage_fd, name, raw)
+        _assert_stage_fd(stage_fd, expected); os.fsync(stage_fd)
         _before_publish(transaction); _revalidate_chain(parent); _assert_owned_stage(transaction)
         if _exists_at(parent.fd, parent.destination_name): raise A0XHostedCaptureError(OUTPUT_EXISTS)
-        (publish_at or _darwin_publish_exclusive_at)(parent.fd, stage_name, parent.destination_name)
+        try:
+            (publish_at or _darwin_publish_exclusive_at)(parent.fd, stage_name, parent.destination_name)
+        except FileExistsError as error:
+            raise A0XHostedCaptureError(OUTPUT_EXISTS) from error
         transaction.state = "published"; _after_publish(transaction)
-        _assert_published(transaction); _assert_stage_fd(stage_fd); transaction.state = "committed"
+        _assert_published(transaction); _assert_stage_fd(stage_fd, expected); transaction.state = "committed"
     except A0XHostedCaptureError:
         _cleanup_transaction(transaction); raise
     except Exception as error:
@@ -198,25 +202,53 @@ def _extract_manifest(archive: bytes) -> bytes:
     except A0XHostedCaptureError: raise
     except (OSError, RuntimeError, ValueError, zipfile.BadZipFile, zipfile.LargeZipFile) as error: raise A0XHostedCaptureError(ARCHIVE_INVALID) from error
 
-def _read_regular(path: Path, code: str) -> bytes:
-    try: first = path.lstat()
-    except OSError as error: raise A0XHostedCaptureError(code) from error
-    if stat.S_ISLNK(first.st_mode) or not stat.S_ISREG(first.st_mode) or first.st_nlink != 1: raise A0XHostedCaptureError(code)
-    try: raw = path.read_bytes(); second = path.lstat()
-    except OSError as error: raise A0XHostedCaptureError(code) from error
-    if stat.S_ISLNK(second.st_mode) or not stat.S_ISREG(second.st_mode) or second.st_nlink != 1: raise A0XHostedCaptureError(code)
+def _read_regular(path: Path, code: str, maximum_bytes: int | None = None) -> bytes:
+    if maximum_bytes is not None and (type(maximum_bytes) is not int or maximum_bytes < 0): raise A0XHostedCaptureError(code)
+    if not all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_CLOEXEC")): raise A0XHostedCaptureError(code)
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError as error:
+        raise A0XHostedCaptureError(code) from error
+    try:
+        first = os.fstat(descriptor)
+        if not stat.S_ISREG(first.st_mode) or first.st_nlink != 1 or (maximum_bytes is not None and first.st_size > maximum_bytes): raise A0XHostedCaptureError(code)
+        bound = maximum_bytes if maximum_bytes is not None else first.st_size
+        raw = _read_fd_bounded(descriptor, bound, code)
+        second = os.fstat(descriptor)
+        if not stat.S_ISREG(second.st_mode) or second.st_nlink != 1 or (first.st_dev, first.st_ino, first.st_size) != (second.st_dev, second.st_ino, second.st_size): raise A0XHostedCaptureError(code)
+        return raw
+    except A0XHostedCaptureError:
+        raise
+    except OSError as error:
+        raise A0XHostedCaptureError(code) from error
+    finally:
+        os.close(descriptor)
+
+def _read_fd_bounded(descriptor: int, maximum_bytes: int, code: str) -> bytes:
+    chunks: list[bytes] = []; remaining = maximum_bytes + 1
+    while remaining:
+        chunk = os.read(descriptor, remaining)
+        if not chunk: break
+        chunks.append(chunk); remaining -= len(chunk)
+    raw = b"".join(chunks)
+    if len(raw) > maximum_bytes: raise A0XHostedCaptureError(code)
     return raw
 
 def _open_output_parent(destination: Path) -> _OutputParent:
     if not destination.is_absolute() or destination == Path("/") or any(part in {"", ".", ".."} for part in destination.parts[1:]): raise A0XHostedCaptureError(CAPTURE_INVALID)
     if not all(hasattr(os, name) for name in ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC")): raise A0XHostedCaptureError(CAPTURE_INVALID)
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    opened: list[int] = []
     try:
-        current = os.open("/", flags); chain: list[tuple[int, str, tuple[int, int]]] = []
+        current = os.open("/", flags); opened.append(current); chain: list[tuple[int, str, tuple[int, int]]] = []
         for part in destination.parts[1:-1]:
-            child = os.open(part, flags, dir_fd=current); chain.append((current, part, _fd_identity(child))); current = child
+            child = os.open(part, flags, dir_fd=current); opened.append(child); chain.append((current, part, _fd_identity(child))); current = child
         return _OutputParent(tuple(chain), current, destination.name)
-    except (AttributeError, OSError) as error: raise A0XHostedCaptureError(CAPTURE_INVALID) from error
+    except (AttributeError, OSError) as error:
+        for descriptor in reversed(opened):
+            try: os.close(descriptor)
+            except OSError: pass
+        raise A0XHostedCaptureError(CAPTURE_INVALID) from error
 
 def _fd_identity(fd: int) -> tuple[int, int]:
     value = os.fstat(fd); return value.st_dev, value.st_ino
@@ -231,12 +263,24 @@ def _revalidate_chain(parent: _OutputParent) -> None:
 def _write_at(fd: int, name: str, raw: bytes) -> None:
     descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
     with os.fdopen(descriptor, "wb") as stream: stream.write(raw); stream.flush(); os.fsync(stream.fileno())
-def _assert_stage_fd(fd: int) -> None:
+def _assert_stage_fd(fd: int, expected: Mapping[str, tuple[bytes, str]]) -> None:
     names = set(os.listdir(fd))
-    if names != set(FINAL_NAMES): raise A0XHostedCaptureError(PUBLICATION_FAILED)
+    if names != set(expected) or set(expected) != set(FINAL_NAMES): raise A0XHostedCaptureError(PUBLICATION_FAILED)
     for name in names:
         metadata = os.stat(name, dir_fd=fd, follow_symlinks=False)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1: raise A0XHostedCaptureError(PUBLICATION_FAILED)
+        raw, digest = expected[name]
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or metadata.st_size != len(raw): raise A0XHostedCaptureError(PUBLICATION_FAILED)
+        try:
+            descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
+            try:
+                observed = _read_fd_bounded(descriptor, len(raw), PUBLICATION_FAILED)
+                if observed != raw or _sha(observed) != digest: raise A0XHostedCaptureError(PUBLICATION_FAILED)
+                checked = os.fstat(descriptor)
+                if not stat.S_ISREG(checked.st_mode) or checked.st_nlink != 1 or checked.st_size != len(raw): raise A0XHostedCaptureError(PUBLICATION_FAILED)
+            finally:
+                os.close(descriptor)
+        except A0XHostedCaptureError: raise
+        except OSError as error: raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
 def _assert_owned_stage(t: _OutputTransaction) -> None:
     metadata = os.stat(t.stage_name, dir_fd=t.parent.fd, follow_symlinks=False)
     if not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_FAILED)
@@ -247,15 +291,17 @@ def _assert_published(t: _OutputTransaction) -> None:
 def _cleanup_transaction(t: _OutputTransaction | None) -> None:
     if t is None: return
     try:
-        name = t.stage_name if t.state == "staged" else t.parent.destination_name
-        try:
-            metadata = os.stat(name, dir_fd=t.parent.fd, follow_symlinks=False)
-        except FileNotFoundError:
-            metadata = os.stat(t.parent.destination_name, dir_fd=t.parent.fd, follow_symlinks=False)
-            name = t.parent.destination_name
-        if (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
+        owned_name: str | None = None
+        for name in (t.stage_name, t.parent.destination_name):
+            try: metadata = os.stat(name, dir_fd=t.parent.fd, follow_symlinks=False)
+            except FileNotFoundError: continue
+            if (metadata.st_dev, metadata.st_ino) == t.stage_identity:
+                if not stat.S_ISDIR(metadata.st_mode): raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
+                if owned_name is not None: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
+                owned_name = name
+        if owned_name is None: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
         for child in os.listdir(t.stage_fd): os.unlink(child, dir_fd=t.stage_fd)
-        os.rmdir(name, dir_fd=t.parent.fd)
+        os.rmdir(owned_name, dir_fd=t.parent.fd)
     except FileNotFoundError: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
     except A0XHostedCaptureError: raise
     except OSError as error: raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
