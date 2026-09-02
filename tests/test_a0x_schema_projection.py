@@ -58,15 +58,15 @@ class A0XSchemaProjectionTests(unittest.TestCase):
             path.relative_to(ROOT).as_posix()
             for path in (ROOT / "schemas").glob("a0x-*.schema.json")
         }
-        self.assertEqual(35, A0X_SCHEMA_COUNT)
-        self.assertEqual(35, len(schema_paths))
+        self.assertEqual(len(schema_paths), A0X_SCHEMA_COUNT)
         self.assertTrue({
             "schemas/a0x-hosted-gate-a-capture-request.schema.json",
             "schemas/a0x-hosted-gate-a-capture-transport.schema.json",
+            "schemas/a0x-vertical-slice-manifest.schema.json",
         }.issubset(schema_paths))
-        self.assertEqual(20, A0X_PAIR_DEFINITION_COUNT)
-        self.assertEqual(20, len(discovered_pair_definitions(ROOT)))
-        self.assertEqual(20, len(registered_pair_definitions(ROOT)))
+        self.assertEqual(21, A0X_PAIR_DEFINITION_COUNT)
+        self.assertEqual(21, len(discovered_pair_definitions(ROOT)))
+        self.assertEqual(21, len(registered_pair_definitions(ROOT)))
 
     def test_tracked_schemas_equal_compiled_bytes(self) -> None:
         for relative, expected in compile_pair_projections(ROOT).items():
@@ -256,7 +256,7 @@ class A0XSchemaProjectionTests(unittest.TestCase):
     def test_registry_requires_explicit_overlays_and_compiled_refs_are_local(self) -> None:
         registry = json.loads((ROOT / "schemas/a0x-pair-projections.json").read_text(encoding="utf-8"))
         projections = registry["projections"]
-        self.assertEqual(20, len(projections))
+        self.assertEqual(21, len(projections))
         self.assertTrue(all("overlay" in projection for projection in projections))
         self.assertTrue(all(isinstance(projection["overlay"], dict) for projection in projections))
         for relative, payload in compile_pair_projections(ROOT).items():
@@ -280,7 +280,8 @@ class A0XSchemaProjectionTests(unittest.TestCase):
             self.assertEqual([], validate(value, schema), relative)
             self.assertEqual([], list(Draft202012Validator(schema).iter_errors(value)), relative)
             mutated = copy.deepcopy(value)
-            mutated["pair_binding"]["output_path"] = "results/a0x/a0/gpt2/"
+            pair_key = "pair" if "pair" in mutated else "pair_binding"
+            mutated[pair_key]["output_path"] = "results/a0x/a0/gpt2/"
             self.assertTrue(validate(mutated, schema), relative)
             self.assertTrue(list(Draft202012Validator(schema).iter_errors(mutated)), relative)
 

@@ -18,5 +18,6 @@
 {"path":"schemas/a0x-statistical-result.schema.json","definition":"any_pair","overlay":{"properties":{"dense_bound":{"$ref":"#/$defs/any_dense"}}}},
 {"path":"schemas/a0x-target-read-receipt.schema.json","definition":"pair","overlay":{"properties":{"dense_bound":{"$ref":"#/$defs/dense"}},"allOf":[{"if":{"properties":{"leg":{"const":"a0"}},"required":["leg"]},"then":{"properties":{"dense_bound":{"properties":{"leg":{"const":"a0"}}}}},"else":{"properties":{"dense_bound":{"properties":{"leg":{"const":"r1"}}}}}}]}},
 {"path":"schemas/a0x-terminal-result.schema.json","definition":"pair","overlay":{"properties":{"dense_bound":{"$ref":"#/$defs/any_dense"}}}},
-{"path":"schemas/a0x-terminal-result.schema.json","definition":"result_pair","overlay":{"properties":{"leg":{"const":"a0"},"dense_bound":{"$ref":"#/$defs/dense"}}}}
+{"path":"schemas/a0x-terminal-result.schema.json","definition":"result_pair","overlay":{"properties":{"leg":{"const":"a0"},"dense_bound":{"$ref":"#/$defs/dense"}}}},
+{"path":"schemas/a0x-vertical-slice-manifest.schema.json","definition":"pair","overlay":{"properties":{"dense_bound":{"$ref":"#/$defs/dense_bound"}}}}
 ]}

@@ -426,6 +426,35 @@ class A0XFreezeTests(unittest.TestCase):
         self.assertTrue(required.issubset(path_sets["a0"]))
         self.assertTrue(required.issubset(path_sets["r1"]))
 
+    def test_vertical_slice_paths_are_bound_in_both_implementation_inventories(self) -> None:
+        """Catch a pair-scoped package dependency omitted from either leg inventory."""
+        required = {
+            "schemas/a0x-vertical-slice-manifest.schema.json",
+            "scripts/a0x_vertical_material.py",
+            "src/latent_triz/a0x_vertical_slice.py",
+            "tests/test_a0x_vertical_material.py",
+            "tests/test_a0x_vertical_slice.py",
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_root = Path(directory)
+            a0x_freeze.freeze_a0x_campaign(
+                self.ROOT,
+                prepare_dossiers=True,
+                output_root=output_root,
+                implementation_source_head="f" * 40,
+            )
+            path_sets = {
+                leg: set(json.loads((
+                    output_root / f"experiments/a0x-six-model/{leg}/implementation.json"
+                ).read_text(encoding="utf-8"))["implementation_paths"])
+                for leg in ("a0", "r1")
+            }
+
+        self.assertTrue(required.issubset(a0x_freeze._IMPLEMENTATION_PATHS))
+        self.assertTrue(required.issubset(path_sets["a0"]))
+        self.assertTrue(required.issubset(path_sets["r1"]))
+
     def test_capture_wrapper_tests_are_in_the_synthetic_aggregate(self) -> None:
         """Catch a capture-wrapper regression suite skipped by the synthetic target."""
         completed = subprocess.run(
@@ -438,6 +467,20 @@ class A0XFreezeTests(unittest.TestCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn("tests.test_a0x_hosted_capture", completed.stdout)
         self.assertIn("tests.test_a0x_capture_hosted_gate_a", completed.stdout)
+
+    def test_vertical_slice_test_is_once_in_the_synthetic_aggregate(self) -> None:
+        """Catch an omitted or duplicated pair-package regression suite."""
+        completed = subprocess.run(
+            ["make", "-n", "a0x-synthetic-verify"],
+            cwd=self.ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        tokens = completed.stdout.split()
+        self.assertEqual(1, tokens.count("tests.test_a0x_vertical_slice"))
+        self.assertEqual(1, tokens.count("tests.test_a0x_vertical_material"))
 
     def test_active_hosted_verifier_schemas_are_bound_in_both_implementation_inventories(self) -> None:
         """Catch a schema read by the active Hosted Gate A verifier outside both freezes."""

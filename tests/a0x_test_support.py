@@ -331,6 +331,25 @@ def artifact(name: str) -> dict[str, object]:
     common_fields = common()
     pair = pair_binding()
     dossier, authorization, chain = authorization_documents(pair)
+    if name == "a0x-vertical-slice-manifest.schema.json":
+        head = "a" * 40
+        package_root = f"experiments/a0x-six-model/vertical-slices/{head}/a0/gpt2"
+        return {
+            "artifact_class": "a0x-vertical-slice-manifest",
+            "generator_profile": "a0x-vertical-slice-v1",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "implementation_source_head": head,
+            "implementation_source_tree": "b" * 40,
+            "package_scope": "one_leg_model_pair_not_campaign_wide_regeneration",
+            "pair": pair,
+            "members": {
+                name: {"path": f"{package_root}/{name}", "sha256": sha(index)}
+                for index, name in enumerate(
+                    ("protocol.json", "implementation.json", "freeze.json", "approval-dossier.json"),
+                    start=700,
+                )
+            },
+        }
     if name == "a0x-model-card.schema.json":
         return {
             **common_fields,

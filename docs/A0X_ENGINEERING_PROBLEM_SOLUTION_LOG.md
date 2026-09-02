@@ -1152,3 +1152,25 @@ target-free regeneration, all twelve dossiers, full deterministic suite,
 independent review, and local closure. No capture, network, GitHub CLI, Gate
 B/C, CCP, Docker, model, tokenizer, target, publication, or scientific work is
 authorized.
+
+## 42. Batch-wide artifacts could not represent a one-pair execution boundary
+
+**Problem.** The two historical batch freezes, twelve approval dossiers, and
+no-model receipt cover a broad campaign state. After the trusted vertical
+generator and selector-only launcher were added, those bytes could not attest a
+current, exact-head package for one leg/model pair.
+
+**Correction.** Register the vertical library, CLI, tests, and manifest schema
+in both implementation inventories and the target-free aggregate. Register its
+PairBinding projection and require the schema inventory count to match the
+actual A0X schema set. The target-free Make verification covers only the
+vertical tests; the selector-derived material target is a future launcher and
+is not an authorization to run it. The governing sequence is
+[A0X pair-scoped vertical slice](A0X_VERTICAL_SLICE.md): P0, Gate A, Gate B,
+Gate C, result verification, and publication are distinct gates.
+
+**Status.** The batch artifacts remain historical and stale. No package,
+freeze, dossier, receipt, model, tokenizer, target, CCP, network, or
+publication action occurred. A0-R1 remains blocked until the A0 terminal
+report and a separate authorization; scientific rules remain frozen between
+legs.
