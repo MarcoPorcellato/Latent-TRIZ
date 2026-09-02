@@ -481,6 +481,7 @@ class A0XFreezeTests(unittest.TestCase):
         tokens = completed.stdout.split()
         self.assertEqual(1, tokens.count("tests.test_a0x_vertical_slice"))
         self.assertEqual(1, tokens.count("tests.test_a0x_vertical_material"))
+        self.assertEqual(1, tokens.count("tests.test_a0x_vertical_p0_bootstrap"))
 
     def test_active_hosted_verifier_schemas_are_bound_in_both_implementation_inventories(self) -> None:
         """Catch a schema read by the active Hosted Gate A verifier outside both freezes."""

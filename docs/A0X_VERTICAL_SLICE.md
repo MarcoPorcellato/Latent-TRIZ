@@ -1,7 +1,7 @@
 ---
 type: laboratory-specification
 title: A0X pair-scoped vertical-slice execution
-status: approved-design-pending-implementation
+status: implemented-p0-authorization-pending
 date: 2026-09-02
 ---
 

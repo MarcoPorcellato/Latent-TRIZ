@@ -1,7 +1,7 @@
 ---
 type: local-qualification-review
 title: A0X vertical-slice local readiness review
-status: authorization-request-ready
+status: authorization-bootstrap-corrected-re-review-pending
 date: 2026-09-02
 reviewed_head: 77dcae52542d21e9bf16e4f17102abf70e68ffc3
 reviewed_tree: 79d9fd9c868cf367fdec28bbad8c0ac0d7f8b598
@@ -12,11 +12,10 @@ scope: target-free
 
 ## Decision
 
-**GO to request one exact P0 authorization only.** No new blocking defect was
-found in the target-free vertical-slice source, schema, selector, provenance,
-historical-isolation, or documentation boundary at the reviewed implementation
-head. This decision does not authorize P0 itself and does not qualify any
-generated package.
+**NO-GO pending independent re-review of the corrected P0 bootstrap.** The
+target-free implementation now addresses the four provenance findings from the
+whole-branch review, but implementation is not authorization. P0 has not run
+and no generated package is qualified.
 
 P0 remains fail-closed unless the operator can exclude every untrusted process
 running as the same user from repository and output-namespace mutation for the
@@ -71,34 +70,46 @@ delegation before any authorization lookup, preflight, claim, or guard call.
 The historical launcher still accepts only the twelve historical dossier
 paths.
 
-The implementation exposes package generation as a reviewed Python API rather
-than a dedicated generator CLI. The one-shot command below invokes that API
-with fixed selectors and derives only the current exact clean HEAD. This is an
-operational limitation, not a provenance bypass; arbitrary dossier paths and
-material execution remain absent from the command.
+The only proposed P0 entry point is
+`scripts/a0x_vertical_p0_bootstrap.py`. Before importing repository modules or
+creating staging state, it requires the immutable authorized HEAD and tree,
+the exact clean checkout, an absolute regular single-link Python executable
+with its authorized SHA-256, isolated source-only flags `-I -S -B`, and the
+exact 137-entry descriptor ledger below. It rejects repository bytecode,
+native extension artifacts, ambient repository imports, and any ledger
+cardinality, type, link-count, byte-count, or digest mismatch. Its terminal
+receipt binds source identity, Python identity, bootstrap identity, and the
+verified ledger.
+
+The bootstrap and its test intentionally remain outside the 137 package-input
+inventory. The authorized clean HEAD/tree binds their committed bytes, and the
+bootstrap records its own SHA-256 in the terminal receipt. The package-input
+ledger continues to cover exactly the bytes consumed by the generator.
 
 ## Fresh deterministic evidence
 
-The following target-free command completed with `Ran 75 tests ... OK`:
+The corrected target-free command completed with `Ran 81 tests ... OK`:
 
 ```text
-rtk env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_a0x_vertical_slice tests.test_a0x_vertical_material tests.test_a0x_freeze tests.test_a0x_schema_projection -v
+rtk env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_a0x_vertical_slice tests.test_a0x_vertical_material tests.test_a0x_vertical_p0_bootstrap tests.test_a0x_freeze tests.test_a0x_schema_projection -v
 ```
 
 It covered selector refusal, exact clean-checkout binding, descriptor-bound
 prerequisites, Darwin flags and errno mapping, exclusive publication,
 ownership-loss preservation, exact five-file validation, cross-leg/model/head
 substitution, changed package bytes, zero claim/preflight/guard calls, trusted
-inventory registration, and schema projection parity.
+inventory registration, schema projection parity, immutable bootstrap source
+identity, isolated hash-bound Python, conflicting valid ignored bytecode, PATH
+shadowing, and ledger cardinality/type/link/digest refusal.
 
 `rtk env PYTHONDONTWRITEBYTECODE=1 make a0x-vertical-slice-verify` independently
-completed with `Ran 42 tests ... OK`. Five active package schemas passed Draft
+completed with `Ran 48 tests ... OK`. Five active package schemas passed Draft
 2020-12 meta-validation: protocol, implementation, freeze manifest,
 authorization dossier, and vertical-slice manifest.
 
 The full target-free synthetic aggregate produced a zero-material receipt with
 `model_loaded: false`, `tokenizer_constructed: false`,
-`sealed_target_content_reads: 0`, and `ccp_invoked: false`. It then ran 490
+`sealed_target_content_reads: 0`, and `ccp_invoked: false`. It then ran 496
 tests and ended with the expected historical stale-package boundary: three
 failures, one dependent error, and one skip. Both frozen legs report
 implementation-path drift; byte-identical historical regeneration differs;
@@ -146,16 +157,16 @@ evidence, not current qualification.
 ## Raw P0 package-input ledger
 
 For `A0 / smollm2_360m`, generation reads 137 unique raw prerequisite files,
-totalling 2,149,289 bytes. All 137 passed the production descriptor-relative,
+totalling 2,149,445 bytes. All 137 passed the production descriptor-relative,
 regular, single-link reader. Each line is `SHA-256 bytes repository-relative-path`.
 The SHA-256 of the sorted newline-terminated ledger is
-`d3f4724dc9873a9fcb2235ebabab9aead9a25ba9e72772648f28a5b5b6615956`.
+`37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa`.
 
 ```text
 f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd 293 .github/a0x-hosted-gate-a-actions.json
 06a3c748ae9491ed4cfbf53f5f8eecdd23ab4ac2a9f7ca465b57874b838aa236 672 .github/a0x-hosted-gate-a-lanes.json
 5f74199107481c73adc2fa1efbd462c2a9d8b1d5009164892a2917d02ae595e4 11419 .github/workflows/a0x-hosted-gate-a.yml
-9e7e57b14dc217fefd11542e5811938f61666f69cd346c80a862ec8061a1b54a 37346 Makefile
+7ae4f426a812e78ed857715c255ec753e09e2c1fe1eb52c34b2c6cac42e9e58d 37420 Makefile
 2d08085d8cfc566f62b1b414c6ca09ad23af8df67de0fbd6876a896783721df9 1936 experiments/a0-automated-weak-proxy/implementation.json
 36d52643d419fd4e8feada63d19a42429940f3559dda72adf342c484411fc244 4755 experiments/a0-automated-weak-proxy/protocol.json
 cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295 13436 experiments/a0x-six-model/a0-selection-manifest.json
@@ -263,7 +274,7 @@ d86698fe26985ad79263a89d3297371525776e68a40ca58748a557c56717cb2e 6278 tests/test
 f22db62509a437395b37716b7cfdca86346fa785f8b856e7121fd3ff540a7236 24796 tests/test_a0x_contract.py
 7fd9eace4a3871337ad98114ed54e692be3398132a813302bc2efec9ecc5f43d 1261 tests/test_a0x_contract_check.py
 03283b28c73db1a946ffeb98ac9854a9c18b014ef0ae3733075131651ecbd344 32955 tests/test_a0x_execution.py
-c1e75ea6ee3241f5f06f37d9059ab6c5274c84a0ae61cb870a98e119b6c79c65 25490 tests/test_a0x_freeze.py
+4eccc59caba77c00924871075e419c4f2f689da9a052614d4de1f789eb5435e6 25572 tests/test_a0x_freeze.py
 be4d01f706e744d26beed3a1d2d6d37c63eb21b40f524554b2996e25ba5ba43e 14415 tests/test_a0x_frozen_package.py
 e887510d7d60d4a4c85d539f8b5b7eca219195c78b0bf65783816fb80c347065 33787 tests/test_a0x_gate_b_builder.py
 eb5da4382207b6c78d04754bd47169788c28cb38e5b51b07bee827f33e5a6788 45422 tests/test_a0x_hosted_capture.py
@@ -293,20 +304,23 @@ d56aad8b90d56a3961123cce768a1fe80aaa380f8a0a0ff479b0932cbe707fd8 5990 tests/test
 
 ## Exact one-shot P0 command and stop boundary
 
-The command below is the only proposed P0 action. It resolves the current
-commit with an absolute Git executable, fixes `Leg.A0` and
-`smollm2_360m`, derives the only permitted output root, invokes the reviewed
-generator once, and prints its receipt as canonical JSON.
+The command template below is the only proposed P0 action. An independent
+review must replace both identity placeholders with the exact final clean
+commit and tree before authorization. The bootstrap refuses a mismatch before
+repository imports or staging, fixes `A0 / smollm2_360m`, validates the exact
+ledger, invokes the reviewed generator once, and prints its receipt as
+canonical JSON.
 
 ```bash
-rtk env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -c 'import json,subprocess; from pathlib import Path; from latent_triz.a0x_contract import Leg; from latent_triz.a0x_vertical_slice import VerticalSliceRequest,generate_vertical_slice; completed=subprocess.run(("/usr/bin/git","rev-parse","--verify","HEAD^{commit}"),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=10,env={"PATH":"/usr/bin:/bin","LC_ALL":"C","GIT_CONFIG_NOSYSTEM":"1","GIT_NO_REPLACE_OBJECTS":"1"}); head=completed.stdout.decode("ascii","strict").strip(); output=f"experiments/a0x-six-model/vertical-slices/{head}/a0/smollm2_360m"; print(json.dumps(generate_vertical_slice(Path("."),VerticalSliceRequest(leg=Leg.A0,model_key="smollm2_360m",implementation_source_head=head,output_root=output)),sort_keys=True,separators=(",",":")))'
+rtk env -i PATH=/usr/bin:/bin LC_ALL=C /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 -I -S -B scripts/a0x_vertical_p0_bootstrap.py --repository-root . --expected-head EXACT_FINAL_40_HEX_HEAD --expected-tree EXACT_FINAL_40_HEX_TREE --expected-python /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 --expected-python-sha256 3a1f077a333905eaac57197c9f2060ed95e05208daf83da4827d92e0474574d8 --expected-ledger-sha256 37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa
 ```
 
-Authorization must bind the final clean checkpoint HEAD/tree, this exact
-command and worktree, pair `A0 / smollm2_360m`, generator profile
-`a0x-vertical-slice-v1`, output root, input-ledger digest, one invocation
-maximum, and no untrusted same-UID repository/namespace mutator for the entire
-transaction.
+Authorization must bind the final clean HEAD/tree, this exact command and
+worktree, absolute Python path and SHA-256, bootstrap path and committed
+SHA-256, bootstrap profile `a0x-vertical-p0-bootstrap-v1`, pair
+`A0 / smollm2_360m`, generator profile `a0x-vertical-slice-v1`, output root,
+137-entry input-ledger digest, one invocation maximum, and no untrusted
+same-UID repository/namespace mutator for the entire transaction.
 
 Stop after the first terminal return, whether success, refusal, interruption,
 or opaque failure. Do not retry. Do not invoke the vertical material target,

@@ -1,7 +1,7 @@
 ---
 type: restart-checkpoint
 title: A0X pair-scoped vertical-slice readiness checkpoint
-status: p0-authorization-pending
+status: p0-bootstrap-re-review-pending
 date: 2026-09-02
 branch: agent/a0x-hosted-gate-a-capture-wrapper
 reviewed_head: 77dcae52542d21e9bf16e4f17102abf70e68ffc3
@@ -13,10 +13,10 @@ scope: target-free
 
 ## Purpose and decision
 
-This checkpoint preserves the independently reviewed local readiness boundary
-for the first pair-scoped package. The decision is **GO to request one exact P0
-authorization only**. P0 has not run, no real vertical package exists, and no
-later gate is authorized.
+This checkpoint preserves the local readiness boundary for the first
+pair-scoped package. The decision is **NO-GO pending independent re-review of
+the corrected P0 bootstrap**. P0 has not run, no real vertical package exists,
+and no later gate is authorized.
 
 Canonical specification: `docs/A0X_VERTICAL_SLICE.md`.
 
@@ -40,19 +40,20 @@ head.
 
 - Exact implementation diff reviewed: 19 files, 2,940 insertions, 14
   deletions; `git diff --check` passed.
-- Focused generator, selector, inventory, and projection suite: 75/75 PASS.
-- Vertical Make verification: 42/42 PASS.
+- Focused generator, selector, bootstrap, inventory, and projection suite:
+  81/81 PASS.
+- Vertical Make verification: 48/48 PASS.
 - Five active package schemas: Draft 2020-12 meta-validation PASS.
-- Production descriptor-bound input reader: 137/137 files PASS; 2,149,289 raw
+- Production descriptor-bound input reader: 137/137 files PASS; 2,149,445 raw
   bytes.
 - Sorted input-ledger SHA-256:
-  `d3f4724dc9873a9fcb2235ebabab9aead9a25ba9e72772648f28a5b5b6615956`.
+  `37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa`.
 - Historical batch artifact range diff: byte-identical for two freezes and
   twelve dossiers.
 - Real `experiments/a0x-six-model/vertical-slices/` path: absent.
 - Documentation gate: canonical link, historical/stale labels, separate
   P0/A/B/C/result/publication gates, and A0-before-A0-R1 boundary present.
-- Full synthetic aggregate: zero-material receipt emitted; 490 tests ended
+- Full synthetic aggregate: zero-material receipt emitted; 496 tests ended
   with the expected stale historical-package boundary of three failures, one
   dependent error, and one skip. This is not a full-suite PASS and must not be
   relabelled as one.
@@ -69,21 +70,25 @@ terminal success or cleanup. Private modes do not exclude another process with
 the same user ID. Darwin has no conditional expected-inode unlink or `rmdir`;
 ownership loss must fail closed and preserve possible replacement data.
 
-The package generator has no dedicated CLI. The proposed command invokes the
-reviewed Python API with fixed selectors and no material-consumer call. This is
-acceptable only as the exact one-shot command below; editing it requires a new
-review and authorization.
+The proposed command uses the dedicated target-free bootstrap
+`scripts/a0x_vertical_p0_bootstrap.py`. Before any repository import or staging
+it verifies the immutable expected HEAD/tree, exact cleanliness, absolute
+hash-bound Python identity under `-I -S -B`, absence of repository bytecode,
+and the complete descriptor-read 137-entry ledger. Its terminal receipt binds
+source, Python, bootstrap, and ledger identities. Editing the bootstrap or
+command requires a new review and authorization.
 
 ## Exact next authorization request
 
-Authorize at most one invocation in this exact worktree, on the final clean
-checkpoint HEAD/tree reported by Task 4, for only `A0 / smollm2_360m`, output
-under
-`experiments/a0x-six-model/vertical-slices/<final-checkpoint-head>/a0/smollm2_360m/`,
-with the input-ledger digest above and the complete same-UID exclusion.
+After independent re-review, authorize at most one invocation in this exact
+worktree, on the exact final clean HEAD/tree, for only
+`A0 / smollm2_360m`, output under
+`experiments/a0x-six-model/vertical-slices/<final-head>/a0/smollm2_360m/`, with
+the absolute Python identity, committed bootstrap identity, input-ledger
+digest above, and complete same-UID exclusion.
 
 ```bash
-rtk env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -c 'import json,subprocess; from pathlib import Path; from latent_triz.a0x_contract import Leg; from latent_triz.a0x_vertical_slice import VerticalSliceRequest,generate_vertical_slice; completed=subprocess.run(("/usr/bin/git","rev-parse","--verify","HEAD^{commit}"),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=10,env={"PATH":"/usr/bin:/bin","LC_ALL":"C","GIT_CONFIG_NOSYSTEM":"1","GIT_NO_REPLACE_OBJECTS":"1"}); head=completed.stdout.decode("ascii","strict").strip(); output=f"experiments/a0x-six-model/vertical-slices/{head}/a0/smollm2_360m"; print(json.dumps(generate_vertical_slice(Path("."),VerticalSliceRequest(leg=Leg.A0,model_key="smollm2_360m",implementation_source_head=head,output_root=output)),sort_keys=True,separators=(",",":")))'
+rtk env -i PATH=/usr/bin:/bin LC_ALL=C /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 -I -S -B scripts/a0x_vertical_p0_bootstrap.py --repository-root . --expected-head EXACT_FINAL_40_HEX_HEAD --expected-tree EXACT_FINAL_40_HEX_TREE --expected-python /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 --expected-python-sha256 3a1f077a333905eaac57197c9f2060ed95e05208daf83da4827d92e0474574d8 --expected-ledger-sha256 37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa
 ```
 
 Stop after the first terminal return. No retry after success, refusal,
@@ -99,8 +104,11 @@ push, PR, merge, publication, and A0-R1 remain prohibited.
 2. Verify the durable branch, exact final checkpoint HEAD/tree, and clean
    status. Preserve any dirty or divergent work; do not reset, stash, or clean.
 3. Recompute the 137-file input ledger and require the exact digest above.
-4. Require the real vertical output root to be absent.
-5. Establish the full same-UID namespace isolation. If unavailable, record
+4. Revalidate the absolute Python path/hash, bootstrap committed hash, and
+   source-only isolation contract.
+5. Require the real vertical output root to be absent.
+6. Complete independent review of the corrected bootstrap and its regressions.
+7. Establish the full same-UID namespace isolation. If unavailable, record
    P0 NO-GO and stop.
-6. Obtain a new explicit authorization containing every binding above.
-7. If authorized, run the command once and stop at its terminal result.
+8. Obtain a new explicit authorization containing every binding above.
+9. If authorized, run the command once and stop at its terminal result.
