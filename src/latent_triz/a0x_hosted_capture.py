@@ -55,9 +55,12 @@ def _timestamp(value: object) -> bool:
     if not isinstance(value, str) or _TIMESTAMP.fullmatch(value) is None:
         return False
     try:
-        return datetime.fromisoformat(value[:-1] + "+00:00").tzinfo == timezone.utc
+        return _timestamp_value(value).tzinfo == timezone.utc
     except ValueError:
         return False
+
+def _timestamp_value(value: str) -> datetime:
+    return datetime.fromisoformat(value[:-1] + "+00:00")
 
 def _sha(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
@@ -96,8 +99,11 @@ class CaptureTransport:
         return result
 
     def validate(self) -> None:
-        if not (_positive(self.artifact_id) and _positive(self.run_id) and self.run_attempt == 1 and _revision(self.head_sha) and isinstance(self.archive_digest, str) and self.archive_digest.startswith("sha256:") and _sha256(self.archive_digest[7:]) and _positive(self.archive_size_bytes) and self.archive_size_bytes <= MAX_ARCHIVE_BYTES and all(_timestamp(v) for v in (self.created_at, self.expires_at, self.captured_at))):
+        timestamps = (self.created_at, self.captured_at, self.expires_at)
+        if not (_positive(self.artifact_id) and _positive(self.run_id) and self.run_attempt == 1 and _revision(self.head_sha) and isinstance(self.archive_digest, str) and self.archive_digest.startswith("sha256:") and _sha256(self.archive_digest[7:]) and _positive(self.archive_size_bytes) and self.archive_size_bytes <= MAX_ARCHIVE_BYTES and all(_timestamp(value) for value in timestamps)):
             raise A0XHostedCaptureError(CAPTURE_INVALID)
+        created_at, captured_at, expires_at = (_timestamp_value(value) for value in timestamps)
+        if not created_at <= captured_at < expires_at: raise A0XHostedCaptureError(CAPTURE_INVALID)
 
     def as_document(self) -> bytes:
         raw = canonical_json_bytes({"artifact_class":"a0x-hosted-gate-a-transport", "transport_profile":"a0x-hosted-gate-a-transport-v1", "repository":REPOSITORY, "artifact_id":self.artifact_id, "run_id":self.run_id, "run_attempt":self.run_attempt, "head_sha":self.head_sha, "archive_digest":self.archive_digest, "archive_size_bytes":self.archive_size_bytes, "created_at":self.created_at, "expires_at":self.expires_at, "captured_at":self.captured_at})
@@ -139,6 +145,7 @@ class _OutputTransaction:
 def _after_parent_chain_open(parent: _OutputParent) -> None: pass
 def _before_publish(transaction: _OutputTransaction) -> None: pass
 def _after_publish(transaction: _OutputTransaction) -> None: pass
+def _before_owned_rmdir(transaction: _OutputTransaction, name: str) -> None: pass
 
 def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, archive_path: Path, attestation_bundle: bytes, trusted_root: bytes, *, publish_at: PublishExclusiveAt | None = None) -> Path:
     if not isinstance(request, CaptureRequest) or not isinstance(transport, CaptureTransport): raise A0XHostedCaptureError(CAPTURE_INVALID)
@@ -179,7 +186,8 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
         except FileExistsError as error:
             raise A0XHostedCaptureError(OUTPUT_EXISTS) from error
         transaction.state = "published"; _after_publish(transaction)
-        _assert_published(transaction); _assert_stage_fd(stage_fd, expected); transaction.state = "committed"
+        _assert_published_chain(transaction); _assert_published(transaction); _assert_stage_fd(stage_fd, expected)
+        _assert_published_chain(transaction); transaction.state = "committed"
     except A0XHostedCaptureError:
         _cleanup_transaction(transaction); raise
     except Exception as error:
@@ -257,9 +265,12 @@ def _exists_at(fd: int, name: str) -> bool:
     except FileNotFoundError: return False
     except OSError as error: raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
 def _revalidate_chain(parent: _OutputParent) -> None:
-    for fd, name, identity in parent.chain:
-        metadata = os.stat(name, dir_fd=fd, follow_symlinks=False)
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != identity: raise A0XHostedCaptureError(CAPTURE_INVALID)
+    try:
+        for fd, name, identity in parent.chain:
+            metadata = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != identity: raise A0XHostedCaptureError(CAPTURE_INVALID)
+    except A0XHostedCaptureError: raise
+    except OSError as error: raise A0XHostedCaptureError(CAPTURE_INVALID) from error
 def _write_at(fd: int, name: str, raw: bytes) -> None:
     descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
     with os.fdopen(descriptor, "wb") as stream: stream.write(raw); stream.flush(); os.fsync(stream.fileno())
@@ -288,9 +299,16 @@ def _assert_published(t: _OutputTransaction) -> None:
     if _exists_at(t.parent.fd, t.stage_name): raise A0XHostedCaptureError(PUBLICATION_FAILED)
     metadata = os.stat(t.parent.destination_name, dir_fd=t.parent.fd, follow_symlinks=False)
     if not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
+def _assert_published_chain(t: _OutputTransaction) -> None:
+    try: _revalidate_chain(t.parent)
+    except A0XHostedCaptureError as error:
+        if error.code != CAPTURE_INVALID: raise
+        t.state = "ownership_lost"
+        raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST) from error
 def _cleanup_transaction(t: _OutputTransaction | None) -> None:
     if t is None: return
     try:
+        if t.state == "ownership_lost": raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
         owned_name: str | None = None
         for name in (t.stage_name, t.parent.destination_name):
             try: metadata = os.stat(name, dir_fd=t.parent.fd, follow_symlinks=False)
@@ -301,6 +319,9 @@ def _cleanup_transaction(t: _OutputTransaction | None) -> None:
                 owned_name = name
         if owned_name is None: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
         for child in os.listdir(t.stage_fd): os.unlink(child, dir_fd=t.stage_fd)
+        _before_owned_rmdir(t, owned_name)
+        metadata = os.stat(owned_name, dir_fd=t.parent.fd, follow_symlinks=False)
+        if not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
         os.rmdir(owned_name, dir_fd=t.parent.fd)
     except FileNotFoundError: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
     except A0XHostedCaptureError: raise

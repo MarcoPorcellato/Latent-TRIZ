@@ -715,3 +715,86 @@ class HostedCaptureTest(unittest.TestCase):
                 capture._darwin_publish_exclusive_at(17, "stage", "destination")
         finally:
             capture.sys.platform, capture.ctypes.CDLL, capture.ctypes.get_errno = original_platform, original_cdll, original_errno
+
+    def test_cleanup_rechecks_identity_before_rmdir_and_preserves_replacement(self) -> None:
+        """A replacement installed after child cleanup must not be removed by a stale owned basename."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+
+            def after_publish(transaction) -> None:
+                descriptor = os.open("unexpected", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=transaction.stage_fd)
+                os.close(descriptor)
+
+            def before_rmdir(transaction, name: str) -> None:
+                os.rename(name, "moved-owned", src_dir_fd=transaction.parent.fd, dst_dir_fd=transaction.parent.fd)
+                os.mkdir(name, dir_fd=transaction.parent.fd)
+                replacement_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=transaction.parent.fd)
+                try:
+                    marker = os.open("replacement", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=replacement_fd)
+                    os.close(marker)
+                finally:
+                    os.close(replacement_fd)
+
+            original_after, original_before = capture._after_publish, capture._before_owned_rmdir
+            capture._after_publish, capture._before_owned_rmdir = after_publish, before_rmdir
+            try:
+                with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_OWNERSHIP_LOST):
+                    capture.capture_hosted_gate_a(
+                        capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                        publish_at=self._publish_at,
+                    )
+            finally:
+                capture._after_publish, capture._before_owned_rmdir = original_after, original_before
+            self.assertEqual(b"", (root / "capture" / "replacement").read_bytes())
+            self.assertTrue((root / "moved-owned").is_dir())
+
+    def test_post_publish_ancestor_swap_returns_ownership_loss_and_preserves_foreign_path(self) -> None:
+        """A lexical output path redirected after publication must never be returned as wrapper-owned."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            held, foreign = root / "held", root / "foreign"
+            (held / "inner").mkdir(parents=True)
+            (foreign / "inner" / "capture").mkdir(parents=True)
+            (foreign / "inner" / "capture" / "foreign").write_bytes(b"preserve")
+            request, transport, archive, bundle, trusted = self._inputs(root)
+            request["output_root"] = str(held / "inner" / "capture")
+
+            def after_publish(_transaction) -> None:
+                held.rename(root / "moved-held")
+                held.symlink_to(foreign, target_is_directory=True)
+
+            original = capture._after_publish
+            capture._after_publish = after_publish
+            try:
+                with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_OWNERSHIP_LOST):
+                    capture.capture_hosted_gate_a(
+                        capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                        publish_at=self._publish_at,
+                    )
+            finally:
+                capture._after_publish = original
+            self.assertEqual(b"preserve", (held / "inner" / "capture" / "foreign").read_bytes())
+            self.assertTrue((root / "moved-held" / "inner" / "capture").is_dir())
+
+    def test_transport_timestamp_order_refuses_before_capture_admission(self) -> None:
+        """Transport cannot claim creation after capture or capture at/after artifact expiry."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID, CaptureTransport
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            _request, transport, _archive, _bundle, _trusted = self._inputs(root)
+            for drift in (
+                {"captured_at": transport["expires_at"]},
+                {"captured_at": "2026-09-03T12:00:00Z"},
+                {"created_at": "2026-09-01T13:00:00Z"},
+            ):
+                with self.subTest(drift=drift):
+                    candidate = dict(transport)
+                    candidate.update(drift)
+                    with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                        CaptureTransport.from_mapping(candidate)
