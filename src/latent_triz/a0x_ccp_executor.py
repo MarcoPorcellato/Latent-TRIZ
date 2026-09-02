@@ -302,6 +302,7 @@ def launch_vertical_slice_dossier(
         guard_preflight_producer=guard_preflight_producer,
         expected_dossier=dossier,
         expected_dossier_sha256=dossier_sha256,
+        expected_vertical_package_head=package_head,
     )
 
 
@@ -314,6 +315,7 @@ def _launch_validated_dossier(
     guard_preflight_producer: GuardPreflightProducer | None,
     expected_dossier: Mapping[str, Any] | None = None,
     expected_dossier_sha256: str | None = None,
+    expected_vertical_package_head: str | None = None,
 ) -> dict[str, Any]:
     """Consume an already selected dossier without selecting its namespace."""
     dossier_path = _repository_file(root, relative_dossier)
@@ -332,6 +334,11 @@ def _launch_validated_dossier(
         dossier.get("implementation_source_head"), "dossier implementation source head",
     )
     source_head = _revision(source_head_probe(), "repository source head")
+    if (
+        expected_vertical_package_head is not None
+        and source_head != expected_vertical_package_head
+    ):
+        raise A0XCcpExecutorError("repository source HEAD differs from vertical package")
     expected_paths = derive_runtime_paths(pair, source_head=source_head)
     authorization_relative = expected_paths.authorization_path
     authorization_path = _repository_file(root, _relative_runtime_path(authorization_relative))
