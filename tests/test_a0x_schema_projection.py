@@ -54,7 +54,16 @@ class A0XSchemaProjectionTests(unittest.TestCase):
         self.assertEqual(discovered_pair_definitions(ROOT), registered_pair_definitions(ROOT))
 
     def test_baseline_cardinality_is_explicit_and_stable(self) -> None:
-        self.assertEqual(33, A0X_SCHEMA_COUNT)
+        schema_paths = {
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "schemas").glob("a0x-*.schema.json")
+        }
+        self.assertEqual(35, A0X_SCHEMA_COUNT)
+        self.assertEqual(35, len(schema_paths))
+        self.assertTrue({
+            "schemas/a0x-hosted-gate-a-capture-request.schema.json",
+            "schemas/a0x-hosted-gate-a-capture-transport.schema.json",
+        }.issubset(schema_paths))
         self.assertEqual(20, A0X_PAIR_DEFINITION_COUNT)
         self.assertEqual(20, len(discovered_pair_definitions(ROOT)))
         self.assertEqual(20, len(registered_pair_definitions(ROOT)))

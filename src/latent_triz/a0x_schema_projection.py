@@ -10,7 +10,7 @@ from typing import Any, Mapping
 from latent_triz.a0x_pair import PAIR_BINDING_FIELD_METADATA
 
 
-A0X_SCHEMA_COUNT = 33
+A0X_SCHEMA_COUNT = 35
 A0X_PAIR_DEFINITION_COUNT = 20
 _REGISTRY_PATH = Path("schemas/a0x-pair-projections.json")
 _FRAGMENT_PATH = Path("schemas/a0x-pair-binding.fragment.json")
