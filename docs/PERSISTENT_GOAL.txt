@@ -467,3 +467,12 @@ and A0-R1 implementation/freeze
 `2ec31870102a9219a36df24304748e31da4050514d9e59cfd0c9056adaba3ffa`.
 The ordered twelve-dossier ledger SHA-256 is
 `c249f94e3d5124c8fb19ebdf873d4bf91eb2dc7eb6c75654e55d9dff58451df0`.
+Active objective: complete the pair-scoped A0X vertical slice described in
+`docs/A0X_VERTICAL_SLICE.md`. Verify its exact implementation anchor live.
+Implement and qualify only the target-free generator first; then create and
+execute one exact leg-model package at a time, beginning with
+`A0 / SmolLM2-360M@f8027fd0eaeea54caa13c31d31b9fdc459c38b49`. Preserve the
+global frozen protocol, historical batch artifacts, separate Gate A/B/C
+authorizations, one-shot terminal outcomes, and no-general-TRIZ-claim limit.
+Do not access model, tokenizer, targets, network, CCP, or publish without the
+separate exact authorization required by the canonical specification.
