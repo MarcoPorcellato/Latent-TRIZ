@@ -10,10 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import re
-import shutil
 import stat
 import sys
-import tempfile
+import secrets
 from typing import Any, Callable, Mapping
 import zipfile
 
@@ -25,6 +24,7 @@ BINDING_MISMATCH = "A0X_HOSTED_CAPTURE_BINDING_MISMATCH"
 OUTPUT_EXISTS = "A0X_HOSTED_CAPTURE_OUTPUT_EXISTS"
 PUBLICATION_UNSUPPORTED = "A0X_HOSTED_CAPTURE_PUBLICATION_UNSUPPORTED"
 PUBLICATION_FAILED = "A0X_HOSTED_CAPTURE_PUBLICATION_FAILED"
+PUBLICATION_OWNERSHIP_LOST = "A0X_HOSTED_CAPTURE_PUBLICATION_OWNERSHIP_LOST"
 PIN_INVALID = "A0X_HOSTED_CAPTURE_PIN_INVALID"
 REPOSITORY = "MarcoPorcellato/Latent-TRIZ"
 ARTIFACT_NAME = "a0x-hosted-gate-a-evidence"
@@ -118,15 +118,36 @@ def revalidate_pinned_cli(pinned: PinnedGitHubCLI, path: Path, version_output: b
     if not isinstance(pinned, PinnedGitHubCLI) or Path(path) != pinned.path or version_output != (GH_VERSION + "\n").encode() or _sha(_read_regular(pinned.path, PIN_INVALID)) != pinned.raw_sha256:
         raise A0XHostedCaptureError(PIN_INVALID)
 
-Publisher = Callable[[Path, Path], None]
+PublishExclusiveAt = Callable[[int, str, str], None]
 
-def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, archive_path: Path, attestation_bundle: bytes, trusted_root: bytes, *, publish: Publisher | None = None) -> Path:
+@dataclass
+class _OutputParent:
+    chain: tuple[tuple[int, str, tuple[int, int]], ...]
+    fd: int
+    destination_name: str
+
+@dataclass
+class _OutputTransaction:
+    parent: _OutputParent
+    stage_name: str
+    stage_fd: int
+    stage_identity: tuple[int, int]
+    state: str = "staged"
+
+def _after_parent_chain_open(parent: _OutputParent) -> None: pass
+def _before_publish(transaction: _OutputTransaction) -> None: pass
+def _after_publish(transaction: _OutputTransaction) -> None: pass
+
+def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, archive_path: Path, attestation_bundle: bytes, trusted_root: bytes, *, publish_at: PublishExclusiveAt | None = None) -> Path:
     if not isinstance(request, CaptureRequest) or not isinstance(transport, CaptureTransport): raise A0XHostedCaptureError(CAPTURE_INVALID)
     request.validate(); transport.validate()
     if not (transport.artifact_id == request.artifact_id and transport.run_id == request.run_id and transport.run_attempt == request.run_attempt and transport.head_sha == request.source_head and transport.archive_digest == "sha256:" + request.archive_sha256 and transport.archive_size_bytes == request.archive_size_bytes and transport.expires_at == request.expires_at): raise A0XHostedCaptureError(BINDING_MISMATCH)
     destination = request.output_root
-    if os.path.lexists(destination): raise A0XHostedCaptureError(OUTPUT_EXISTS)
-    _require_safe_output_ancestors(destination)
+    preflight_parent = _open_output_parent(destination)
+    try:
+        if _exists_at(preflight_parent.fd, preflight_parent.destination_name): raise A0XHostedCaptureError(OUTPUT_EXISTS)
+    finally:
+        _close_parent(preflight_parent)
     archive = _read_regular(Path(archive_path), ARCHIVE_INVALID)
     if len(archive) != request.archive_size_bytes or _sha(archive) != request.archive_sha256: raise A0XHostedCaptureError(ARCHIVE_INVALID)
     manifest = _extract_manifest(archive)
@@ -135,19 +156,31 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
     except A0XHostedGateAError as error: raise A0XHostedCaptureError(ARCHIVE_INVALID) from error
     if not (parsed["repository"] == request.repository and parsed["qualified_source_head"] == request.source_head and parsed["qualified_source_tree"] == request.source_tree and parsed["workflow"]["run_id"] == request.run_id and parsed["workflow"]["run_attempt"] == request.run_attempt): raise A0XHostedCaptureError(BINDING_MISMATCH)
     if not isinstance(attestation_bundle, bytes) or not attestation_bundle or len(attestation_bundle) > MAX_BUNDLE_BYTES or not isinstance(trusted_root, bytes) or not trusted_root or len(trusted_root) > MAX_TRUSTED_ROOT_BYTES: raise A0XHostedCaptureError(CAPTURE_INVALID)
-    stage = Path(tempfile.mkdtemp(prefix=".a0x-hosted-capture-", dir=destination.parent))
-    stage_identity = _directory_identity(stage)
+    parent = _open_output_parent(destination)
+    transaction: _OutputTransaction | None = None
     try:
-        for name, raw in zip(FINAL_NAMES, (manifest, attestation_bundle, trusted_root, transport.as_document()), strict=True):
-            with (stage / name).open("xb") as stream: stream.write(raw); stream.flush(); os.fsync(stream.fileno())
-        _assert_stage(stage)
-        (publish or _darwin_publish_exclusive)(stage, destination)
-        if os.path.lexists(stage) or destination.is_symlink(): raise A0XHostedCaptureError(PUBLICATION_FAILED)
-        _assert_stage(destination)
+        _after_parent_chain_open(parent); _revalidate_chain(parent)
+        if _exists_at(parent.fd, parent.destination_name): raise A0XHostedCaptureError(OUTPUT_EXISTS)
+        stage_name = ".a0x-hosted-capture-" + secrets.token_hex(16)
+        os.mkdir(stage_name, 0o700, dir_fd=parent.fd)
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        stage_fd = os.open(stage_name, flags, dir_fd=parent.fd)
+        identity = _fd_identity(stage_fd)
+        transaction = _OutputTransaction(parent, stage_name, stage_fd, identity)
+        for name, raw in zip(FINAL_NAMES, (manifest, attestation_bundle, trusted_root, transport.as_document()), strict=True): _write_at(stage_fd, name, raw)
+        _assert_stage_fd(stage_fd); os.fsync(stage_fd)
+        _before_publish(transaction); _revalidate_chain(parent); _assert_owned_stage(transaction)
+        if _exists_at(parent.fd, parent.destination_name): raise A0XHostedCaptureError(OUTPUT_EXISTS)
+        (publish_at or _darwin_publish_exclusive_at)(parent.fd, stage_name, parent.destination_name)
+        transaction.state = "published"; _after_publish(transaction)
+        _assert_published(transaction); _assert_stage_fd(stage_fd); transaction.state = "committed"
     except A0XHostedCaptureError:
-        _cleanup(stage, stage_identity); raise
+        _cleanup_transaction(transaction); raise
     except Exception as error:
-        _cleanup(stage, stage_identity); raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
+        _cleanup_transaction(transaction); raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
+    finally:
+        if transaction is not None: os.close(transaction.stage_fd)
+        _close_parent(parent)
     return destination
 
 def _extract_manifest(archive: bytes) -> bytes:
@@ -172,49 +205,68 @@ def _read_regular(path: Path, code: str) -> bytes:
     if stat.S_ISLNK(second.st_mode) or not stat.S_ISREG(second.st_mode) or second.st_nlink != 1: raise A0XHostedCaptureError(code)
     return raw
 
-def _assert_stage(path: Path) -> None:
-    try: entries = list(path.iterdir())
+def _open_output_parent(destination: Path) -> _OutputParent:
+    if not destination.is_absolute() or destination == Path("/") or any(part in {"", ".", ".."} for part in destination.parts[1:]): raise A0XHostedCaptureError(CAPTURE_INVALID)
+    if not all(hasattr(os, name) for name in ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC")): raise A0XHostedCaptureError(CAPTURE_INVALID)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        current = os.open("/", flags); chain: list[tuple[int, str, tuple[int, int]]] = []
+        for part in destination.parts[1:-1]:
+            child = os.open(part, flags, dir_fd=current); chain.append((current, part, _fd_identity(child))); current = child
+        return _OutputParent(tuple(chain), current, destination.name)
+    except (AttributeError, OSError) as error: raise A0XHostedCaptureError(CAPTURE_INVALID) from error
+
+def _fd_identity(fd: int) -> tuple[int, int]:
+    value = os.fstat(fd); return value.st_dev, value.st_ino
+def _exists_at(fd: int, name: str) -> bool:
+    try: os.stat(name, dir_fd=fd, follow_symlinks=False); return True
+    except FileNotFoundError: return False
     except OSError as error: raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
-    if {entry.name for entry in entries} != set(FINAL_NAMES): raise A0XHostedCaptureError(PUBLICATION_FAILED)
-    for entry in entries: _read_regular(entry, PUBLICATION_FAILED)
-
-def _require_safe_output_ancestors(destination: Path) -> None:
-    current = Path(destination.anchor)
+def _revalidate_chain(parent: _OutputParent) -> None:
+    for fd, name, identity in parent.chain:
+        metadata = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != identity: raise A0XHostedCaptureError(CAPTURE_INVALID)
+def _write_at(fd: int, name: str, raw: bytes) -> None:
+    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+    with os.fdopen(descriptor, "wb") as stream: stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+def _assert_stage_fd(fd: int) -> None:
+    names = set(os.listdir(fd))
+    if names != set(FINAL_NAMES): raise A0XHostedCaptureError(PUBLICATION_FAILED)
+    for name in names:
+        metadata = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1: raise A0XHostedCaptureError(PUBLICATION_FAILED)
+def _assert_owned_stage(t: _OutputTransaction) -> None:
+    metadata = os.stat(t.stage_name, dir_fd=t.parent.fd, follow_symlinks=False)
+    if not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_FAILED)
+def _assert_published(t: _OutputTransaction) -> None:
+    if _exists_at(t.parent.fd, t.stage_name): raise A0XHostedCaptureError(PUBLICATION_FAILED)
+    metadata = os.stat(t.parent.destination_name, dir_fd=t.parent.fd, follow_symlinks=False)
+    if not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
+def _cleanup_transaction(t: _OutputTransaction | None) -> None:
+    if t is None: return
     try:
-        for component in destination.parts[1:-1]:
-            current /= component
-            metadata = current.lstat()
-            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-                raise A0XHostedCaptureError(CAPTURE_INVALID)
-    except A0XHostedCaptureError:
-        raise
-    except OSError as error:
-        raise A0XHostedCaptureError(CAPTURE_INVALID) from error
+        name = t.stage_name if t.state == "staged" else t.parent.destination_name
+        metadata = os.stat(name, dir_fd=t.parent.fd, follow_symlinks=False)
+        if (metadata.st_dev, metadata.st_ino) != t.stage_identity: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
+        for child in os.listdir(t.stage_fd): os.unlink(child, dir_fd=t.stage_fd)
+        os.rmdir(name, dir_fd=t.parent.fd)
+    except FileNotFoundError: raise A0XHostedCaptureError(PUBLICATION_OWNERSHIP_LOST)
+    except A0XHostedCaptureError: raise
+    except OSError as error: raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
+def _close_parent(parent: _OutputParent) -> None:
+    closed: set[int] = set()
+    for fd, _, _ in parent.chain:
+        if fd not in closed: os.close(fd); closed.add(fd)
+    if parent.fd not in closed: os.close(parent.fd)
 
-def _directory_identity(path: Path) -> tuple[int, int]:
-    try:
-        metadata = path.lstat()
-    except OSError as error:
-        raise A0XHostedCaptureError(PUBLICATION_FAILED) from error
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-        raise A0XHostedCaptureError(PUBLICATION_FAILED)
-    return metadata.st_dev, metadata.st_ino
-
-def _cleanup(stage: Path, identity: tuple[int, int]) -> None:
-    try:
-        metadata = stage.lstat()
-        if stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode) and (metadata.st_dev, metadata.st_ino) == identity:
-            shutil.rmtree(stage, ignore_errors=True)
-    except OSError: pass
-
-def _darwin_publish_exclusive(stage: Path, destination: Path) -> None:
+def _darwin_publish_exclusive_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
     if sys.platform != "darwin": raise A0XHostedCaptureError(PUBLICATION_UNSUPPORTED)
     try:
-        fn = ctypes.CDLL(None, use_errno=True).renamex_np; fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]; fn.restype = ctypes.c_int
-        result = fn(os.fsencode(stage), os.fsencode(destination), 4)
+        fn = ctypes.CDLL(None, use_errno=True).renameatx_np; fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]; fn.restype = ctypes.c_int
+        result = fn(parent_fd, os.fsencode(stage_name), parent_fd, os.fsencode(destination_name), 0x00000004 | 0x00000001)
     except (AttributeError, OSError) as error: raise A0XHostedCaptureError(PUBLICATION_UNSUPPORTED) from error
     if result:
         if ctypes.get_errno() == errno.EEXIST: raise A0XHostedCaptureError(OUTPUT_EXISTS)
         raise A0XHostedCaptureError(PUBLICATION_FAILED)
 
-__all__ = ["ARCHIVE_INVALID", "A0XHostedCaptureError", "BINDING_MISMATCH", "CAPTURE_INVALID", "CaptureRequest", "CaptureTransport", "FINAL_NAMES", "GH_SHA256", "GH_VERSION", "OUTPUT_EXISTS", "PIN_INVALID", "PinnedGitHubCLI", "PUBLICATION_FAILED", "PUBLICATION_UNSUPPORTED", "capture_hosted_gate_a", "revalidate_pinned_cli"]
+__all__ = ["ARCHIVE_INVALID", "A0XHostedCaptureError", "BINDING_MISMATCH", "CAPTURE_INVALID", "CaptureRequest", "CaptureTransport", "FINAL_NAMES", "GH_SHA256", "GH_VERSION", "OUTPUT_EXISTS", "PIN_INVALID", "PinnedGitHubCLI", "PUBLICATION_FAILED", "PUBLICATION_OWNERSHIP_LOST", "PUBLICATION_UNSUPPORTED", "capture_hosted_gate_a", "revalidate_pinned_cli"]

@@ -35,6 +35,16 @@ non-directory ancestors, duplicate/extra/traversal/encrypted/nonregular ZIP
 members, bad hashes/sizes, malformed values, source/run/attempt drift, and
 partial publication are fail-closed.
 
+The output parent namespace is a trusted local namespace for the duration of
+an authorized capture: no untrusted concurrent mutator, including an untrusted
+same-UID process, may alter any ancestor or final parent. Before commit every
+refusal removes wrapper-owned staging only while ownership is continuously
+proven. After publication a refusal removes the destination only while its
+directory entry still names the held staging inode. If either ownership or
+parent-chain continuity is lost, the wrapper performs no deletion through that
+name and returns `A0X_HOSTED_CAPTURE_PUBLICATION_OWNERSHIP_LOST`; preserving
+non-owned data outranks canonical-name cleanup.
+
 ## Architecture
 
 `src/latent_triz/a0x_hosted_capture.py` owns pure request validation, safe
@@ -44,9 +54,14 @@ is a thin explicit-argument, shell-free adapter. Every real subprocess path is
 injected in tests. The production adapter exists only for a later exact real
 capture authorization.
 
-Darwin `renamex_np(..., RENAME_EXCL)` is the only no-overwrite publication
-primitive. Unsupported hosts refuse; tests inject the primitive so hosted CI
-tests portability without claiming Linux material capture support.
+Darwin descriptor-relative `renameatx_np(..., RENAME_EXCL |
+RENAME_NOFOLLOW_ANY)` is the only no-overwrite publication primitive. The
+wrapper traverses, stages, validates, publishes, and cleans up through held
+directory descriptors; test injection receives only a parent descriptor and
+two validated basenames. Unsupported `dir_fd`, `O_DIRECTORY`, `O_NOFOLLOW`,
+`renameatx_np`, `RENAME_EXCL`, or `RENAME_NOFOLLOW_ANY` support refuses without
+a path-based fallback. Tests inject this narrow primitive so hosted CI tests
+portability without claiming Linux material capture support.
 
 ## Tests
 

@@ -54,6 +54,9 @@ def _typed_zip(name: str, payload: bytes, mode: int) -> bytes:
 
 
 class HostedCaptureTest(unittest.TestCase):
+    @staticmethod
+    def _publish_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
+        os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
     def _request(self, output_root: Path) -> dict[str, object]:
         return {
             "repository": "MarcoPorcellato/Latent-TRIZ",
@@ -141,13 +144,13 @@ class HostedCaptureTest(unittest.TestCase):
             }
             calls: list[tuple[Path, Path]] = []
 
-            def publish(stage: Path, destination: Path) -> None:
-                calls.append((stage, destination))
-                stage.rename(destination)
+            def publish_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
+                calls.append((Path(stage_name), Path(destination_name)))
+                os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
 
             result = capture_hosted_gate_a(
                 CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path,
-                bundle, trusted_root, publish=publish,
+                bundle, trusted_root, publish_at=publish_at,
             )
 
             self.assertEqual(root / "capture", result)
@@ -232,7 +235,7 @@ class HostedCaptureTest(unittest.TestCase):
                 transport["archive_digest"] = "sha256:" + request["archive_sha256"]
                 transport["archive_size_bytes"] = len(raw_archive)
                 with self.subTest(label=label), self.assertRaisesRegex(A0XHostedCaptureError, ARCHIVE_INVALID):
-                    capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish=lambda _stage, _destination: None)
+                    capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
                 self.assertFalse((root / "capture").exists())
 
     def test_capture_refuses_transport_cross_binding_without_output(self) -> None:
@@ -244,7 +247,7 @@ class HostedCaptureTest(unittest.TestCase):
             request, transport, archive_path, bundle, trusted = self._inputs(root)
             transport["head_sha"] = "c" * 40
             with self.assertRaisesRegex(A0XHostedCaptureError, BINDING_MISMATCH):
-                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish=lambda _stage, _destination: None)
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
             self.assertFalse((root / "capture").exists())
 
     def test_failed_publication_removes_owned_stage_and_never_creates_final_output(self) -> None:
@@ -257,7 +260,7 @@ class HostedCaptureTest(unittest.TestCase):
             with self.assertRaisesRegex(A0XHostedCaptureError, PUBLICATION_FAILED):
                 capture_hosted_gate_a(
                     CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted,
-                    publish=lambda _stage, _destination: (_ for _ in ()).throw(OSError("synthetic publish failure")),
+                    publish_at=lambda _fd, _stage, _destination: (_ for _ in ()).throw(OSError("synthetic publish failure")),
                 )
             self.assertFalse((root / "capture").exists())
             self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
@@ -298,11 +301,11 @@ class HostedCaptureTest(unittest.TestCase):
             linked = root / "archive-link.zip"
             os.link(archive_path, linked)
             with self.assertRaisesRegex(A0XHostedCaptureError, ARCHIVE_INVALID):
-                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), linked, bundle, trusted, publish=lambda _stage, _destination: None)
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), linked, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
             output = root / "capture"
             output.mkdir()
             with self.assertRaisesRegex(A0XHostedCaptureError, OUTPUT_EXISTS):
-                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish=lambda _stage, _destination: None)
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
 
     def test_capture_refuses_manifest_and_each_transport_binding_drift(self) -> None:
         """Removing any request/manifest/transport equality would publish mixed-run bytes."""
@@ -324,7 +327,7 @@ class HostedCaptureTest(unittest.TestCase):
                 "archive_size_bytes": request["archive_size_bytes"],
             })
             with self.assertRaisesRegex(A0XHostedCaptureError, BINDING_MISMATCH):
-                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish=lambda _stage, _destination: None)
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive_path, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
             request, transport, archive_path, bundle, trusted = self._inputs(root)
             for field, value in (
                 ("artifact_id", 457), ("run_id", 124), ("head_sha", "c" * 40),
@@ -334,7 +337,7 @@ class HostedCaptureTest(unittest.TestCase):
                 drifted = dict(transport)
                 drifted[field] = value
                 with self.subTest(field=field), self.assertRaisesRegex(A0XHostedCaptureError, BINDING_MISMATCH):
-                    capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(drifted), archive_path, bundle, trusted, publish=lambda _stage, _destination: None)
+                    capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(drifted), archive_path, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
                 self.assertFalse((root / "capture").exists())
 
     def test_capture_refuses_nested_symlink_and_non_directory_ancestors(self) -> None:
@@ -349,12 +352,12 @@ class HostedCaptureTest(unittest.TestCase):
             (root / "link").symlink_to(redirect_target, target_is_directory=True)
             request["output_root"] = str(root / "link" / "inner" / "capture")
             with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
-                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=lambda _stage, _destination: None)
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
             request, transport, archive, bundle, trusted = self._inputs(root)
             (root / "blocked").write_bytes(b"not a directory")
             request["output_root"] = str(root / "blocked" / "inner" / "capture")
             with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
-                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=lambda _stage, _destination: None)
+                capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
 
     def test_noop_or_invalid_publisher_cleans_owned_stage(self) -> None:
         """Removing post-publication cleanup would leave synthetic staged evidence after a bad publisher."""
@@ -366,7 +369,7 @@ class HostedCaptureTest(unittest.TestCase):
                 with self.subTest(publisher=publisher):
                     request, transport, archive, bundle, trusted = self._inputs(root)
                     with self.assertRaisesRegex(A0XHostedCaptureError, PUBLICATION_FAILED):
-                        capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=publisher)
+                        capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish_at=publisher)
                     self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
                     self.assertFalse((root / "capture").exists())
 
@@ -406,4 +409,87 @@ class HostedCaptureTest(unittest.TestCase):
                 request.update({"archive_sha256": hashlib.sha256(raw).hexdigest(), "archive_size_bytes": len(raw)})
                 transport.update({"archive_digest": "sha256:" + request["archive_sha256"], "archive_size_bytes": len(raw)})
                 with self.subTest(label=label), self.assertRaisesRegex(A0XHostedCaptureError, ARCHIVE_INVALID):
-                    capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish=lambda _stage, _destination: None)
+                    capture_hosted_gate_a(CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted, publish_at=lambda _fd, _stage, _destination: None)
+
+    def test_descriptor_only_publisher_receives_held_parent_and_basename_components(self) -> None:
+        """Replacing descriptor publication with paths would re-open the ancestor redirection race."""
+        from latent_triz.a0x_hosted_capture import CaptureRequest, CaptureTransport, capture_hosted_gate_a
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+            calls: list[tuple[int, str, str]] = []
+
+            def publish_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
+                self.assertIsInstance(parent_fd, int)
+                self.assertNotIn("/", stage_name)
+                self.assertEqual("capture", destination_name)
+                calls.append((parent_fd, stage_name, destination_name))
+                os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+
+            result = capture_hosted_gate_a(
+                CaptureRequest.from_mapping(request), CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                publish_at=publish_at,
+            )
+            self.assertEqual(root / "capture", result)
+            self.assertEqual(1, len(calls))
+
+    def test_ownership_loss_preserves_replacement_and_raises_stable_boundary(self) -> None:
+        """Deleting a replacement after publication loses ownership would destroy non-owned evidence."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+
+            def publish_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
+                os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+
+            def after_publish(transaction) -> None:
+                os.rename("capture", "moved-owned", src_dir_fd=transaction.parent.fd, dst_dir_fd=transaction.parent.fd)
+                os.mkdir("capture", dir_fd=transaction.parent.fd)
+                replacement_fd = os.open("capture", os.O_RDONLY | os.O_DIRECTORY, dir_fd=transaction.parent.fd)
+                try:
+                    marker = os.open("replacement", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=replacement_fd)
+                    os.write(marker, b"preserve")
+                    os.close(marker)
+                finally:
+                    os.close(replacement_fd)
+
+            original = capture._after_publish
+            capture._after_publish = after_publish
+            try:
+                with self.assertRaisesRegex(capture.A0XHostedCaptureError, "A0X_HOSTED_CAPTURE_PUBLICATION_OWNERSHIP_LOST"):
+                    capture.capture_hosted_gate_a(
+                        capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                        publish_at=publish_at,
+                    )
+            finally:
+                capture._after_publish = original
+            self.assertTrue((root / "capture").is_dir())
+            self.assertEqual(b"preserve", (root / "capture" / "replacement").read_bytes())
+
+    def test_post_rename_extra_entry_removes_still_owned_destination(self) -> None:
+        """Skipping held-inode cleanup after post-rename validation failure leaks canonical partial output."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            request, transport, archive, bundle, trusted = self._inputs(root)
+
+            def publish_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
+                os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                output_fd = os.open(destination_name, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
+                try:
+                    extra = os.open("unexpected", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=output_fd)
+                    os.close(extra)
+                finally:
+                    os.close(output_fd)
+
+            with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.PUBLICATION_FAILED):
+                capture.capture_hosted_gate_a(
+                    capture.CaptureRequest.from_mapping(request), capture.CaptureTransport.from_mapping(transport), archive, bundle, trusted,
+                    publish_at=publish_at,
+                )
+            self.assertFalse((root / "capture").exists())
+            self.assertEqual([], list(root.glob(".a0x-hosted-capture-*")))
