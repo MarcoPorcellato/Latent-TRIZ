@@ -162,6 +162,37 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
             finally:
                 capture_library.GH_SHA256, capture_library.GH_VERSION = original_sha, original_version
 
+    def test_invalid_transport_timestamps_refuse_before_every_runner_call(self) -> None:
+        """Removing pre-transport transport validation would send malformed explicit bindings."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID
+
+        module = _script_module()
+        manifest, archive = _manifest(), _archive(_manifest())
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            executable = root / "synthetic-gh"
+            executable.write_bytes(b"synthetic pinned gh\n")
+            original_sha, original_version = capture_library.GH_SHA256, capture_library.GH_VERSION
+            try:
+                module.GH_SHA256 = hashlib.sha256(executable.read_bytes()).hexdigest()
+                module.GH_VERSION = "synthetic gh version"
+                for field in ("created_at", "captured_at"):
+                    with self.subTest(field=field):
+                        arguments = self._arguments(module, executable, archive, manifest, root / f"capture-{field}")
+                        setattr(arguments, field, "not-a-timestamp")
+                        calls: list[tuple[str, ...]] = []
+
+                        def runner(argv: tuple[str, ...], _env: dict[str, str]) -> tuple[int, bytes, bytes]:
+                            calls.append(argv)
+                            self.fail(f"unexpected runner call: {argv!r}")
+
+                        with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                            module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                        self.assertEqual([], calls)
+                        self.assertFalse(arguments.output_root.exists())
+            finally:
+                capture_library.GH_SHA256, capture_library.GH_VERSION = original_sha, original_version
+
     @staticmethod
     def _publish_at(parent_fd: int, stage_name: str, destination_name: str) -> None:
         os.rename(stage_name, destination_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)

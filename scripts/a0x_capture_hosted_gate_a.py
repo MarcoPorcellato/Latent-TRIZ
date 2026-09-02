@@ -113,15 +113,6 @@ def capture(
         "expires_at": arguments.expires_at,
         "output_root": arguments.output_root,
     })
-    archive = _checked_transport_call(
-        pinned, runner,
-        (str(pinned.path), "api", "--method", "GET", f"/repos/{request.repository}/actions/artifacts/{request.artifact_id}/zip"),
-    )
-    bundle = _checked_transport_call(
-        pinned, runner,
-        (str(pinned.path), "attestation", "download", "--repo", request.repository, "--digest", f"sha256:{request.manifest_sha256}"),
-    )
-    trusted_root = _checked_transport_call(pinned, runner, (str(pinned.path), "attestation", "trusted-root"))
     transport = capture_library.CaptureTransport.from_mapping({
         "artifact_id": request.artifact_id,
         "run_id": request.run_id,
@@ -133,6 +124,15 @@ def capture(
         "expires_at": request.expires_at,
         "captured_at": arguments.captured_at,
     })
+    archive = _checked_transport_call(
+        pinned, runner,
+        (str(pinned.path), "api", "--method", "GET", f"/repos/{request.repository}/actions/artifacts/{request.artifact_id}/zip"),
+    )
+    bundle = _checked_transport_call(
+        pinned, runner,
+        (str(pinned.path), "attestation", "download", "--repo", request.repository, "--digest", f"sha256:{request.manifest_sha256}"),
+    )
+    trusted_root = _checked_transport_call(pinned, runner, (str(pinned.path), "attestation", "trusted-root"))
     with TemporaryDirectory(prefix="a0x-hosted-capture-") as temporary:
         archive_path = Path(temporary) / "archive.zip"
         archive_path.write_bytes(archive)
