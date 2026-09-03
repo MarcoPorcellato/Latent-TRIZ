@@ -16,6 +16,18 @@ source and exact bytes. These source changes do not alter or retroactively
 upgrade it. Any future use of this hardening requires a new exact-head Gate A
 qualification and a new pair-specific Gate B authorization.
 
+## Pair-scoped sequence
+
+[A0X pair-scoped vertical slice](A0X_VERTICAL_SLICE.md) is the operational
+authority for the first `A0 / smollm2_360m` package. P0 package generation,
+hosted Gate A, offline Gate B, local Gate C, target-free result verification,
+and publication require separate exact authorizations. None authorizes a later
+gate. The historical batch freezes, twelve dossiers, and no-model receipt are
+stale and must not be reused as current pair-package evidence.
+
+A0-R1 starts only after the A0 terminal report and its own authorization. The
+frozen scientific inputs and rules must not change between the two legs.
+
 ## Hosted Gate A prerequisite (current)
 
 For current A0X dossiers, Gate A is the signed GitHub-hosted provider, not a

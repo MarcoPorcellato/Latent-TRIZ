@@ -3,6 +3,35 @@ Current A0X lifecycle, hashes, and active boundary: see the sole ledger in
 `docs/A0X_ARCHITECTURE_CONVERGENCE.md`. Earlier A0X checkpoint blocks below are
 historical.
 
+Current vertical-slice integration checkpoint (2026-09-02): the trusted
+pair-scoped package generator, selector-only launcher, manifest schema, and
+target-free aggregate registration are complete. Canonical operational order:
+`docs/A0X_VERTICAL_SLICE.md`. The two batch freezes, twelve dossiers, and
+no-model receipt are historical and stale; do not regenerate, rewrite, or use
+them as current pair-package evidence.
+
+P0 target-free package generation, Gate A, Gate B, Gate C, result verification,
+and publication each require a separate exact-head authorization. First scope,
+if authorized, is only `A0 / smollm2_360m`. A0-R1 remains blocked until the A0
+terminal report and its own authorization; no scientific input or rule may
+change between legs. This checkpoint does not authorize package generation,
+model/tokenizer/target access, CCP, Docker, network, GitHub, publication, push,
+PR, merge, or retry.
+
+Current capture-wrapper recovery checkpoint (2026-09-02): the target-free
+Hosted Gate A capture library, shell-free adapter, request/transport schemas,
+and both capture test modules are in the active A0X implementation inventory
+definition; both test modules are in the synthetic aggregate. Existing tracked
+inventories, freezes, twelve dossiers, and no-model receipt predate this
+trusted surface and are intentionally stale. Do not regenerate.
+
+Require one new explicit authorization bound to the exact implementation HEAD
+for one target-free regeneration of both inventories/freezes, all twelve
+dossiers, and the no-model receipt, followed by the full deterministic suite,
+independent review, and local closure. This authorization must not be inferred
+to permit real GitHub/CLI capture, network, publication, Gate B/C, CCP, Docker,
+model, tokenizer, target, or scientific execution.
+
 --- Historical checkpoint below; retained with original hashes and outcomes ---
 
 A0X Hosted Gate A local implementation checkpoint (2026-08-31): resume only
@@ -453,3 +482,12 @@ and A0-R1 implementation/freeze
 `2ec31870102a9219a36df24304748e31da4050514d9e59cfd0c9056adaba3ffa`.
 The ordered twelve-dossier ledger SHA-256 is
 `c249f94e3d5124c8fb19ebdf873d4bf91eb2dc7eb6c75654e55d9dff58451df0`.
+Active objective: complete the pair-scoped A0X vertical slice described in
+`docs/A0X_VERTICAL_SLICE.md`. Verify its exact implementation anchor live.
+Implement and qualify only the target-free generator first; then create and
+execute one exact leg-model package at a time, beginning with
+`A0 / SmolLM2-360M@f8027fd0eaeea54caa13c31d31b9fdc459c38b49`. Preserve the
+global frozen protocol, historical batch artifacts, separate Gate A/B/C
+authorizations, one-shot terminal outcomes, and no-general-TRIZ-claim limit.
+Do not access model, tokenizer, targets, network, CCP, or publish without the
+separate exact authorization required by the canonical specification.

@@ -198,6 +198,24 @@ def planned_material_dossiers() -> dict[tuple[str, str], str]:
     return dict(_MATERIAL_DOSSIERS)
 
 
+def vertical_slice_dossier_path(
+    implementation_source_head: str, leg: Leg, model_key: str,
+) -> str:
+    """Derive the only allowed pair-scoped vertical dossier location."""
+    if (
+        not isinstance(implementation_source_head, str)
+        or _REVISION.fullmatch(implementation_source_head) is None
+        or not isinstance(leg, Leg)
+        or not isinstance(model_key, str)
+        or model_key not in {key for _leg, key in _PAIR_DOSSIERS}
+    ):
+        raise A0XRunnerError("vertical slice selector is invalid")
+    return (
+        "experiments/a0x-six-model/vertical-slices/"
+        f"{implementation_source_head}/{leg.value}/{model_key}/approval-dossier.json"
+    )
+
+
 def frozen_pair_dossiers() -> dict[tuple[str, str], str]:
     """Return the canonical internal leg/model-key dossier mapping."""
     return dict(_PAIR_DOSSIERS)

@@ -1129,3 +1129,72 @@ fixtures. The local wheelhouse manifest
 binds 39 wheels totalling 150,397,774 bytes, but no real environment has been
 created and no real snapshot has been cloned. Gate B/C, model, tokenizer,
 target, network, CCP, push, and publication remain unauthorized.
+
+## 41. Lost capture-wrapper paths were outside frozen A0X trust surface
+
+**Problem.** macOS restart removed the volatile recovery clone containing the
+target-free Hosted Gate A capture boundary. Reconstructing its source, schemas,
+adapter, and tests without adding them to both A0X implementation inventories
+would allow a later frozen package to omit capture-critical behavior. Omitting
+either capture test module from the synthetic aggregate would also leave a
+trusted input unexercised by the required target-free lane.
+
+**Correction.** Both capture schemas, the capture library, shell-free adapter,
+and both capture test modules are now required by both inventory definitions.
+The synthetic aggregate runs both capture test modules. The production adapter
+remains fail-closed with no real subprocess runner; no live GitHub or CLI
+contract was enabled by the recovery.
+
+**Status.** The existing inventories, freezes, twelve dossiers, and no-model
+receipt are intentionally stale because they predate this trusted surface. No
+regeneration occurred. A new explicit authorization is required for one
+target-free regeneration, all twelve dossiers, full deterministic suite,
+independent review, and local closure. No capture, network, GitHub CLI, Gate
+B/C, CCP, Docker, model, tokenizer, target, publication, or scientific work is
+authorized.
+
+## 42. Batch-wide artifacts could not represent a one-pair execution boundary
+
+**Problem.** The two historical batch freezes, twelve approval dossiers, and
+no-model receipt cover a broad campaign state. After the trusted vertical
+generator and selector-only launcher were added, those bytes could not attest a
+current, exact-head package for one leg/model pair.
+
+**Correction.** Register the vertical library, CLI, tests, and manifest schema
+in both implementation inventories and the target-free aggregate. Register its
+PairBinding projection and require the schema inventory count to match the
+actual A0X schema set. The target-free Make verification covers only the
+vertical tests; the selector-derived material target is a future launcher and
+is not an authorization to run it. The governing sequence is
+[A0X pair-scoped vertical slice](A0X_VERTICAL_SLICE.md): P0, Gate A, Gate B,
+Gate C, result verification, and publication are distinct gates.
+
+**Status.** The batch artifacts remain historical and stale. No package,
+freeze, dossier, receipt, model, tokenizer, target, CCP, network, or
+publication action occurred. A0-R1 remains blocked until the A0 terminal
+report and a separate authorization; scientific rules remain frozen between
+legs.
+
+## 43. Hosted repository checks exposed non-portable target-free fixtures
+
+**Problem.** The first Hosted Gate A workflow for the vertical branch failed
+on both Python 3.11 and 3.12. The test suite used macOS-only `/private/tmp`
+paths, the bootstrap hard-coded that path for its private bytecode directory,
+and injected capture tests did not explicitly enable their synthetic host
+boundary. The same run also exposed implementation/freeze byte drift because
+the latest trusted source changes had not yet been regenerated into the
+committed A0X package.
+
+**Correction.** Synthetic tests now use the repository root or platform
+temporary directories rather than a fixed macOS namespace, while preserving
+the real source and path-safety assertions. The P0 bootstrap creates its
+private bytecode directory with the platform-managed temporary root, retaining
+mode, regular-directory, emptiness, and cleanup checks. Capture tests pass an
+explicit injected supported-host predicate; production still refuses
+unsupported hosts. After this correction, the affected local suites pass
+target-free; the A0X implementation inventories, freezes, and dossiers must
+be regenerated from the correction commit before hosted requalification.
+
+**Status.** Corrected offline with TDD. No models, tokenizers, targets, CCP,
+Docker, network, or scientific execution were used. The failed workflow is
+preserved as negative hosted evidence; a new push and workflow are required.

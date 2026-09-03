@@ -18,9 +18,42 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
+## Current pair-scoped vertical-slice checkpoint — 2026-09-02
+
+The trusted package generator, selector-only material launcher, manifest
+schema, and their target-free tests are now part of the implementation
+surface. The operational authority is [A0X pair-scoped vertical
+slice](A0X_VERTICAL_SLICE.md). The two historical batch freezes, twelve batch
+dossiers, and no-model receipt predate this trusted surface. They remain
+historical and stale; they are not current pair-package evidence and must not
+be regenerated or rewritten under this checkpoint.
+
+The first possible package is only `A0 / smollm2_360m`, and requires a separate
+exact-head P0 authorization for target-free package generation. P0, hosted Gate
+A, offline Gate B, local Gate C, target-free result verification, and
+publication are distinct authorization gates. Passing one does not authorize
+the next. A0-R1 may begin only after the A0 terminal report, under a separate
+authorization. No corpus, prompt, control, statistic, endpoint, stopping rule,
+or other scientific rule may change between those legs.
+
+## Current Hosted Gate A capture-wrapper recovery checkpoint — 2026-09-02
+
+The recovered target-free capture library, shell-free adapter, request and
+transport schemas, and both capture test modules are now trusted inputs in
+both implementation inventory definitions. The synthetic aggregate includes
+both capture test modules. Existing generated inventories, freezes, twelve
+dossiers, and no-model receipt predate that source and are intentionally stale.
+
+Do not regenerate from this checkpoint. A new explicit authorization must bind
+the exact implementation head and allow exactly one target-free regeneration,
+both leg inventories/freezes, twelve dossiers, no-model receipt, full
+deterministic suite, independent review, and local closure. It does not permit
+real GitHub/CLI capture, network, publication, Gate B/C, CCP, Docker, model,
+tokenizer, target, or scientific execution.
+
 ## Current offline Gate B builder checkpoint — 2026-09-01
 
-This is the sole canonical current A0X status ledger. Architecture authority is
+This document is the sole canonical A0X status ledger. Architecture authority is
 [A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md); operator
 authority is [A0X Gate B hardening](A0X_GATE_B_OPERATOR_HARDENING.md). All later
 A0X checkpoint blocks in this file are historical evidence only.
