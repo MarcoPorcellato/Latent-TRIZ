@@ -32,6 +32,26 @@ _PYTHON_PROBE = (
     "'python_version':'.'.join(str(x) for x in sys.version_info[:3])},"
     "sort_keys=True,separators=(',',':')))"
 )
+_MODEL_CARD_FIELD_ORDER = (
+    "artifact_class", "empirical", "scientific_status", "evidence_eligible",
+    "expert_validated", "claim_ids", "model_key", "model_id", "revision",
+    "license_id", "architecture", "model_type", "runtime_root", "runtime_files",
+    "num_hidden_layers", "hidden_size", "vocab_size", "effective_context",
+    "final_transformer_block_tuple_index", "tokenizer_metadata_class",
+    "expected_runtime_tokenizer_class", "fast_offsets_required", "pad_side",
+    "trust_remote_code", "source_receipt_path", "source_receipt_sha256",
+    "official_audit_path", "official_audit_sha256", "config_fact_provenance",
+    "tokenizer_fact_provenance", "card_path",
+)
+_MODEL_CARD_RUNTIME_FILE_ORDER = ("path", "size_bytes", "sha256")
+_MODEL_CARD_PROVENANCE_ORDER = ("source_path", "source_sha256", "field_pointers")
+_MODEL_CARD_CONFIG_POINTER_ORDER = (
+    "model_type", "architecture", "num_hidden_layers", "hidden_size", "vocab_size",
+    "effective_context", "final_transformer_block_tuple_index",
+)
+_MODEL_CARD_TOKENIZER_POINTER_ORDER = (
+    "tokenizer_metadata_class", "expected_runtime_tokenizer_class", "fast_offsets_required",
+)
 _DISTRIBUTION_PROBE = (
     "import importlib.metadata as m,importlib.util as u,json,re,sys;"
     "ds=sorted((re.sub(r'[-_.]+','-',d.metadata['Name']).lower(),d.version) "
@@ -131,8 +151,44 @@ def _canonical(value: object) -> bytes:
 
 
 def _canonical_json_document(value: object, raw: bytes) -> bool:
-    """Accept canonical JSON bytes with the repository's single final LF convention."""
-    canonical = _canonical(value)
+    """Accept the versioned A0X model-card field order and optional final LF."""
+    if not isinstance(value, dict):
+        return False
+    keys = list(value)
+    if any(key not in _MODEL_CARD_FIELD_ORDER for key in keys):
+        return False
+    if keys != [key for key in _MODEL_CARD_FIELD_ORDER if key in value]:
+        return False
+    ordered = dict(value)
+    runtime_files = value.get("runtime_files")
+    if isinstance(runtime_files, list):
+        ordered_runtime: list[dict[str, object]] = []
+        for item in runtime_files:
+            if not isinstance(item, dict) or list(item) != list(_MODEL_CARD_RUNTIME_FILE_ORDER):
+                return False
+            ordered_runtime.append(dict(item))
+        ordered["runtime_files"] = ordered_runtime
+    for name, pointer_order in (
+        ("config_fact_provenance", _MODEL_CARD_CONFIG_POINTER_ORDER),
+        ("tokenizer_fact_provenance", _MODEL_CARD_TOKENIZER_POINTER_ORDER),
+    ):
+        provenance = value.get(name)
+        if provenance is None:
+            continue
+        if not isinstance(provenance, dict) or list(provenance) != list(_MODEL_CARD_PROVENANCE_ORDER):
+            return False
+        pointers = provenance.get("field_pointers")
+        if not isinstance(pointers, dict) or list(pointers) != list(pointer_order):
+            return False
+        ordered_provenance = dict(provenance)
+        ordered_provenance["field_pointers"] = dict(pointers)
+        ordered[name] = ordered_provenance
+    try:
+        canonical = json.dumps(
+            ordered, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise A0XGateBBuilderError("builder value is not canonical JSON") from error
     return raw == canonical or raw == canonical + b"\n"
 
 

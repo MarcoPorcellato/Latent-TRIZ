@@ -145,11 +145,13 @@ base runtime and all 39 wheels into private, attempt-owned paths. No external
 executable or wheel path is consumed after that binding. It then uses
 shell-free commands to:
 
-Model-card JSON is canonical UTF-8 with either no final line feed or exactly
+Model-card JSON uses the versioned A0X field order emitted by the model-card
+generator, compact UTF-8 separators, and either no final line feed or exactly
 one `LF` final line feed. The builder preserves and hashes the raw bytes; it
-rejects additional line feeds, trailing spaces, non-canonical key ordering,
-invalid UTF-8, and any hash mismatch. This matches the repository's normal
-newline convention without weakening byte-level provenance.
+rejects unknown or reordered fields, additional line feeds, trailing spaces,
+invalid UTF-8, and any hash mismatch. Nested runtime-file and provenance
+objects have their own fixed field orders. This matches the repository's
+normal newline convention without weakening byte-level provenance.
 
 1. create a virtual environment with `venv --copies`;
 2. verify the installer created inside the environment, then install only

@@ -25,11 +25,11 @@ The executable plan is
 before writing because the tracked model card ended with one `LF`, while the
 builder compared raw bytes only with canonical JSON without a final line feed.
 
-**Correction.** The model-card boundary now accepts exactly canonical UTF-8
-bytes or those bytes plus one final `LF`, while retaining the raw-byte
-SHA-256. Additional line feeds, trailing spaces, non-canonical ordering,
-invalid UTF-8, and hash drift remain refusals. Synthetic tests cover the
-accepted single-LF form and the rejected variants.
+**Correction.** The model-card boundary now accepts the versioned A0X field
+order with compact UTF-8 bytes or those bytes plus one final `LF`, while
+retaining the raw-byte SHA-256. Unknown/reordered fields, additional line
+feeds, trailing spaces, invalid UTF-8, and hash drift remain refusals. Synthetic
+tests cover the accepted order and single-LF form plus rejected variants.
 
 **Evidence.** Builder tests: 24/24 pass. The exact real card remains byte
 unchanged and is still bound by its original SHA-256. A fresh target-free
