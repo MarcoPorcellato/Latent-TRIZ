@@ -308,9 +308,9 @@
       "sha256": "c744ba0a1bc1eda4245c7b15665b1e860c76e021ed714a4fa9ab4c992101b454"
     },
     {
-      "bytes": 47086,
+      "bytes": 50136,
       "path": "src/latent_triz/a0x_gate_b_builder.py",
-      "sha256": "260e43a767dbc2e3f6a458d72cce81f1fa2385e2c73640f069680bfced552142"
+      "sha256": "cc831acfe214b4a8f784c80143cfd6d5c743d812bb84d1cf14d5bc8d316629af"
     },
     {
       "bytes": 8549,
@@ -503,9 +503,9 @@
       "sha256": "be4d01f706e744d26beed3a1d2d6d37c63eb21b40f524554b2996e25ba5ba43e"
     },
     {
-      "bytes": 33787,
+      "bytes": 36391,
       "path": "tests/test_a0x_gate_b_builder.py",
-      "sha256": "e887510d7d60d4a4c85d539f8b5b7eca219195c78b0bf65783816fb80c347065"
+      "sha256": "8dede33c6b9cf589472f796780e878961a36fd37b63eb1c99724e4405a0c5ca9"
     },
     {
       "bytes": 45422,
