@@ -130,6 +130,12 @@ def _canonical(value: object) -> bytes:
         raise A0XGateBBuilderError("builder value is not canonical JSON") from error
 
 
+def _canonical_json_document(value: object, raw: bytes) -> bool:
+    """Accept canonical JSON bytes with the repository's single final LF convention."""
+    canonical = _canonical(value)
+    return raw == canonical or raw == canonical + b"\n"
+
+
 def _independent_regular(path: Path, label: str, *, executable: bool = False) -> os.stat_result:
     try:
         metadata = path.lstat()
@@ -423,7 +429,7 @@ def _model_card(root: Path, request: GateBBuildRequest) -> tuple[Path, bytes, di
         value = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as error:
         raise A0XGateBBuilderError("model card is invalid JSON") from error
-    if not isinstance(value, dict) or _canonical(value) != raw:
+    if not isinstance(value, dict) or not _canonical_json_document(value, raw):
         raise A0XGateBBuilderError("model card is not canonical JSON")
     runtime_root = value.get("runtime_root")
     runtime_files = value.get("runtime_files")
