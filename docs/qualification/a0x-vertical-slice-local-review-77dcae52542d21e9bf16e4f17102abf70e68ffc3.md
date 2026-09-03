@@ -173,10 +173,10 @@ evidence, not current qualification.
 ## Raw P0 package-input ledger
 
 For `A0 / smollm2_360m`, generation reads 137 unique raw prerequisite files,
-totalling 2,149,445 bytes. All 137 passed the production descriptor-relative,
+totalling 2,149,928 bytes. All 137 passed the production descriptor-relative,
 regular, single-link reader. Each line is `SHA-256 bytes repository-relative-path`.
 The SHA-256 of the sorted newline-terminated ledger is
-`37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa`.
+`72a3b119e3a3629b7bcb7a84a867f9a32bdb4f95c6f7db7396a5184229ea7595`.
 
 ```text
 f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd 293 .github/a0x-hosted-gate-a-actions.json
@@ -285,7 +285,7 @@ e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4 413 tests/fixtu
 8f531a8f1ac7006c9b42ce98ebe7d3c676f049b251c903fe508a4cdbd309bbea 19092 tests/test_a0x_activations.py
 d86698fe26985ad79263a89d3297371525776e68a40ca58748a557c56717cb2e 6278 tests/test_a0x_apfs.py
 013897727eca3a7533f38f70dec57277fdb0a6ad2547593809801926cee5a958 4159 tests/test_a0x_architecture.py
-382131fdcf03598c1ff96c850c976e42ee409492a9f0b8ab313409ab4957eec7 15425 tests/test_a0x_capture_hosted_gate_a.py
+f9bd6b249bd86db66d6a5374b5ba448b80446226e9d7128d33600d39df8c689a 15961 tests/test_a0x_capture_hosted_gate_a.py
 2d636dfaf1f8cc77752d2419d1a85901beb439b3ebc79c5c4a37e1dba7cd270f 43992 tests/test_a0x_ccp_executor.py
 f22db62509a437395b37716b7cfdca86346fa785f8b856e7121fd3ff540a7236 24796 tests/test_a0x_contract.py
 7fd9eace4a3871337ad98114ed54e692be3398132a813302bc2efec9ecc5f43d 1261 tests/test_a0x_contract_check.py
@@ -313,7 +313,7 @@ c27f52b1fadcd222c41da596dc9afd0ef013647f8c261908f84617250f667e6b 49533 tests/tes
 3d288de26eb5b701a7cabf6210769bf29f32e47f82856e47c142f6ed4208f976 16734 tests/test_a0x_schema_projection.py
 503b2d12dd842dc1a1f4043bb23fe44f5e3cad9bce8b37c2ebd8ff6debd03c36 29146 tests/test_a0x_schemas.py
 3d5d17fa16e45127622632447f319db1bce06c0d0829b972b7dc25f910ba4988 28401 tests/test_a0x_verify.py
-ab5e00f87123a43e536063bfc1dc05d0d09a08fe8d5d2b66423a19cb2025b4f6 17047 tests/test_a0x_vertical_material.py
+4f8ab7493f9cfe86f21f6f494e9aec41cb6384579169b7fc07b651afe280c108 16994 tests/test_a0x_vertical_material.py
 c2abe6b522b2527034ee037f31ed619886c86a62385c86c6d6853329a2fca987 31129 tests/test_a0x_vertical_slice.py
 d56aad8b90d56a3961123cce768a1fe80aaa380f8a0a0ff479b0932cbe707fd8 5990 tests/test_a0x_wheelhouse.py
 ```
