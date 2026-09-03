@@ -1214,3 +1214,24 @@ be regenerated from the correction commit before hosted requalification.
 **Status.** Corrected offline with TDD. No models, tokenizers, targets, CCP,
 Docker, network, or scientific execution were used. The failed workflow is
 preserved as negative hosted evidence; a new push and workflow are required.
+
+## 44. Model-card byte correction required freeze regeneration
+
+**Problem.** The six tracked model cards intentionally use a versioned insertion
+order, compact UTF-8, and one final LF. A generic sorted-key canonicalizer
+therefore rejected valid cards. After correcting the builder to enforce the
+explicit A0X field order, the implementation and test bytes changed while the
+tracked freezes and dossiers still referenced their previous sizes and hashes.
+
+**Correction.** The builder now validates the explicit model-card field order
+and whitespace contract while preserving raw bytes. The two implementation
+inventories, two freezes, and twelve dossiers were regenerated target-free from
+the correction commit and committed together. Frozen-package and no-model
+verification passed; synthetic verification passed 505 tests with one skip.
+
+**Status.** Hosted run `33709259544`, attempt `1`, correctly failed on both
+Python lanes before any material access because the pre-regeneration package
+was stale (`50136` current bytes versus `47086` bound bytes). No artifact was
+created and no rerun is authorized. The regenerated package is now at
+`62dd5cd9c747f986fc41c364ea86306f0d7164ac`; a fresh Hosted Gate A is required
+for that exact head.
