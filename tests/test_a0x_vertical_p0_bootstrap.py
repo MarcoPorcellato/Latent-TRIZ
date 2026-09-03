@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import py_compile
@@ -13,6 +14,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -74,6 +76,18 @@ globals_for_script = {
 }
 exec(compile(raw, path, "exec", dont_inherit=True, optimize=0), globals_for_script, globals_for_script)
 """
+
+
+def _load_bootstrap_module():
+    spec = importlib.util.spec_from_file_location(
+        "a0x_vertical_p0_bootstrap_under_test", ROOT / SCRIPT_RELATIVE,
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError("bootstrap module cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _sha256(path: Path) -> str:
@@ -316,6 +330,22 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
         return SyntheticRepository(
             Path(self.temporary.name), cleanup_failure=cleanup_failure,
         )
+
+    def test_private_pycache_uses_platform_temp_root(self) -> None:
+        """The bootstrap must not assume macOS's /private/tmp on hosted Linux."""
+        module = _load_bootstrap_module()
+        calls: dict[str, object] = {}
+
+        def fake_mkdtemp(**kwargs: object) -> str:
+            calls.update(kwargs)
+            path = Path(self.temporary.name) / "portable-pycache"
+            path.mkdir()
+            return str(path)
+
+        with mock.patch.object(module.tempfile, "mkdtemp", side_effect=fake_mkdtemp):
+            path = module._create_private_pycache()
+        self.assertNotIn("dir", calls)
+        self.assertEqual(str(path), sys.pycache_prefix)
 
     def test_replaced_bootstrap_is_rejected_before_any_replacement_byte_executes(self) -> None:
         fixture = self.fixture()

@@ -115,7 +115,10 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                         return 0, trusted_root, b""
                     self.fail(f"unexpected argv: {argv!r}")
 
-                result = module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                result = module.capture(
+                    arguments, runner=runner, publish_at=self._publish_at,
+                    supported_host=lambda: True,
+                )
 
                 self.assertEqual(root / "capture", result)
                 self.assertEqual(
@@ -160,7 +163,10 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                     return 0, archive, b""
 
                 with self.assertRaisesRegex(A0XHostedCaptureError, PIN_INVALID):
-                    module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                    module.capture(
+                        arguments, runner=runner, publish_at=self._publish_at,
+                        supported_host=lambda: True,
+                    )
                 self.assertEqual([(str(executable), "--version"), (str(executable), "api", "--method", "GET", "/repos/MarcoPorcellato/Latent-TRIZ/actions/artifacts/456/zip")], calls)
                 self.assertFalse((root / "capture").exists())
             finally:
@@ -193,7 +199,10 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                             self.fail(f"unexpected runner call: {argv!r}")
 
                         with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
-                            module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                            module.capture(
+                                arguments, runner=runner, publish_at=self._publish_at,
+                                supported_host=lambda: True,
+                            )
                         self.assertEqual([], calls)
                         self.assertFalse(arguments.output_root.exists())
             finally:
@@ -242,7 +251,10 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                             return 0, b'{"synthetic":"trusted-root"}\n', b""
 
                         with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
-                            module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                            module.capture(
+                                arguments, runner=runner, publish_at=self._publish_at,
+                                supported_host=lambda: True,
+                            )
                         self.assertFalse(arguments.output_root.exists())
                         self.assertEqual(limit, [entry[2] for entry in calls if entry[0][-1] != "--version"][-1])
             finally:
@@ -272,7 +284,10 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                     raise TimeoutError("synthetic timeout")
 
                 with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
-                    module.capture(arguments, runner=runner, publish_at=self._publish_at)
+                    module.capture(
+                        arguments, runner=runner, publish_at=self._publish_at,
+                        supported_host=lambda: True,
+                    )
                 self.assertEqual([(str(executable), "--version")], [entry[0] for entry in calls])
                 self.assertEqual(module.TRANSPORT_TIMEOUT_SECONDS, calls[0][1])
                 self.assertEqual(module.MAX_VERSION_STDOUT_BYTES, calls[0][2])

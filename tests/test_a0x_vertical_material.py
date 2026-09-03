@@ -23,6 +23,7 @@ from latent_triz.a0x_vertical_slice import (
 from tests.a0x_test_support import pair_binding
 
 
+ROOT = Path(__file__).resolve().parents[1]
 HEAD = "a" * 40
 VERTICAL_DOSSIER = (
     "experiments/a0x-six-model/vertical-slices/"
@@ -82,13 +83,13 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             load.side_effect = A0XVerticalSliceError("synthetic package rejection")
             with self.assertRaises(A0XCcpExecutorError):
                 launch_vertical_slice_dossier(
-                    repository_root=Path("/private/tmp"),
+                    repository_root=ROOT,
                     implementation_source_head=HEAD,
                     leg="a0",
                     model_key="smollm2_360m",
                     source_head_probe=lambda: HEAD,
                 )
-        load.assert_called_once_with(Path("/private/tmp").resolve(), VERTICAL_DOSSIER)
+        load.assert_called_once_with(ROOT.resolve(), VERTICAL_DOSSIER)
 
     def test_bad_selector_refuses_before_package_load_or_guard(self) -> None:
         from latent_triz.a0x_ccp_executor import launch_vertical_slice_dossier
@@ -96,7 +97,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         with patch("latent_triz.a0x_ccp_executor.load_vertical_slice") as load:
             with self.assertRaises(A0XCcpExecutorError):
                 launch_vertical_slice_dossier(
-                    repository_root=Path("/private/tmp"),
+                    repository_root=ROOT,
                     implementation_source_head=HEAD,
                     leg="A0",
                     model_key="smollm2_360m",
@@ -113,7 +114,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         ):
             with self.assertRaises(A0XCcpExecutorError):
                 launch_vertical_slice_dossier(
-                    repository_root=Path("/private/tmp"),
+                    repository_root=ROOT,
                     implementation_source_head=HEAD,
                     leg="a0",
                     model_key="smollm2_360m",
@@ -139,7 +140,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         ):
             with self.assertRaises(A0XCcpExecutorError):
                 launch_vertical_slice_dossier(
-                    repository_root=Path("/private/tmp"),
+                    repository_root=ROOT,
                     implementation_source_head=HEAD,
                     leg="a0",
                     model_key="smollm2_360m",
@@ -231,7 +232,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
 
         with self.assertRaises(A0XCcpExecutorError):
             launch_fixed_dossier(
-                repository_root=Path("/private/tmp"),
+                repository_root=ROOT,
                 fixed_dossier=VERTICAL_DOSSIER,
                 source_head_probe=lambda: HEAD,
             )

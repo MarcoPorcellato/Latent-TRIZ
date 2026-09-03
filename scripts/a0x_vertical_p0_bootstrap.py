@@ -463,7 +463,9 @@ def _reject_repository_bytecode(root: Path) -> None:
 
 def _create_private_pycache() -> Path:
     try:
-        path = Path(tempfile.mkdtemp(prefix="a0x-p0-pycache-", dir="/private/tmp"))
+        # Use the platform's managed temporary root; hosted Linux has no
+        # macOS-specific /private/tmp namespace.
+        path = Path(tempfile.mkdtemp(prefix="a0x-p0-pycache-"))
         path.chmod(0o700)
         metadata = path.lstat()
         if (

@@ -1174,3 +1174,27 @@ freeze, dossier, receipt, model, tokenizer, target, CCP, network, or
 publication action occurred. A0-R1 remains blocked until the A0 terminal
 report and a separate authorization; scientific rules remain frozen between
 legs.
+
+## 43. Hosted repository checks exposed non-portable target-free fixtures
+
+**Problem.** The first Hosted Gate A workflow for the vertical branch failed
+on both Python 3.11 and 3.12. The test suite used macOS-only `/private/tmp`
+paths, the bootstrap hard-coded that path for its private bytecode directory,
+and injected capture tests did not explicitly enable their synthetic host
+boundary. The same run also exposed implementation/freeze byte drift because
+the latest trusted source changes had not yet been regenerated into the
+committed A0X package.
+
+**Correction.** Synthetic tests now use the repository root or platform
+temporary directories rather than a fixed macOS namespace, while preserving
+the real source and path-safety assertions. The P0 bootstrap creates its
+private bytecode directory with the platform-managed temporary root, retaining
+mode, regular-directory, emptiness, and cleanup checks. Capture tests pass an
+explicit injected supported-host predicate; production still refuses
+unsupported hosts. After this correction, the affected local suites pass
+target-free; the A0X implementation inventories, freezes, and dossiers must
+be regenerated from the correction commit before hosted requalification.
+
+**Status.** Corrected offline with TDD. No models, tokenizers, targets, CCP,
+Docker, network, or scientific execution were used. The failed workflow is
+preserved as negative hosted evidence; a new push and workflow are required.
