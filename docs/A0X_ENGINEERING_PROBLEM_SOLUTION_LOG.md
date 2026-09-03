@@ -31,9 +31,9 @@ retaining the raw-byte SHA-256. Unknown/reordered fields, additional line
 feeds, trailing spaces, invalid UTF-8, and hash drift remain refusals. Synthetic
 tests cover the accepted order and single-LF form plus rejected variants.
 
-**Evidence.** Builder tests: 24/24 pass. The exact real card remains byte
-unchanged and is still bound by its original SHA-256. A fresh target-free
-`--plan` is the next verification step after this local correction.
+**Evidence.** Builder tests: 25/25 pass. The exact real card remains byte
+unchanged and is still bound by its original SHA-256. The fresh target-free
+`--plan` now passes with the explicit field-order contract.
 
 ## 1. Material entrypoint remained a refusal stub
 
