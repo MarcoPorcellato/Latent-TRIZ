@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 from latent_triz.a0x_ccp_executor import A0XCcpExecutorError
@@ -42,6 +43,127 @@ def _load_cli_module():
 
 
 class A0XVerticalMaterialTests(unittest.TestCase):
+    def test_v2_launcher_is_a_distinct_typed_entrypoint(self) -> None:
+        """Future Gate C must not select the historical v1/batch launcher."""
+        from latent_triz.a0x_ccp_executor import launch_vertical_runtime_package
+
+        self.assertTrue(callable(launch_vertical_runtime_package))
+
+    def _prepared_v2_graph(self):
+        """Build Task-1/2 synthetic bytes; no model, network, or runtime load."""
+        from tests.test_a0x_vertical_runtime_bundle import A0XVerticalRuntimeBundleTests, HEAD as V2_HEAD, TREE as V2_TREE
+        from latent_triz.a0x_runtime_bundle import prepare_vertical_runtime_bundle, sha256_file
+        from tests.test_a0x_runtime_bundle import _synthetic_gate_a_verifier
+
+        fixture = A0XVerticalRuntimeBundleTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        binding = fixture._binding()
+        request = fixture._request(binding)
+        expected_ccp = json.loads(
+            (fixture.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
+        )["ccp"]["sha256"]
+        with (
+            patch(
+                "latent_triz.a0x_runtime_bundle.sha256_file",
+                side_effect=lambda path: (
+                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
+                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+                    if Path(path).resolve() == request.verifier_executable.resolve()
+                    else sha256_file(path)
+                ),
+            ),
+            patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value={"artifact_class": "synthetic-readiness"}),
+            patch("latent_triz.a0x_runtime_bundle.validate_gate_a_evidence", side_effect=lambda value: dict(value)),
+        ):
+            prepared = prepare_vertical_runtime_bundle(
+                fixture.root, request, source_state_probe=lambda: (V2_HEAD, V2_TREE, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=lambda *_args: (_ for _ in ()).throw(AssertionError("readiness reached")),
+                gate_a_verifier=_synthetic_gate_a_verifier,
+            )
+        return fixture.root, binding, prepared, V2_HEAD, V2_TREE
+
+    def test_v2_gate_c_revalidates_package_and_every_gate_b_output_before_guard(self) -> None:
+        from latent_triz.a0x_ccp_executor import (
+            ProcessResult, launch_vertical_runtime_package, vertical_execution_authorization_path,
+        )
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        references = {
+            name: {"path": relative, "sha256": hashlib.sha256((root / relative).read_bytes()).hexdigest()}
+            for name, relative in prepared["vertical_outputs"].items()
+        }
+        authorization = {
+            "artifact_class": "a0x-vertical-execution-authorization",
+            "commitment_profile": "a0x-execution-authorization-json-v4",
+            "qualified_source": {"head": head, "tree": tree, "ref": "refs/heads/main"},
+            "pair_binding": binding.pair_binding.as_mapping(),
+            "vertical_package": {
+                "envelope_path": binding.envelope_path, "package_path": binding.package_path,
+                "commitment_path": binding.commitment_path, "commitment_raw_sha256": binding.commitment_raw_sha256,
+                "package_commitment_sha256": binding.package_commitment_sha256, "dossier_path": binding.dossier_path,
+                "dossier_sha256": binding.dossier_sha256,
+            },
+            "gate_b_outputs": references,
+            "authorization_id": "gate-c-auth-test-01", "attempt_id": "gate-c-attempt-test-01",
+            "max_guard_exec_count": 1, "stop_boundary": "after_one_sealed_target_read",
+        }
+        path = root / vertical_execution_authorization_path(binding)
+        path.parent.mkdir(parents=True)
+        path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+        class Inert:
+            calls = 0
+            def run(self, *args, **kwargs):
+                self.calls += 1
+                return ProcessResult(0, "0" * 64, 0, "0" * 64, 0)
+
+        inert = Inert()
+        result = launch_vertical_runtime_package(
+            repository_root=root, package_binding=binding, execution_authorization_path=path.relative_to(root).as_posix(),
+            source_state_probe=lambda: (head, tree, True), process_executor=inert,
+        )
+        self.assertEqual("completed", result["status"])
+        self.assertEqual(1, inert.calls)
+
+    def test_v2_gate_c_refuses_output_drift_before_guard(self) -> None:
+        from latent_triz.a0x_ccp_executor import A0XCcpExecutorError, launch_vertical_runtime_package, vertical_execution_authorization_path
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        authorization = {
+            "artifact_class": "a0x-vertical-execution-authorization", "commitment_profile": "a0x-execution-authorization-json-v4",
+            "qualified_source": {"head": head, "tree": tree, "ref": "refs/heads/main"}, "pair_binding": binding.pair_binding.as_mapping(),
+            "vertical_package": {"envelope_path": binding.envelope_path, "package_path": binding.package_path, "commitment_path": binding.commitment_path, "commitment_raw_sha256": binding.commitment_raw_sha256, "package_commitment_sha256": binding.package_commitment_sha256, "dossier_path": binding.dossier_path, "dossier_sha256": binding.dossier_sha256},
+            "gate_b_outputs": {name: {"path": relative, "sha256": hashlib.sha256((root / relative).read_bytes()).hexdigest()} for name, relative in prepared["vertical_outputs"].items()},
+            "authorization_id": "gate-c-auth-test-01", "attempt_id": "gate-c-attempt-test-01", "max_guard_exec_count": 1, "stop_boundary": "after_one_sealed_target_read",
+        }
+        path = root / vertical_execution_authorization_path(binding)
+        path.parent.mkdir(parents=True)
+        path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode())
+        (root / prepared["vertical_outputs"]["mapping"]).write_bytes(b"{}")
+        executor = mock.Mock(side_effect=AssertionError("guard reached"))
+        with self.assertRaises(A0XCcpExecutorError):
+            launch_vertical_runtime_package(
+                repository_root=root, package_binding=binding, execution_authorization_path=path.relative_to(root).as_posix(),
+                source_state_probe=lambda: (head, tree, True), process_executor=executor,
+            )
+        executor.assert_not_called()
+
+    def test_v2_gate_c_refuses_dirty_or_wrong_source_before_package_or_guard(self) -> None:
+        from latent_triz.a0x_ccp_executor import A0XCcpExecutorError, launch_vertical_runtime_package, vertical_execution_authorization_path
+
+        root, binding, _prepared, head, tree = self._prepared_v2_graph()
+        executor = mock.Mock(side_effect=AssertionError("guard reached"))
+        for state in ((head, tree, False), ("f" * 40, tree, True), (head, "e" * 40, True)):
+            with self.subTest(state=state), self.assertRaises(A0XCcpExecutorError):
+                launch_vertical_runtime_package(
+                    repository_root=root, package_binding=binding,
+                    execution_authorization_path=vertical_execution_authorization_path(binding),
+                    source_state_probe=lambda state=state: state, process_executor=executor,
+                )
+        executor.assert_not_called()
+
     def _valid_package(self):
         from tests.test_a0x_vertical_slice import _publish_at, _synthetic_repository
 

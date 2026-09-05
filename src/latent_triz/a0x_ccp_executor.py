@@ -27,6 +27,7 @@ from .a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
     CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
+    VERTICAL_EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     Leg,
     PairBinding,
@@ -51,7 +52,7 @@ from .a0x_runtime_readiness import (
     runtime_readiness_path,
     validate_runtime_readiness_live,
 )
-from .a0x_vertical_slice import A0XVerticalSliceError, load_vertical_slice
+from .a0x_vertical_slice import A0XVerticalSliceError, VerticalPackageBinding, load_vertical_runtime_package, load_vertical_slice
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -304,6 +305,145 @@ def launch_vertical_slice_dossier(
         expected_dossier_sha256=dossier_sha256,
         expected_vertical_package_head=package_head,
     )
+
+
+def vertical_execution_authorization_path(binding: VerticalPackageBinding) -> str:
+    """Derive the sole future-only Gate-C authorization inlet for one pair."""
+    if not isinstance(binding, VerticalPackageBinding):
+        raise A0XCcpExecutorError("vertical package binding is invalid")
+    pair = binding.pair_binding
+    return (
+        f".a0x-runtime/gate-c/v2/{binding.qualified_source_head}/"
+        f"{binding.qualified_source_tree}/{pair.leg.value}/{pair.model_key}/"
+        f"{pair.run_id}/execution-authorization.json"
+    )
+
+
+def launch_vertical_runtime_package(
+    *,
+    repository_root: str | Path,
+    package_binding: VerticalPackageBinding,
+    execution_authorization_path: str,
+    source_state_probe: Callable[[], tuple[str, str, bool]],
+    process_executor: ProcessExecutor | None = None,
+    guard_preflight_producer: GuardPreflightProducer | None = None,
+) -> dict[str, Any]:
+    """Validate the v2 P0/Gate-B graph before one injected future Gate-C guard.
+
+    This deliberately cannot route through the historical selector launcher.
+    A real material adapter is not supplied by this target-free task: callers
+    must provide an explicit process adapter under a later authorization.
+    """
+    del guard_preflight_producer
+    if not isinstance(package_binding, VerticalPackageBinding):
+        raise A0XCcpExecutorError("vertical Gate C package binding is invalid")
+    root = Path(repository_root).resolve(strict=True)
+    try:
+        source_head, source_tree, clean = source_state_probe()
+    except Exception as error:
+        raise A0XCcpExecutorError("vertical Gate C source-state probe failed") from error
+    if (
+        not isinstance(clean, bool)
+        or not clean
+        or source_head != package_binding.qualified_source_head
+        or source_tree != package_binding.qualified_source_tree
+    ):
+        raise A0XCcpExecutorError("vertical Gate C source state does not match package binding")
+    _revision(source_head, "vertical Gate C source HEAD")
+    _revision(source_tree, "vertical Gate C source tree")
+    expected_authorization = vertical_execution_authorization_path(package_binding)
+    if execution_authorization_path != expected_authorization:
+        raise A0XCcpExecutorError("vertical Gate C authorization path is not derived")
+    try:
+        # Local import avoids the intentional Gate-B -> Gate-C import cycle.
+        from .a0x_runtime_bundle import validate_vertical_runtime_output
+        load_vertical_runtime_package(root, package_binding)
+        paths = _vertical_gate_b_output_paths(package_binding)
+        outputs = {name: validate_vertical_runtime_output(root, path, package_binding) for name, path in paths.items()}
+    except Exception as error:
+        raise A0XCcpExecutorError("vertical Gate C package or Gate B output is invalid") from error
+    authorization_path = _unique_repository_file(root, execution_authorization_path, "vertical Gate C authorization")
+    authorization_raw = authorization_path.read_bytes()
+    authorization = _strict_object(authorization_raw, "vertical Gate C authorization")
+    if _canonical_json(authorization) != authorization_raw:
+        raise A0XCcpExecutorError("vertical Gate C authorization is not canonical JSON")
+    try:
+        canonical_commitment(authorization, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE)
+        pair = PairBinding.from_mapping(_mapping(authorization, "pair_binding", "vertical Gate C authorization"))
+    except (A0XContractError, TypeError, ValueError) as error:
+        raise A0XCcpExecutorError("vertical Gate C authorization is not schema-valid") from error
+    expected_source = {"head": source_head, "tree": source_tree, "ref": "refs/heads/main"}
+    expected_package = _vertical_package_projection(package_binding)
+    if (
+        authorization.get("artifact_class") != "a0x-vertical-execution-authorization"
+        or authorization.get("qualified_source") != expected_source
+        or pair != package_binding.pair_binding
+        or authorization.get("vertical_package") != expected_package
+        or authorization.get("max_guard_exec_count") != 1
+        or authorization.get("stop_boundary") != "after_one_sealed_target_read"
+    ):
+        raise A0XCcpExecutorError("vertical Gate C authorization binding differs")
+    references = authorization.get("gate_b_outputs")
+    if not isinstance(references, Mapping) or set(references) != set(paths):
+        raise A0XCcpExecutorError("vertical Gate C Gate B output set is invalid")
+    for name, relative in paths.items():
+        reference = references.get(name)
+        raw = _unique_repository_file(root, relative, f"vertical Gate B {name} output").read_bytes()
+        if reference != {"path": relative, "sha256": _sha256_bytes(raw)} or outputs[name].get("output_kind") != name:
+            raise A0XCcpExecutorError("vertical Gate C Gate B output binding drifted")
+    if process_executor is None:
+        raise A0XCcpExecutorError("vertical Gate C requires an explicit authorized process executor")
+    claim_path = authorization_path.with_name("attempt-claim.json")
+    _reserve_claim(claim_path, {
+        "artifact_class": "a0x-vertical-gate-c-attempt-claim",
+        "qualified_source": expected_source,
+        "pair_binding": pair.as_mapping(),
+        "vertical_package": expected_package,
+        "authorization_raw_sha256": _sha256_bytes(authorization_raw),
+        "authorization_id": authorization["authorization_id"],
+        "attempt_id": authorization["attempt_id"],
+        "max_guard_exec_count": 1,
+    })
+    result = process_executor.run(
+        ("vertical-gate-c-v2",), cwd=root, env={}, timeout_seconds=_SUPERVISION_TIMEOUT_SECONDS,
+        capture_limit_bytes=_CAPTURE_LIMIT_BYTES,
+    )
+    _validate_process_result(result)
+    return {
+        "status": "completed" if result.returncode == 0 and not result.timed_out else "terminal",
+        "qualified_source": expected_source,
+        "pair_binding": pair.as_mapping(),
+        "package_commitment_sha256": package_binding.package_commitment_sha256,
+        "execution_authorization_raw_sha256": _sha256_bytes(authorization_raw),
+        "claim_path": claim_path.relative_to(root).as_posix(),
+    }
+
+
+def _vertical_gate_b_output_paths(binding: VerticalPackageBinding) -> dict[str, str]:
+    pair = binding.pair_binding
+    base = (
+        f".a0x-runtime/gate-b/v2/{binding.qualified_source_head}/"
+        f"{binding.qualified_source_tree}/{pair.leg.value}/{pair.model_key}/{pair.run_id}"
+    )
+    return {
+        "gate_a_evidence": f"{base}/gate-a-evidence.json",
+        "readiness": f"{base}/runtime-readiness.json",
+        "descriptor": f"{base}/launch-descriptor.json",
+        "authorization": f"{base}/execution-authorization.json",
+        "mapping": f"{base}/runtime-mapping.json",
+    }
+
+
+def _vertical_package_projection(binding: VerticalPackageBinding) -> dict[str, str]:
+    return {
+        "envelope_path": binding.envelope_path,
+        "package_path": binding.package_path,
+        "commitment_path": binding.commitment_path,
+        "commitment_raw_sha256": binding.commitment_raw_sha256,
+        "package_commitment_sha256": binding.package_commitment_sha256,
+        "dossier_path": binding.dossier_path,
+        "dossier_sha256": binding.dossier_sha256,
+    }
 
 
 def _launch_validated_dossier(
@@ -1320,6 +1460,7 @@ def _sha256_bytes(value: bytes) -> str:
 __all__ = [
     "A0XCcpExecutorError", "GuardPreflightOutput", "GuardPreflightProducer",
     "ProcessExecutor", "ProcessResult", "SubprocessGuardPreflightProducer",
-    "launch_fixed_dossier", "launch_vertical_slice_dossier", "qualification_evidence_from_receipt", "rehash_gate_a_evidence",
+    "launch_fixed_dossier", "launch_vertical_runtime_package", "launch_vertical_slice_dossier", "qualification_evidence_from_receipt", "rehash_gate_a_evidence",
+    "vertical_execution_authorization_path",
     "runtime_mapping_path",
 ]

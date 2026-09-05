@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "commitment_profile", "qualified_source", "pair_binding", "vertical_package", "gate_b_outputs", "authorization_id", "attempt_id", "max_guard_exec_count", "stop_boundary"],
+  "properties": {
+    "artifact_class": {"const": "a0x-vertical-execution-authorization"},
+    "commitment_profile": {"const": "a0x-execution-authorization-json-v4"},
+    "qualified_source": {"type": "object", "additionalProperties": false, "required": ["head", "tree", "ref"], "properties": {"head": {"type": "string", "pattern": "^[a-f0-9]{40}$"}, "tree": {"type": "string", "pattern": "^[a-f0-9]{40}$"}, "ref": {"const": "refs/heads/main"}}},
+    "pair_binding": {"type": "object", "minProperties": 1},
+    "vertical_package": {"type": "object", "additionalProperties": false, "required": ["envelope_path", "package_path", "commitment_path", "commitment_raw_sha256", "package_commitment_sha256", "dossier_path", "dossier_sha256"], "properties": {"envelope_path": {"type": "string"}, "package_path": {"type": "string"}, "commitment_path": {"type": "string"}, "commitment_raw_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "package_commitment_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "dossier_path": {"type": "string"}, "dossier_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}},
+    "gate_b_outputs": {"type": "object", "additionalProperties": false, "required": ["gate_a_evidence", "readiness", "descriptor", "authorization", "mapping"], "properties": {"gate_a_evidence": {"$ref": "#/$defs/ref"}, "readiness": {"$ref": "#/$defs/ref"}, "descriptor": {"$ref": "#/$defs/ref"}, "authorization": {"$ref": "#/$defs/ref"}, "mapping": {"$ref": "#/$defs/ref"}}},
+    "authorization_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "attempt_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "max_guard_exec_count": {"const": 1},
+    "stop_boundary": {"const": "after_one_sealed_target_read"}
+  },
+  "$defs": {"ref": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}}
+}
