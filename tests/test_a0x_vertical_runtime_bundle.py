@@ -126,6 +126,101 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
             attempt_id="gate-b-attempt-test-01",
         )
 
+    def _synthetic_dependencies(self, request):
+        """Private-only target-free Gate-B dependencies; production is untouched."""
+        from latent_triz.a0x_ccp_executor import _ExecutableIdentityEvidence
+        from latent_triz.a0x_contract import sha256_file
+        from latent_triz.a0x_hosted_gate_a import canonical_json_bytes as hosted_canonical_json_bytes
+        from latent_triz.a0x_runtime_bundle import (
+            _GateBDependencies, _HostedVerificationResult, canonical_json_bytes,
+        )
+        from latent_triz.a0x_runtime_readiness import EXPECTED_API_SYMBOLS, EXPECTED_PACKAGES
+
+        authorization = json.loads(request.gate_b_authorization.read_text(encoding="utf-8"))
+        authorization["qualification_context"] = "synthetic-target-free"
+        authorization["verifier"]["sha256"] = sha256_file(request.verifier_executable)
+        request.gate_b_authorization.write_bytes(canonical_json_bytes(authorization))
+
+        class SyntheticVerifier:
+            calls = 0
+
+            def verify(self, verifier_request):
+                self.calls += 1
+                raw_authorization = verifier_request.authorization_path.read_bytes()
+                value = json.loads(raw_authorization)
+                receipt = {
+                    "artifact_class": "a0x-hosted-gate-a-verification-receipt-synthetic-target-free",
+                    "receipt_profile": "a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1",
+                    "qualification_context": "synthetic-target-free",
+                    "verification_status": "verified",
+                    "repository": "MarcoPorcellato/Latent-TRIZ",
+                    "qualified_source_head": value["source_head"],
+                    "qualified_source_tree": value["source_tree"],
+                    "pair_binding": value["pair_binding"],
+                    "authorization_raw_sha256": hashlib.sha256(raw_authorization).hexdigest(),
+                    "hosted_inputs": value["hosted_inputs"],
+                    "verifier": value["verifier"],
+                    "verified_at": "2026-09-05T00:00:00Z",
+                }
+                raw = hosted_canonical_json_bytes(receipt)
+                target = verifier_request.repository_root / value["verification_receipt_path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+                return _HostedVerificationResult(
+                    raw,
+                    _ExecutableIdentityEvidence(
+                        role="hosted_verifier", path=verifier_request.verifier_executable,
+                        sha256=sha256_file(verifier_request.verifier_executable), version=None, synthetic=True,
+                    ),
+                    "synthetic-target-free",
+                )
+
+        def readiness(_root, pair, source_head, python_path):
+            return {
+                "artifact_class": "a0x-runtime-readiness",
+                "readiness_profile": "a0x-runtime-readiness-v1",
+                "source_head": source_head,
+                "pair_binding": pair.as_mapping(),
+                "python": {
+                    "path": str(python_path), "sha256": sha256_file(python_path),
+                    "version": "3.11.13", "major_minor": [3, 11],
+                    "environment_root": str(python_path.parent.parent), "base_prefix": "/synthetic/base",
+                    "packages": dict(EXPECTED_PACKAGES), "api_symbols": dict(EXPECTED_API_SYMBOLS),
+                },
+                "model_runtime": {
+                    "model_key": pair.model_key, "model_id": pair.model_id, "revision": pair.revision,
+                    "card_path": "experiments/a0x-six-model/model-cards/smollm2_360m.json",
+                    "card_sha256": "0" * 64, "runtime_root": "artifacts/synthetic",
+                    "runtime_file_count": 1, "runtime_total_bytes": 1,
+                    "runtime_files_commitment_sha256": "1" * 64,
+                },
+            }
+
+        class SyntheticCcpIdentityVerifier:
+            def verify(self, *, role, path, expected_sha256, expected_version=None):
+                return _ExecutableIdentityEvidence(
+                    role=role, path=Path(path), sha256=expected_sha256,
+                    version=expected_version, synthetic=True,
+                )
+
+        verifier = SyntheticVerifier()
+        return _GateBDependencies(
+            hosted_verifier=verifier,
+            ccp_identity_verifier=SyntheticCcpIdentityVerifier(),
+            readiness_probe=readiness,
+            context="synthetic-target-free",
+        ), verifier
+
+    def _prepare_synthetic(self, binding):
+        from latent_triz.a0x_runtime_bundle import _prepare_vertical_runtime_bundle_core
+
+        request = self._request(binding)
+        dependencies, verifier = self._synthetic_dependencies(request)
+        result = _prepare_vertical_runtime_bundle_core(
+            self.root, request, source_state_probe=lambda: (HEAD, TREE, True), dependencies=dependencies,
+        )
+        return result, request, verifier
+
     def test_preflight_binds_real_v2_package_before_external_probes(self) -> None:
         from latent_triz.a0x_runtime_bundle import preflight_vertical_runtime_bundle
 
@@ -334,74 +429,29 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
         version.assert_not_called()
 
     def test_prepare_uses_v2_selector_and_writes_no_material_output(self) -> None:
-        from latent_triz.a0x_runtime_bundle import prepare_vertical_runtime_bundle
-        from tests.test_a0x_runtime_bundle import _synthetic_gate_a_verifier
-
         binding = self._binding()
-        request = self._request(binding)
-        expected_ccp = json.loads(
-            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
-        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
-        readiness = {"artifact_class": "synthetic-readiness"}
-        with (
-            mock.patch(
-                "latent_triz.a0x_runtime_bundle.sha256_file",
-                side_effect=lambda path: (
-                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
-                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
-                    if Path(path).resolve() == request.verifier_executable.resolve()
-                    else actual_hash(path)
-                ),
-            ),
-            mock.patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value=readiness),
-        ):
-            result = prepare_vertical_runtime_bundle(
-                self.root,
-                request,
-                source_state_probe=lambda: (HEAD, TREE, True),
-                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
-                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("direct readiness probe reached")),
-                gate_a_verifier=_synthetic_gate_a_verifier,
-            )
+        result, _request, verifier = self._prepare_synthetic(binding)
         self.assertEqual("prepared", result["status"])
+        self.assertEqual(1, verifier.calls)
         self.assertEqual(binding.package_commitment_sha256, result["package_commitment_sha256"])
         self.assertTrue((self.root / result["vertical_outputs"]["readiness"]).is_file())
         self.assertFalse((self.root / binding.pair_binding.output_path).exists())
 
     def test_prepare_revalidates_package_after_injected_verifier(self) -> None:
-        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, prepare_vertical_runtime_bundle
-        from tests.test_a0x_runtime_bundle import _synthetic_gate_a_verifier
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, _prepare_vertical_runtime_bundle_core
 
         binding = self._binding()
         request = self._request(binding)
-        expected_ccp = json.loads(
-            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
-        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
-
+        dependencies, verifier = self._synthetic_dependencies(request)
+        original_verify = verifier.verify
         def mutate_after_receipt(verifier_request):
-            raw = _synthetic_gate_a_verifier(verifier_request)
+            raw = original_verify(verifier_request)
             (self.root / binding.package_path / "protocol.json").write_bytes(b"{}\n")
             return raw
-
-        with (
-            mock.patch(
-                "latent_triz.a0x_runtime_bundle.sha256_file",
-                side_effect=lambda path: (
-                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
-                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
-                    if Path(path).resolve() == request.verifier_executable.resolve()
-                    else actual_hash(path)
-                ),
-            ),
-            self.assertRaises(A0XRuntimeBundleError),
-        ):
-            prepare_vertical_runtime_bundle(
-                self.root, request, source_state_probe=lambda: (HEAD, TREE, True),
-                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
-                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("readiness reached")),
-                gate_a_verifier=mutate_after_receipt,
+        verifier.verify = mutate_after_receipt
+        with self.assertRaises(A0XRuntimeBundleError):
+            _prepare_vertical_runtime_bundle_core(
+                self.root, request, source_state_probe=lambda: (HEAD, TREE, True), dependencies=dependencies,
             )
         self.assertFalse((self.root / ".a0x-runtime/launches").exists())
 
@@ -409,37 +459,11 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
         """Every v2 output carries the same P0 identity, not a legacy subset."""
         from latent_triz.a0x_runtime_bundle import (
             A0XRuntimeBundleError,
-            prepare_vertical_runtime_bundle,
             validate_vertical_runtime_output,
         )
-        from tests.test_a0x_runtime_bundle import _synthetic_gate_a_verifier
 
         binding = self._binding()
-        request = self._request(binding)
-        expected_ccp = json.loads(
-            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
-        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
-        with (
-            mock.patch(
-                "latent_triz.a0x_runtime_bundle.sha256_file",
-                side_effect=lambda path: (
-                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
-                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
-                    if Path(path).resolve() == request.verifier_executable.resolve()
-                    else actual_hash(path)
-                ),
-            ),
-            mock.patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value={"artifact_class": "synthetic-readiness"}),
-        ):
-            result = prepare_vertical_runtime_bundle(
-                self.root,
-                request,
-                source_state_probe=lambda: (HEAD, TREE, True),
-                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
-                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("direct readiness probe reached")),
-                gate_a_verifier=_synthetic_gate_a_verifier,
-            )
+        result, _request, _verifier = self._prepare_synthetic(binding)
         self.assertEqual({"head": HEAD, "tree": TREE}, result["qualified_source"])
         expected_binding = {
             "envelope_path": binding.envelope_path,
@@ -531,32 +555,6 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
 
     def test_v2_preparation_does_not_compute_a_legacy_runtime_route(self) -> None:
         """V2 uses only _VerticalOutputPaths, including its nested documents."""
-        from latent_triz.a0x_runtime_bundle import prepare_vertical_runtime_bundle
-        from tests.test_a0x_runtime_bundle import _synthetic_gate_a_verifier
-
         binding = self._binding()
-        request = self._request(binding)
-        expected_ccp = json.loads(
-            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
-        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
-        with (
-            mock.patch("latent_triz.a0x_runtime_bundle.derive_runtime_paths", side_effect=AssertionError("legacy route reached")),
-            mock.patch(
-                "latent_triz.a0x_runtime_bundle.sha256_file",
-                side_effect=lambda path: (
-                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
-                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
-                    if Path(path).resolve() == request.verifier_executable.resolve()
-                    else actual_hash(path)
-                ),
-            ),
-            mock.patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value={"artifact_class": "synthetic-readiness"}),
-        ):
-            result = prepare_vertical_runtime_bundle(
-                self.root, request, source_state_probe=lambda: (HEAD, TREE, True),
-                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
-                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("direct readiness probe reached")),
-                gate_a_verifier=_synthetic_gate_a_verifier,
-            )
+        result, _request, _verifier = self._prepare_synthetic(binding)
         self.assertTrue(all(path.startswith(".a0x-runtime/gate-b/v2/") for path in result["vertical_outputs"].values()))

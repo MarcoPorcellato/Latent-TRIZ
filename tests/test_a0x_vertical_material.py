@@ -72,38 +72,16 @@ class A0XVerticalMaterialTests(unittest.TestCase):
     def _prepared_v2_graph(self):
         """Build Task-1/2 synthetic bytes; no model, network, or runtime load."""
         from tests.test_a0x_vertical_runtime_bundle import A0XVerticalRuntimeBundleTests, HEAD as V2_HEAD, TREE as V2_TREE
-        from latent_triz.a0x_runtime_bundle import prepare_vertical_runtime_bundle, sha256_file
-        from tests.test_a0x_runtime_bundle import _synthetic_gate_a_verifier
+        from latent_triz.a0x_runtime_bundle import sha256_file
 
         fixture = A0XVerticalRuntimeBundleTests()
         fixture.setUp()
         self.addCleanup(fixture.tearDown)
         binding = fixture._binding()
-        request = fixture._request(binding)
-        expected_ccp = json.loads(
-            (fixture.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
-        with (
-            patch(
-                "latent_triz.a0x_runtime_bundle.sha256_file",
-                side_effect=lambda path: (
-                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
-                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
-                    if Path(path).resolve() == request.verifier_executable.resolve()
-                    else sha256_file(path)
-                ),
-            ),
-            patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value={"artifact_class": "synthetic-readiness"}),
-        ):
-            prepared = prepare_vertical_runtime_bundle(
-                fixture.root, request, source_state_probe=lambda: (V2_HEAD, V2_TREE, True),
-                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
-                runtime_readiness_probe=lambda *_args: (_ for _ in ()).throw(AssertionError("readiness reached")),
-                gate_a_verifier=_synthetic_gate_a_verifier,
-            )
+        prepared, _request, _verifier = fixture._prepare_synthetic(binding)
         return fixture.root, binding, prepared, V2_HEAD, V2_TREE
 
-    def _v4_authorization(self, root, binding, prepared, head, tree):
+    def _v4_authorization(self, root, binding, prepared, head, tree, *, qualification_context="synthetic-target-free"):
         """Build the complete v4 graph from real Task-2 wrapper bytes."""
         outputs = prepared["vertical_outputs"]
         references = {
@@ -131,6 +109,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             "qualified_source": {"head": head, "tree": tree, "ref": "refs/heads/main"},
             "pair_binding": binding.pair_binding.as_mapping(),
             "vertical_package": {"envelope_path": binding.envelope_path, "package_path": binding.package_path, "commitment_path": binding.commitment_path, "commitment_raw_sha256": binding.commitment_raw_sha256, "package_commitment_sha256": binding.package_commitment_sha256, "dossier_path": binding.dossier_path, "dossier_sha256": binding.dossier_sha256},
+            "qualification_context": qualification_context,
             "gate_b_authorization": {
                 "path": prepared["gate_b_authorization_path"],
                 "sha256": hashlib.sha256((root / prepared["gate_b_authorization_path"]).read_bytes()).hexdigest(),

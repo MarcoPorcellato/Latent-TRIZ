@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from .a0x_contract import PairBinding
 
@@ -133,6 +133,7 @@ class VerticalGateBAuthorizationInputs:
     package_commitment_sha256: str
     dossier_path: str
     dossier_sha256: str
+    qualification_context: Literal["production", "synthetic-target-free"] = "production"
 
     def __post_init__(self) -> None:
         if not isinstance(self.base, GateBAuthorizationInputs):
@@ -151,6 +152,8 @@ class VerticalGateBAuthorizationInputs:
             ("vertical dossier SHA-256", self.dossier_sha256),
         ):
             _require_sha256(value, label)
+        if self.qualification_context not in {"production", "synthetic-target-free"}:
+            raise A0XGateContractError("vertical Gate B qualification context is invalid")
 
 
 def _vertical_package_paths(pair: PairBinding, source_head: str, source_tree: str) -> tuple[str, str, str, str]:
@@ -178,6 +181,7 @@ class VerificationReceiptInputs:
     hosted_inputs: HostedInputBindings
     verifier: VerifierIdentity
     verified_at: str
+    qualification_context: Literal["production", "synthetic-target-free"] = "production"
 
     def __post_init__(self) -> None:
         _require_revision(self.source_head, "source head")
@@ -188,6 +192,8 @@ class VerificationReceiptInputs:
         self.hosted_inputs.require_source_head(self.source_head)
         if not isinstance(self.verified_at, str) or not _TIMESTAMP.fullmatch(self.verified_at):
             raise A0XGateContractError("verified timestamp is invalid")
+        if self.qualification_context not in {"production", "synthetic-target-free"}:
+            raise A0XGateContractError("verification receipt qualification context is invalid")
 
 
 def build_gate_b_authorization(pair: PairBinding, inputs: GateBAuthorizationInputs) -> dict[str, Any]:
@@ -244,6 +250,7 @@ def build_vertical_gate_b_authorization(
     document.update(
         {
             "authorization_profile": VERTICAL_GATE_B_AUTHORIZATION_PROFILE,
+            "qualification_context": inputs.qualification_context,
             "vertical_package": {
                 "envelope_path": inputs.envelope_path,
                 "package_path": inputs.package_path,
@@ -266,7 +273,7 @@ def build_verification_receipt(pair: PairBinding, inputs: VerificationReceiptInp
     pair = _validated_pair(pair)
     if not isinstance(inputs, VerificationReceiptInputs):
         raise A0XGateContractError("verification receipt inputs are invalid")
-    return {
+    document = {
         "artifact_class": "a0x-hosted-gate-a-verification-receipt",
         "receipt_profile": "a0x-hosted-gate-a-verification-receipt-v1",
         "verification_status": "verified",
@@ -279,6 +286,9 @@ def build_verification_receipt(pair: PairBinding, inputs: VerificationReceiptInp
         "verifier": inputs.verifier.as_mapping(),
         "verified_at": inputs.verified_at,
     }
+    if inputs.qualification_context != "production":
+        raise A0XGateContractError("synthetic receipts require the private synthetic profile")
+    return document
 
 
 def _validated_pair(pair: PairBinding) -> PairBinding:
