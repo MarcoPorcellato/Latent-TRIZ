@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from latent_triz.a0x_validator import validate as validate_a0x  # noqa: E402
 from latent_triz.validator import validate as validate_minimal  # noqa: E402
 
 
@@ -374,15 +375,78 @@ def main() -> int:
                 f"reference_rejects={reference_rejects}"
             )
 
+    a0x_pairs = _a0x_positional_pairs()
+    for schema_name, instance in a0x_pairs:
+        schema = json.loads((ROOT / schema_name).read_text(encoding="utf-8"))
+        reference = Draft202012Validator(schema)
+        a0x_errors = validate_a0x(instance, schema)
+        reference_errors = list(reference.iter_errors(instance))
+        if a0x_errors or reference_errors:
+            errors.append(
+                f"A0X positional {schema_name}: a0x={len(a0x_errors)} reference={len(reference_errors)}"
+            )
+        for mutation_name, mutation in _a0x_positional_mutations(instance):
+            rejected = mutation
+            a0x_rejects = bool(validate_a0x(rejected, schema))
+            reference_rejects = bool(list(reference.iter_errors(rejected)))
+            if not a0x_rejects or not reference_rejects:
+                errors.append(
+                    f"A0X positional mutation {schema_name}:{mutation_name}: "
+                    f"a0x_rejects={a0x_rejects} reference_rejects={reference_rejects}"
+                )
+
     if errors:
         for error in errors:
             print(f"schema-cross-validate: {error}", file=sys.stderr)
         return 1
     print(
-        f"schema-cross-validate: {len(VALIDATION_PAIRS)} tracked pairs agree; "
-        "19 mutations rejected by both validators"
+        f"schema-cross-validate: {len(VALIDATION_PAIRS)} legacy tracked pairs agree; "
+        "19 legacy mutations rejected by both validators; "
+        f"{len(a0x_pairs)} A0X positional pairs agree; "
+        f"{len(a0x_pairs) * 4} A0X positional mutations rejected by both validators"
     )
     return 0
+
+
+def _a0x_positional_pairs() -> tuple[tuple[str, dict[str, Any]], ...]:
+    source = {"head": "a" * 40, "tree": "b" * 40, "ref": "refs/heads/main"}
+    names = ("protocol.json", "implementation.json", "freeze.json", "approval-dossier.json", "slice-manifest.json")
+    members = [{"name": name, "size": index + 1, "sha256": "c" * 64} for index, name in enumerate(names)]
+    lanes = (
+        "a0x-no-model", "a0x-synthetic", "documentation-audit", "repository-python311",
+        "repository-python312", "schema-cross-validation-python311", "schema-cross-validation-python312",
+    )
+    return (
+        ("schemas/a0x-hosted-gate-a-evidence.schema.json", {
+            "artifact_class": "a0x-hosted-gate-a-evidence", "evidence_profile": "a0x-hosted-gate-a-evidence-v1",
+            "repository": "MarcoPorcellato/Latent-TRIZ", "event": "push", "ref": "refs/heads/main",
+            "qualified_source_head": "a" * 40, "qualified_source_tree": "b" * 40,
+            "workflow": {"path": ".github/workflows/a0x-hosted-gate-a.yml", "raw_sha256": "c" * 64, "run_id": 1, "run_attempt": 1},
+            "inputs": {"requirements_schema_lock_sha256": "c" * 64, "action_pin_manifest_sha256": "c" * 64, "lane_manifest_sha256": "c" * 64},
+            "required_lanes": [{"id": lane, "receipt_sha256": "c" * 64, "status": "PASS"} for lane in lanes], "overall_status": "PASS",
+        }),
+        ("schemas/a0x-vertical-slice-manifest-v2.schema.json", {
+            "artifact_class": "a0x-vertical-slice-manifest-v2", "generator_profile": "a0x-vertical-slice-v2",
+            "repository": "MarcoPorcellato/Latent-TRIZ", "qualified_source": source, "pair_binding": {"one": "pair"}, "members": members[:-1],
+        }),
+        ("schemas/a0x-vertical-package-commitment-v2.schema.json", {
+            "profile": "a0x-vertical-package-commitment-v2", "qualified_source": source, "pair_binding": {"one": "pair"}, "members": members,
+            "generator": {"profile": "a0x-vertical-slice-v2", "repository": "MarcoPorcellato/Latent-TRIZ"}, "authorization_id": "p0-auth-test-01", "attempt_id": "p0-attempt-test-01", "package_commitment_sha256": "d" * 64,
+        }),
+    )
+
+
+def _a0x_positional_mutations(instance: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
+    key = "required_lanes" if "required_lanes" in instance else "members"
+    for name, mutate in (
+        ("order", lambda rows: rows.reverse()),
+        ("duplicate-identity", lambda rows: rows.__setitem__(1, deepcopy(rows[0]))),
+        ("missing-final", lambda rows: rows.pop()),
+        ("extra-item", lambda rows: rows.append(deepcopy(rows[-1]))),
+    ):
+        rejected = deepcopy(instance)
+        mutate(rejected[key])
+        yield name, rejected
 
 
 if __name__ == "__main__":

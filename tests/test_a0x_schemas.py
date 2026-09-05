@@ -11,6 +11,7 @@ from jsonschema import Draft202012Validator
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import A0XContractError, assert_pair_binding
+from latent_triz.a0x_validator import validate as validate_a0x
 from latent_triz.validator import validate
 from tests.a0x_test_support import artifact, pair_binding, rich_r1_statistical_result, rich_statistical_result
 from latent_triz.a0x_contract import Leg
@@ -147,13 +148,13 @@ class A0XSchemasTests(unittest.TestCase):
             "attempt_id": "p0-attempt-test-01",
             "package_commitment_sha256": "d" * 64,
         }
-        self.assertEqual([], validate(manifest, manifest_schema))
-        self.assertEqual([], validate(commitment, commitment_schema))
+        self.assertEqual([], validate_a0x(manifest, manifest_schema))
+        self.assertEqual([], validate_a0x(commitment, commitment_schema))
         for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
             rejected = copy.deepcopy(value)
             rejected["unexpected"] = True
             with self.subTest(value=value):
-                self.assertTrue(validate(rejected, schema))
+                self.assertTrue(validate_a0x(rejected, schema))
         for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
             for mutate in (
                 lambda member_list: member_list.__setitem__(0, copy.deepcopy(member_list[1])),
@@ -162,12 +163,12 @@ class A0XSchemasTests(unittest.TestCase):
                 rejected = copy.deepcopy(value)
                 mutate(rejected["members"])
                 with self.subTest(value=value, members=rejected["members"]):
-                    self.assertTrue(validate(rejected, schema))
+                    self.assertTrue(validate_a0x(rejected, schema))
         for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
             rejected = copy.deepcopy(value)
             rejected["members"] = rejected["members"][:-1]
             with self.subTest(value=value, members=rejected["members"]):
-                self.assertTrue(validate(rejected, schema))
+                self.assertTrue(validate_a0x(rejected, schema))
 
     def test_terminal_taxonomy_requires_receipt_and_statistics_by_status(self) -> None:
         terminal_schema = self.schemas["a0x-terminal-result.schema.json"]

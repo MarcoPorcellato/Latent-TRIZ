@@ -32,6 +32,7 @@ from .a0x_freeze import (
     _LEG_SOURCES,
     _copy_fields,
 )
+from .a0x_validator import validate as validate_a0x
 from .validator import validate
 
 
@@ -666,7 +667,8 @@ def _validate_schema(
     schema_name: str,
 ) -> None:
     schema = prerequisites.object(f"schemas/{schema_name}")
-    issues = validate(dict(value), schema)
+    validator = validate_a0x if schema_name == "a0x-vertical-slice-manifest-v2.schema.json" else validate
+    issues = validator(dict(value), schema)
     if issues:
         raise A0XVerticalSliceError(VALIDATION_FAILED)
 

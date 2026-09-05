@@ -8,6 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from latent_triz.a0x_validator import validate as validate_a0x
 from latent_triz.validator import validate
 
 from .a0x_pair import (
@@ -487,7 +488,8 @@ def _validate_authorization_document(value: Mapping[str, Any], schema_name: str)
         schema = json.loads((_REPOSITORY_ROOT / "schemas" / schema_name).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise A0XContractError("authorization document schema is unavailable") from error
-    issues = validate(dict(value), schema)
+    validator = validate_a0x if schema_name == "a0x-vertical-package-commitment-v2.schema.json" else validate
+    issues = validator(dict(value), schema)
     if issues:
         raise A0XContractError(f"authorization document schema rejected input: {issues[0].message}")
 

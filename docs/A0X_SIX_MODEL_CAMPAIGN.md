@@ -613,3 +613,19 @@ Frozen verification passed 11/11, the synthetic aggregate passed 268/268, and
 the repository check passed 1,100 tests with 11 documented skips. The next
 action remains a separately authorized exact-head Gate A qualification after
 the regenerated package is committed.
+
+## Validator-isolation correction
+
+The A0-R2/C3 validator remains the exact historical dependency-free subset and
+therefore rejects `prefixItems`. A0X owns a copied dependency-free extension
+for exactly three positional schemas: Hosted Gate A evidence, the v2 slice
+manifest, and the v2 package commitment. A0X v2 runtime callers use that
+extension only where needed; Hosted Gate A remains independently checked by
+the pinned Draft 2020-12 validator. `schema_cross_validate.py` retains its
+legacy matrix separately and reports the A0X positional matrix independently.
+
+Before current A0X bindings are replaced, the immutable Git-object ledger
+`docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json` records
+the exact `ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9` parent/tree and all
+seventeen superseded generated artifacts. It is historical audit evidence,
+not an authorization or an active runtime input.

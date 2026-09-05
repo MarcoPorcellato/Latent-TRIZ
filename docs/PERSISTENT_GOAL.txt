@@ -482,3 +482,11 @@ global frozen protocol, historical batch artifacts, separate Gate A/B/C
 authorizations, one-shot terminal outcomes, and no-general-TRIZ-claim limit.
 Do not access model, tokenizer, targets, network, CCP, or publish without the
 separate exact authorization required by the canonical specification.
+
+Task 6 validator-isolation checkpoint: preserve the historical A0-R2/C3
+validator byte-for-byte; route only A0X positional schemas through the
+dependency-free A0X validator; preserve the superseded current A0X generated
+set with the `ab047833` historical Git-object ledger; then regenerate only the
+two A0X inventories, two freezes, twelve dossiers, and canonical no-model
+receipt from one committed implementation anchor. No remote, material, model,
+tokenizer, target, scoring, CCP, Docker, or publication action is authorized.

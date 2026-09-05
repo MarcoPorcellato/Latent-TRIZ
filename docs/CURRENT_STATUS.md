@@ -250,6 +250,15 @@ authorized until a new exact-head CCP authorization is granted.
 The historical detail below remains evidence, but this continuation statement
 governs the current gate.
 
+### A0X validator isolation checkpoint (target-free, 2026-09-05)
+
+The historical A0-R2 validator has been restored byte-exactly. A0X positional
+schemas use a separate dependency-free validator and retain independent pinned
+Draft 2020-12 validation. The pre-regeneration current A0X artifact set is
+preserved by `a0x-batch-pre-regeneration-ledger-ab047833.json`; it is audit
+evidence only. Regeneration, remote work, model/tokenizer access, Gate B/C,
+CCP, Docker, and publication remain separate stop boundaries.
+
 The A0X six-model campaign is now at its frozen no-model checkpoint. Two
 independent legs preserve the historical A0 and A0-R1 rules, and twelve
 single-pair dossiers cover six exact model snapshots without pooling. Every

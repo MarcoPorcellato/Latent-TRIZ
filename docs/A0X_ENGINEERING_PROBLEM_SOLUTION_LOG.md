@@ -1328,3 +1328,26 @@ historical-byte checks remain fail-closed.
 **Status.** Target-free correction at implementation anchor
 `bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. The ledger remains historical audit
 evidence only and is not an active P0, Gate B, Gate C, or no-model input.
+
+## 49. Shared validator extension invalidated immutable A0-R2 evidence
+
+**Problem.** A shared dependency-free validator acquired Draft 2020-12
+`prefixItems` support for A0X positional schemas. The A0-R2 execution receipt
+binds the historical validator bytes, so the required receipt verifier refused
+the changed path before any model or target access.
+
+**Correction.** Restore `src/latent_triz/validator.py` byte-for-byte and move
+the reviewed extended implementation to `src/latent_triz/a0x_validator.py`.
+Only A0X positional consumers use the new module; legacy A0-R2/C3 imports do
+not load it. The pinned `Draft202012Validator` remains the independent oracle.
+The schema cross-validator now reports legacy and A0X positional results
+separately.
+
+**Historical preservation.** The existing `d7a8b5f` ledger is unchanged. A
+second Git-object ledger records the current `ab047833` parent/tree and its
+seventeen A0X generated artifacts before regeneration. Both ledgers are audit
+only and replay from exact Git objects.
+
+**Status.** Target-free implementation correction only. No model, tokenizer,
+target, Gate B/C, CCP, Docker, network, remote, or publication authority is
+created by this record.

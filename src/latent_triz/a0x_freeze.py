@@ -63,6 +63,21 @@ _HISTORICAL_BATCH_PRE_REGENERATION_PATHS = (
     "experiments/a0x-six-model/r1/implementation.json",
     "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
 )
+_CURRENT_BATCH_PRE_REGENERATION_PROFILE = "a0x-batch-pre-regeneration-ledger-v2"
+_CURRENT_BATCH_PRE_REGENERATION_PARENT = "ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9"
+_CURRENT_BATCH_PRE_REGENERATION_TREE = "ff90ef65cd1ca1c58be620c5241621db5091fa77"
+_HISTORICAL_BATCH_PRE_REGENERATION_LEDGERS = {
+    _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE: (
+        _HISTORICAL_BATCH_PRE_REGENERATION_PARENT,
+        _HISTORICAL_BATCH_PRE_REGENERATION_TREE,
+        _HISTORICAL_BATCH_PRE_REGENERATION_PATHS,
+    ),
+    _CURRENT_BATCH_PRE_REGENERATION_PROFILE: (
+        _CURRENT_BATCH_PRE_REGENERATION_PARENT,
+        _CURRENT_BATCH_PRE_REGENERATION_TREE,
+        _HISTORICAL_BATCH_PRE_REGENERATION_PATHS,
+    ),
+}
 _COMMON = {
     "empirical": True,
     "scientific_status": "exploratory",
@@ -127,6 +142,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "scripts/a0x_compatibility_check.py",
     "scripts/a0x_build_gate_b_runtime.py",
     "scripts/a0x_compile_pair_schemas.py",
+    "scripts/schema_cross_validate.py",
     "scripts/repository_check.py",
     "scripts/a0x_material.py",
     "scripts/a0x_material_child.py",
@@ -134,6 +150,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "src/latent_triz/a0x_a0_activations.py",
     "src/latent_triz/a0x_a0_analysis.py",
     "src/latent_triz/a0x_apfs.py",
+    "src/latent_triz/a0x_validator.py",
     "src/latent_triz/a0x_gate_b_builder.py",
     "src/latent_triz/a0x_contract.py",
     "src/latent_triz/a0x_pair.py",
@@ -158,6 +175,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "src/latent_triz/a0x_wheelhouse.py",
     "src/latent_triz/validator.py",
     "tests/test_a0x_activations.py",
+    "tests/test_a0x_validator.py",
     "tests/test_a0x_a0_analysis.py",
     "tests/test_a0x_apfs.py",
     "tests/test_a0x_gate_b_builder.py",
@@ -245,6 +263,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "tests/fixtures/a0x/hosted-gate-a/positive/verifier-policy.json",
     "docs/qualification/a0x-vertical-chain-historical-protection.json",
     "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json",
+    "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json",
 }))
 
 _DOSSIER_FILENAMES = {
@@ -1070,13 +1089,16 @@ def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Pa
     }
     if set(document) != expected_keys:
         raise A0XFreezeError("historical ledger fields differ")
+    configuration = _HISTORICAL_BATCH_PRE_REGENERATION_LEDGERS.get(document["profile"])
+    if configuration is None:
+        raise A0XFreezeError("historical ledger identity differs")
+    parent_head, parent_tree, expected_paths = configuration
     if (
-        document["profile"] != _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE
-        or document["domain"] != _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE
+        document["domain"] != document["profile"]
         or document["historical_only"] is not True
-        or document["parent_head"] != _HISTORICAL_BATCH_PRE_REGENERATION_PARENT
-        or document["parent_tree"] != _HISTORICAL_BATCH_PRE_REGENERATION_TREE
-        or document["entry_count"] != len(_HISTORICAL_BATCH_PRE_REGENERATION_PATHS)
+        or document["parent_head"] != parent_head
+        or document["parent_tree"] != parent_tree
+        or document["entry_count"] != len(expected_paths)
         or not isinstance(document["entries"], list)
         or not isinstance(document["ledger_commitment_sha256"], str)
         or _SHA256.fullmatch(document["ledger_commitment_sha256"]) is None
@@ -1086,9 +1108,9 @@ def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Pa
     commitment = projection.pop("ledger_commitment_sha256")
     if commitment != _historical_ledger_commitment(projection):
         raise A0XFreezeError("historical ledger commitment differs")
-    _historical_git(repository, ["cat-file", "-e", f"{_HISTORICAL_BATCH_PRE_REGENERATION_PARENT}^{{commit}}"], missing_parent=True)
-    observed_tree = _historical_git(repository, ["rev-parse", f"{_HISTORICAL_BATCH_PRE_REGENERATION_PARENT}^{{tree}}"], missing_parent=True).decode("ascii", "strict").strip()
-    if observed_tree != _HISTORICAL_BATCH_PRE_REGENERATION_TREE:
+    _historical_git(repository, ["cat-file", "-e", f"{parent_head}^{{commit}}"], missing_parent=True)
+    observed_tree = _historical_git(repository, ["rev-parse", f"{parent_head}^{{tree}}"], missing_parent=True).decode("ascii", "strict").strip()
+    if observed_tree != parent_tree:
         raise A0XFreezeError("historical parent tree differs")
     entries = document["entries"]
     paths: list[str] = []
@@ -1109,13 +1131,13 @@ def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Pa
         ):
             raise A0XFreezeError("historical ledger entry is invalid")
         paths.append(path)
-    if tuple(paths) != _HISTORICAL_BATCH_PRE_REGENERATION_PATHS:
+    if tuple(paths) != expected_paths:
         raise A0XFreezeError("historical ledger path set differs")
     for entry in entries:
         path = entry["path"]
         tree_line = _historical_git(
             repository,
-            ["ls-tree", _HISTORICAL_BATCH_PRE_REGENERATION_PARENT, "--", path],
+            ["ls-tree", parent_head, "--", path],
         ).decode("utf-8", "strict").rstrip("\n")
         fields, separator, observed_path = tree_line.partition("\t")
         parts = fields.split()
@@ -1128,9 +1150,9 @@ def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Pa
         if len(raw) != entry["bytes"] or hashlib.sha256(raw).hexdigest() != entry["sha256"]:
             raise A0XFreezeError("historical Git blob bytes differ")
     return {
-        "profile": _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE,
-        "parent_head": _HISTORICAL_BATCH_PRE_REGENERATION_PARENT,
-        "parent_tree": _HISTORICAL_BATCH_PRE_REGENERATION_TREE,
+        "profile": document["profile"],
+        "parent_head": parent_head,
+        "parent_tree": parent_tree,
         "entry_count": len(entries),
         "ledger_commitment_sha256": commitment,
     }

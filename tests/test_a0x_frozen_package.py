@@ -139,10 +139,14 @@ class A0XFrozenPackageTests(unittest.TestCase):
                     "schemas/a0x-vertical-gate-b-output-v2.schema.json",
                     "schemas/a0x-vertical-package-commitment-v2.schema.json",
                     "schemas/a0x-vertical-slice-manifest-v2.schema.json",
+                    "scripts/schema_cross_validate.py",
+                    "src/latent_triz/a0x_validator.py",
                     "src/latent_triz/validator.py",
+                    "tests/test_a0x_validator.py",
                     "tests/test_a0x_vertical_gate_chain_v2.py",
                     "tests/test_a0x_vertical_runtime_bundle.py",
                     "tests/test_a0x_vertical_slice_v2.py",
+                    "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json",
                     "docs/qualification/a0x-vertical-chain-historical-protection.json",
                 }.issubset(paths))
                 for row in bindings:
@@ -187,6 +191,15 @@ class A0XFrozenPackageTests(unittest.TestCase):
             "a0x-batch-pre-regeneration-ledger-v1",
             verified["profile"],
         )
+
+    def test_current_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
+        """Keep Task 5 generated artifacts auditable before Task 6 replaces them."""
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json"
+        verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
+        self.assertEqual("ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9", verified["parent_head"])
+        self.assertEqual("ff90ef65cd1ca1c58be620c5241621db5091fa77", verified["parent_tree"])
+        self.assertEqual(17, verified["entry_count"])
+        self.assertEqual("a0x-batch-pre-regeneration-ledger-v2", verified["profile"])
 
     def test_batch_pre_regeneration_ledger_refuses_missing_parent(self) -> None:
         """Historical verification must fail closed when Git lacks its exact parent."""

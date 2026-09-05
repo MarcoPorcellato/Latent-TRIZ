@@ -47,3 +47,13 @@ validators reject:
 The reference dependency is intentionally separated from the runtime package.
 Normal local commands remain dependency-free; protected CI installs only the
 pinned schema-validation set before running the repository gate.
+
+## A0X positional extension boundary
+
+`src/latent_triz/validator.py` is immutable A0-R2/C3 compatibility code. It
+rejects `prefixItems` as an unsupported keyword. A0X-only
+`src/latent_triz/a0x_validator.py` contains the reviewed dependency-free
+extension required by the three tracked positional schemas. A0X v2 package
+callers select that module only for those schemas; Hosted Gate A retains the
+pinned `Draft202012Validator` oracle. The cross-validator reports legacy
+agreement and A0X positional agreement as separate counts.
