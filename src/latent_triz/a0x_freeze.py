@@ -1048,18 +1048,21 @@ def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Pa
     Git plumbing and must not be called by current P0 v2, Gate B v2, Gate C v2,
     or ordinary no-model loaders.
     """
-    repository = Path(root).resolve()
+    lexical_root = Path(root)
+    repository = lexical_root.resolve()
     candidate = Path(ledger_path)
     if not candidate.is_absolute():
-        candidate = repository / candidate
-    # Resolve only the parent components for containment; keep the leaf
-    # unresolved so lstat() can reject a symlink instead of accepting its target.
-    candidate = candidate.parent.resolve() / candidate.name
+        candidate = lexical_root / candidate
     try:
-        relative_candidate = candidate.relative_to(repository)
+        relative_candidate = candidate.relative_to(lexical_root)
     except ValueError as error:
         raise A0XFreezeError("historical ledger escapes repository root") from error
+    if not relative_candidate.parts or any(component in {".", ".."} for component in relative_candidate.parts):
+        raise A0XFreezeError("historical ledger path is not lexically contained")
+    # Validate lexical components before any resolution.  Resolving first would
+    # normalize a symlinked parent into a trusted path and erase the evidence.
     _reject_symlink_components(repository, relative_candidate.as_posix())
+    candidate = repository.joinpath(*relative_candidate.parts)
     document = _historical_ledger_document(candidate)
     expected_keys = {
         "profile", "domain", "historical_only", "parent_head", "parent_tree",

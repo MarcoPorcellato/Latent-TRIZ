@@ -1505,7 +1505,8 @@ def _gate_a_evidence_from_receipt(
         or receipt["authorization_raw_sha256"] != hashlib.sha256(authorization_raw).hexdigest()
         or receipt["hosted_inputs"] != authorization["hosted_inputs"]
         or receipt["verifier"] != authorization["verifier"]
-        or receipt.get("qualification_context") != authorization.get("qualification_context", "production")
+        or receipt.get("qualification_context", "production")
+        != authorization.get("qualification_context", "production")
     ):
         raise A0XRuntimeBundleError("Gate B verifier receipt does not bind authorized hosted evidence")
     vertical = authorization.get("authorization_profile") == VERTICAL_GATE_B_AUTHORIZATION_PROFILE

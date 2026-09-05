@@ -477,12 +477,71 @@ class A0XRuntimeBundleTests(unittest.TestCase):
         """Runtime test callback must not retain a second receipt serializer."""
         temporary, root, request = self._fixture()
         self.addCleanup(temporary.cleanup)
+        root = root.resolve()
         raw = _synthetic_gate_a_verifier(type("Request", (), {
             "repository_root": root,
             "authorization_path": request.gate_b_authorization,
         })())
         self.assertTrue(raw.endswith(b"\n"))
         self.assertEqual(raw, (root / json.loads(request.gate_b_authorization.read_text())["verification_receipt_path"]).read_bytes())
+
+    def test_legacy_gate_b_accepts_canonical_production_receipt_without_context_field(self) -> None:
+        """Production receipt v1 denotes production by omitting its context field."""
+        from latent_triz import a0x_runtime_bundle
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        root = root.resolve()
+        raw = _synthetic_gate_a_verifier(type("Request", (), {
+            "repository_root": root,
+            "authorization_path": request.gate_b_authorization,
+        })())
+        authorization_raw = request.gate_b_authorization.read_bytes()
+        authorization = json.loads(authorization_raw)
+        receipt = json.loads(raw)
+        self.assertNotIn("qualification_context", receipt)
+        evidence = a0x_runtime_bundle._gate_a_evidence_from_receipt(
+            root,
+            request.gate_b_authorization,
+            authorization_raw,
+            authorization,
+            raw,
+            pair=PairBinding.from_mapping(authorization["pair_binding"]),
+            source_head=authorization["source_head"],
+        )
+        self.assertEqual("a0x-gate-a-evidence-binding-v2", evidence["evidence_profile"])
+
+    def test_legacy_gate_b_refuses_synthetic_receipt_context(self) -> None:
+        """Production legacy authorization cannot accept a synthetic receipt profile."""
+        from latent_triz import a0x_runtime_bundle
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        root = root.resolve()
+        raw = _synthetic_gate_a_verifier(type("Request", (), {
+            "repository_root": root,
+            "authorization_path": request.gate_b_authorization,
+        })())
+        authorization_raw = request.gate_b_authorization.read_bytes()
+        authorization = json.loads(authorization_raw)
+        receipt = json.loads(raw)
+        receipt.update({
+            "artifact_class": "a0x-hosted-gate-a-verification-receipt-synthetic-target-free",
+            "receipt_profile": "a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1",
+            "qualification_context": "synthetic-target-free",
+        })
+        mismatched = __import__("latent_triz.a0x_hosted_gate_a", fromlist=["canonical_json_bytes"]).canonical_json_bytes(receipt)
+        (root / authorization["verification_receipt_path"]).write_bytes(mismatched)
+        with self.assertRaisesRegex(a0x_runtime_bundle.A0XRuntimeBundleError, "schema rejected input"):
+            a0x_runtime_bundle._gate_a_evidence_from_receipt(
+                root,
+                request.gate_b_authorization,
+                authorization_raw,
+                authorization,
+                mismatched,
+                pair=PairBinding.from_mapping(authorization["pair_binding"]),
+                source_head=authorization["source_head"],
+            )
 
     def test_schema_valid_dense_drift_refuses_before_injected_gate_a_verifier(self) -> None:
         """Runtime preparation cannot spend injected Gate A verifier on invalid pair semantics."""
