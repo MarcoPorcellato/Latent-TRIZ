@@ -137,7 +137,9 @@ class _ValidatedPreparationInputs:
     child_sha256: str
     contract_sha256: str
     ccp_identity: Mapping[str, Any]
-    descriptor_path: str
+    # Historical v1 preparation needs this derived legacy route.  V2 must not
+    # even compute it: all of its durable paths are _VerticalOutputPaths.
+    descriptor_path: str | None
 
 
 @dataclass(frozen=True)
@@ -254,7 +256,7 @@ def preflight_vertical_runtime_bundle(
     _preflight_vertical_output_paths(repository, pair, output_paths)
     inputs = _validate_preparation_inputs(
         repository, request, dossier=dossier, pair=pair, source_head=source_head,
-        ccp_version_probe=ccp_version_probe,
+        ccp_version_probe=ccp_version_probe, derive_legacy_paths=False,
     )
     authorization_path, authorization_raw, authorization = _vertical_gate_b_authorization(repository, request)
     _validate_vertical_gate_b_static(
@@ -301,7 +303,7 @@ def prepare_vertical_runtime_bundle(
     _preflight_vertical_output_paths(repository, pair, _vertical_output_paths(binding))
     inputs = _validate_preparation_inputs(
         repository, request, dossier=dossier, pair=pair, source_head=source_head,
-        ccp_version_probe=ccp_version_probe,
+        ccp_version_probe=ccp_version_probe, derive_legacy_paths=False,
     )
     authorization_path, authorization_raw, authorization = _vertical_gate_b_authorization(repository, request)
     _validate_vertical_gate_b_static(
@@ -317,28 +319,9 @@ def prepare_vertical_runtime_bundle(
     # before spending the next capability (the readiness probe).
     _vertical_dossier(_load_vertical_package(repository, binding), binding)
     readiness = _runtime_readiness(runtime_readiness_probe, repository, pair, source_head, inputs.python_path)
-    readiness_sha256 = hashlib.sha256(canonical_json_bytes(readiness)).hexdigest()
-    descriptor = _build_descriptor(
-        repository, pair, source_head, inputs.python_path, inputs.child_path,
-        inputs.contract_sha256, readiness_sha256,
-    )
-    descriptor_sha256 = hashlib.sha256(canonical_json_bytes(descriptor)).hexdigest()
-    runtime_authorization = _build_vertical_execution_inlet(
-        binding=binding,
-        pair=pair,
-        source_head=source_head,
-        source_tree=source_tree,
-        descriptor_sha256=descriptor_sha256,
-        gate_a_evidence=gate_a_evidence,
-        ccp_identity=inputs.ccp_identity,
-        python_sha256=inputs.python_sha256,
-        child_sha256=inputs.child_sha256,
-        authorization_id=request.authorization_id,
-        attempt_id=request.attempt_id,
-    )
-    mapping = _build_mapping(
-        repository, pair, source_head, inputs.ccp_path, inputs.python_path,
-        inputs.descriptor_path, descriptor_sha256,
+    documents = _build_vertical_output_documents(
+        repository, binding, pair, source_head, source_tree, inputs,
+        gate_a_evidence, readiness, request.authorization_id, request.attempt_id,
     )
     # Re-read the ignored envelope after every injected capability and before
     # the first readiness/descriptor/authorization/mapping write.
@@ -360,8 +343,7 @@ def prepare_vertical_runtime_bundle(
     if _vertical_source_state(source_state_probe) != (source_head, source_tree, True):
         raise A0XRuntimeBundleError("vertical Gate B source state drifted before output")
     summary = _write_and_verify_vertical_bundle(
-        repository, binding, pair, source_head, source_tree, gate_a_evidence,
-        readiness, descriptor, runtime_authorization, mapping,
+        repository, binding, pair, source_head, source_tree, documents,
     )
     summary.update({
         "qualified_source": {"head": source_head, "tree": source_tree},
@@ -475,14 +457,77 @@ def _vertical_output_document(
     }
 
 
+def _vertical_document_sha256(document: Mapping[str, Any]) -> str:
+    return hashlib.sha256(canonical_json_bytes(document)).hexdigest()
+
+
+def _vertical_document_reference(
+    paths: _VerticalOutputPaths, name: str, document: Mapping[str, Any], *, role: str | None = None,
+) -> dict[str, str]:
+    reference = {"path": paths.durable()[name], "sha256": _vertical_document_sha256(document)}
+    if role is not None:
+        reference = {"role": role, **reference}
+    return reference
+
+
+def _build_vertical_descriptor(
+    root: Path,
+    binding: VerticalPackageBinding,
+    pair: PairBinding,
+    source_head: str,
+    source_tree: str,
+    inputs: _ValidatedPreparationInputs,
+    paths: _VerticalOutputPaths,
+    gate_a_evidence: Mapping[str, Any],
+    readiness: Mapping[str, Any],
+    gate_a_evidence_document: Mapping[str, Any],
+    readiness_document: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the acyclic V2 descriptor without touching legacy route builders."""
+    if inputs.child_path != _repository_file(root, "scripts/a0x_material_child.py"):
+        raise A0XRuntimeBundleError("child script is not the fixed repository child")
+    del gate_a_evidence, readiness
+    return {
+        "artifact_class": "a0x-vertical-launch-descriptor",
+        "descriptor_profile": "a0x-vertical-launch-descriptor-v2",
+        "qualified_source": {"head": source_head, "tree": source_tree, "ref": "refs/heads/main"},
+        "pair_binding": pair.as_mapping(),
+        "vertical_package": _vertical_package_projection(binding),
+        "child_script": {
+            "role": "child", "path": "scripts/a0x_material_child.py", "sha256": inputs.child_sha256,
+        },
+        "python": {"role": "python", "path": str(inputs.python_path), "sha256": inputs.python_sha256},
+        "runtime_readiness": _vertical_document_reference(
+            paths, "readiness", readiness_document, role="readiness",
+        ),
+        "gate_a_evidence": _vertical_document_reference(
+            paths, "gate_a_evidence", gate_a_evidence_document, role="gate_a_evidence",
+        ),
+        # Deliberately path-only: authorization is downstream of descriptor,
+        # so a hash here would create a cycle.
+        "authorization_reference": {"role": "authorization", "path": paths.authorization},
+        "environment_template": list(_ENVIRONMENT),
+        "material_contract": {
+            "role": "material_contract", "path": MATERIAL_CONTRACT_PATH, "sha256": inputs.contract_sha256,
+        },
+        "execution": {
+            "network": "offline", "generation": "forbidden", "trust_remote_code": False,
+            "device": "cpu", "dtype": "float32", "outer_timeout_seconds": OUTER_TIMEOUT_SECONDS,
+            "internal_budget_seconds": INTERNAL_BUDGET_SECONDS, "cleanup_margin_seconds": CLEANUP_MARGIN_SECONDS,
+        },
+    }
+
+
 def _build_vertical_execution_inlet(
     *,
     binding: VerticalPackageBinding,
     pair: PairBinding,
     source_head: str,
     source_tree: str,
-    descriptor_sha256: str,
-    gate_a_evidence: Mapping[str, Any],
+    paths: _VerticalOutputPaths,
+    gate_a_evidence_document: Mapping[str, Any],
+    readiness_document: Mapping[str, Any],
+    descriptor_document: Mapping[str, Any],
     ccp_identity: Mapping[str, Any],
     python_sha256: str,
     child_sha256: str,
@@ -490,7 +535,6 @@ def _build_vertical_execution_inlet(
     attempt_id: str,
 ) -> dict[str, Any]:
     """Create a v2-only Gate-B inlet; Task 3 owns final Guard authorization."""
-    _digest(descriptor_sha256, "vertical descriptor SHA-256")
     _digest(python_sha256, "vertical Python SHA-256")
     _digest(child_sha256, "vertical child SHA-256")
     _identifier(authorization_id, "vertical authorization ID")
@@ -501,8 +545,13 @@ def _build_vertical_execution_inlet(
         "qualified_source": {"head": source_head, "tree": source_tree, "ref": "refs/heads/main"},
         "pair_binding": pair.as_mapping(),
         "vertical_package": _vertical_package_projection(binding),
-        "gate_a_evidence": dict(gate_a_evidence),
-        "descriptor_payload_sha256": descriptor_sha256,
+        "gate_a_evidence": _vertical_document_reference(
+            paths, "gate_a_evidence", gate_a_evidence_document, role="gate_a_evidence",
+        ),
+        "runtime_readiness": _vertical_document_reference(
+            paths, "readiness", readiness_document, role="readiness",
+        ),
+        "descriptor": _vertical_document_reference(paths, "descriptor", descriptor_document, role="descriptor"),
         "ccp": dict(ccp_identity),
         "python_sha256": python_sha256,
         "child_sha256": child_sha256,
@@ -510,6 +559,84 @@ def _build_vertical_execution_inlet(
         "attempt_id": attempt_id,
         "stop_boundary": "after_gate_b_runtime_bundle",
     }
+
+
+def _build_vertical_mapping(
+    root: Path,
+    binding: VerticalPackageBinding,
+    pair: PairBinding,
+    source_head: str,
+    source_tree: str,
+    inputs: _ValidatedPreparationInputs,
+    paths: _VerticalOutputPaths,
+    descriptor_document: Mapping[str, Any],
+    authorization_document: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind only V2 wrapper references; no legacy descriptor route exists here."""
+    return {
+        "artifact_class": "a0x-vertical-runtime-role-mapping",
+        "mapping_profile": "a0x-vertical-runtime-role-mapping-v2",
+        "qualified_source": {"head": source_head, "tree": source_tree, "ref": "refs/heads/main"},
+        "pair_binding": pair.as_mapping(),
+        "vertical_package": _vertical_package_projection(binding),
+        "repository_root": str(root),
+        "ccp": {"role": "ccp", "path": str(inputs.ccp_path), "sha256": inputs.ccp_sha256},
+        "python": {"role": "python", "path": str(inputs.python_path), "sha256": inputs.python_sha256},
+        "descriptor": _vertical_document_reference(paths, "descriptor", descriptor_document, role="descriptor"),
+        "authorization": _vertical_document_reference(
+            paths, "authorization", authorization_document, role="authorization",
+        ),
+    }
+
+
+def _build_vertical_output_documents(
+    root: Path,
+    binding: VerticalPackageBinding,
+    pair: PairBinding,
+    source_head: str,
+    source_tree: str,
+    inputs: _ValidatedPreparationInputs,
+    gate_a_evidence: Mapping[str, Any],
+    readiness: Mapping[str, Any],
+    authorization_id: str,
+    attempt_id: str,
+) -> dict[str, dict[str, Any]]:
+    """Project the V2 durable graph in its only acyclic dependency order."""
+    paths = _vertical_output_paths(binding)
+    documents: dict[str, dict[str, Any]] = {}
+    for name, payload in (("gate_a_evidence", gate_a_evidence), ("readiness", readiness)):
+        documents[name] = _vertical_output_document(
+            kind=name, payload=payload, binding=binding, pair=pair,
+            source_head=source_head, source_tree=source_tree,
+        )
+    descriptor = _build_vertical_descriptor(
+        root, binding, pair, source_head, source_tree, inputs, paths, gate_a_evidence, readiness,
+        documents["gate_a_evidence"], documents["readiness"],
+    )
+    documents["descriptor"] = _vertical_output_document(
+        kind="descriptor", payload=descriptor, binding=binding, pair=pair,
+        source_head=source_head, source_tree=source_tree,
+    )
+    authorization = _build_vertical_execution_inlet(
+        binding=binding, pair=pair, source_head=source_head, source_tree=source_tree, paths=paths,
+        gate_a_evidence_document=documents["gate_a_evidence"], readiness_document=documents["readiness"],
+        descriptor_document=documents["descriptor"], ccp_identity=inputs.ccp_identity,
+        python_sha256=inputs.python_sha256, child_sha256=inputs.child_sha256,
+        authorization_id=authorization_id, attempt_id=attempt_id,
+    )
+    documents["authorization"] = _vertical_output_document(
+        kind="authorization", payload=authorization, binding=binding, pair=pair,
+        source_head=source_head, source_tree=source_tree,
+    )
+    mapping = _build_vertical_mapping(
+        root, binding, pair, source_head, source_tree, inputs, paths,
+        documents["descriptor"], documents["authorization"],
+    )
+    documents["mapping"] = _vertical_output_document(
+        kind="mapping", payload=mapping, binding=binding, pair=pair,
+        source_head=source_head, source_tree=source_tree,
+    )
+    return documents
 
 
 def _preflight_vertical_output_paths(
@@ -560,7 +687,85 @@ def validate_vertical_runtime_output(
         canonical_json_bytes(dict(payload))
     ).hexdigest():
         raise A0XRuntimeBundleError("vertical Gate B output payload binding drifted")
+    _validate_vertical_output_dependencies(repository, by_path[relative], dict(payload), paths)
     return value
+
+
+def _vertical_persisted_reference(
+    root: Path, paths: _VerticalOutputPaths, name: str, *, role: str,
+) -> dict[str, str]:
+    relative = paths.durable()[name]
+    raw = _independent_repository_file(root, relative, f"vertical Gate B {name} output").read_bytes()
+    return {"role": role, "path": relative, "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def _require_exact_fields(value: Mapping[str, Any], expected: set[str], label: str) -> None:
+    if set(value) != expected:
+        raise A0XRuntimeBundleError(f"vertical Gate B {label} shape is invalid")
+
+
+def _validate_vertical_output_dependencies(
+    root: Path, name: str, payload: Mapping[str, Any], paths: _VerticalOutputPaths,
+) -> None:
+    """Reject substituted V2 references before any later material probe."""
+    if name in {"gate_a_evidence", "readiness"}:
+        return
+    if name == "descriptor":
+        _require_exact_fields(
+            payload,
+            {
+                "artifact_class", "descriptor_profile", "qualified_source", "pair_binding", "vertical_package",
+                "child_script", "python", "runtime_readiness", "gate_a_evidence", "authorization_reference",
+                "environment_template", "material_contract", "execution",
+            },
+            "descriptor payload",
+        )
+        if (
+            payload.get("artifact_class") != "a0x-vertical-launch-descriptor"
+            or payload.get("descriptor_profile") != "a0x-vertical-launch-descriptor-v2"
+            or payload.get("runtime_readiness") != _vertical_persisted_reference(root, paths, "readiness", role="readiness")
+            or payload.get("gate_a_evidence") != _vertical_persisted_reference(root, paths, "gate_a_evidence", role="gate_a_evidence")
+            or payload.get("authorization_reference") != {"role": "authorization", "path": paths.authorization}
+        ):
+            raise A0XRuntimeBundleError("vertical Gate B descriptor dependency binding drifted")
+        return
+    if name == "authorization":
+        _require_exact_fields(
+            payload,
+            {
+                "artifact_class", "inlet_profile", "qualified_source", "pair_binding", "vertical_package",
+                "gate_a_evidence", "runtime_readiness", "descriptor", "ccp", "python_sha256", "child_sha256",
+                "authorization_id", "attempt_id", "stop_boundary",
+            },
+            "authorization payload",
+        )
+        if (
+            payload.get("artifact_class") != "a0x-vertical-gate-b-execution-inlet"
+            or payload.get("inlet_profile") != "a0x-vertical-gate-b-execution-inlet-v2"
+            or payload.get("gate_a_evidence") != _vertical_persisted_reference(root, paths, "gate_a_evidence", role="gate_a_evidence")
+            or payload.get("runtime_readiness") != _vertical_persisted_reference(root, paths, "readiness", role="readiness")
+            or payload.get("descriptor") != _vertical_persisted_reference(root, paths, "descriptor", role="descriptor")
+        ):
+            raise A0XRuntimeBundleError("vertical Gate B authorization dependency binding drifted")
+        return
+    if name == "mapping":
+        _require_exact_fields(
+            payload,
+            {
+                "artifact_class", "mapping_profile", "qualified_source", "pair_binding", "vertical_package",
+                "repository_root", "ccp", "python", "descriptor", "authorization",
+            },
+            "mapping payload",
+        )
+        if (
+            payload.get("artifact_class") != "a0x-vertical-runtime-role-mapping"
+            or payload.get("mapping_profile") != "a0x-vertical-runtime-role-mapping-v2"
+            or payload.get("descriptor") != _vertical_persisted_reference(root, paths, "descriptor", role="descriptor")
+            or payload.get("authorization") != _vertical_persisted_reference(root, paths, "authorization", role="authorization")
+        ):
+            raise A0XRuntimeBundleError("vertical Gate B mapping dependency binding drifted")
+        return
+    raise A0XRuntimeBundleError("vertical Gate B output kind is invalid")
 
 
 def _independent_repository_file(root: Path, relative: str, label: str) -> Path:
@@ -577,37 +782,13 @@ def _write_and_verify_vertical_bundle(
     pair: PairBinding,
     source_head: str,
     source_tree: str,
-    gate_a_evidence: Mapping[str, Any],
-    readiness: Mapping[str, Any],
-    descriptor: Mapping[str, Any],
-    authorization: Mapping[str, Any],
-    mapping: Mapping[str, Any],
+    documents: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Publish only v2 projections; v1/batch bytes are never reused or changed."""
     paths = _vertical_output_paths(binding)
     _preflight_vertical_output_paths(root, pair, paths, raw_receipt_must_be_absent=False)
-    documents = {
-        "gate_a_evidence": _vertical_output_document(
-            kind="gate_a_evidence", payload=gate_a_evidence, binding=binding, pair=pair,
-            source_head=source_head, source_tree=source_tree,
-        ),
-        "readiness": _vertical_output_document(
-            kind="readiness", payload=readiness, binding=binding, pair=pair,
-            source_head=source_head, source_tree=source_tree,
-        ),
-        "descriptor": _vertical_output_document(
-            kind="descriptor", payload=descriptor, binding=binding, pair=pair,
-            source_head=source_head, source_tree=source_tree,
-        ),
-        "authorization": _vertical_output_document(
-            kind="authorization", payload=authorization, binding=binding, pair=pair,
-            source_head=source_head, source_tree=source_tree,
-        ),
-        "mapping": _vertical_output_document(
-            kind="mapping", payload=mapping, binding=binding, pair=pair,
-            source_head=source_head, source_tree=source_tree,
-        ),
-    }
+    if set(documents) != set(paths.durable()):
+        raise A0XRuntimeBundleError("vertical Gate B durable output set is invalid")
     created: list[tuple[Path, os.stat_result]] = []
     try:
         for name, relative in paths.durable().items():
@@ -681,7 +862,7 @@ def _build_runtime_bundle(
     )
     mapping = _build_mapping(
         repository, pair, source_head, inputs.ccp_path, inputs.python_path,
-        inputs.descriptor_path, descriptor_sha256,
+        _required_legacy_descriptor_path(inputs), descriptor_sha256,
     )
     _revalidate_gate_a_evidence(repository, request, pair=pair, source_head=source_head, evidence=gate_a_evidence)
     if _source_state(source_state_probe) != (source_head, True):
@@ -695,6 +876,12 @@ def _build_runtime_bundle(
         authorization=authorization,
         mapping=mapping,
     )
+
+
+def _required_legacy_descriptor_path(inputs: _ValidatedPreparationInputs) -> str:
+    if inputs.descriptor_path is None:
+        raise A0XRuntimeBundleError("historical runtime preparation lacks its legacy descriptor path")
+    return inputs.descriptor_path
 
 
 def _load_fixed_dossier(root: Path, relative: str) -> tuple[dict[str, Any], PairBinding]:
@@ -721,6 +908,7 @@ def _validate_preparation_inputs(
     pair: PairBinding,
     source_head: str,
     ccp_version_probe: Callable[[Path], str],
+    derive_legacy_paths: bool = True,
 ) -> _ValidatedPreparationInputs:
     """Bind every input byte before any runtime output can be created."""
     _revision(source_head, "source HEAD")
@@ -745,7 +933,7 @@ def _validate_preparation_inputs(
         raise A0XRuntimeBundleError("CCP executable version differs from material contract")
     python_path = _external_executable(request.python_executable, "Python executable")
     child_path = _repository_file(root, "scripts/a0x_material_child.py")
-    descriptor_path = derive_runtime_paths(pair).launch_descriptor_path
+    descriptor_path = derive_runtime_paths(pair).launch_descriptor_path if derive_legacy_paths else None
     return _ValidatedPreparationInputs(
         ccp_path=ccp_path,
         python_path=python_path,

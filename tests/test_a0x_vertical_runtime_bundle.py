@@ -471,8 +471,82 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
                 validate_vertical_runtime_output(self.root, relative, binding)
             (self.root / relative).write_bytes(original)
 
+        descriptor = json.loads((self.root / outputs["descriptor"]).read_text(encoding="utf-8"))["payload"]
+        self.assertEqual(outputs["readiness"], descriptor["runtime_readiness"]["path"])
+        self.assertEqual(outputs["gate_a_evidence"], descriptor["gate_a_evidence"]["path"])
+        self.assertEqual(outputs["authorization"], descriptor["authorization_reference"]["path"])
+        authorization = json.loads((self.root / outputs["authorization"]).read_text(encoding="utf-8"))["payload"]
+        self.assertEqual(outputs["descriptor"], authorization["descriptor"]["path"])
+        self.assertEqual(outputs["readiness"], authorization["runtime_readiness"]["path"])
+        self.assertEqual(outputs["gate_a_evidence"], authorization["gate_a_evidence"]["path"])
+        mapping = json.loads((self.root / outputs["mapping"]).read_text(encoding="utf-8"))["payload"]
+        self.assertEqual(outputs["descriptor"], mapping["descriptor"]["path"])
+        self.assertEqual(outputs["authorization"], mapping["authorization"]["path"])
+        self.assertEqual(
+            hashlib.sha256((self.root / outputs["readiness"]).read_bytes()).hexdigest(),
+            descriptor["runtime_readiness"]["sha256"],
+        )
+        self.assertEqual(
+            hashlib.sha256((self.root / outputs["descriptor"]).read_bytes()).hexdigest(),
+            authorization["descriptor"]["sha256"],
+        )
+        self.assertEqual(
+            hashlib.sha256((self.root / outputs["authorization"]).read_bytes()).hexdigest(),
+            mapping["authorization"]["sha256"],
+        )
+
+        for relative, field, replacement in (
+            (outputs["descriptor"], "authorization_reference", {"role": "authorization", "path": ".a0x-runtime/legacy.json"}),
+            (outputs["mapping"], "descriptor", {"role": "descriptor", "path": ".a0x-runtime/legacy.json", "sha256": "0" * 64}),
+        ):
+            original = (self.root / relative).read_bytes()
+            substituted = json.loads(original)
+            substituted["payload"][field] = replacement
+            substituted["payload_sha256"] = hashlib.sha256(
+                json.dumps(substituted["payload"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            (self.root / relative).write_bytes(
+                json.dumps(substituted, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            )
+            with self.assertRaises(A0XRuntimeBundleError):
+                validate_vertical_runtime_output(self.root, relative, binding)
+            (self.root / relative).write_bytes(original)
+
         linked_relative = outputs["mapping"]
         alias = self.root / "independent-output-alias.json"
         os.link(self.root / linked_relative, alias)
         with self.assertRaises(A0XRuntimeBundleError):
             validate_vertical_runtime_output(self.root, linked_relative, binding)
+
+    def test_v2_preparation_does_not_compute_a_legacy_runtime_route(self) -> None:
+        """V2 uses only _VerticalOutputPaths, including its nested documents."""
+        from latent_triz.a0x_runtime_bundle import prepare_vertical_runtime_bundle
+        from tests.test_a0x_runtime_bundle import _synthetic_gate_a_verifier
+
+        binding = self._binding()
+        request = self._request(binding)
+        expected_ccp = json.loads(
+            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
+        )["ccp"]["sha256"]
+        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
+        with (
+            mock.patch("latent_triz.a0x_runtime_bundle.derive_runtime_paths", side_effect=AssertionError("legacy route reached")),
+            mock.patch(
+                "latent_triz.a0x_runtime_bundle.sha256_file",
+                side_effect=lambda path: (
+                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
+                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+                    if Path(path).resolve() == request.verifier_executable.resolve()
+                    else actual_hash(path)
+                ),
+            ),
+            mock.patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value={"artifact_class": "synthetic-readiness"}),
+            mock.patch("latent_triz.a0x_runtime_bundle.validate_gate_a_evidence", side_effect=lambda value: dict(value)),
+        ):
+            result = prepare_vertical_runtime_bundle(
+                self.root, request, source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("direct readiness probe reached")),
+                gate_a_verifier=_synthetic_gate_a_verifier,
+            )
+        self.assertTrue(all(path.startswith(".a0x-runtime/gate-b/v2/") for path in result["vertical_outputs"].values()))
