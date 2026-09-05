@@ -34,6 +34,7 @@
     "pair_binding": {"type": "object", "minProperties": 1},
     "members": {
       "type": "array",
+      "minItems": 4,
       "prefixItems": [
         {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "protocol.json"}}}]},
         {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "implementation.json"}}}]},

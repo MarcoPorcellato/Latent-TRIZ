@@ -163,6 +163,11 @@ class A0XSchemasTests(unittest.TestCase):
                 mutate(rejected["members"])
                 with self.subTest(value=value, members=rejected["members"]):
                     self.assertTrue(validate(rejected, schema))
+        for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
+            rejected = copy.deepcopy(value)
+            rejected["members"] = rejected["members"][:-1]
+            with self.subTest(value=value, members=rejected["members"]):
+                self.assertTrue(validate(rejected, schema))
 
     def test_terminal_taxonomy_requires_receipt_and_statistics_by_status(self) -> None:
         terminal_schema = self.schemas["a0x-terminal-result.schema.json"]
