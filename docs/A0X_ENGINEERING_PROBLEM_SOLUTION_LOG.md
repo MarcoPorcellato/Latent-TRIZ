@@ -1351,3 +1351,29 @@ only and replay from exact Git objects.
 **Status.** Target-free implementation correction only. No model, tokenizer,
 target, Gate B/C, CCP, Docker, network, remote, or publication authority is
 created by this record.
+
+## 50. Hosted PR checks lacked history and crossed a native-only test boundary
+
+**Problem.** GitHub run `33982279950` failed both repository lanes before any
+material access. The PR checkout for Python 3.11 and 3.12 was shallow, while
+the explicit historical-ledger audit requires exact ancestor Git objects.
+Separately, the disposable real-Git vertical-chain fixture invoked the
+production Darwin-only exclusive publication primitive on an Ubuntu runner.
+The primitive correctly refused the unsupported platform, but the fixture had
+not substituted its existing test-only publisher seam.
+
+**Correction.** Both repository-check lanes now fetch complete Git history so
+the historical verifier can replay the exact ancestor objects it already
+binds. On non-Darwin test hosts only, the real-Git fixture replaces the final
+native rename syscall with the existing private test publisher. All package,
+Git identity, mutation, Gate B, and Gate C logic remains production code.
+Darwin keeps the native primitive, and the dedicated tests still prove native
+flags, error mapping, unsupported-platform refusal, no-overwrite behavior, and
+ownership-safe cleanup.
+
+**Status.** Target-free CI portability correction. The failed workflow remains
+negative hosted evidence and is not reinterpreted. The affected implementation
+inventory, freezes, dossiers, and no-model receipt must be regenerated from the
+new correction commit before a fresh push. No model, tokenizer, target, Gate
+B/C, CCP, Docker, scoring, or scientific execution is authorized by this
+record.

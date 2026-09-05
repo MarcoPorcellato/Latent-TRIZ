@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import inspect
@@ -42,7 +43,7 @@ from latent_triz.a0x_vertical_slice import (
     generate_vertical_runtime_package,
     load_vertical_runtime_package,
 )
-from tests.test_a0x_vertical_slice import ROOT, _copy_file, _synthetic_repository
+from tests.test_a0x_vertical_slice import ROOT, _copy_file, _publish_at, _synthetic_repository
 
 
 _GIT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
@@ -75,8 +76,17 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
         self._git("commit", "-q", "-m", "real source fixture")
         self.head = self._git_output("rev-parse", "HEAD")
         self.tree = self._git_output("rev-parse", "HEAD^{tree}")
+        self.publish_patch = None
+        if sys.platform != "darwin":
+            self.publish_patch = mock.patch(
+                "latent_triz.a0x_vertical_slice._darwin_publish_exclusive_at",
+                new=_publish_at,
+            )
+            self.publish_patch.start()
 
     def tearDown(self) -> None:
+        if self.publish_patch is not None:
+            self.publish_patch.stop()
         self.temporary.cleanup()
 
     def _git(self, *argv: str) -> None:

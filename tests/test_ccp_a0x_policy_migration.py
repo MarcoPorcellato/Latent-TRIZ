@@ -92,6 +92,20 @@ class A0XPolicyMigrationTests(unittest.TestCase):
         self.assertNotIn("commit-ci-preflight verify", workflow)
         self.assertNotIn("secrets.", workflow)
 
+    def test_hosted_repository_lanes_fetch_full_history_for_historical_audits(self) -> None:
+        workflow = (ROOT / ".github/workflows/merge-policy.yml").read_text(
+            encoding="utf-8"
+        )
+        repository = workflow.split("\n  repository:\n", 1)[1].split(
+            "\n  python-311:\n", 1
+        )[0]
+        python_311 = workflow.split("\n  python-311:\n", 1)[1].split(
+            "\n  scientific:\n", 1
+        )[0]
+
+        self.assertIn("fetch-depth: 0", repository)
+        self.assertIn("fetch-depth: 0", python_311)
+
     def test_qualification_dossier_binds_the_old_plan_and_stays_unapproved(self) -> None:
         self.assertTrue(DOSSIER.is_file(), "qualification dossier is missing")
         dossier = json.loads(DOSSIER.read_text(encoding="utf-8"))
