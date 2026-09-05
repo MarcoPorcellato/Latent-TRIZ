@@ -47,6 +47,7 @@ from .a0x_material_contract import (
     validate_guard_launch_pair_binding,
     validate_qualification_evidence,
 )
+from .a0x_hosted_gate_a import canonical_json_bytes as hosted_gate_a_canonical_json_bytes
 from .a0x_runner import A0XRunnerError, planned_material_dossiers, vertical_slice_dossier_path
 from .a0x_runtime_readiness import (
     A0XRuntimeReadinessError,
@@ -699,6 +700,10 @@ def _vertical_gate_a_evidence_from_raw(
     """Reconstruct the sole v2 Gate-A projection from raw Gate-B documents."""
     authorization = _strict_object(gate_b_authorization_raw, "vertical Gate B authorization")
     receipt = _strict_object(gate_b_receipt_raw, "vertical Gate B verification receipt")
+    if _canonical_json(authorization) != gate_b_authorization_raw:
+        raise A0XCcpExecutorError("vertical Gate B authorization is not canonical JSON")
+    if hosted_gate_a_canonical_json_bytes(receipt) != gate_b_receipt_raw:
+        raise A0XCcpExecutorError("vertical Gate B verification receipt is not canonical JSON")
     _validate_vertical_raw_schema(
         authorization, "a0x-gate-b-authorization-v2.schema.json", "vertical Gate B authorization",
     )

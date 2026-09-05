@@ -254,6 +254,69 @@ class A0XVerticalMaterialTests(unittest.TestCase):
                     )
                 self.assertEqual(0, inert.calls)
 
+    def test_v2_gate_c_refuses_noncanonical_gate_b_raw_documents_before_preflight(self) -> None:
+        """Semantically equivalent raw Gate-B bytes are still an early terminal NO-GO."""
+        from latent_triz.a0x_ccp_executor import _launch_validated_vertical_v2, vertical_execution_authorization_path
+
+        for label in ("authorization", "receipt"):
+            with self.subTest(raw=label):
+                root, binding, prepared, head, tree = self._prepared_v2_graph()
+                authorization = self._v4_authorization(root, binding, prepared, head, tree)
+                gate_b_path = root / prepared["gate_b_authorization_path"]
+                receipt_path = root / prepared["verification_receipt_path"]
+                gate_b = json.loads(gate_b_path.read_text())
+                receipt = json.loads(receipt_path.read_text())
+
+                if label == "authorization":
+                    gate_b_raw = json.dumps(gate_b, indent=2).encode("utf-8")
+                    gate_b_path.write_bytes(gate_b_raw)
+                    receipt["authorization_raw_sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
+                    receipt_raw = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                    receipt_path.write_bytes(receipt_raw)
+                else:
+                    gate_b_raw = gate_b_path.read_bytes()
+                    receipt_raw = json.dumps(receipt, indent=2).encode("utf-8")
+                    receipt_path.write_bytes(receipt_raw)
+
+                evidence_path = root / prepared["vertical_outputs"]["gate_a_evidence"]
+                evidence_document = json.loads(evidence_path.read_text())
+                evidence_document["payload"]["gate_b_authorization_raw_sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
+                evidence_document["payload"]["verification_receipt"]["sha256"] = hashlib.sha256(receipt_raw).hexdigest()
+                evidence_document["payload_sha256"] = hashlib.sha256(
+                    json.dumps(evidence_document["payload"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest()
+                evidence_raw = json.dumps(evidence_document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                evidence_path.write_bytes(evidence_raw)
+                authorization["gate_b_authorization"]["sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
+                authorization["gate_a_verification_receipt"]["sha256"] = hashlib.sha256(receipt_raw).hexdigest()
+                authorization["gate_b_outputs"]["gate_a_evidence"]["sha256"] = hashlib.sha256(evidence_raw).hexdigest()
+                path = root / vertical_execution_authorization_path(binding)
+                path.parent.mkdir(parents=True)
+                path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+                preflight = mock.Mock()
+                preflight.produce.side_effect = AssertionError("preflight reached")
+                executor = mock.Mock(side_effect=AssertionError("guard reached"))
+                with (
+                    patch("latent_triz.a0x_runtime_bundle.load_vertical_runtime_package"),
+                    patch(
+                        "latent_triz.a0x_runtime_bundle.validate_vertical_runtime_output",
+                        side_effect=lambda _root, relative, _binding: json.loads((root / relative).read_text()),
+                    ),
+                    self.assertRaises(A0XCcpExecutorError) as caught,
+                ):
+                    _launch_validated_vertical_v2(
+                        repository_root=root, package_binding=binding,
+                        execution_authorization_path=path.relative_to(root).as_posix(),
+                        source_state_probe=lambda: (head, tree, True), process_executor=executor,
+                        guard_preflight_producer=preflight,
+                        executable_identity_verifier=_SyntheticExecutableIdentityVerifier(),
+                    )
+                preflight.produce.assert_not_called()
+                executor.assert_not_called()
+                self.assertFalse(path.with_name("attempt-claim.json").exists())
+                self.assertIn("not canonical JSON", str(caught.exception))
+
     def test_v2_gate_c_reconstructs_evidence_and_refuses_a_rebound_gate_b_package(self) -> None:
         """Raw Gate-B bytes cannot be rebound to a different P0 package graph."""
         from latent_triz.a0x_ccp_executor import (
