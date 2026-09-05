@@ -23,14 +23,19 @@
       "sha256": "06a3c748ae9491ed4cfbf53f5f8eecdd23ab4ac2a9f7ca465b57874b838aa236"
     },
     {
-      "bytes": 11419,
+      "bytes": 11619,
       "path": ".github/workflows/a0x-hosted-gate-a.yml",
-      "sha256": "5f74199107481c73adc2fa1efbd462c2a9d8b1d5009164892a2917d02ae595e4"
+      "sha256": "7dc2a1dbfc577345b7f247ee50914d327f0350a8bfc35ea64700856ab25a1491"
     },
     {
       "bytes": 37530,
       "path": "Makefile",
       "sha256": "8f0b6edd3f70b03e81271b1080d6712d00763cd84f3f1b70a9f56376c3a00ef5"
+    },
+    {
+      "bytes": 4397,
+      "path": "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json",
+      "sha256": "729406a5aa4d55372c62e61745ac687344f2caf6918d51f64dbd87182d131cf7"
     },
     {
       "bytes": 2318,
@@ -343,9 +348,9 @@
       "sha256": "8c7f52a69a41e0f8a9e946b0d023c4caa620420fef9bb7e9daa28d4454205b6f"
     },
     {
-      "bytes": 49508,
+      "bytes": 57509,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "89ad6447e414ca891957d23ae646edee709053ef45ff90db440c1dee76f20aed"
+      "sha256": "b180150972402d07b17807c14233f0cb057995ccc988df9eacceea77d5745894"
     },
     {
       "bytes": 50136,
@@ -543,9 +548,9 @@
       "sha256": "4eccc59caba77c00924871075e419c4f2f689da9a052614d4de1f789eb5435e6"
     },
     {
-      "bytes": 16252,
+      "bytes": 20146,
       "path": "tests/test_a0x_frozen_package.py",
-      "sha256": "1863e3ff45a8c2d881f465f5ed75c92e011c535f7618b188daacfc59b9638f6e"
+      "sha256": "c2d73680b4b69d5d2dace184d48bc6f97291d77408137c984158ce4c607ea05b"
     },
     {
       "bytes": 36391,
@@ -563,9 +568,9 @@
       "sha256": "93415a3537a68d7ffd9ff1284f588d316451617034dae31675b50883bbe3b113"
     },
     {
-      "bytes": 14410,
+      "bytes": 14446,
       "path": "tests/test_a0x_hosted_gate_a_workflow.py",
-      "sha256": "b41e05a253b5c3587eb0718eedc78ee202fe906173a13628e85f249c4ebbeb62"
+      "sha256": "011eb743a77881b1a2814b763df0ee8faee56535f964dd5b2ea106a8b6c14d12"
     },
     {
       "bytes": 39587,
@@ -688,6 +693,7 @@
     ".github/a0x-hosted-gate-a-lanes.json",
     ".github/workflows/a0x-hosted-gate-a.yml",
     "Makefile",
+    "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json",
     "docs/qualification/a0x-vertical-chain-historical-protection.json",
     "requirements-schema.in",
     "requirements-schema.lock",
