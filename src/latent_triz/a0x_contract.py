@@ -29,6 +29,14 @@ EXECUTION_AUTHORIZATION_PROFILE = "a0x-execution-authorization-json-v2"
 LEGACY_EXECUTION_AUTHORIZATION_PROFILE = EXECUTION_AUTHORIZATION_PROFILE
 CURRENT_EXECUTION_AUTHORIZATION_PROFILE = "a0x-execution-authorization-json-v3"
 QUALIFICATION_AUTHORIZATION_PROFILE = "a0x-qualification-authorization-json-v1"
+VERTICAL_PACKAGE_COMMITMENT_PROFILE = "a0x-vertical-package-commitment-v2"
+V2_MEMBER_NAMES = (
+    "protocol.json",
+    "implementation.json",
+    "freeze.json",
+    "approval-dossier.json",
+    "slice-manifest.json",
+)
 _COMMITMENT_PREFIXES = {
     APPROVAL_DOSSIER_PROFILE: b"A0X-APPROVAL-DOSSIER-COMMITMENT-V2\x00",
     EXECUTION_AUTHORIZATION_PROFILE: b"A0X-EXECUTION-AUTHORIZATION-COMMITMENT-V2\x00",
@@ -119,6 +127,100 @@ class ModelCard:
 def canonical_json_sha256(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def domain_sha256(value: Mapping[str, Any]) -> str:
+    """Hash a canonical, profile-separated v2 package commitment projection."""
+    try:
+        encoded = json.dumps(
+            dict(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise A0XContractError("vertical package commitment cannot encode") from error
+    return hashlib.sha256(b"A0X-VERTICAL-PACKAGE-COMMITMENT-V2\\x00" + encoded).hexdigest()
+
+
+def build_vertical_package_commitment(
+    *,
+    qualified_source: Mapping[str, str],
+    pair: PairBinding,
+    members: Sequence[Mapping[str, object]],
+    generator: Mapping[str, str],
+    authorization_id: str,
+    attempt_id: str,
+) -> dict[str, object]:
+    """Build the external, non-self-hashing P0 v2 package commitment."""
+    projection: dict[str, object] = {
+        "profile": VERTICAL_PACKAGE_COMMITMENT_PROFILE,
+        "qualified_source": dict(qualified_source),
+        "pair_binding": pair.as_mapping(),
+        "members": [dict(member) for member in members],
+        "generator": dict(generator),
+        "authorization_id": authorization_id,
+        "attempt_id": attempt_id,
+    }
+    projection["package_commitment_sha256"] = domain_sha256(projection)
+    return validate_vertical_package_commitment(projection)
+
+
+def validate_vertical_package_commitment(value: Mapping[str, object]) -> dict[str, object]:
+    """Strictly validate fixed-order v2 package commitment semantics."""
+    try:
+        document = strict_json_object(
+            json.dumps(
+                dict(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+            ).encode("utf-8"),
+        )
+        _exact_keys(
+            document,
+            {
+                "profile", "qualified_source", "pair_binding", "members", "generator",
+                "authorization_id", "attempt_id", "package_commitment_sha256",
+            },
+            "vertical package commitment",
+        )
+        if document["profile"] != VERTICAL_PACKAGE_COMMITMENT_PROFILE:
+            raise ValueError("profile")
+        qualified_source = _mapping(document, "qualified_source")
+        _exact_keys(qualified_source, {"head", "tree", "ref"}, "qualified source")
+        _revision(qualified_source, "head")
+        _revision(qualified_source, "tree")
+        if qualified_source["ref"] != "refs/heads/main":
+            raise ValueError("source ref")
+        pair = PairBinding.from_mapping(_mapping(document, "pair_binding"))
+        if document["pair_binding"] != pair.as_mapping():
+            raise ValueError("pair binding")
+        members = document["members"]
+        if not isinstance(members, list) or len(members) != len(V2_MEMBER_NAMES):
+            raise ValueError("members")
+        names: list[str] = []
+        for member in members:
+            if not isinstance(member, dict):
+                raise ValueError("member")
+            _exact_keys(member, {"name", "size", "sha256"}, "vertical package member")
+            name = _nonempty_string(member, "name")
+            if not isinstance(member["size"], int) or isinstance(member["size"], bool) or member["size"] < 1:
+                raise ValueError("member size")
+            _sha256(member, "sha256")
+            names.append(name)
+        if tuple(names) != V2_MEMBER_NAMES:
+            raise A0XContractError("vertical package member order is invalid")
+        generator = _mapping(document, "generator")
+        _exact_keys(generator, {"profile", "repository"}, "vertical package generator")
+        if generator != {"profile": "a0x-vertical-slice-v2", "repository": "MarcoPorcellato/Latent-TRIZ"}:
+            raise ValueError("generator")
+        _nonempty_string(document, "authorization_id")
+        _nonempty_string(document, "attempt_id")
+        commitment = _sha256(document, "package_commitment_sha256")
+        projection = {key: document[key] for key in document if key != "package_commitment_sha256"}
+        if commitment != domain_sha256(projection):
+            raise ValueError("package commitment")
+        _validate_authorization_document(document, "a0x-vertical-package-commitment-v2.schema.json")
+        return document
+    except A0XContractError:
+        raise
+    except (KeyError, TypeError, ValueError) as error:
+        raise A0XContractError("vertical package commitment is invalid") from error
 
 
 def strict_json_object(raw: bytes) -> dict[str, Any]:

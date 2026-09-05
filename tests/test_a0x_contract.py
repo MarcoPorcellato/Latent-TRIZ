@@ -15,11 +15,14 @@ from latent_triz.a0x_contract import (
     A0XContractError,
     Leg,
     PairBinding,
+    V2_MEMBER_NAMES,
+    VERTICAL_PACKAGE_COMMITMENT_PROFILE,
     assert_authorization_chain,
     assert_leg_freeze_binding,
     assert_pair_binding,
     assert_single_pair,
     build_leg_freeze_binding,
+    build_vertical_package_commitment,
     canonical_commitment,
     canonical_json_sha256,
     compute_dense_bound,
@@ -27,12 +30,41 @@ from latent_triz.a0x_contract import (
     endpoint_indices,
     sha256_file,
     strict_json_object,
+    validate_vertical_package_commitment,
 )
 from latent_triz.validator import validate
 from tests.a0x_test_support import A0XTempTestCase, artifact, pair_binding, sha
 
 
 class A0XContractTests(A0XTempTestCase):
+    def test_v2_package_commitment_is_external_ordered_and_domain_separated(self) -> None:
+        pair = PairBinding.from_mapping(pair_binding())
+        members = [
+            {"name": name, "size": index + 1, "sha256": sha(index + 70)}
+            for index, name in enumerate(V2_MEMBER_NAMES)
+        ]
+        document = build_vertical_package_commitment(
+            qualified_source={"head": "a" * 40, "tree": "b" * 40, "ref": "refs/heads/main"},
+            pair=pair,
+            members=members,
+            generator={"profile": "a0x-vertical-slice-v2", "repository": "MarcoPorcellato/Latent-TRIZ"},
+            authorization_id="p0-auth-test-01",
+            attempt_id="p0-attempt-test-01",
+        )
+        self.assertEqual(VERTICAL_PACKAGE_COMMITMENT_PROFILE, document["profile"])
+        self.assertNotIn("commitment_raw_sha256", document)
+        self.assertEqual(document, validate_vertical_package_commitment(document))
+        for mutate in (
+            lambda value: value.__setitem__("members", list(reversed(value["members"]))),
+            lambda value: value["members"][0].__setitem__("size", 0),
+            lambda value: value.__setitem__("package_commitment_sha256", "A" * 64),
+            lambda value: value.__setitem__("raw_sha256", sha(99)),
+        ):
+            rejected = copy.deepcopy(document)
+            mutate(rejected)
+            with self.subTest(rejected=rejected), self.assertRaisesRegex(A0XContractError, "vertical package"):
+                validate_vertical_package_commitment(rejected)
+
     def _current_gate_a_evidence(self, source_head: str = "a" * 40) -> dict[str, object]:
         base = f".a0x-runtime/gate-a/evidence/{source_head}"
         return {

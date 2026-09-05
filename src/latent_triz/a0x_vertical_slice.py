@@ -20,8 +20,11 @@ from .a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
     Leg,
     PairBinding,
+    V2_MEMBER_NAMES,
+    build_vertical_package_commitment,
     compute_dense_bound,
     derive_pair_output_path,
+    validate_vertical_package_commitment,
 )
 from .a0x_freeze import (
     _COMMON,
@@ -41,6 +44,12 @@ PUBLICATION_FAILED = "A0X_VERTICAL_SLICE_PUBLICATION_FAILED"
 PUBLICATION_OWNERSHIP_LOST = "A0X_VERTICAL_SLICE_PUBLICATION_OWNERSHIP_LOST"
 PUBLICATION_UNSUPPORTED = "A0X_VERTICAL_SLICE_PUBLICATION_UNSUPPORTED"
 VALIDATION_FAILED = "A0X_VERTICAL_SLICE_VALIDATION_FAILED"
+V2_INVALID_REQUEST = "A0X_VERTICAL_RUNTIME_PACKAGE_V2_INVALID_REQUEST"
+V2_OUTPUT_EXISTS = "A0X_VERTICAL_RUNTIME_PACKAGE_V2_OUTPUT_EXISTS"
+V2_PUBLICATION_FAILED = "A0X_VERTICAL_RUNTIME_PACKAGE_V2_PUBLICATION_FAILED"
+V2_PUBLICATION_OWNERSHIP_LOST = "A0X_VERTICAL_RUNTIME_PACKAGE_V2_PUBLICATION_OWNERSHIP_LOST"
+V2_VALIDATION_FAILED = "A0X_VERTICAL_RUNTIME_PACKAGE_V2_VALIDATION_FAILED"
+V2_GENERATOR_PROFILE = "a0x-vertical-slice-v2"
 RENAME_EXCL = 0x00000004
 RENAME_NOFOLLOW_ANY = 0x00000010
 
@@ -76,6 +85,34 @@ class VerticalSliceRequest:
     model_key: str
     implementation_source_head: str
     output_root: str
+
+
+@dataclass(frozen=True)
+class VerticalRuntimePackageRequest:
+    qualified_source_head: str
+    qualified_source_tree: str
+    leg: Leg
+    model_key: str
+    output_root: str
+    authorization_id: str
+    attempt_id: str
+
+
+@dataclass(frozen=True)
+class VerticalPackageBinding:
+    envelope_path: str
+    package_path: str
+    commitment_path: str
+    commitment_raw_sha256: str
+    package_commitment_sha256: str
+    dossier_path: str
+    dossier_sha256: str
+    qualified_source_head: str
+    qualified_source_tree: str
+    leg: Leg
+    model_key: str
+    model_revision: str
+    pair_binding: PairBinding
 
 
 @dataclass
@@ -1210,6 +1247,382 @@ def _darwin_publish_exclusive_at(parent_fd: int, stage_name: str, destination_na
         raise A0XVerticalSliceError(PUBLICATION_FAILED)
 
 
+def generate_vertical_runtime_package(
+    root: str | Path, request: VerticalRuntimePackageRequest,
+) -> VerticalPackageBinding:
+    """Publish one v2 P0 envelope without changing tracked source bytes."""
+    repository = _repository_root(root)
+    envelope_relative = _validate_v2_request(request)
+    observed_tree = _git_tree_for_head(repository, request.qualified_source_head)
+    if observed_tree != request.qualified_source_tree:
+        raise A0XVerticalSliceError(V2_INVALID_REQUEST)
+    _require_v2_checkout(repository, request.qualified_source_head, request.qualified_source_tree)
+    legacy_request = VerticalSliceRequest(
+        leg=request.leg,
+        model_key=request.model_key,
+        implementation_source_head=request.qualified_source_head,
+        output_root=_package_relative(
+            request.qualified_source_head, request.leg, request.model_key,
+        ).as_posix(),
+    )
+    with _RepositoryReader(repository) as prerequisites:
+        documents, pair_mapping = _build_documents(
+            prerequisites, legacy_request, request.qualified_source_tree, envelope_relative / "package",
+        )
+        pair = PairBinding.from_mapping(pair_mapping)
+        preliminary = {
+            name: _canonical_json_bytes(documents[name]) for name in V2_MEMBER_NAMES[:-1]
+        }
+        manifest = {
+            "artifact_class": "a0x-vertical-slice-manifest-v2",
+            "generator_profile": V2_GENERATOR_PROFILE,
+            "repository": REPOSITORY,
+            "qualified_source": {
+                "head": request.qualified_source_head,
+                "tree": request.qualified_source_tree,
+                "ref": "refs/heads/main",
+            },
+            "pair_binding": pair.as_mapping(),
+            "members": [
+                {"name": name, "size": len(preliminary[name]), "sha256": _sha256(preliminary[name])}
+                for name in V2_MEMBER_NAMES[:-1]
+            ],
+        }
+        documents["slice-manifest.json"] = manifest
+        encoded = {name: _canonical_json_bytes(documents[name]) for name in V2_MEMBER_NAMES}
+        _validate_v2_documents(prerequisites, documents, encoded, request, pair)
+
+    members = [
+        {"name": name, "size": len(encoded[name]), "sha256": _sha256(encoded[name])}
+        for name in V2_MEMBER_NAMES
+    ]
+    commitment = build_vertical_package_commitment(
+        qualified_source={
+            "head": request.qualified_source_head,
+            "tree": request.qualified_source_tree,
+            "ref": "refs/heads/main",
+        },
+        pair=pair,
+        members=members,
+        generator={"profile": V2_GENERATOR_PROFILE, "repository": REPOSITORY},
+        authorization_id=request.authorization_id,
+        attempt_id=request.attempt_id,
+    )
+    commitment_raw = _canonical_json_bytes(commitment)
+    _publish_v2_envelope(repository, envelope_relative, encoded, commitment_raw, request)
+    package_relative = envelope_relative / "package"
+    dossier_relative = package_relative / "approval-dossier.json"
+    return VerticalPackageBinding(
+        envelope_path=envelope_relative.as_posix(),
+        package_path=package_relative.as_posix(),
+        commitment_path=(envelope_relative / "p0-commitment.json").as_posix(),
+        commitment_raw_sha256=_sha256(commitment_raw),
+        package_commitment_sha256=str(commitment["package_commitment_sha256"]),
+        dossier_path=dossier_relative.as_posix(),
+        dossier_sha256=_sha256(encoded["approval-dossier.json"]),
+        qualified_source_head=request.qualified_source_head,
+        qualified_source_tree=request.qualified_source_tree,
+        leg=request.leg,
+        model_key=request.model_key,
+        model_revision=pair.revision,
+        pair_binding=pair,
+    )
+
+
+def load_vertical_runtime_package(
+    root: str | Path, binding: VerticalPackageBinding,
+) -> dict[str, Any]:
+    """Descriptor-relatively reload and fully validate one v2 P0 envelope."""
+    repository = _repository_root(root)
+    _validate_v2_binding(binding)
+    envelope_relative = PurePosixPath(binding.envelope_path)
+    _require_v2_checkout(repository, binding.qualified_source_head, binding.qualified_source_tree)
+    parent = _open_package_parent(repository, envelope_relative, create=False, package_is_parent=True)
+    package_fd: int | None = None
+    try:
+        _revalidate_chain(parent)
+        if set(os.listdir(parent.fd)) != {"package", "p0-commitment.json"}:
+            raise A0XVerticalSliceError(V2_VALIDATION_FAILED)
+        package_fd = os.open(
+            "package", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent.fd,
+        )
+        if set(os.listdir(package_fd)) != set(V2_MEMBER_NAMES):
+            raise A0XVerticalSliceError(V2_VALIDATION_FAILED)
+        raw = {
+            name: _read_regular_at(package_fd, name, _MAX_DOCUMENT_BYTES, V2_VALIDATION_FAILED)
+            for name in V2_MEMBER_NAMES
+        }
+        commitment_raw = _read_regular_at(
+            parent.fd, "p0-commitment.json", _MAX_DOCUMENT_BYTES, V2_VALIDATION_FAILED,
+        )
+        _revalidate_chain(parent)
+    except A0XVerticalSliceError as error:
+        if error.code == V2_VALIDATION_FAILED:
+            raise
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED) from error
+    except OSError as error:
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED) from error
+    finally:
+        if package_fd is not None:
+            os.close(package_fd)
+        _close_parent(parent)
+    try:
+        documents = {name: _parse_json_object(raw[name]) for name in V2_MEMBER_NAMES}
+        commitment = _parse_json_object(commitment_raw)
+        if any(raw[name] != _canonical_json_bytes(documents[name]) for name in V2_MEMBER_NAMES):
+            raise ValueError("noncanonical member")
+        if commitment_raw != _canonical_json_bytes(commitment):
+            raise ValueError("noncanonical commitment")
+        commitment = validate_vertical_package_commitment(commitment)
+        pair = PairBinding.from_mapping(documents["slice-manifest.json"]["pair_binding"])
+        request = VerticalRuntimePackageRequest(
+            qualified_source_head=binding.qualified_source_head,
+            qualified_source_tree=binding.qualified_source_tree,
+            leg=binding.leg,
+            model_key=binding.model_key,
+            output_root=binding.envelope_path,
+            authorization_id=str(commitment["authorization_id"]),
+            attempt_id=str(commitment["attempt_id"]),
+        )
+        _validate_v2_loaded_documents(documents, raw, commitment, request, pair, binding)
+    except (A0XVerticalSliceError, ValueError, KeyError, TypeError) as error:
+        if isinstance(error, A0XVerticalSliceError) and error.code == V2_VALIDATION_FAILED:
+            raise
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED) from error
+    _require_v2_checkout(repository, binding.qualified_source_head, binding.qualified_source_tree)
+    return {
+        "binding": binding,
+        "package_commitment_sha256": binding.package_commitment_sha256,
+        "dossier_sha256": binding.dossier_sha256,
+        "commitment": commitment,
+        "documents": documents,
+    }
+
+
+def _validate_v2_request(request: VerticalRuntimePackageRequest) -> PurePosixPath:
+    if (
+        not isinstance(request, VerticalRuntimePackageRequest)
+        or not isinstance(request.leg, Leg)
+        or not isinstance(request.model_key, str)
+        or _MODEL_KEY.fullmatch(request.model_key) is None
+        or not isinstance(request.qualified_source_head, str)
+        or _REVISION.fullmatch(request.qualified_source_head) is None
+        or not isinstance(request.qualified_source_tree, str)
+        or _REVISION.fullmatch(request.qualified_source_tree) is None
+        or not isinstance(request.authorization_id, str) or not request.authorization_id
+        or not isinstance(request.attempt_id, str) or not request.attempt_id
+        or not isinstance(request.output_root, str)
+    ):
+        raise A0XVerticalSliceError(V2_INVALID_REQUEST)
+    expected = _v2_envelope_relative(
+        request.qualified_source_head, request.qualified_source_tree, request.leg, request.model_key,
+    )
+    if request.output_root != expected.as_posix() or PurePosixPath(request.output_root) != expected:
+        raise A0XVerticalSliceError(V2_INVALID_REQUEST)
+    return expected
+
+
+def _v2_envelope_relative(head: str, tree: str, leg: Leg, model_key: str) -> PurePosixPath:
+    return PurePosixPath(".a0x-runtime", "p0", "v2", head, tree, leg.value, model_key)
+
+
+def _require_v2_checkout(repository: Path, head: str, tree: str) -> None:
+    try:
+        _require_checkout_state(repository, head, tree, frozenset())
+    except A0XVerticalSliceError as error:
+        raise A0XVerticalSliceError(V2_INVALID_REQUEST) from error
+
+
+def _validate_v2_documents(
+    prerequisites: _RepositoryReader,
+    documents: Mapping[str, Mapping[str, Any]],
+    encoded: Mapping[str, bytes],
+    request: VerticalRuntimePackageRequest,
+    pair: PairBinding,
+) -> None:
+    if set(documents) != set(V2_MEMBER_NAMES) or set(encoded) != set(V2_MEMBER_NAMES):
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED)
+    for name, schema in (
+        ("protocol.json", "a0x-protocol.schema.json"),
+        ("implementation.json", "a0x-implementation.schema.json"),
+        ("freeze.json", "a0x-freeze-manifest.schema.json"),
+        ("approval-dossier.json", "a0x-authorization-dossier.schema.json"),
+        ("slice-manifest.json", "a0x-vertical-slice-manifest-v2.schema.json"),
+    ):
+        _validate_schema(prerequisites, documents[name], schema)
+    manifest = documents["slice-manifest.json"]
+    if (
+        manifest.get("qualified_source")
+        != {"head": request.qualified_source_head, "tree": request.qualified_source_tree, "ref": "refs/heads/main"}
+        or manifest.get("pair_binding") != pair.as_mapping()
+        or manifest.get("members")
+        != [
+            {"name": name, "size": len(encoded[name]), "sha256": _sha256(encoded[name])}
+            for name in V2_MEMBER_NAMES[:-1]
+        ]
+    ):
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED)
+
+
+def _publish_v2_envelope(
+    repository: Path,
+    envelope_relative: PurePosixPath,
+    encoded: Mapping[str, bytes],
+    commitment_raw: bytes,
+    request: VerticalRuntimePackageRequest,
+) -> None:
+    parent = _open_package_parent(repository, envelope_relative, create=True)
+    transaction: _PublicationTransaction | None = None
+    package_fd: int | None = None
+    try:
+        _revalidate_chain(parent)
+        if _exists_at(parent.fd, parent.destination_name):
+            raise A0XVerticalSliceError(V2_OUTPUT_EXISTS)
+        transaction = _create_stage(parent)
+        os.mkdir("package", 0o700, dir_fd=transaction.stage_fd)
+        package_fd = os.open(
+            "package", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=transaction.stage_fd,
+        )
+        for name in V2_MEMBER_NAMES:
+            _write_member_at(package_fd, name, encoded[name])
+        _write_member_at(transaction.stage_fd, "p0-commitment.json", commitment_raw)
+        if set(os.listdir(package_fd)) != set(V2_MEMBER_NAMES) or set(os.listdir(transaction.stage_fd)) != {"package", "p0-commitment.json"}:
+            raise A0XVerticalSliceError(V2_PUBLICATION_FAILED)
+        os.fsync(package_fd)
+        os.fsync(transaction.stage_fd)
+        os.fsync(parent.fd)
+        _before_publish(transaction)
+        _revalidate_chain(parent)
+        _assert_owned_stage(transaction)
+        if _exists_at(parent.fd, parent.destination_name):
+            raise A0XVerticalSliceError(V2_OUTPUT_EXISTS)
+        _require_v2_checkout(repository, request.qualified_source_head, request.qualified_source_tree)
+        _darwin_publish_exclusive_at(parent.fd, transaction.stage_name, parent.destination_name)
+        transaction.state = "published"
+        _after_publish(transaction)
+        _assert_published(transaction)
+        _assert_published_chain(transaction)
+        os.fsync(parent.fd)
+    except A0XVerticalSliceError as error:
+        _cleanup_v2_stage(transaction)
+        if error.code in {V2_OUTPUT_EXISTS, V2_INVALID_REQUEST}:
+            raise
+        if error.code == PUBLICATION_OWNERSHIP_LOST:
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST) from error
+        raise A0XVerticalSliceError(V2_PUBLICATION_FAILED) from error
+    except (OSError, ValueError) as error:
+        _cleanup_v2_stage(transaction)
+        raise A0XVerticalSliceError(V2_PUBLICATION_FAILED) from error
+    finally:
+        if package_fd is not None:
+            os.close(package_fd)
+        if transaction is not None:
+            os.close(transaction.stage_fd)
+        _close_parent(parent)
+
+
+def _validate_v2_binding(binding: VerticalPackageBinding) -> None:
+    if not isinstance(binding, VerticalPackageBinding):
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED)
+    envelope = _v2_envelope_relative(
+        binding.qualified_source_head, binding.qualified_source_tree, binding.leg, binding.model_key,
+    )
+    package = envelope / "package"
+    if (
+        binding.envelope_path != envelope.as_posix()
+        or binding.package_path != package.as_posix()
+        or binding.commitment_path != (envelope / "p0-commitment.json").as_posix()
+        or binding.dossier_path != (package / "approval-dossier.json").as_posix()
+        or _REVISION.fullmatch(binding.qualified_source_head) is None
+        or _REVISION.fullmatch(binding.qualified_source_tree) is None
+        or _MODEL_KEY.fullmatch(binding.model_key) is None
+        or _REVISION.fullmatch(binding.model_revision) is None
+        or not isinstance(binding.pair_binding, PairBinding)
+        or binding.pair_binding != PairBinding.from_mapping(binding.pair_binding.as_mapping())
+        or binding.pair_binding.leg is not binding.leg
+        or binding.pair_binding.model_key != binding.model_key
+        or binding.pair_binding.revision != binding.model_revision
+        or _sha256_pattern_invalid(binding.commitment_raw_sha256)
+        or _sha256_pattern_invalid(binding.package_commitment_sha256)
+        or _sha256_pattern_invalid(binding.dossier_sha256)
+    ):
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED)
+
+
+def _sha256_pattern_invalid(value: object) -> bool:
+    return not isinstance(value, str) or re.fullmatch(r"[a-f0-9]{64}", value) is None
+
+
+def _cleanup_v2_stage(transaction: _PublicationTransaction | None) -> None:
+    """Remove only an unchanged unpublished v2 staging inode."""
+    if transaction is None or transaction.state != "staged":
+        return
+    try:
+        metadata = os.stat(transaction.stage_name, dir_fd=transaction.parent.fd, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or (metadata.st_dev, metadata.st_ino) != transaction.stage_identity
+            or set(os.listdir(transaction.stage_fd)) != {"package", "p0-commitment.json"}
+        ):
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+        package_fd = os.open(
+            "package", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+            dir_fd=transaction.stage_fd,
+        )
+        try:
+            if set(os.listdir(package_fd)) != set(V2_MEMBER_NAMES):
+                raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+            for name in V2_MEMBER_NAMES:
+                member = os.stat(name, dir_fd=package_fd, follow_symlinks=False)
+                if not stat.S_ISREG(member.st_mode) or member.st_nlink != 1:
+                    raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+                os.unlink(name, dir_fd=package_fd)
+        finally:
+            os.close(package_fd)
+        os.rmdir("package", dir_fd=transaction.stage_fd)
+        commitment = os.stat("p0-commitment.json", dir_fd=transaction.stage_fd, follow_symlinks=False)
+        if not stat.S_ISREG(commitment.st_mode) or commitment.st_nlink != 1:
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+        os.unlink("p0-commitment.json", dir_fd=transaction.stage_fd)
+        metadata = os.stat(transaction.stage_name, dir_fd=transaction.parent.fd, follow_symlinks=False)
+        if (metadata.st_dev, metadata.st_ino) != transaction.stage_identity:
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+        os.rmdir(transaction.stage_name, dir_fd=transaction.parent.fd)
+        os.fsync(transaction.parent.fd)
+    except A0XVerticalSliceError:
+        raise
+    except OSError as error:
+        raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST) from error
+
+
+def _validate_v2_loaded_documents(
+    documents: Mapping[str, dict[str, Any]], raw: Mapping[str, bytes], commitment: Mapping[str, object],
+    request: VerticalRuntimePackageRequest, pair: PairBinding, binding: VerticalPackageBinding,
+) -> None:
+    expected_source = {
+        "head": request.qualified_source_head, "tree": request.qualified_source_tree, "ref": "refs/heads/main",
+    }
+    members = [
+        {"name": name, "size": len(raw[name]), "sha256": _sha256(raw[name])}
+        for name in V2_MEMBER_NAMES
+    ]
+    manifest = documents["slice-manifest.json"]
+    if (
+        commitment.get("qualified_source") != expected_source
+        or commitment.get("pair_binding") != pair.as_mapping()
+        or commitment.get("members") != members
+        or manifest.get("qualified_source") != expected_source
+        or manifest.get("pair_binding") != pair.as_mapping()
+        or manifest.get("members") != members[:-1]
+        or documents["approval-dossier.json"].get("pair_binding") != pair.as_mapping()
+        or documents["approval-dossier.json"].get("implementation_source_head") != request.qualified_source_head
+        or _sha256(raw["approval-dossier.json"]) != binding.dossier_sha256
+        or _sha256(_canonical_json_bytes(dict(commitment))) != binding.commitment_raw_sha256
+        or commitment.get("package_commitment_sha256") != binding.package_commitment_sha256
+    ):
+        raise A0XVerticalSliceError(V2_VALIDATION_FAILED)
+
+
 __all__ = [
     "A0XVerticalSliceError",
     "GENERATOR_PROFILE",
@@ -1219,7 +1632,17 @@ __all__ = [
     "PUBLICATION_OWNERSHIP_LOST",
     "PUBLICATION_UNSUPPORTED",
     "VALIDATION_FAILED",
+    "V2_GENERATOR_PROFILE",
+    "V2_INVALID_REQUEST",
+    "V2_OUTPUT_EXISTS",
+    "V2_PUBLICATION_FAILED",
+    "V2_PUBLICATION_OWNERSHIP_LOST",
+    "V2_VALIDATION_FAILED",
+    "VerticalPackageBinding",
+    "VerticalRuntimePackageRequest",
     "VerticalSliceRequest",
+    "generate_vertical_runtime_package",
     "generate_vertical_slice",
+    "load_vertical_runtime_package",
     "load_vertical_slice",
 ]
