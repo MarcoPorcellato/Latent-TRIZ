@@ -11,8 +11,9 @@ import hashlib
 import json
 import os
 import re
+import stat
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping
 
 from .a0x_ccp_executor import runtime_mapping_path
@@ -25,6 +26,7 @@ from .a0x_contract import (
     sha256_file,
     strict_json_object,
 )
+from .a0x_gate_contract import HashBoundPath, HostedInputBindings, VERTICAL_GATE_B_AUTHORIZATION_PROFILE
 from .a0x_material_contract import (
     ADMISSION_TIMEOUT_SECONDS,
     CLEANUP_MARGIN_SECONDS,
@@ -43,6 +45,7 @@ from .a0x_runtime_readiness import (
     runtime_readiness_path,
     validate_runtime_readiness,
 )
+from .a0x_vertical_slice import VerticalPackageBinding, load_vertical_runtime_package
 from .validator import validate
 
 
@@ -53,6 +56,7 @@ _MAPPING_PROFILE = "a0x-runtime-role-mapping-v1"
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _MATERIAL_CONTRACT_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-material-execution-contract.schema.json"
 _GATE_B_AUTHORIZATION_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-gate-b-authorization.schema.json"
+_VERTICAL_GATE_B_AUTHORIZATION_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-gate-b-authorization-v2.schema.json"
 _GATE_A_RECEIPT_SCHEMA = _REPOSITORY_ROOT / "schemas/a0x-hosted-gate-a-verification-receipt.schema.json"
 _ENVIRONMENT = (
     "HF_HUB_OFFLINE=1",
@@ -78,6 +82,20 @@ class A0XRuntimeBundleError(RuntimeError):
 @dataclass(frozen=True)
 class RuntimePreparationRequest:
     fixed_dossier: str
+    gate_b_authorization: Path
+    verifier_executable: Path
+    verifier_policy: Path
+    ccp_executable: Path
+    python_executable: Path
+    authorization_id: str
+    attempt_id: str
+
+
+@dataclass(frozen=True)
+class VerticalRuntimePreparationRequest:
+    """Future-only Gate B request anchored by one P0 v2 package binding."""
+
+    package_binding: VerticalPackageBinding
     gate_b_authorization: Path
     verifier_executable: Path
     verifier_policy: Path
@@ -184,6 +202,183 @@ def preflight_runtime_bundle(
         "authorization_id": request.authorization_id,
         "attempt_id": request.attempt_id,
     }
+
+
+def preflight_vertical_runtime_bundle(
+    root: Path,
+    request: VerticalRuntimePreparationRequest,
+    *,
+    source_state_probe: Callable[[], tuple[str, str, bool]],
+    ccp_version_probe: Callable[[Path], str],
+    runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+    gate_a_verifier: Callable[[GateBVerificationRequest], bytes] | None = None,
+) -> dict[str, Any]:
+    """Validate exactly one v2 package before Gate B may use any capability.
+
+    The preflight deliberately ignores capability callbacks.  It is a strict
+    no-write selector for the later materialisation route.
+    """
+    del runtime_readiness_probe, gate_a_verifier
+    repository = Path(root).resolve(strict=True)
+    source_head, source_tree, source_clean = _vertical_source_state(source_state_probe)
+    binding = request.package_binding
+    if (
+        not isinstance(binding, VerticalPackageBinding)
+        or (source_head, source_tree) != (binding.qualified_source_head, binding.qualified_source_tree)
+        or not source_clean
+    ):
+        raise A0XRuntimeBundleError("vertical Gate B source state does not match package binding")
+    package = _load_vertical_package(repository, binding)
+    dossier, pair = _vertical_dossier(package, binding)
+    _preflight_output_paths(repository, pair, source_head)
+    inputs = _validate_preparation_inputs(
+        repository, request, dossier=dossier, pair=pair, source_head=source_head,
+        ccp_version_probe=ccp_version_probe,
+    )
+    authorization_path, authorization_raw, authorization = _vertical_gate_b_authorization(repository, request)
+    _validate_vertical_gate_b_static(
+        repository, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head, source_tree=source_tree, binding=binding,
+    )
+    paths = derive_runtime_paths(pair)
+    return {
+        "status": "preflight",
+        "qualified_source": {"head": source_head, "tree": source_tree},
+        "pair_binding": pair.as_mapping(),
+        "package_commitment_sha256": binding.package_commitment_sha256,
+        "commitment_raw_sha256": binding.commitment_raw_sha256,
+        "dossier_path": binding.dossier_path,
+        "dossier_sha256": binding.dossier_sha256,
+        "verification_receipt_path": authorization["verification_receipt_path"],
+        "readiness_path": runtime_readiness_path(pair),
+        "descriptor_path": paths.launch_descriptor_path,
+        "authorization_path": paths.authorization_path,
+        "mapping_path": runtime_mapping_path(pair, source_head=source_head),
+        "authorization_id": request.authorization_id,
+        "attempt_id": request.attempt_id,
+        "ccp_sha256": inputs.ccp_sha256,
+    }
+
+
+def prepare_vertical_runtime_bundle(
+    root: Path,
+    request: VerticalRuntimePreparationRequest,
+    *,
+    source_state_probe: Callable[[], tuple[str, str, bool]],
+    ccp_version_probe: Callable[[Path], str],
+    runtime_readiness_probe: Callable[[Path, PairBinding, str, Path], Mapping[str, Any]],
+    gate_a_verifier: Callable[[GateBVerificationRequest], bytes] | None = None,
+) -> dict[str, Any]:
+    """Prepare v2 Gate B documents after the package/static boundary passes.
+
+    This shares only document construction with the historical route.  Its
+    selector is the typed v2 package; it never accepts a fixed dossier.
+    """
+    repository = Path(root).resolve(strict=True)
+    source_head, source_tree, source_clean = _vertical_source_state(source_state_probe)
+    binding = request.package_binding
+    if not source_clean or (source_head, source_tree) != (binding.qualified_source_head, binding.qualified_source_tree):
+        raise A0XRuntimeBundleError("vertical Gate B source state does not match package binding")
+    package = _load_vertical_package(repository, binding)
+    dossier, pair = _vertical_dossier(package, binding)
+    _preflight_output_paths(repository, pair, source_head)
+    inputs = _validate_preparation_inputs(
+        repository, request, dossier=dossier, pair=pair, source_head=source_head,
+        ccp_version_probe=ccp_version_probe,
+    )
+    authorization_path, authorization_raw, authorization = _vertical_gate_b_authorization(repository, request)
+    _validate_vertical_gate_b_static(
+        repository, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head, source_tree=source_tree, binding=binding,
+    )
+    verifier = _required_gate_a_verifier if gate_a_verifier is None else gate_a_verifier
+    gate_a_evidence = _verify_vertical_gate_a_evidence(
+        repository, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head, source_tree=source_tree, verifier=verifier,
+    )
+    # The hosted verifier is an external capability. Re-bind the P0 envelope
+    # before spending the next capability (the readiness probe).
+    _vertical_dossier(_load_vertical_package(repository, binding), binding)
+    readiness = _runtime_readiness(runtime_readiness_probe, repository, pair, source_head, inputs.python_path)
+    readiness_sha256 = hashlib.sha256(canonical_json_bytes(readiness)).hexdigest()
+    descriptor = _build_descriptor(
+        repository, pair, source_head, inputs.python_path, inputs.child_path,
+        inputs.contract_sha256, readiness_sha256,
+    )
+    descriptor_sha256 = hashlib.sha256(canonical_json_bytes(descriptor)).hexdigest()
+    runtime_authorization = _build_authorization(
+        dossier, pair, source_head, descriptor_sha256, gate_a_evidence,
+        inputs.ccp_identity, inputs.python_sha256, inputs.child_sha256,
+        request.authorization_id, request.attempt_id,
+    )
+    mapping = _build_mapping(
+        repository, pair, source_head, inputs.ccp_path, inputs.python_path,
+        inputs.descriptor_path, descriptor_sha256,
+    )
+    # Re-read the ignored envelope after every injected capability and before
+    # the first readiness/descriptor/authorization/mapping write.
+    _vertical_dossier(_load_vertical_package(repository, binding), binding)
+    _validate_vertical_gate_b_static(
+        repository, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head, source_tree=source_tree, binding=binding,
+        receipt_must_be_absent=False,
+    )
+    if _vertical_source_state(source_state_probe) != (source_head, source_tree, True):
+        raise A0XRuntimeBundleError("vertical Gate B source state drifted before output")
+    summary = _write_and_verify_bundle(
+        repository, pair, source_head, readiness, descriptor, runtime_authorization, mapping,
+    )
+    summary.update({
+        "qualified_source": {"head": source_head, "tree": source_tree},
+        "package_commitment_sha256": binding.package_commitment_sha256,
+        "commitment_raw_sha256": binding.commitment_raw_sha256,
+        "dossier_path": binding.dossier_path,
+        "dossier_sha256": binding.dossier_sha256,
+    })
+    return summary
+
+
+def vertical_package_binding_from_commitment(
+    root: Path, commitment_path: str,
+) -> VerticalPackageBinding:
+    """Derive the complete v2 selector from its sole external commitment path."""
+    repository = Path(root).resolve(strict=True)
+    relative = _relative_path(commitment_path, "vertical commitment")
+    parts = PurePosixPath(relative).parts
+    if len(parts) != 8 or parts[:3] != (".a0x-runtime", "p0", "v2") or parts[-1] != "p0-commitment.json":
+        raise A0XRuntimeBundleError("vertical commitment path is not canonical")
+    _, _, _, head, tree, leg, model_key, _filename = parts
+    _revision(head, "vertical commitment source HEAD")
+    _revision(tree, "vertical commitment source tree")
+    try:
+        pair_leg = PairBinding.from_mapping
+        raw = _repository_file(repository, relative).read_bytes()
+        commitment = strict_json_object(raw)
+        from .a0x_contract import validate_vertical_package_commitment
+        validated = validate_vertical_package_commitment(commitment)
+        pair = pair_leg(_mapping(validated, "pair_binding", "vertical commitment"))
+        dossier_member = next(member for member in validated["members"] if member["name"] == "approval-dossier.json")
+    except (A0XContractError, StopIteration, TypeError, ValueError) as error:
+        raise A0XRuntimeBundleError("vertical commitment is invalid") from error
+    if pair.leg.value != leg or pair.model_key != model_key or validated["qualified_source"] != {"head": head, "tree": tree, "ref": "refs/heads/main"}:
+        raise A0XRuntimeBundleError("vertical commitment selector does not match its path")
+    envelope = "/".join(parts[:-1])
+    package = f"{envelope}/package"
+    return VerticalPackageBinding(
+        envelope_path=envelope,
+        package_path=package,
+        commitment_path=relative,
+        commitment_raw_sha256=hashlib.sha256(raw).hexdigest(),
+        package_commitment_sha256=str(validated["package_commitment_sha256"]),
+        dossier_path=f"{package}/approval-dossier.json",
+        dossier_sha256=str(dossier_member["sha256"]),
+        qualified_source_head=head,
+        qualified_source_tree=tree,
+        leg=pair.leg,
+        model_key=pair.model_key,
+        model_revision=pair.revision,
+        pair_binding=pair,
+    )
 
 
 def _build_runtime_bundle(
@@ -370,6 +565,169 @@ def _gate_b_authorization(root: Path, request: RuntimePreparationRequest) -> tup
     except (A0XContractError, KeyError, TypeError) as error:
         raise A0XRuntimeBundleError("Gate B authorization pair binding is invalid") from error
     return path, raw, value
+
+
+def _vertical_source_state(
+    probe: Callable[[], tuple[str, str, bool]],
+) -> tuple[str, str, bool]:
+    try:
+        source_head, source_tree, clean = probe()
+    except Exception as error:
+        raise A0XRuntimeBundleError("vertical Gate B source-state probe failed") from error
+    _revision(source_head, "vertical source HEAD")
+    _revision(source_tree, "vertical source tree")
+    if not isinstance(clean, bool):
+        raise A0XRuntimeBundleError("vertical Gate B source cleanliness is invalid")
+    return source_head, source_tree, clean
+
+
+def _load_vertical_package(root: Path, binding: VerticalPackageBinding) -> Mapping[str, Any]:
+    try:
+        return load_vertical_runtime_package(root, binding)
+    except Exception as error:
+        raise A0XRuntimeBundleError("vertical Gate B package binding is invalid") from error
+
+
+def _vertical_dossier(
+    package: Mapping[str, Any], binding: VerticalPackageBinding,
+) -> tuple[Mapping[str, Any], PairBinding]:
+    try:
+        documents = _mapping(package, "documents", "vertical package")
+        dossier = _mapping(documents, "approval-dossier.json", "vertical package")
+        pair = PairBinding.from_mapping(_mapping(dossier, "pair_binding", "vertical dossier"))
+        raw = _vertical_canonical_json_bytes(dossier)
+        if (
+            hashlib.sha256(raw).hexdigest() != binding.dossier_sha256
+            or pair != binding.pair_binding
+            or pair.leg != binding.leg
+            or pair.model_key != binding.model_key
+            or pair.revision != binding.model_revision
+        ):
+            raise ValueError("dossier binding")
+        canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE)
+    except (A0XContractError, TypeError, ValueError) as error:
+        raise A0XRuntimeBundleError("vertical Gate B dossier binding is invalid") from error
+    return dossier, pair
+
+
+def _vertical_canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
+    """Match Task-1's canonical JSON representation, including its single LF."""
+    try:
+        return (
+            json.dumps(dict(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+            + "\n"
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise A0XRuntimeBundleError("vertical package document is not canonical JSON") from error
+
+
+def _vertical_gate_b_authorization(
+    root: Path, request: VerticalRuntimePreparationRequest,
+) -> tuple[Path, bytes, dict[str, Any]]:
+    path = _controlled_repository_file(root, request.gate_b_authorization, "vertical Gate B authorization")
+    raw = path.read_bytes()
+    try:
+        value = strict_json_object(raw)
+    except A0XContractError as error:
+        raise A0XRuntimeBundleError("vertical Gate B authorization is not strict JSON") from error
+    _validate_schema(value, _VERTICAL_GATE_B_AUTHORIZATION_SCHEMA, "vertical Gate B authorization")
+    try:
+        value["pair_binding"] = PairBinding.from_mapping(value["pair_binding"]).as_mapping()
+    except (A0XContractError, KeyError, TypeError) as error:
+        raise A0XRuntimeBundleError("vertical Gate B authorization pair binding is invalid") from error
+    return path, raw, value
+
+
+def _validate_vertical_gate_b_static(
+    root: Path,
+    request: VerticalRuntimePreparationRequest,
+    authorization_path: Path,
+    authorization_raw: bytes,
+    authorization: Mapping[str, Any],
+    *,
+    pair: PairBinding,
+    source_head: str,
+    source_tree: str,
+    binding: VerticalPackageBinding,
+    receipt_must_be_absent: bool = True,
+) -> tuple[Path, Path]:
+    if (
+        authorization.get("authorization_profile") != VERTICAL_GATE_B_AUTHORIZATION_PROFILE
+        or authorization.get("source_head") != source_head
+        or authorization.get("source_tree") != source_tree
+        or authorization.get("pair_binding") != pair.as_mapping()
+        or authorization.get("authorization_id") != request.authorization_id
+    ):
+        raise A0XRuntimeBundleError("vertical Gate B authorization does not match package binding")
+    expected_package = {
+        "envelope_path": binding.envelope_path,
+        "package_path": binding.package_path,
+        "commitment_path": binding.commitment_path,
+        "commitment_raw_sha256": binding.commitment_raw_sha256,
+        "package_commitment_sha256": binding.package_commitment_sha256,
+        "dossier_path": binding.dossier_path,
+        "dossier_sha256": binding.dossier_sha256,
+    }
+    if authorization.get("vertical_package") != expected_package:
+        raise A0XRuntimeBundleError("vertical Gate B authorization package binding drifted")
+    try:
+        hosted_inputs = HostedInputBindings(**{
+            name: HashBoundPath(**value) for name, value in authorization["hosted_inputs"].items()
+        })
+        hosted_inputs.require_source_head(source_head)
+    except (TypeError, ValueError) as error:
+        raise A0XRuntimeBundleError("vertical Gate B hosted input paths are invalid") from error
+    policy_path = _controlled_repository_file(root, request.verifier_policy, "verifier policy")
+    executable = _external_executable(request.verifier_executable, "verifier executable")
+    if hashlib.sha256(policy_path.read_bytes()).hexdigest() != authorization["verifier"]["policy_raw_sha256"]:
+        raise A0XRuntimeBundleError("verifier policy bytes differ from vertical Gate B authorization")
+    if sha256_file(executable) != authorization["verifier"]["sha256"]:
+        raise A0XRuntimeBundleError("verifier executable bytes differ from vertical Gate B authorization")
+    for hosted_binding in authorization["hosted_inputs"].values():
+        path = _repository_file(root, hosted_binding["path"])
+        metadata = path.stat(follow_symlinks=False)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or hashlib.sha256(path.read_bytes()).hexdigest() != hosted_binding["sha256"]
+        ):
+            raise A0XRuntimeBundleError("hosted input bytes differ from vertical Gate B authorization")
+    if receipt_must_be_absent and os.path.lexists(root / authorization["verification_receipt_path"]):
+        raise A0XRuntimeBundleError("vertical Gate B verification receipt destination is already occupied")
+    return policy_path, executable
+
+
+def _verify_vertical_gate_a_evidence(
+    root: Path,
+    request: VerticalRuntimePreparationRequest,
+    authorization_path: Path,
+    authorization_raw: bytes,
+    authorization: Mapping[str, Any],
+    *,
+    pair: PairBinding,
+    source_head: str,
+    source_tree: str,
+    verifier: Callable[[GateBVerificationRequest], bytes],
+) -> dict[str, Any]:
+    policy_path, executable = _validate_vertical_gate_b_static(
+        root, request, authorization_path, authorization_raw, authorization,
+        pair=pair, source_head=source_head, source_tree=source_tree, binding=request.package_binding,
+    )
+    try:
+        returned_raw = verifier(
+            GateBVerificationRequest(
+                root, authorization_path, executable, policy_path,
+                authorization_schema_name="a0x-gate-b-authorization-v2.schema.json",
+            ),
+        )
+    except Exception as error:
+        raise A0XRuntimeBundleError("vertical Gate B verification refused") from error
+    if not isinstance(returned_raw, bytes):
+        raise A0XRuntimeBundleError("vertical Gate B verifier returned invalid receipt bytes")
+    return _gate_a_evidence_from_receipt(
+        root, authorization_path, authorization_raw, authorization, returned_raw,
+        pair=pair, source_head=source_head,
+    )
 
 
 def _validate_gate_b_static(
@@ -868,7 +1226,9 @@ def _identifier(value: Any, label: str) -> str:
 
 
 __all__ = [
-    "A0XRuntimeBundleError", "RuntimePreparationRequest", "canonical_json_bytes",
-    "preflight_runtime_bundle", "prepare_runtime_bundle", "_build_authorization", "_build_descriptor", "_build_mapping",
+    "A0XRuntimeBundleError", "RuntimePreparationRequest", "VerticalRuntimePreparationRequest", "canonical_json_bytes",
+    "preflight_runtime_bundle", "prepare_runtime_bundle", "preflight_vertical_runtime_bundle",
+    "prepare_vertical_runtime_bundle", "vertical_package_binding_from_commitment",
+    "_build_authorization", "_build_descriptor", "_build_mapping",
     "_exclusive_write", "_load_fixed_dossier", "_write_and_verify_bundle",
 ]

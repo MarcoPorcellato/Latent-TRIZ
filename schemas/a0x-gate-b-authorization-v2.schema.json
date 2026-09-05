@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "bound_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-a/evidence/[a-f0-9]{40}/[A-Za-z0-9._-]+$"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_class", "authorization_profile", "authorization_status", "repository",
+    "source_head", "source_tree", "job_workflow_sha", "source_sha", "pair_binding",
+    "hosted_inputs", "verifier", "vertical_package", "verification_receipt_path",
+    "max_verification_count", "stop_boundary", "authorization_id"
+  ],
+  "properties": {
+    "artifact_class": {"const": "a0x-gate-b-authorization"},
+    "authorization_profile": {"const": "a0x-gate-b-authorization-v2"},
+    "authorization_status": {"const": "authorized"},
+    "repository": {"const": "MarcoPorcellato/Latent-TRIZ"},
+    "source_head": {"$ref": "#/$defs/revision"},
+    "source_tree": {"$ref": "#/$defs/revision"},
+    "job_workflow_sha": {"$ref": "#/$defs/revision"},
+    "source_sha": {"$ref": "#/$defs/revision"},
+    "pair_binding": {"type": "object", "minProperties": 1},
+    "hosted_inputs": {
+      "type": "object", "additionalProperties": false,
+      "required": ["manifest", "attestation_bundle", "trusted_root", "transport"],
+      "properties": {
+        "manifest": {"$ref": "#/$defs/bound_path"},
+        "attestation_bundle": {"$ref": "#/$defs/bound_path"},
+        "trusted_root": {"$ref": "#/$defs/bound_path"},
+        "transport": {"$ref": "#/$defs/bound_path"}
+      }
+    },
+    "verifier": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "version", "sha256", "policy_raw_sha256"],
+      "properties": {
+        "role": {"const": "github_cli_verifier"},
+        "version": {"const": "gh version 2.97.0 (2026-07-31)"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "policy_raw_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "vertical_package": {
+      "type": "object", "additionalProperties": false,
+      "required": ["envelope_path", "package_path", "commitment_path", "commitment_raw_sha256", "package_commitment_sha256", "dossier_path", "dossier_sha256"],
+      "properties": {
+        "envelope_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+$"},
+        "package_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/package$"},
+        "commitment_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/p0-commitment\\.json$"},
+        "commitment_raw_sha256": {"$ref": "#/$defs/sha256"},
+        "package_commitment_sha256": {"$ref": "#/$defs/sha256"},
+        "dossier_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/package/approval-dossier\\.json$"},
+        "dossier_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "verification_receipt_path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-b-verifications/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/gate-a-verification-receipt\\.json$"},
+    "max_verification_count": {"const": 1},
+    "stop_boundary": {"const": "after_gate_b_runtime_bundle"},
+    "authorization_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}
+  }
+}

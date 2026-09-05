@@ -17,6 +17,7 @@ _TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}
 _REPOSITORY = "MarcoPorcellato/Latent-TRIZ"
 _VERIFIER_SHA256 = "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
 _VERIFIER_VERSION = "gh version 2.97.0 (2026-07-31)"
+VERTICAL_GATE_B_AUTHORIZATION_PROFILE = "a0x-gate-b-authorization-v2"
 
 
 class A0XGateContractError(ValueError):
@@ -121,6 +122,46 @@ class GateBAuthorizationInputs:
 
 
 @dataclass(frozen=True)
+class VerticalGateBAuthorizationInputs:
+    """Gate B v2 authorization plus one external P0 package commitment."""
+
+    base: GateBAuthorizationInputs
+    envelope_path: str
+    package_path: str
+    commitment_path: str
+    commitment_raw_sha256: str
+    package_commitment_sha256: str
+    dossier_path: str
+    dossier_sha256: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.base, GateBAuthorizationInputs):
+            raise A0XGateContractError("vertical Gate B base authorization is invalid")
+        for label, value in (
+            ("vertical envelope path", self.envelope_path),
+            ("vertical package path", self.package_path),
+            ("vertical commitment path", self.commitment_path),
+            ("vertical dossier path", self.dossier_path),
+        ):
+            if not isinstance(value, str) or not value or value.startswith("/") or ".." in value.split("/"):
+                raise A0XGateContractError(f"{label} is invalid")
+        for label, value in (
+            ("vertical commitment raw SHA-256", self.commitment_raw_sha256),
+            ("vertical package commitment SHA-256", self.package_commitment_sha256),
+            ("vertical dossier SHA-256", self.dossier_sha256),
+        ):
+            _require_sha256(value, label)
+
+
+def _vertical_package_paths(pair: PairBinding, source_head: str, source_tree: str) -> tuple[str, str, str, str]:
+    base = (
+        f".a0x-runtime/p0/v2/{source_head}/{source_tree}/"
+        f"{pair.leg.value}/{pair.model_key}"
+    )
+    return base, f"{base}/package", f"{base}/p0-commitment.json", f"{base}/package/approval-dossier.json"
+
+
+@dataclass(frozen=True)
 class VerificationReceiptInputs:
     """Typed immutable values required to project one verified Hosted receipt."""
 
@@ -167,6 +208,52 @@ def build_gate_b_authorization(pair: PairBinding, inputs: GateBAuthorizationInpu
         "stop_boundary": "after_gate_b_runtime_bundle",
         "authorization_id": inputs.authorization_id,
     }
+
+
+def build_vertical_gate_b_authorization(
+    pair: PairBinding, inputs: VerticalGateBAuthorizationInputs,
+) -> dict[str, Any]:
+    """Build the future-only Gate B authorization for exactly one v2 package.
+
+    This keeps Hosted Gate A's ordinary facts intact while refusing a caller-
+    selected dossier or package.  The paths are derived only from the source
+    identity and canonical pair.
+    """
+    pair = _validated_pair(pair)
+    if not isinstance(inputs, VerticalGateBAuthorizationInputs):
+        raise A0XGateContractError("vertical Gate B authorization inputs are invalid")
+    base = inputs.base
+    expected_envelope, expected_package, expected_commitment, expected_dossier = _vertical_package_paths(
+        pair, base.source_head, base.source_tree,
+    )
+    if (
+        inputs.envelope_path != expected_envelope
+        or inputs.package_path != expected_package
+        or inputs.commitment_path != expected_commitment
+        or inputs.dossier_path != expected_dossier
+    ):
+        raise A0XGateContractError("vertical Gate B package paths are not derived")
+    document = build_gate_b_authorization(pair, base)
+    document.update(
+        {
+            "authorization_profile": VERTICAL_GATE_B_AUTHORIZATION_PROFILE,
+            "vertical_package": {
+                "envelope_path": inputs.envelope_path,
+                "package_path": inputs.package_path,
+                "commitment_path": inputs.commitment_path,
+                "commitment_raw_sha256": inputs.commitment_raw_sha256,
+                "package_commitment_sha256": inputs.package_commitment_sha256,
+                "dossier_path": inputs.dossier_path,
+                "dossier_sha256": inputs.dossier_sha256,
+            },
+            "verification_receipt_path": (
+                f".a0x-runtime/gate-b-verifications/{base.source_head}/"
+                f"{pair.leg.value}/{pair.model_key}/{pair.run_id}/"
+                "gate-a-verification-receipt.json"
+            ),
+        },
+    )
+    return document
 
 
 def build_verification_receipt(pair: PairBinding, inputs: VerificationReceiptInputs) -> dict[str, Any]:

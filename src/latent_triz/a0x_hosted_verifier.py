@@ -61,6 +61,7 @@ class GateBVerificationRequest:
     authorization_path: Path
     verifier_executable: Path
     verifier_policy_path: Path
+    authorization_schema_name: str = "a0x-gate-b-authorization.schema.json"
 
 
 @dataclass(frozen=True)
@@ -223,7 +224,12 @@ def _verify_hosted_gate_a_after_verifier_preflight(
     if _sha256(executable.read_bytes()) != pinned_verifier.raw_sha256:
         raise A0XHostedVerifierError(INPUT_HASH_MISMATCH)
     authorization_raw = authorization_path.read_bytes()
-    authorization = _load_schema_object(authorization_raw, "a0x-gate-b-authorization.schema.json")
+    if request.authorization_schema_name not in {
+        "a0x-gate-b-authorization.schema.json",
+        "a0x-gate-b-authorization-v2.schema.json",
+    }:
+        raise A0XHostedVerifierError(INPUT_INVALID)
+    authorization = _load_schema_object(authorization_raw, request.authorization_schema_name)
     try:
         pair = PairBinding.from_mapping(authorization["pair_binding"])
     except (A0XContractError, KeyError, TypeError) as error:
