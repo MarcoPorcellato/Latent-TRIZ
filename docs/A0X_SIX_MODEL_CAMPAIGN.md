@@ -18,25 +18,36 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
-## Current pair-scoped vertical-slice checkpoint — 2026-09-02
+## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
-The trusted package generator, selector-only material launcher, manifest
-schema, and their target-free tests are now part of the implementation
-surface. The operational authority is [A0X pair-scoped vertical
-slice](A0X_VERTICAL_SLICE.md). The two historical batch freezes, twelve batch
-dossiers, and no-model receipt predate this trusted surface. They remain
-historical and stale; they are not current pair-package evidence and must not
-be regenerated or rewritten under this checkpoint.
+The current target-free implementation anchor is
+`2bed9da6cd51877162f7efa39d2b1906219b1101`. It regenerated the two leg
+implementation inventories, two freezes, twelve approval-request dossiers, and
+the no-model receipt. Those regenerated batch artifacts remain current only
+for deterministic no-model verification; they are **not** a new material route.
 
-The first possible package is only `A0 / smollm2_360m`, and requires a separate
-exact-head P0 authorization for target-free package generation. P0, hosted Gate
-A, offline Gate B, local Gate C, target-free result verification, and
-publication are distinct authorization gates. Passing one does not authorize
-the next. A0-R1 may begin only after the A0 terminal report, under a separate
-authorization. No corpus, prompt, control, statistic, endpoint, stopping rule,
-or other scientific rule may change between those legs.
+The sole future execution route is:
 
-## Current Hosted Gate A capture-wrapper recovery checkpoint — 2026-09-02
+```text
+Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
+```
+
+P0 v2 creates one ignored, atomic local envelope bound to a protected-main
+`HEAD/tree`, one leg/model pair, and a separate package commitment. Gate B v2
+and Gate C v2 consume that same typed binding and have no v1 or batch fallback.
+The tracked v1 vertical package, historical CCP/Matrix Gate A evidence, and
+pre-convergence batch material interpretations are historical evidence only.
+Their protected hashes are recorded in
+[`docs/qualification/a0x-vertical-chain-historical-protection.json`](qualification/a0x-vertical-chain-historical-protection.json).
+
+The next stop is a separate authorization for one protected-main Hosted Gate A
+run, followed by separately authorized capture and P0 v2. Gate B v2, Gate C,
+model/tokenizer access, target reads, scoring, CCP, Docker, network use, and
+publication remain unauthorized. A0-R1 remains blocked until the A0 terminal
+report and its own authorization. Frozen scientific inputs do not change
+between legs.
+
+## Historical Hosted Gate A capture-wrapper recovery checkpoint — 2026-09-02
 
 The recovered target-free capture library, shell-free adapter, request and
 transport schemas, and both capture test modules are now trusted inputs in

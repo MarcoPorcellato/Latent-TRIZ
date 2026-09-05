@@ -1235,3 +1235,41 @@ was stale (`50136` current bytes versus `47086` bound bytes). No artifact was
 created and no rerun is authorized. The regenerated package is now at
 `62dd5cd9c747f986fc41c364ea86306f0d7164ac`; a fresh Hosted Gate A is required
 for that exact head.
+
+## 45. Tracked vertical packages created a source-identity cycle
+
+**Problem.** The tracked `a0x-vertical-slice-v1` package bound its own
+`implementation_source_head`. Publishing it necessarily changed the checkout
+identity required by P0 and later Gate C, while the batch Gate B route accepted
+only the unrelated twelve-dossier set. The sequence could not produce one
+stable source/package identity; repeated preparation would only move the
+mismatch.
+
+**Correction.** The future-only v2 route separates protected-main source
+identity from local package identity: `Hosted Gate A -> capture -> P0 v2 ->
+Gate B v2 -> Gate C v2 -> verification`. P0 v2 writes an ignored atomic
+envelope containing the canonical five-member package and a non-self-hashing
+external commitment. Gate B v2 and Gate C v2 reload the same typed binding,
+source `HEAD/tree`, raw commitment, dossier, and pair; v1 and batch routes are
+rejected for new work. The implementation inventory now binds every v2
+schema/source/script/test path, including the schema cardinality baseline.
+
+**Historical protection.** The tracked v1 package and historical review bytes
+are recorded in
+`docs/qualification/a0x-vertical-chain-historical-protection.json`. Generated
+batch inventories/freezes/dossiers and the no-model receipt are explicitly
+distinguished as current target-free derivatives and were regenerated from
+implementation anchor `2bed9da6cd51877162f7efa39d2b1906219b1101`; they do
+not authorize material work.
+
+**Residual limitation.** Ignored runtime storage is not Git-attested. Every
+P0/Gate B/Gate C validation window therefore assumes no untrusted same-user
+namespace mutator; it enforces trusted-root containment, no-follow traversal,
+regular-file/link-count/inode/size/hash checks, atomic absent-destination
+publication, and ownership-loss refusal. This reduces but cannot eliminate a
+same-user concurrent-mutator threat without operator isolation.
+
+**Next boundary.** Stop at `sealed_gate_pending`. A new exact authorization is
+required first for one Hosted Gate A run on protected main, then separately for
+capture, P0 v2, Gate B v2, Gate C, and any publication. No model, tokenizer,
+target, scoring, CCP, Docker, network, or scientific claim is opened here.

@@ -3,34 +3,25 @@ Current A0X lifecycle, hashes, and active boundary: see the sole ledger in
 `docs/A0X_ARCHITECTURE_CONVERGENCE.md`. Earlier A0X checkpoint blocks below are
 historical.
 
-Current vertical-slice integration checkpoint (2026-09-02): the trusted
-pair-scoped package generator, selector-only launcher, manifest schema, and
-target-free aggregate registration are complete. Canonical operational order:
-`docs/A0X_VERTICAL_SLICE.md`. The two batch freezes, twelve dossiers, and
-no-model receipt are historical and stale; do not regenerate, rewrite, or use
-them as current pair-package evidence.
+Current vertical Gate-Chain Convergence checkpoint (2026-09-05): target-free
+implementation/inventory anchor `2bed9da6cd51877162f7efa39d2b1906219b1101`.
+Canonical route: `Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2
+-> verification`. P0 v2 is the only future package route: an ignored, atomic
+envelope bound to one protected-main HEAD/tree, one pair, and an external
+commitment. Gate B v2 and Gate C v2 have no v1 or batch fallback.
 
-P0 target-free package generation, Gate A, Gate B, Gate C, result verification,
-and publication each require a separate exact-head authorization. First scope,
-if authorized, is only `A0 / smollm2_360m`. A0-R1 remains blocked until the A0
-terminal report and its own authorization; no scientific input or rule may
-change between legs. This checkpoint does not authorize package generation,
-model/tokenizer/target access, CCP, Docker, network, GitHub, publication, push,
-PR, merge, or retry.
+The regenerated two inventories, two freezes, twelve dossiers, and no-model
+receipt are current target-free verification artifacts only; they do not
+authorize material work. Tracked v1 packages, CCP/Matrix Gate A evidence, and
+earlier batch material interpretations are historical. The next required
+authorization is one exact protected-main Hosted Gate A run; capture, P0 v2,
+Gate B v2, Gate C v2, and publication remain separate later authorizations.
 
-Current capture-wrapper recovery checkpoint (2026-09-02): the target-free
-Hosted Gate A capture library, shell-free adapter, request/transport schemas,
-and both capture test modules are in the active A0X implementation inventory
-definition; both test modules are in the synthetic aggregate. Existing tracked
-inventories, freezes, twelve dossiers, and no-model receipt predate this
-trusted surface and are intentionally stale. Do not regenerate.
-
-Require one new explicit authorization bound to the exact implementation HEAD
-for one target-free regeneration of both inventories/freezes, all twelve
-dossiers, and the no-model receipt, followed by the full deterministic suite,
-independent review, and local closure. This authorization must not be inferred
-to permit real GitHub/CLI capture, network, publication, Gate B/C, CCP, Docker,
-model, tokenizer, target, or scientific execution.
+First future pair remains `A0 / smollm2_360m`; A0-R1 remains blocked until the
+A0 terminal report. No scientific input/rule may change between legs. This
+checkpoint grants no model/tokenizer/target access, CCP, Docker, network,
+GitHub mutation, package generation, scoring, publication, push, PR, merge, or
+retry.
 
 --- Historical checkpoint below; retained with original hashes and outcomes ---
 

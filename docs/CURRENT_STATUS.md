@@ -25,6 +25,26 @@ and immutable null packages from the reference-integrated and comparative
 studies. None is expert-validated TRIZ evidence, causal evidence, or evidence
 for the Strong Latent TRIZ Hypothesis.
 
+## A0X vertical Gate-Chain Convergence — current local route
+
+The current target-free A0X route is:
+
+```text
+Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
+```
+
+The implementation inventory/freeze/dossier anchor is
+`2bed9da6cd51877162f7efa39d2b1906219b1101`. It is local target-free evidence,
+not a Hosted Gate A qualification. The ignored P0 v2 envelope is intentionally
+not generated yet. It will bind one protected-main `HEAD/tree`, one pair, and
+one external package commitment after separately authorized Hosted evidence
+capture.
+
+Tracked v1 vertical packages, CCP/Matrix Gate A receipts, and earlier batch
+material interpretations are historical only. The six-model frozen science is
+unchanged. No Gate B/C material step, model/tokenizer access, target read,
+scoring, network action, CCP/Docker action, or publication is authorized.
+
 ## What is delivered
 
 ### Laboratory and governance

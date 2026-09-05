@@ -13,6 +13,21 @@ C, load a model or tokenizer, read a target, use CCP heavy work, use Docker, or
 contact GitHub. Each listed external step needs its own separate authorization
 bound to the exact source and files involved.
 
+## Current vertical-chain consumer — 2026-09-05
+
+Hosted Gate A qualifies a protected-main source `HEAD/tree`; it does not create
+or attest a P0 package. After a separately authorized capture of the four
+hosted inputs, only P0 v2 may create an ignored atomic package envelope. The
+current consumer chain is `Hosted Gate A -> capture -> P0 v2 -> Gate B v2 ->
+Gate C v2 -> verification`. P0 v2, Gate B v2, and Gate C v2 each bind the same
+source identity and external package commitment.
+
+Historical CCP/Matrix Gate A evidence, tracked v1 vertical packages, and
+earlier batch artifacts retain their original historical meanings. They cannot
+substitute for a new Hosted Gate A run or for a v2 package. This text grants no
+capture, network, GitHub CLI, P0, Gate B, Gate C, model, tokenizer, target,
+CCP, Docker, or publication authority.
+
 ## Capture-wrapper recovery checkpoint — 2026-09-02
 
 The target-free capture library and shell-free adapter are restored locally.
