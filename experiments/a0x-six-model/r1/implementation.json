@@ -678,9 +678,9 @@
       "sha256": "3d5d17fa16e45127622632447f319db1bce06c0d0829b972b7dc25f910ba4988"
     },
     {
-      "bytes": 35653,
+      "bytes": 36039,
       "path": "tests/test_a0x_vertical_gate_chain_v2.py",
-      "sha256": "cb06ca18b7913ad06a28b9af36276262a22efc1e12ea3fe75c24dc0e2a2c1716"
+      "sha256": "79c3d75f0ab28c525bbae9ac024c8441ac86a998eef3aec140318f88037508f5"
     },
     {
       "bytes": 48626,

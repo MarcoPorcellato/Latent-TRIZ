@@ -4,7 +4,7 @@ Current A0X lifecycle, hashes, and active boundary: see the sole ledger in
 historical.
 
 Current vertical Gate-Chain Convergence checkpoint (2026-09-05): target-free
-implementation/inventory anchor `513742e492fc0b53e9f5d2c4bfa5f74c9b510722`.
+implementation/inventory anchor `5e6204217c2fdf675a8c6dbce0310e8882c893c2`.
 Canonical route: `Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2
 -> verification`. P0 v2 is the only future package route: an ignored, atomic
 envelope bound to one protected-main HEAD/tree, one pair, and an external
@@ -16,6 +16,11 @@ authorize material work. Tracked v1 packages, CCP/Matrix Gate A evidence, and
 earlier batch material interpretations are historical. The next required
 authorization is one exact protected-main Hosted Gate A run; capture, P0 v2,
 Gate B v2, Gate C v2, and publication remain separate later authorizations.
+
+Hosted PR run `33982279950` is preserved as a failed portability result. The
+shallow-history and Linux test-fixture causes are corrected at the current
+anchor; no material capability was reached and a fresh exact-head hosted run is
+still required.
 
 First future pair remains `A0 / smollm2_360m`; A0-R1 remains blocked until the
 A0 terminal report. No scientific input/rule may change between legs. This

@@ -14,7 +14,7 @@ and the event-by-event chronology remains in [`docs/log.md`](./log.md).
 
 ## Public checkpoint
 
-- **Public main:** `0e41e042ec9ded01075c5761ba1e6e7e4bc0e7b9`
+- **Public main:** `a2d2b5647524b81a746b2d375bf542e7ae190a0a`
 - **Repository:** [MarcoPorcellato/Latent-TRIZ](https://github.com/MarcoPorcellato/Latent-TRIZ)
 - **Scientific posture:** exploratory, reproducible, and claim-free
 - **Registered claims:** all remain `E0`; `data/claims.jsonl` is unchanged
@@ -34,11 +34,11 @@ Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
 ```
 
 The implementation inventory/freeze/dossier anchor is
-`513742e492fc0b53e9f5d2c4bfa5f74c9b510722`. Current regenerated hashes are A0
-implementation `0d1efb54ab6752e35c7999fe7e704e1f818cab95ffefbc40e82b3af681d2bc3e`,
-R1 implementation `a6ee9f3b04c7472a8babef503aef2dd348727380f2463f1a9bc2093c9d67e493`,
-A0 freeze `5d61aa4299a87dcb63068584b22717440f8328f640a632527c56a4f3c7b5eff4`,
-R1 freeze `988b3fe6daab02885d05bfe345e9f344773cfaddbedced9287240e807a9452fd`,
+`5e6204217c2fdf675a8c6dbce0310e8882c893c2`. Current regenerated hashes are A0
+implementation `b7154e101879795e7c7e3802b4ece095a226728b283121e2e806967f3850b269`,
+R1 implementation `43b591531b3f5b7df87c198a1218937fbbbc6c3f1737e936c1318faf2c0c771e`,
+A0 freeze `6b4394ee07bd6309656c20b86e0de02042a6d2bc5a6c140593a7818ea7cab398`,
+R1 freeze `d56011da52080de43e8af8722a685e9ea851efd3afead8506ab1a59e43879ae6`,
 and no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
 The new pre-regeneration ledger hash is
 `6bf7391457b56ef91493a89112da77c3de4d5f7dc7d1756701020187778b16ad`. It is local target-free evidence,
@@ -46,6 +46,13 @@ not a Hosted Gate A qualification. The ignored P0 v2 envelope is intentionally
 not generated yet. It will bind one protected-main `HEAD/tree`, one pair, and
 one external package commitment after separately authorized Hosted evidence
 capture.
+
+The first hosted PR run for this convergence, `33982279950`, is preserved as a
+failed portability result: shallow repository-check lanes could not replay the
+bound historical Git objects, and the Linux fixture reached the intentional
+Darwin-only publication refusal. Both causes are corrected at the anchor above;
+the production Darwin boundary remains unchanged. A fresh hosted run is
+required and the failed run is not reinterpreted.
 
 Tracked v1 vertical packages, CCP/Matrix Gate A receipts, and earlier batch
 material interpretations are historical only. The six-model frozen science is

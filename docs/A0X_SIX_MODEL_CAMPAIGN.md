@@ -21,17 +21,23 @@ publication.
 ## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
 The current target-free implementation anchor is
-`513742e492fc0b53e9f5d2c4bfa5f74c9b510722` (final branch HEAD may postdate
+`5e6204217c2fdf675a8c6dbce0310e8882c893c2` (final branch HEAD may postdate
 this implementation anchor). Current regenerated hashes are A0/R1
-implementation `0d1efb54ab6752e35c7999fe7e704e1f818cab95ffefbc40e82b3af681d2bc3e` /
-`a6ee9f3b04c7472a8babef503aef2dd348727380f2463f1a9bc2093c9d67e493`, A0/R1
-freeze `5d61aa4299a87dcb63068584b22717440f8328f640a632527c56a4f3c7b5eff4` /
-`988b3fe6daab02885d05bfe345e9f344773cfaddbedced9287240e807a9452fd`, and
+implementation `b7154e101879795e7c7e3802b4ece095a226728b283121e2e806967f3850b269` /
+`43b591531b3f5b7df87c198a1218937fbbbc6c3f1737e936c1318faf2c0c771e`, A0/R1
+freeze `6b4394ee07bd6309656c20b86e0de02042a6d2bc5a6c140593a7818ea7cab398` /
+`d56011da52080de43e8af8722a685e9ea851efd3afead8506ab1a59e43879ae6`, and
 no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
 It regenerated the two leg
 implementation inventories, two freezes, twelve approval-request dossiers, and
 the no-model receipt. Those regenerated batch artifacts remain current only
 for deterministic no-model verification; they are **not** a new material route.
+
+Hosted PR run `33982279950` remains a failed, non-material portability result.
+Its two causes—shallow history in the repository lanes and an unpatched
+Darwin-only syscall in the Linux real-Git fixture—are corrected at the anchor
+above. The production syscall and fail-closed platform boundary are unchanged;
+a new hosted run must prove the corrected exact head.
 
 The sole future execution route is:
 
