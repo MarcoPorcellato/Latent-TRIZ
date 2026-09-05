@@ -206,6 +206,15 @@ class A0XFrozenPackageTests(unittest.TestCase):
             with self.assertRaisesRegex(A0XFreezeError, "historical parent is unavailable"):
                 verify_batch_pre_regeneration_ledger(shallow, copied)
 
+    def test_batch_pre_regeneration_ledger_refuses_symlink_before_resolution(self) -> None:
+        """A symlink must not be resolved into an accepted historical ledger."""
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            alias = Path(directory) / "ledger.json"
+            alias.symlink_to(ledger)
+            with self.assertRaisesRegex(A0XFreezeError, "symlink|independent regular file"):
+                verify_batch_pre_regeneration_ledger(ROOT, alias)
+
     def test_historical_vertical_evidence_manifest_remains_byte_identical(self) -> None:
         manifest = load("docs/qualification/a0x-vertical-chain-historical-protection.json")
         self.assertEqual("a0x-vertical-chain-historical-protection-v1", manifest["profile"])

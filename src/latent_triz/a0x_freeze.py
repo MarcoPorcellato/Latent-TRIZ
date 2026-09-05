@@ -1049,11 +1049,17 @@ def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Pa
     or ordinary no-model loaders.
     """
     repository = Path(root).resolve()
-    candidate = Path(ledger_path).resolve()
+    candidate = Path(ledger_path)
+    if not candidate.is_absolute():
+        candidate = repository / candidate
+    # Resolve only the parent components for containment; keep the leaf
+    # unresolved so lstat() can reject a symlink instead of accepting its target.
+    candidate = candidate.parent.resolve() / candidate.name
     try:
-        candidate.relative_to(repository)
+        relative_candidate = candidate.relative_to(repository)
     except ValueError as error:
         raise A0XFreezeError("historical ledger escapes repository root") from error
+    _reject_symlink_components(repository, relative_candidate.as_posix())
     document = _historical_ledger_document(candidate)
     expected_keys = {
         "profile", "domain", "historical_only", "parent_head", "parent_tree",
