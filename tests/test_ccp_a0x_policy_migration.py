@@ -92,6 +92,43 @@ class A0XPolicyMigrationTests(unittest.TestCase):
         self.assertNotIn("commit-ci-preflight verify", workflow)
         self.assertNotIn("secrets.", workflow)
 
+    def test_hosted_repository_lanes_fetch_full_history_for_historical_audits(self) -> None:
+        workflow = (ROOT / ".github/workflows/merge-policy.yml").read_text(
+            encoding="utf-8"
+        )
+        repository = workflow.split("\n  repository:\n", 1)[1].split(
+            "\n  python-311:\n", 1
+        )[0]
+        python_311 = workflow.split("\n  python-311:\n", 1)[1].split(
+            "\n  scientific:\n", 1
+        )[0]
+
+        self.assertIn("fetch-depth: 0", repository)
+        self.assertIn("fetch-depth: 0", python_311)
+        for lane in (repository, python_311):
+            self.assertIn(
+                "git fetch --no-tags --depth=1 origin "
+                "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+                lane,
+            )
+            self.assertIn(
+                "git fetch --no-tags --depth=1 origin "
+                "ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9",
+                lane,
+            )
+            self.assertIn(
+                'test "$(git rev-parse '
+                'd7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d^{tree})" = '
+                '"54c59868802af381f57f830102a01be54410e718"',
+                lane,
+            )
+            self.assertIn(
+                'test "$(git rev-parse '
+                'ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9^{tree})" = '
+                '"ff90ef65cd1ca1c58be620c5241621db5091fa77"',
+                lane,
+            )
+
     def test_qualification_dossier_binds_the_old_plan_and_stays_unapproved(self) -> None:
         self.assertTrue(DOSSIER.is_file(), "qualification dossier is missing")
         dossier = json.loads(DOSSIER.read_text(encoding="utf-8"))

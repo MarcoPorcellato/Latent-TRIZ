@@ -18,25 +18,55 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
-## Current pair-scoped vertical-slice checkpoint — 2026-09-02
+## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
-The trusted package generator, selector-only material launcher, manifest
-schema, and their target-free tests are now part of the implementation
-surface. The operational authority is [A0X pair-scoped vertical
-slice](A0X_VERTICAL_SLICE.md). The two historical batch freezes, twelve batch
-dossiers, and no-model receipt predate this trusted surface. They remain
-historical and stale; they are not current pair-package evidence and must not
-be regenerated or rewritten under this checkpoint.
+The current target-free implementation anchor is
+`eb33d7ad22a97e15bdea3475d88942231ba094a0` (final branch HEAD may postdate
+this implementation anchor). Current regenerated hashes are A0/R1
+implementation `e2f037569c7755095a38bbf0460ac0fd18a0f696836bc21e6f408a33fe9b3ebf` /
+`ee8fb1893340d6adf49e7075a62d4a9bdb7d2627da8e529de30f07b8705dd01e`, A0/R1
+freeze `b19f6fe744ed990bd8905a250ffd833bf62d0f166cfea79693bcaf4f2385ec1b` /
+`776f5a31a85744a26aad85a6831d42717c37ef3610c3d96b5e52d0c884ce72e8`, and
+no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
+It regenerated the two leg
+implementation inventories, two freezes, twelve approval-request dossiers, and
+the no-model receipt. Those regenerated batch artifacts remain current only
+for deterministic no-model verification; they are **not** a new material route.
 
-The first possible package is only `A0 / smollm2_360m`, and requires a separate
-exact-head P0 authorization for target-free package generation. P0, hosted Gate
-A, offline Gate B, local Gate C, target-free result verification, and
-publication are distinct authorization gates. Passing one does not authorize
-the next. A0-R1 may begin only after the A0 terminal report, under a separate
-authorization. No corpus, prompt, control, statistic, endpoint, stopping rule,
-or other scientific rule may change between those legs.
+Hosted PR runs `33982279950`, `33983540338`, and `33984594646` remain failed, non-material
+portability results. The first exposed shallow history and an unpatched
+Darwin-only syscall in the Linux real-Git fixture. The second proved that full
+history cannot supply historical commits outside the PR ancestry. The third
+showed that `pull_request_target` used the pre-correction trusted-base workflow
+during bootstrap. Each repository lane now fetches the two ledger-bound commit
+SHA-1 values explicitly and verifies their exact trees before testing, while a
+canonical-repository-only test bootstrap preserves the same verification during
+this transition. The production syscall and all
+fail-closed verification remain unchanged; a new hosted run must prove the
+corrected exact head.
 
-## Current Hosted Gate A capture-wrapper recovery checkpoint — 2026-09-02
+The sole future execution route is:
+
+```text
+Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
+```
+
+P0 v2 creates one ignored, atomic local envelope bound to a protected-main
+`HEAD/tree`, one leg/model pair, and a separate package commitment. Gate B v2
+and Gate C v2 consume that same typed binding and have no v1 or batch fallback.
+The tracked v1 vertical package, historical CCP/Matrix Gate A evidence, and
+pre-convergence batch material interpretations are historical evidence only.
+Their protected hashes are recorded in
+[`docs/qualification/a0x-vertical-chain-historical-protection.json`](qualification/a0x-vertical-chain-historical-protection.json).
+
+The next stop is a separate authorization for one protected-main Hosted Gate A
+run, followed by separately authorized capture and P0 v2. Gate B v2, Gate C,
+model/tokenizer access, target reads, scoring, CCP, Docker, network use, and
+publication remain unauthorized. A0-R1 remains blocked until the A0 terminal
+report and its own authorization. Frozen scientific inputs do not change
+between legs.
+
+## Historical Hosted Gate A capture-wrapper recovery checkpoint — 2026-09-02
 
 The recovered target-free capture library, shell-free adapter, request and
 transport schemas, and both capture test modules are now trusted inputs in
@@ -602,3 +632,19 @@ Frozen verification passed 11/11, the synthetic aggregate passed 268/268, and
 the repository check passed 1,100 tests with 11 documented skips. The next
 action remains a separately authorized exact-head Gate A qualification after
 the regenerated package is committed.
+
+## Validator-isolation correction
+
+The A0-R2/C3 validator remains the exact historical dependency-free subset and
+therefore rejects `prefixItems`. A0X owns a copied dependency-free extension
+for exactly three positional schemas: Hosted Gate A evidence, the v2 slice
+manifest, and the v2 package commitment. A0X v2 runtime callers use that
+extension only where needed; Hosted Gate A remains independently checked by
+the pinned Draft 2020-12 validator. `schema_cross_validate.py` retains its
+legacy matrix separately and reports the A0X positional matrix independently.
+
+Before current A0X bindings are replaced, the immutable Git-object ledger
+`docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json` records
+the exact `ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9` parent/tree and all
+seventeen superseded generated artifacts. It is historical audit evidence,
+not an authorization or an active runtime input.

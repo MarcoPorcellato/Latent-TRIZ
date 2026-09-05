@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "size", "sha256"],
+      "properties": {
+        "name": {"type": "string", "enum": ["protocol.json", "implementation.json", "freeze.json", "approval-dossier.json", "slice-manifest.json"]},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile", "qualified_source", "pair_binding", "members", "generator", "authorization_id", "attempt_id", "package_commitment_sha256"],
+  "properties": {
+    "profile": {"const": "a0x-vertical-package-commitment-v2"},
+    "qualified_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "tree", "ref"],
+      "properties": {
+        "head": {"$ref": "#/$defs/revision"},
+        "tree": {"$ref": "#/$defs/revision"},
+        "ref": {"const": "refs/heads/main"}
+      }
+    },
+    "pair_binding": {"type": "object", "minProperties": 1},
+    "members": {
+      "type": "array",
+      "minItems": 5,
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "protocol.json"}}}]},
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "implementation.json"}}}]},
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "freeze.json"}}}]},
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "approval-dossier.json"}}}]},
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "slice-manifest.json"}}}]}
+      ],
+      "items": false
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "repository"],
+      "properties": {
+        "profile": {"const": "a0x-vertical-slice-v2"},
+        "repository": {"const": "MarcoPorcellato/Latent-TRIZ"}
+      }
+    },
+    "authorization_id": {"type": "string", "minLength": 1},
+    "attempt_id": {"type": "string", "minLength": 1},
+    "package_commitment_sha256": {"$ref": "#/$defs/sha256"}
+  }
+}

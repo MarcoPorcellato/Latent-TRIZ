@@ -469,7 +469,7 @@ class A0XFreezeTests(unittest.TestCase):
         self.assertIn("tests.test_a0x_capture_hosted_gate_a", completed.stdout)
 
     def test_vertical_slice_test_is_once_in_the_synthetic_aggregate(self) -> None:
-        """Catch an omitted or duplicated pair-package regression suite."""
+        """Catch an omitted or duplicated A0X validator or pair-package suite."""
         completed = subprocess.run(
             ["make", "-n", "a0x-synthetic-verify"],
             cwd=self.ROOT,
@@ -479,6 +479,7 @@ class A0XFreezeTests(unittest.TestCase):
         )
         self.assertEqual(0, completed.returncode, completed.stderr)
         tokens = completed.stdout.split()
+        self.assertEqual(1, tokens.count("tests.test_a0x_validator"))
         self.assertEqual(1, tokens.count("tests.test_a0x_vertical_slice"))
         self.assertEqual(1, tokens.count("tests.test_a0x_vertical_material"))
         self.assertEqual(1, tokens.count("tests.test_a0x_vertical_p0_bootstrap"))

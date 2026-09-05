@@ -1,0 +1,132 @@
+{
+  "domain": "a0x-batch-pre-regeneration-ledger-v2",
+  "entries": [
+    {
+      "blob_oid": "729b1fd01cd1182913f0cc25d33d902e3010bb52",
+      "bytes": 32552,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/a0/implementation.json",
+      "sha256": "499b1ae1bcf72bd7289da52b4e6f5edbb119eb6aaf4847d489ab774e4adee49b"
+    },
+    {
+      "blob_oid": "21d5a5abd323c5e6df26bf1e88d8828d29fc8056",
+      "bytes": 1561,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/a0/gpt2.json",
+      "sha256": "7847ee97d8c4fe7ccdcbd9559d617ea48d829f4f213edcf9b5d46a5c35366fdf"
+    },
+    {
+      "blob_oid": "3928c525cfe6d5493022a9ca00944bc84ae05860",
+      "bytes": 1611,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/a0/gpt_neo_125m.json",
+      "sha256": "d2d8c059b717edac0a654f46f19f73a5c2489e626752ea75ff1febd8a44c857c"
+    },
+    {
+      "blob_oid": "837f0c0937523a334d588a8feeb5c771c7dca3dc",
+      "bytes": 1605,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/a0/qwen2_5_0_5b.json",
+      "sha256": "71f171632b1d983ebce0957b879c8ea16dfa59acac502f46fad4d903d3f2bb21"
+    },
+    {
+      "blob_oid": "da16dec470d934eb5190d434eb3eb4ae45c4bec4",
+      "bytes": 1627,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/a0/qwen3_0_6b_base.json",
+      "sha256": "97e591380d7547d9d78e4d35354251fd987e81a3bce1f46b1620d9a3143f4e99"
+    },
+    {
+      "blob_oid": "a5c3b349776d791ce5da3b21b7fe9bb0eda4fb05",
+      "bytes": 1614,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/a0/smollm2_135m.json",
+      "sha256": "e04de3e0efb03318681a68047ddf81c18d42062c6216465d2903fa9c1fe3470e"
+    },
+    {
+      "blob_oid": "672444af51acba8e09591bb16abe71abf915bc74",
+      "bytes": 1614,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json",
+      "sha256": "301ce9c9addf92ab99b1cfb20c3e2ffe327ea8116c5e58ac0c0e821e6e35b38a"
+    },
+    {
+      "blob_oid": "a19581f12c7aba9302643b3022ab462873d316d4",
+      "bytes": 1554,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/r1/gpt2.json",
+      "sha256": "109dce9eb2aab3324bd56c76a205f387982c8f53d7c2135fc12da38b02b8c60b"
+    },
+    {
+      "blob_oid": "d16e1bd511744c8896ced8e07baae779fc9b0925",
+      "bytes": 1604,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/r1/gpt_neo_125m.json",
+      "sha256": "7d953235fd4b6e7f55258a3fb009b85ae9af6f609ab989c4decf2e5b4dba090b"
+    },
+    {
+      "blob_oid": "aad6239da75b4e7199bb59bb0251cf71a8d1bc8a",
+      "bytes": 1598,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/r1/qwen2_5_0_5b.json",
+      "sha256": "b1ffb7a24e5702e80dfbbde964e7d14e428657650e11e6ac9c262a5e93ccf0b6"
+    },
+    {
+      "blob_oid": "8b2025bd102fa8f9c56339703feffd1523ab0b8e",
+      "bytes": 1620,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/r1/qwen3_0_6b_base.json",
+      "sha256": "296eab3705a9887133efd4a3aebb7f178cc6845ee404dc66e550c6e2a0bd0814"
+    },
+    {
+      "blob_oid": "c77a67f8604429a9fba11a47bf9f02569845e942",
+      "bytes": 1606,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/r1/smollm2_135m.json",
+      "sha256": "bd57bcc004b128f75b6a70ead3f936d228ac5fc5be6d2e42714a7b9bf0e67fe9"
+    },
+    {
+      "blob_oid": "4741b4a5aa4fb81c7759e88cbde8ab9b6d0832dd",
+      "bytes": 1607,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/approval-dossiers/r1/smollm2_360m.json",
+      "sha256": "96a38fa9ba291ca27da62543e910b2ab0effcb104cf8280610439295e23166f6"
+    },
+    {
+      "blob_oid": "ea89ed335eab5e3019d3f11823f02d75b10a5c15",
+      "bytes": 745,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/freeze/a0-freeze.json",
+      "sha256": "f9680ed9bdf1ae3e407b87d4547760be2c9ed5c5ba35a6b8147b6812ed94c918"
+    },
+    {
+      "blob_oid": "a16fdaed150b7c4a54655b626a672916480b263b",
+      "bytes": 745,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/freeze/r1-freeze.json",
+      "sha256": "ff1e5e3ae6b423f8c4d3b5c683ca60500cda39726d936b3c88bd64d4e3f1852e"
+    },
+    {
+      "blob_oid": "f15f2403ffa380c6dfb218b67e6de21e67015a44",
+      "bytes": 33190,
+      "mode": "100644",
+      "path": "experiments/a0x-six-model/r1/implementation.json",
+      "sha256": "6382cf4d0e45d0c74d63b7006f32604cdb0cbe021bfd713ae9a30d60ab8825da"
+    },
+    {
+      "blob_oid": "36d01e4a938e766f273a15c83e63677560d679ce",
+      "bytes": 426,
+      "mode": "100644",
+      "path": "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
+      "sha256": "9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816"
+    }
+  ],
+  "entry_count": 17,
+  "historical_only": true,
+  "ledger_commitment_sha256": "167cbd906c121f87d0bd8e592445bcf3128811e62d95094d63d085e1fa99f4d3",
+  "parent_head": "ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9",
+  "parent_tree": "ff90ef65cd1ca1c58be620c5241621db5091fa77",
+  "profile": "a0x-batch-pre-regeneration-ledger-v2"
+}
+
+

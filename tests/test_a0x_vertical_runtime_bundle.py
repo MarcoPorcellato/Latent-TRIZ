@@ -1,0 +1,609 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from dataclasses import replace
+from pathlib import Path
+from unittest import mock
+
+from latent_triz.a0x_contract import Leg
+from latent_triz.a0x_gate_contract import (
+    GateBAuthorizationInputs,
+    HashBoundPath,
+    HostedInputBindings,
+    VerifierIdentity,
+    VerticalGateBAuthorizationInputs,
+    build_vertical_gate_b_authorization,
+)
+from latent_triz.a0x_vertical_slice import (
+    VerticalRuntimePackageRequest,
+    generate_vertical_runtime_package,
+)
+from tests.test_a0x_vertical_slice import HEAD, TREE, ROOT, _copy_file, _publish_at, _synthetic_repository
+
+
+class A0XVerticalRuntimeBundleTests(unittest.TestCase):
+    """The v2 Gate B route accepts only a real Task-1 package binding."""
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name) / "repository"
+        self.root.mkdir()
+        _synthetic_repository(self.root)
+        _copy_file(ROOT, self.root, "schemas/a0x-vertical-slice-manifest-v2.schema.json")
+        _copy_file(ROOT, self.root, "schemas/a0x-vertical-package-commitment-v2.schema.json")
+        self.tree_patch = mock.patch("latent_triz.a0x_vertical_slice._git_tree_for_head", return_value=TREE)
+        self.publish_patch = mock.patch("latent_triz.a0x_vertical_slice._darwin_publish_exclusive_at", new=_publish_at)
+        self.checkout_patch = mock.patch("latent_triz.a0x_vertical_slice._checkout_state", return_value=(HEAD, TREE, True))
+        self.tree_patch.start()
+        self.publish_patch.start()
+        self.checkout_patch.start()
+
+    def tearDown(self) -> None:
+        self.checkout_patch.stop()
+        self.publish_patch.stop()
+        self.tree_patch.stop()
+        self.temporary.cleanup()
+
+    def _binding(self):
+        return generate_vertical_runtime_package(
+            self.root,
+            VerticalRuntimePackageRequest(
+                qualified_source_head=HEAD,
+                qualified_source_tree=TREE,
+                leg=Leg.A0,
+                model_key="smollm2_360m",
+                output_root=f".a0x-runtime/p0/v2/{HEAD}/{TREE}/a0/smollm2_360m",
+                authorization_id="p0-auth-test-01",
+                attempt_id="p0-attempt-test-01",
+            ),
+        )
+
+    def _request(self, binding):
+        from latent_triz.a0x_runtime_bundle import VerticalRuntimePreparationRequest
+
+        evidence = self.root / f".a0x-runtime/gate-a/evidence/{HEAD}"
+        evidence.mkdir(parents=True)
+        hosted: dict[str, HashBoundPath] = {}
+        for name, filename in (
+            ("manifest", "hosted-gate-a-evidence.json"),
+            ("attestation_bundle", "hosted-gate-a-attestation.bundle.jsonl"),
+            ("trusted_root", "github-trusted-root.jsonl"),
+            ("transport", "hosted-gate-a-transport.json"),
+        ):
+            path = evidence / filename
+            path.write_bytes(f"synthetic-{name}".encode())
+            hosted[name] = HashBoundPath(
+                path=path.relative_to(self.root).as_posix(),
+                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            )
+        verifier = self.root / "bin/gh"
+        verifier.parent.mkdir(parents=True, exist_ok=True)
+        verifier.write_bytes(b"synthetic verifier")
+        verifier.chmod(0o700)
+        policy = self.root / "gate-b/verifier-policy.json"
+        policy.parent.mkdir()
+        policy.write_bytes(b"{}")
+        authorization = build_vertical_gate_b_authorization(
+            binding.pair_binding,
+            VerticalGateBAuthorizationInputs(
+                base=GateBAuthorizationInputs(
+                    authorization_id="gate-b-auth-test-01",
+                    source_head=HEAD,
+                    source_tree=TREE,
+                    source_sha=HEAD,
+                    job_workflow_sha=HEAD,
+                    hosted_inputs=HostedInputBindings(**hosted),
+                    verifier=VerifierIdentity(policy_raw_sha256=hashlib.sha256(policy.read_bytes()).hexdigest()),
+                ),
+                envelope_path=binding.envelope_path,
+                package_path=binding.package_path,
+                commitment_path=binding.commitment_path,
+                commitment_raw_sha256=binding.commitment_raw_sha256,
+                package_commitment_sha256=binding.package_commitment_sha256,
+                dossier_path=binding.dossier_path,
+                dossier_sha256=binding.dossier_sha256,
+            ),
+        )
+        authorization_path = self.root / "gate-b/vertical-authorization.json"
+        authorization_path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode())
+        ccp = self.root / "bin/commit-ci-preflight"
+        ccp.write_bytes(b"synthetic ccp")
+        ccp.chmod(0o700)
+        python = self.root / "bin/python"
+        python.write_bytes(b"synthetic python")
+        python.chmod(0o700)
+        return VerticalRuntimePreparationRequest(
+            package_binding=binding,
+            gate_b_authorization=authorization_path,
+            verifier_executable=verifier,
+            verifier_policy=policy,
+            ccp_executable=ccp,
+            python_executable=python,
+            authorization_id="gate-b-auth-test-01",
+            attempt_id="gate-b-attempt-test-01",
+        )
+
+    def _synthetic_dependencies(self, request):
+        """Private-only target-free Gate-B dependencies; production is untouched."""
+        from latent_triz.a0x_ccp_executor import _ExecutableIdentityEvidence
+        from latent_triz.a0x_contract import sha256_file
+        from latent_triz.a0x_hosted_gate_a import canonical_json_bytes as hosted_canonical_json_bytes
+        from latent_triz.a0x_runtime_bundle import (
+            _GateBDependencies, _HostedVerificationResult, canonical_json_bytes,
+        )
+        from latent_triz.a0x_runtime_readiness import EXPECTED_API_SYMBOLS, EXPECTED_PACKAGES
+
+        authorization = json.loads(request.gate_b_authorization.read_text(encoding="utf-8"))
+        authorization["qualification_context"] = "synthetic-target-free"
+        authorization["verifier"]["sha256"] = sha256_file(request.verifier_executable)
+        request.gate_b_authorization.write_bytes(canonical_json_bytes(authorization))
+
+        class SyntheticVerifier:
+            calls = 0
+
+            def verify(self, verifier_request):
+                self.calls += 1
+                raw_authorization = verifier_request.authorization_path.read_bytes()
+                value = json.loads(raw_authorization)
+                receipt = {
+                    "artifact_class": "a0x-hosted-gate-a-verification-receipt-synthetic-target-free",
+                    "receipt_profile": "a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1",
+                    "qualification_context": "synthetic-target-free",
+                    "verification_status": "verified",
+                    "repository": "MarcoPorcellato/Latent-TRIZ",
+                    "qualified_source_head": value["source_head"],
+                    "qualified_source_tree": value["source_tree"],
+                    "pair_binding": value["pair_binding"],
+                    "authorization_raw_sha256": hashlib.sha256(raw_authorization).hexdigest(),
+                    "hosted_inputs": value["hosted_inputs"],
+                    "verifier": value["verifier"],
+                    "verified_at": "2026-09-05T00:00:00Z",
+                }
+                raw = hosted_canonical_json_bytes(receipt)
+                target = verifier_request.repository_root / value["verification_receipt_path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+                return _HostedVerificationResult(
+                    raw,
+                    _ExecutableIdentityEvidence(
+                        role=value["verifier"]["role"], path=verifier_request.verifier_executable,
+                        sha256=sha256_file(verifier_request.verifier_executable),
+                        version=value["verifier"]["version"], synthetic=True,
+                    ),
+                    "synthetic-target-free",
+                )
+
+        def readiness(_root, pair, source_head, python_path):
+            return {
+                "artifact_class": "a0x-runtime-readiness",
+                "readiness_profile": "a0x-runtime-readiness-v1",
+                "source_head": source_head,
+                "pair_binding": pair.as_mapping(),
+                "python": {
+                    "path": str(python_path), "sha256": sha256_file(python_path),
+                    "version": "3.11.13", "major_minor": [3, 11],
+                    "environment_root": str(python_path.parent.parent), "base_prefix": "/synthetic/base",
+                    "packages": dict(EXPECTED_PACKAGES), "api_symbols": dict(EXPECTED_API_SYMBOLS),
+                },
+                "model_runtime": {
+                    "model_key": pair.model_key, "model_id": pair.model_id, "revision": pair.revision,
+                    "card_path": "experiments/a0x-six-model/model-cards/smollm2_360m.json",
+                    "card_sha256": "0" * 64, "runtime_root": "artifacts/synthetic",
+                    "runtime_file_count": 1, "runtime_total_bytes": 1,
+                    "runtime_files_commitment_sha256": "1" * 64,
+                },
+            }
+
+        class SyntheticCcpIdentityVerifier:
+            def verify(self, *, role, path, expected_sha256, expected_version=None):
+                return _ExecutableIdentityEvidence(
+                    role=role, path=Path(path), sha256=expected_sha256,
+                    version=expected_version, synthetic=True,
+                )
+
+        verifier = SyntheticVerifier()
+        return _GateBDependencies(
+            hosted_verifier=verifier,
+            ccp_identity_verifier=SyntheticCcpIdentityVerifier(),
+            readiness_probe=readiness,
+            context="synthetic-target-free",
+        ), verifier
+
+    def _prepare_synthetic(self, binding):
+        from latent_triz.a0x_runtime_bundle import _prepare_vertical_runtime_bundle_core
+
+        request = self._request(binding)
+        dependencies, verifier = self._synthetic_dependencies(request)
+        result = _prepare_vertical_runtime_bundle_core(
+            self.root, request, source_state_probe=lambda: (HEAD, TREE, True), dependencies=dependencies,
+        )
+        return result, request, verifier
+
+    def test_synthetic_hosted_verifier_identity_fields_refuse_before_readiness(self) -> None:
+        """Private Gate B accepts no synthetic identity weaker than its raw authorization."""
+        from latent_triz.a0x_runtime_bundle import (
+            A0XRuntimeBundleError, _GateBDependencies, _prepare_vertical_runtime_bundle_core,
+            _vertical_output_paths,
+        )
+
+        binding = self._binding()
+        request = self._request(binding)
+        dependencies, verifier = self._synthetic_dependencies(request)
+        for field, value in (
+            ("role", "wrong-role"),
+            ("path", request.verifier_executable.with_name("wrong-gh")),
+            ("sha256", "0" * 64),
+            ("version", "wrong-version"),
+        ):
+            with self.subTest(field=field):
+                class WrongIdentityVerifier:
+                    calls = 0
+
+                    def verify(inner_self, verifier_request):
+                        inner_self.calls += 1
+                        result = verifier.verify(verifier_request)
+                        return replace(result, identity=replace(result.identity, **{field: value}))
+
+                readiness = mock.Mock(side_effect=AssertionError("readiness reached"))
+                wrong = WrongIdentityVerifier()
+                rejected_dependencies = _GateBDependencies(
+                    hosted_verifier=wrong,
+                    ccp_identity_verifier=dependencies.ccp_identity_verifier,
+                    readiness_probe=readiness,
+                    context="synthetic-target-free",
+                )
+                try:
+                    with self.assertRaises(A0XRuntimeBundleError):
+                        _prepare_vertical_runtime_bundle_core(
+                            self.root, request, source_state_probe=lambda: (HEAD, TREE, True),
+                            dependencies=rejected_dependencies,
+                        )
+                    self.assertEqual(1, wrong.calls)
+                    readiness.assert_not_called()
+                    for relative in _vertical_output_paths(binding).durable().values():
+                        self.assertFalse((self.root / relative).exists())
+                finally:
+                    shutil.rmtree(self.root / ".a0x-runtime/gate-b", ignore_errors=True)
+
+    def test_preflight_binds_real_v2_package_before_external_probes(self) -> None:
+        from latent_triz.a0x_runtime_bundle import preflight_vertical_runtime_bundle
+
+        binding = self._binding()
+        request = self._request(binding)
+        version = mock.Mock(return_value="commit-ci-preflight 0.1.0")
+        expected_ccp = json.loads(
+            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
+        )["ccp"]["sha256"]
+        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
+        with mock.patch(
+            "latent_triz.a0x_runtime_bundle.sha256_file",
+            side_effect=lambda path: (
+                expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
+                else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+                if Path(path).resolve() == request.verifier_executable.resolve()
+                else actual_hash(path)
+            ),
+        ):
+            result = preflight_vertical_runtime_bundle(
+                self.root,
+                request,
+                source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=version,
+                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("readiness reached")),
+            )
+        self.assertEqual({"head": HEAD, "tree": TREE}, result["qualified_source"])
+        self.assertEqual(binding.package_commitment_sha256, result["package_commitment_sha256"])
+        self.assertEqual(binding.dossier_sha256, result["dossier_sha256"])
+        version.assert_called_once()
+
+    def test_package_or_source_mismatch_refuses_before_version_probe(self) -> None:
+        from dataclasses import replace
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, preflight_vertical_runtime_bundle
+
+        binding = self._binding()
+        request = self._request(binding)
+        version = mock.Mock(side_effect=AssertionError("version reached"))
+        for rejected, state in (
+            (replace(binding, qualified_source_tree="c" * 40), (HEAD, TREE, True)),
+            (binding, (HEAD, "c" * 40, True)),
+        ):
+            with self.subTest(rejected=rejected, state=state), self.assertRaises(A0XRuntimeBundleError):
+                preflight_vertical_runtime_bundle(
+                    self.root,
+                    replace(request, package_binding=rejected),
+                    source_state_probe=lambda state=state: state,
+                    ccp_version_probe=version,
+                    runtime_readiness_probe=mock.Mock(side_effect=AssertionError("readiness reached")),
+                )
+        version.assert_not_called()
+
+    def test_missing_typed_binding_dirty_source_and_occupied_output_refuse_before_verifier(self) -> None:
+        """The v2 selector has no batch fallback or output reuse path."""
+        from dataclasses import replace
+        from latent_triz.a0x_runtime_readiness import runtime_readiness_path
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, preflight_vertical_runtime_bundle
+
+        binding = self._binding()
+        request = self._request(binding)
+        version = mock.Mock(side_effect=AssertionError("version reached"))
+        verifier = mock.Mock(side_effect=AssertionError("verifier reached"))
+        readiness = mock.Mock(side_effect=AssertionError("readiness reached"))
+        with self.assertRaises(A0XRuntimeBundleError):
+            preflight_vertical_runtime_bundle(
+                self.root,
+                replace(request, package_binding=object()),  # type: ignore[arg-type]
+                source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=version,
+                runtime_readiness_probe=readiness,
+                gate_a_verifier=verifier,
+            )
+        with self.assertRaises(A0XRuntimeBundleError):
+            preflight_vertical_runtime_bundle(
+                self.root,
+                request,
+                source_state_probe=lambda: (HEAD, TREE, False),
+                ccp_version_probe=version,
+                runtime_readiness_probe=readiness,
+                gate_a_verifier=verifier,
+            )
+        occupied = self.root / runtime_readiness_path(binding.pair_binding)
+        occupied.parent.mkdir(parents=True, exist_ok=True)
+        occupied.write_bytes(b"occupied")
+        with self.assertRaises(A0XRuntimeBundleError):
+            preflight_vertical_runtime_bundle(
+                self.root,
+                request,
+                source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=version,
+                runtime_readiness_probe=readiness,
+                gate_a_verifier=verifier,
+            )
+        version.assert_not_called()
+        verifier.assert_not_called()
+        readiness.assert_not_called()
+
+    def test_hosted_input_drift_refuses_before_verifier_or_readiness(self) -> None:
+        binding = self._binding()
+        request = self._request(binding)
+        authorization = json.loads(request.gate_b_authorization.read_text(encoding="utf-8"))
+        manifest = self.root / authorization["hosted_inputs"]["manifest"]["path"]
+        manifest.write_bytes(b"drifted")
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, preflight_vertical_runtime_bundle
+
+        verifier = mock.Mock(side_effect=AssertionError("verifier reached"))
+        readiness = mock.Mock(side_effect=AssertionError("readiness reached"))
+        expected_ccp = json.loads(
+            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
+        )["ccp"]["sha256"]
+        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
+        with (
+            mock.patch(
+                "latent_triz.a0x_runtime_bundle.sha256_file",
+                side_effect=lambda path: (
+                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
+                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+                    if Path(path).resolve() == request.verifier_executable.resolve()
+                    else actual_hash(path)
+                ),
+            ),
+            self.assertRaises(A0XRuntimeBundleError),
+        ):
+            preflight_vertical_runtime_bundle(
+                self.root,
+                request,
+                source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=readiness,
+                gate_a_verifier=verifier,
+            )
+        verifier.assert_not_called()
+        readiness.assert_not_called()
+
+    def test_v2_authorization_rejects_v1_or_binding_drift(self) -> None:
+        binding = self._binding()
+        request = self._request(binding)
+        raw = json.loads(request.gate_b_authorization.read_text(encoding="utf-8"))
+        raw["authorization_profile"] = "a0x-gate-b-authorization-v1"
+        request.gate_b_authorization.write_bytes(json.dumps(raw, sort_keys=True, separators=(",", ":")).encode())
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, preflight_vertical_runtime_bundle
+        with self.assertRaises(A0XRuntimeBundleError):
+            preflight_vertical_runtime_bundle(
+                self.root, request, source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=mock.Mock(side_effect=AssertionError("version reached")),
+                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("readiness reached")),
+            )
+
+    def test_v2_authorization_rejects_nonderived_raw_receipt_path_before_verifier(self) -> None:
+        binding = self._binding()
+        request = self._request(binding)
+        raw = json.loads(request.gate_b_authorization.read_text(encoding="utf-8"))
+        raw["verification_receipt_path"] = (
+            f".a0x-runtime/gate-b/v2/{HEAD}/{TREE}/a0/smollm2_360m/other-run/"
+            "gate-a-verification-raw.json"
+        )
+        request.gate_b_authorization.write_bytes(json.dumps(raw, sort_keys=True, separators=(",", ":")).encode())
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, preflight_vertical_runtime_bundle
+
+        expected_ccp = json.loads(
+            (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
+        )["ccp"]["sha256"]
+        actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
+        with (
+            mock.patch(
+                "latent_triz.a0x_runtime_bundle.sha256_file",
+                side_effect=lambda path: (
+                    expected_ccp if Path(path).resolve() == request.ccp_executable.resolve()
+                    else "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c"
+                    if Path(path).resolve() == request.verifier_executable.resolve()
+                    else actual_hash(path)
+                ),
+            ),
+            self.assertRaises(A0XRuntimeBundleError),
+        ):
+            preflight_vertical_runtime_bundle(
+                self.root,
+                request,
+                source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=lambda _path: "commit-ci-preflight 0.1.0",
+                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("readiness reached")),
+                gate_a_verifier=mock.Mock(side_effect=AssertionError("verifier reached")),
+            )
+
+    def test_package_mutation_and_cli_selector_refuse_before_external_probe(self) -> None:
+        from latent_triz.a0x_runtime_bundle import (
+            A0XRuntimeBundleError,
+            preflight_vertical_runtime_bundle,
+            vertical_package_binding_from_commitment,
+        )
+
+        binding = self._binding()
+        request = self._request(binding)
+        self.assertEqual(
+            binding,
+            vertical_package_binding_from_commitment(self.root, binding.commitment_path),
+        )
+        (self.root / binding.package_path / "unexpected.json").write_bytes(b"{}\n")
+        version = mock.Mock(side_effect=AssertionError("version reached"))
+        with self.assertRaises(A0XRuntimeBundleError):
+            preflight_vertical_runtime_bundle(
+                self.root, request, source_state_probe=lambda: (HEAD, TREE, True),
+                ccp_version_probe=version,
+                runtime_readiness_probe=mock.Mock(side_effect=AssertionError("readiness reached")),
+            )
+        version.assert_not_called()
+
+    def test_prepare_uses_v2_selector_and_writes_no_material_output(self) -> None:
+        binding = self._binding()
+        result, _request, verifier = self._prepare_synthetic(binding)
+        self.assertEqual("prepared", result["status"])
+        self.assertEqual(1, verifier.calls)
+        self.assertEqual(binding.package_commitment_sha256, result["package_commitment_sha256"])
+        self.assertTrue((self.root / result["vertical_outputs"]["readiness"]).is_file())
+        self.assertFalse((self.root / binding.pair_binding.output_path).exists())
+
+    def test_prepare_revalidates_package_after_injected_verifier(self) -> None:
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError, _prepare_vertical_runtime_bundle_core
+
+        binding = self._binding()
+        request = self._request(binding)
+        dependencies, verifier = self._synthetic_dependencies(request)
+        original_verify = verifier.verify
+        def mutate_after_receipt(verifier_request):
+            raw = original_verify(verifier_request)
+            (self.root / binding.package_path / "protocol.json").write_bytes(b"{}\n")
+            return raw
+        verifier.verify = mutate_after_receipt
+        with self.assertRaises(A0XRuntimeBundleError):
+            _prepare_vertical_runtime_bundle_core(
+                self.root, request, source_state_probe=lambda: (HEAD, TREE, True), dependencies=dependencies,
+            )
+        self.assertFalse((self.root / ".a0x-runtime/launches").exists())
+
+    def test_v2_durable_outputs_bind_and_reject_vertical_package_drift(self) -> None:
+        """Every v2 output carries the same P0 identity, not a legacy subset."""
+        from latent_triz.a0x_runtime_bundle import (
+            A0XRuntimeBundleError,
+            validate_vertical_runtime_output,
+        )
+
+        binding = self._binding()
+        result, _request, _verifier = self._prepare_synthetic(binding)
+        self.assertEqual({"head": HEAD, "tree": TREE}, result["qualified_source"])
+        expected_binding = {
+            "envelope_path": binding.envelope_path,
+            "package_path": binding.package_path,
+            "commitment_path": binding.commitment_path,
+            "commitment_raw_sha256": binding.commitment_raw_sha256,
+            "package_commitment_sha256": binding.package_commitment_sha256,
+            "dossier_path": binding.dossier_path,
+            "dossier_sha256": binding.dossier_sha256,
+        }
+        outputs = result["vertical_outputs"]
+        self.assertEqual({"gate_a_evidence", "readiness", "descriptor", "authorization", "mapping"}, set(outputs))
+        for relative in outputs.values():
+            document = json.loads((self.root / relative).read_text(encoding="utf-8"))
+            self.assertEqual(expected_binding, document["vertical_package"])
+            self.assertEqual({"head": HEAD, "tree": TREE, "ref": "refs/heads/main"}, document["qualified_source"])
+            self.assertEqual(binding.pair_binding.as_mapping(), document["pair_binding"])
+            validate_vertical_runtime_output(self.root, relative, binding)
+            original = (self.root / relative).read_bytes()
+            drifted = json.loads(original)
+            drifted["vertical_package"]["dossier_sha256"] = "0" * 64
+            (self.root / relative).write_bytes(
+                json.dumps(drifted, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            )
+            with self.assertRaises(A0XRuntimeBundleError):
+                validate_vertical_runtime_output(self.root, relative, binding)
+            (self.root / relative).write_bytes(original)
+
+        descriptor = json.loads((self.root / outputs["descriptor"]).read_text(encoding="utf-8"))["payload"]
+        self.assertEqual(outputs["readiness"], descriptor["runtime_readiness"]["path"])
+        self.assertEqual(outputs["gate_a_evidence"], descriptor["gate_a_evidence"]["path"])
+        self.assertEqual(outputs["authorization"], descriptor["authorization_reference"]["path"])
+        authorization = json.loads((self.root / outputs["authorization"]).read_text(encoding="utf-8"))["payload"]
+        self.assertEqual(outputs["descriptor"], authorization["descriptor"]["path"])
+        self.assertEqual(outputs["readiness"], authorization["runtime_readiness"]["path"])
+        self.assertEqual(outputs["gate_a_evidence"], authorization["gate_a_evidence"]["path"])
+        mapping = json.loads((self.root / outputs["mapping"]).read_text(encoding="utf-8"))["payload"]
+        self.assertEqual(outputs["descriptor"], mapping["descriptor"]["path"])
+        self.assertEqual(outputs["authorization"], mapping["authorization"]["path"])
+        self.assertEqual(
+            hashlib.sha256((self.root / outputs["readiness"]).read_bytes()).hexdigest(),
+            descriptor["runtime_readiness"]["sha256"],
+        )
+        self.assertEqual(
+            hashlib.sha256((self.root / outputs["descriptor"]).read_bytes()).hexdigest(),
+            authorization["descriptor"]["sha256"],
+        )
+        self.assertEqual(
+            hashlib.sha256((self.root / outputs["authorization"]).read_bytes()).hexdigest(),
+            mapping["authorization"]["sha256"],
+        )
+
+        from latent_triz.a0x_material_contract import validate_vertical_gate_a_evidence
+        from latent_triz.a0x_contract import A0XContractError
+        gate_a_payload = json.loads(
+            (self.root / outputs["gate_a_evidence"]).read_text(encoding="utf-8")
+        )["payload"]
+        self.assertEqual(
+            "a0x-vertical-gate-a-evidence-binding-v1",
+            validate_vertical_gate_a_evidence(gate_a_payload)["evidence_profile"],
+        )
+        legacy_payload = dict(gate_a_payload)
+        legacy_payload["evidence_profile"] = "a0x-gate-a-evidence-binding-v2"
+        with self.assertRaises(A0XContractError):
+            validate_vertical_gate_a_evidence(legacy_payload)
+
+        for relative, field, replacement in (
+            (outputs["descriptor"], "authorization_reference", {"role": "authorization", "path": ".a0x-runtime/legacy.json"}),
+            (outputs["mapping"], "descriptor", {"role": "descriptor", "path": ".a0x-runtime/legacy.json", "sha256": "0" * 64}),
+        ):
+            original = (self.root / relative).read_bytes()
+            substituted = json.loads(original)
+            substituted["payload"][field] = replacement
+            substituted["payload_sha256"] = hashlib.sha256(
+                json.dumps(substituted["payload"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            (self.root / relative).write_bytes(
+                json.dumps(substituted, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            )
+            with self.assertRaises(A0XRuntimeBundleError):
+                validate_vertical_runtime_output(self.root, relative, binding)
+            (self.root / relative).write_bytes(original)
+
+        linked_relative = outputs["mapping"]
+        alias = self.root / "independent-output-alias.json"
+        os.link(self.root / linked_relative, alias)
+        with self.assertRaises(A0XRuntimeBundleError):
+            validate_vertical_runtime_output(self.root, linked_relative, binding)
+
+    def test_v2_preparation_does_not_compute_a_legacy_runtime_route(self) -> None:
+        """V2 uses only _VerticalOutputPaths, including its nested documents."""
+        binding = self._binding()
+        result, _request, _verifier = self._prepare_synthetic(binding)
+        self.assertTrue(all(path.startswith(".a0x-runtime/gate-b/v2/") for path in result["vertical_outputs"].values()))

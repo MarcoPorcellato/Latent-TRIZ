@@ -16,6 +16,22 @@ source and exact bytes. These source changes do not alter or retroactively
 upgrade it. Any future use of this hardening requires a new exact-head Gate A
 qualification and a new pair-specific Gate B authorization.
 
+## Current v2 route — 2026-09-05
+
+The current route is `Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C
+v2 -> verification`. Gate B v2 receives only a typed binding to the ignored P0
+v2 atomic envelope and its external commitment; it derives every package path
+and refuses tracked v1 packages, the batch dossiers, and arbitrary dossier
+paths. It revalidates source `HEAD/tree`, all hosted-input bindings, the raw
+commitment, its five package members, and its own output graph before creating
+any readiness output.
+
+The historical CCP/Matrix Gate A route is not a substitute for Hosted Gate A.
+The previous prepared bundle, tracked v1 package, and old batch interpretation
+remain historical and cannot be upgraded. This runbook remains target-free and
+does not authorize P0, Gate B, Gate C, a model, tokenizer, target, network,
+CCP, Docker, or publication.
+
 ## Pair-scoped sequence
 
 [A0X pair-scoped vertical slice](A0X_VERTICAL_SLICE.md) is the operational
@@ -144,6 +160,14 @@ destinations. Before any child execution it APFS-clones the complete verified
 base runtime and all 39 wheels into private, attempt-owned paths. No external
 executable or wheel path is consumed after that binding. It then uses
 shell-free commands to:
+
+Model-card JSON uses the versioned A0X field order emitted by the model-card
+generator, compact UTF-8 separators, and either no final line feed or exactly
+one `LF` final line feed. The builder preserves and hashes the raw bytes; it
+rejects unknown or reordered fields, additional line feeds, trailing spaces,
+invalid UTF-8, and any hash mismatch. Nested runtime-file and provenance
+objects have their own fixed field orders. This matches the repository's
+normal newline convention without weakening byte-level provenance.
 
 1. create a virtual environment with `venv --copies`;
 2. verify the installer created inside the environment, then install only

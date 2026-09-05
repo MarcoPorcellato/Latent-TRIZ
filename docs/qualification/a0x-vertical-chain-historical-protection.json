@@ -1,0 +1,51 @@
+{
+  "generated_current_exclusions": [
+    "experiments/a0x-six-model/a0/implementation.json",
+    "experiments/a0x-six-model/a0/protocol.json",
+    "experiments/a0x-six-model/approval-dossiers/**/*.json",
+    "experiments/a0x-six-model/freeze/a0-freeze.json",
+    "experiments/a0x-six-model/freeze/r1-freeze.json",
+    "experiments/a0x-six-model/r1/implementation.json",
+    "experiments/a0x-six-model/r1/protocol.json",
+    "results/a0x/preexecution/a0x-no-model-verification-receipt.json"
+  ],
+  "profile": "a0x-vertical-chain-historical-protection-v1",
+  "protected_files": [
+    {
+      "bytes": 2470,
+      "path": "docs/qualification/a0x-hosted-gate-a-scientific-boundary-review-157b4b1-historical.md",
+      "sha256": "943657c674965750082c83794b84b360b8a0cf8906f8e15cb0984be9a284c27f"
+    },
+    {
+      "bytes": 29732,
+      "path": "docs/qualification/a0x-vertical-slice-local-review-77dcae52542d21e9bf16e4f17102abf70e68ffc3.md",
+      "sha256": "2cac9349dff05b7a0e919dda7b4c8f2178795e0a67a9bc1c05e52dae50c6ba39"
+    },
+    {
+      "bytes": 1379,
+      "path": "experiments/a0x-six-model/vertical-slices/f0f52d3f2108080871f01f4e080464c61c47ea84/a0/smollm2_360m/approval-dossier.json",
+      "sha256": "4de613811fc7ff61b3ca14eb46d221a4d9a0f4baf250d3b311bb6c327db6b26b"
+    },
+    {
+      "bytes": 671,
+      "path": "experiments/a0x-six-model/vertical-slices/f0f52d3f2108080871f01f4e080464c61c47ea84/a0/smollm2_360m/freeze.json",
+      "sha256": "de3678f7d9dc327430ae39f1a5832f4c855863e124c6c409f36b22a9000a14ac"
+    },
+    {
+      "bytes": 24105,
+      "path": "experiments/a0x-six-model/vertical-slices/f0f52d3f2108080871f01f4e080464c61c47ea84/a0/smollm2_360m/implementation.json",
+      "sha256": "2770e54ad7e2f8eb42be78648ba947cb552827384b2064a92956b3e36a7e8a36"
+    },
+    {
+      "bytes": 4418,
+      "path": "experiments/a0x-six-model/vertical-slices/f0f52d3f2108080871f01f4e080464c61c47ea84/a0/smollm2_360m/protocol.json",
+      "sha256": "61020c660d7884be6ca1972575ad8a95ac093751d2e5d7b43095d49e12da874e"
+    },
+    {
+      "bytes": 1989,
+      "path": "experiments/a0x-six-model/vertical-slices/f0f52d3f2108080871f01f4e080464c61c47ea84/a0/smollm2_360m/slice-manifest.json",
+      "sha256": "d0902177123f77de8fe735ed915a733aa8677efd267f7856f339ed7b42745b39"
+    }
+  ],
+  "recorded_on": "2026-09-05"
+}

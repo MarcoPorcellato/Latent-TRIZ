@@ -1,11 +1,30 @@
 ---
 type: laboratory-specification
 title: A0X pair-scoped vertical-slice execution
-status: implemented-p0-authorization-pending
+status: current-v2-route-p0-pending
 date: 2026-09-02
 ---
 
 # A0X pair-scoped vertical slice
+
+## Current route — 2026-09-05
+
+This document's tracked `a0x-vertical-slice-v1` package is historical evidence
+only. It is not a selector for new Gate B or Gate C work. The current
+target-free operational route is:
+
+```text
+Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
+```
+
+The v2 P0 package is an ignored, attempt-owned atomic envelope bound to one
+protected-`main` `HEAD/tree`, one pair, and an external package commitment.
+Gate B v2 and Gate C v2 reload that same commitment and reject v1, batch, or
+caller-selected dossier fallbacks. See the [Vertical Gate-Chain Convergence
+design](superpowers/specs/2026-09-05-a0x-vertical-gate-chain-convergence-design.md)
+for the normative boundary. Every arrow remains a separate exact authorization;
+this documentation does not authorize Hosted capture, P0, Gate B, Gate C, or
+any material access.
 
 ## Purpose
 
@@ -37,30 +56,34 @@ SmolLM2-360M / A0
   -> next model, under the unchanged frozen protocol
 ```
 
-## Pair-scoped generated package
+## Historical v1 package and current v2 envelope
 
-The existing batch generator writes both leg freezes and twelve dossiers. It
-must remain historical and must not be silently reinterpreted as current.
+The existing batch generator, its two leg freezes, and its twelve dossiers are
+historical target-free derivatives. The tracked
+`a0x-vertical-slice-v1` generator and package are also historical evidence.
+Neither can be silently reinterpreted as a current pair-scoped authorization.
 
-The new `a0x-vertical-slice-v1` generator accepts exactly one `--leg` and one
-`--model-key`. It writes only this five-file package under an absent,
-implementation-head-qualified namespace:
+The current P0 v2 generator accepts one typed leg/model pair and the already
+captured protected-main source identity. It writes one ignored, attempt-owned
+envelope under an absent, derived namespace:
 
 ```text
-experiments/a0x-six-model/vertical-slices/<implementation-head>/<leg>/<model-key>/
-  protocol.json
-  implementation.json
-  freeze.json
-  approval-dossier.json
-  slice-manifest.json
+.a0x-runtime/p0/v2/<head>/<tree>/<leg>/<model-key>/
+  package/
+    protocol.json
+    implementation.json
+    freeze.json
+    approval-dossier.json
+    slice-manifest.json
+  p0-commitment.json
 ```
 
-`slice-manifest.json` is canonical JSON and binds the repository, exact source
-HEAD/tree, selected leg/model/revision, the four member paths and SHA-256
-values, generator profile `a0x-vertical-slice-v1`, and the explicit statement
-that this is one pair, not a campaign-wide regeneration. It does not hash
-itself. The dossier binds the raw freeze hash and never grants model, tokenizer,
-target, Gate B, Gate C, CCP, network, publication, retry, or claim promotion.
+`slice-manifest.json` binds the exact source `HEAD/tree`, one typed pair, and
+the other four member sizes and SHA-256 values. The external
+`p0-commitment.json` binds all five package members and records P0
+authorization/attempt identities without self-hashing. Gate B v2 and Gate C v2
+recompute and reload this same commitment. These documents never grant model,
+tokenizer, target, network, CCP, publication, retry, or claim promotion.
 
 All construction occurs in a private staging directory. The package publishes
 only through an exclusive atomic rename; occupied output, selector ambiguity,
@@ -114,10 +137,10 @@ model or a batch artifact.
 
 ## First slice: SmolLM2-360M
 
-1. Implement and qualify the target-free pair-scoped generator.
-2. Generate only `A0 / smollm2_360m` from an exact clean implementation head.
-3. Request an exact-hash authorization for that one package.
-4. Complete Gate A, then separately Gate B, then separately the one Gate C
+1. Run one separately authorized Hosted Gate A for protected main.
+2. Capture its four verified inputs under a separate authorization.
+3. Generate only `A0 / smollm2_360m` through separately authorized P0 v2.
+4. Complete separately authorized Gate B, then separately the one Gate C
    attempt. Preserve any terminal outcome.
 5. Verify and publish the A0 terminal report only under a separate publication
    authorization.
@@ -141,7 +164,7 @@ orchestrator.
 
 ## Completion checklist
 
-- [ ] Pair-scoped generator refuses ambiguity and cannot alter historical batch artifacts.
+- [ ] P0 v2 refuses ambiguity and cannot alter historical v1 or batch artifacts.
 - [ ] Pair package is generated atomically from one exact current source head.
 - [ ] Each leg has its own freeze, dossier, gate evidence, and terminal report.
 - [ ] A0 and A0-R1 remain unpooled and independently interpreted.

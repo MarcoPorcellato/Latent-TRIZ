@@ -19,6 +19,22 @@ The executable plan is
   authorization or external state is required.
 - **Historical evidence:** preserved outcome; never silently relabelled.
 
+## 0. Gate B builder rejected repository model-card newline convention
+
+**Symptom.** The target-free Gate B `--plan` refused the exact SmolLM2 source
+before writing because the tracked model card ended with one `LF`, while the
+builder compared raw bytes only with canonical JSON without a final line feed.
+
+**Correction.** The model-card boundary now accepts the versioned A0X field
+order with compact UTF-8 bytes or those bytes plus one final `LF`, while
+retaining the raw-byte SHA-256. Unknown/reordered fields, additional line
+feeds, trailing spaces, invalid UTF-8, and hash drift remain refusals. Synthetic
+tests cover the accepted order and single-LF form plus rejected variants.
+
+**Evidence.** Builder tests: 25/25 pass. The exact real card remains byte
+unchanged and is still bound by its original SHA-256. The fresh target-free
+`--plan` now passes with the explicit field-order contract.
+
 ## 1. Material entrypoint remained a refusal stub
 
 **Symptom.** The twelve fixed Make targets existed, but
@@ -1198,3 +1214,208 @@ be regenerated from the correction commit before hosted requalification.
 **Status.** Corrected offline with TDD. No models, tokenizers, targets, CCP,
 Docker, network, or scientific execution were used. The failed workflow is
 preserved as negative hosted evidence; a new push and workflow are required.
+
+## 44. Model-card byte correction required freeze regeneration
+
+**Problem.** The six tracked model cards intentionally use a versioned insertion
+order, compact UTF-8, and one final LF. A generic sorted-key canonicalizer
+therefore rejected valid cards. After correcting the builder to enforce the
+explicit A0X field order, the implementation and test bytes changed while the
+tracked freezes and dossiers still referenced their previous sizes and hashes.
+
+**Correction.** The builder now validates the explicit model-card field order
+and whitespace contract while preserving raw bytes. The two implementation
+inventories, two freezes, and twelve dossiers were regenerated target-free from
+the correction commit and committed together. Frozen-package and no-model
+verification passed; synthetic verification passed 505 tests with one skip.
+
+**Status.** Hosted run `33709259544`, attempt `1`, correctly failed on both
+Python lanes before any material access because the pre-regeneration package
+was stale (`50136` current bytes versus `47086` bound bytes). No artifact was
+created and no rerun is authorized. The regenerated package is now at
+`62dd5cd9c747f986fc41c364ea86306f0d7164ac`; a fresh Hosted Gate A is required
+for that exact head.
+
+## 45. Tracked vertical packages created a source-identity cycle
+
+**Problem.** The tracked `a0x-vertical-slice-v1` package bound its own
+`implementation_source_head`. Publishing it necessarily changed the checkout
+identity required by P0 and later Gate C, while the batch Gate B route accepted
+only the unrelated twelve-dossier set. The sequence could not produce one
+stable source/package identity; repeated preparation would only move the
+mismatch.
+
+**Correction.** The future-only v2 route separates protected-main source
+identity from local package identity: `Hosted Gate A -> capture -> P0 v2 ->
+Gate B v2 -> Gate C v2 -> verification`. P0 v2 writes an ignored atomic
+envelope containing the canonical five-member package and a non-self-hashing
+external commitment. Gate B v2 and Gate C v2 reload the same typed binding,
+source `HEAD/tree`, raw commitment, dossier, and pair; v1 and batch routes are
+rejected for new work. The implementation inventory now binds every v2
+schema/source/script/test path, including the schema cardinality baseline.
+
+**Historical protection.** The tracked v1 package and historical review bytes
+are recorded in
+`docs/qualification/a0x-vertical-chain-historical-protection.json`. Generated
+batch inventories/freezes/dossiers and the no-model receipt are explicitly
+distinguished as current target-free derivatives and were regenerated from
+implementation anchor `bf49a48106b77e65f16aa6763035f9ab2fa9a67f`; they do
+not authorize material work.
+
+**Residual limitation.** Ignored runtime storage is not Git-attested. Every
+P0/Gate B/Gate C validation window therefore assumes no untrusted same-user
+namespace mutator; it enforces trusted-root containment, no-follow traversal,
+regular-file/link-count/inode/size/hash checks, atomic absent-destination
+publication, and ownership-loss refusal. This reduces but cannot eliminate a
+same-user concurrent-mutator threat without operator isolation.
+
+**Next boundary.** Stop at `sealed_gate_pending`. A new exact authorization is
+required first for one Hosted Gate A run on protected main, then separately for
+capture, P0 v2, Gate B v2, Gate C, and any publication. No model, tokenizer,
+target, scoring, CCP, Docker, network, or scientific claim is opened here.
+
+## 46. Historical batch derivatives required an independent Git-object ledger
+
+**Problem.** The original seven-file historical protection manifest preserves
+tracked v1 and review evidence, but intentionally excludes the seventeen
+batch-derived implementation, freeze, dossier, and no-model receipt files that
+were regenerated while Task 5 established the v2 route. A local working-tree
+comparison would not prove their pre-regeneration bytes, and a shallow hosted
+checkout would not retain their exact parent objects.
+
+**Correction.** `docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json`
+records exactly the seventeen generated paths from parent
+`d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d`, its tree, mode, blob object ID,
+byte count, SHA-256, and a domain-separated non-self commitment. The explicit
+historical verifier replays only `git ls-tree` and `git cat-file` objects,
+requires the complete exact path set, and refuses a missing parent. It is not
+an active P0, Gate B, Gate C, or no-model input. Hosted checkout depth is zero
+so the target-free test can prove the same historical object availability.
+
+**Status.** The original seven-file protection manifest remains byte-identical.
+The new ledger is historical audit evidence, not a qualification, authorization,
+or scientific result. Regeneration remains target-free and is followed by exact
+canonical recomputation of the tracked no-model receipt.
+
+## 47. Production Gate A receipts had an implicit production context
+
+**Problem.** The production Hosted Gate A verification receipt schema correctly
+forbids a `qualification_context` field. The Gate B receipt-to-authorization
+comparison nevertheless read that absent field without its production default,
+which rejected the canonical production receipt before any runtime work.
+
+**Correction.** Gate B now treats an omitted receipt context as `production`,
+matching the authorization default while retaining the separate synthetic
+schema's required explicit `synthetic-target-free` value. Regression tests prove
+both canonical production acceptance and synthetic/production refusal.
+
+**Status.** Target-free correction at implementation anchor
+`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. It does not authorize Hosted Gate
+A, P0 v2, Gate B, Gate C, model or tokenizer access, targets, scoring, CCP,
+Docker, network, or publication.
+
+## 48. Historical ledger containment must precede path resolution
+
+**Problem.** The historical batch-ledger verifier resolved a caller-supplied
+parent directory before checking controlled path components. A symlinked parent
+could therefore normalize to an otherwise trusted path.
+
+**Correction.** The verifier now checks lexical containment and every component
+before resolution, then reconstructs the canonical repository path. A regression
+test proves that a parent symlink is rejected; existing missing-parent and
+historical-byte checks remain fail-closed.
+
+**Status.** Target-free correction at implementation anchor
+`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. The ledger remains historical audit
+evidence only and is not an active P0, Gate B, Gate C, or no-model input.
+
+## 49. Shared validator extension invalidated immutable A0-R2 evidence
+
+**Problem.** A shared dependency-free validator acquired Draft 2020-12
+`prefixItems` support for A0X positional schemas. The A0-R2 execution receipt
+binds the historical validator bytes, so the required receipt verifier refused
+the changed path before any model or target access.
+
+**Correction.** Restore `src/latent_triz/validator.py` byte-for-byte and move
+the reviewed extended implementation to `src/latent_triz/a0x_validator.py`.
+Only A0X positional consumers use the new module; legacy A0-R2/C3 imports do
+not load it. The pinned `Draft202012Validator` remains the independent oracle.
+The schema cross-validator now reports legacy and A0X positional results
+separately.
+
+**Historical preservation.** The existing `d7a8b5f` ledger is unchanged. A
+second Git-object ledger records the current `ab047833` parent/tree and its
+seventeen A0X generated artifacts before regeneration. Both ledgers are audit
+only and replay from exact Git objects.
+
+**Status.** Target-free implementation correction only. No model, tokenizer,
+target, Gate B/C, CCP, Docker, network, remote, or publication authority is
+created by this record.
+
+## 50. Hosted PR checks lacked history and crossed a native-only test boundary
+
+**Problem.** GitHub run `33982279950` failed both repository lanes before any
+material access. The PR checkout for Python 3.11 and 3.12 was shallow, while
+the explicit historical-ledger audit requires exact ancestor Git objects.
+Separately, the disposable real-Git vertical-chain fixture invoked the
+production Darwin-only exclusive publication primitive on an Ubuntu runner.
+The primitive correctly refused the unsupported platform, but the fixture had
+not substituted its existing test-only publisher seam.
+
+**Correction.** Both repository-check lanes now fetch complete Git history so
+the historical verifier can replay the exact ancestor objects it already
+binds. On non-Darwin test hosts only, the real-Git fixture replaces the final
+native rename syscall with the existing private test publisher. All package,
+Git identity, mutation, Gate B, and Gate C logic remains production code.
+Darwin keeps the native primitive, and the dedicated tests still prove native
+flags, error mapping, unsupported-platform refusal, no-overwrite behavior, and
+ownership-safe cleanup.
+
+**Status.** Target-free CI portability correction. The failed workflow remains
+negative hosted evidence and is not reinterpreted. The affected implementation
+inventory, freezes, dossiers, and no-model receipt must be regenerated from the
+new correction commit before a fresh push. No model, tokenizer, target, Gate
+B/C, CCP, Docker, scoring, or scientific execution is authorized by this
+record.
+
+## 51. Full history did not include unreachable historical audit objects
+
+**Problem.** GitHub run `33983540338` showed that `fetch-depth: 0` was
+necessary but insufficient. Both repository lanes still refused the two
+historical-ledger replay tests because their exact parent commits are not
+reachable from the pull-request ancestry. A full checkout cannot include an
+unreachable object unless that object is requested explicitly.
+
+**Correction.** Each repository lane now fetches only the two immutable commit
+SHA-1 values bound by the ledgers, at depth one and without tags, then verifies
+their exact tree identities before any test executes. A missing object, failed
+fetch, or tree mismatch stops the lane. The public ledger verifier and its
+missing-parent regression remain fail-closed; no historical check is skipped.
+
+**Status.** Target-free hosted-portability correction. Run `33983540338`
+remains negative hosted evidence. The two commit and tree pairs were confirmed
+through the public repository API and an isolated shallow-clone fetch before
+implementation. No model, tokenizer, target, Gate B/C, CCP, Docker, scoring, or
+scientific execution is authorized by this record.
+
+## 52. Pull-request-target used the trusted base workflow during bootstrap
+
+**Problem.** GitHub run `33984594646` still lacked the historical objects even
+though the candidate workflow contained the correct fetch step. The event is
+`pull_request_target`, so GitHub executed the workflow definition from the
+trusted base branch. Candidate workflow corrections cannot prepare their own
+bootstrap run.
+
+**Correction.** The two historical replay tests may prepare their exact object
+only when GitHub identifies the canonical public repository and hosted Actions
+environment. The preparation uses the fixed public repository URL, immutable
+commit SHA-1, no tags, and depth one, then verifies the exact ledger-bound tree
+before calling the unchanged fail-closed verifier. It refuses automatic network
+access everywhere else. After merge, the trusted-base workflow performs the
+same fetch and tree verification before the full suite, so this bootstrap path
+is normally dormant.
+
+**Status.** Target-free bootstrap correction. Run `33984594646` remains
+negative hosted evidence and is not reinterpreted. No gate is skipped, no
+untrusted ref is fetched, and no model, tokenizer, target, Gate B/C, CCP,
+Docker, scoring, or scientific execution is authorized.

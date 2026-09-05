@@ -74,7 +74,14 @@ jobs:
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Fetch immutable historical audit objects
+        run: |
+          git fetch --no-tags --depth=1 origin d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d
+          test "$(git rev-parse d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d^{tree})" = "54c59868802af381f57f830102a01be54410e718"
+          git fetch --no-tags --depth=1 origin ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9
+          test "$(git rev-parse ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9^{tree})" = "ff90ef65cd1ca1c58be620c5241621db5091fa77"
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
@@ -94,7 +101,14 @@ jobs:
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Fetch immutable historical audit objects
+        run: |
+          git fetch --no-tags --depth=1 origin d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d
+          test "$(git rev-parse d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d^{tree})" = "54c59868802af381f57f830102a01be54410e718"
+          git fetch --no-tags --depth=1 origin ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9
+          test "$(git rev-parse ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9^{tree})" = "ff90ef65cd1ca1c58be620c5241621db5091fa77"
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"

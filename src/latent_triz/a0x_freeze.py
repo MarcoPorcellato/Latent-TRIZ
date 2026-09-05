@@ -9,8 +9,10 @@ boundary is reached elsewhere.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -39,6 +41,43 @@ SELECTION_PATH = "experiments/a0x-six-model/a0-selection-manifest.json"
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
 _SAFE_RELATIVE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$")
+_HISTORICAL_BATCH_PRE_REGENERATION_PROFILE = "a0x-batch-pre-regeneration-ledger-v1"
+_HISTORICAL_BATCH_PRE_REGENERATION_PARENT = "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d"
+_HISTORICAL_BATCH_PRE_REGENERATION_TREE = "54c59868802af381f57f830102a01be54410e718"
+_HISTORICAL_BATCH_PRE_REGENERATION_PATHS = (
+    "experiments/a0x-six-model/a0/implementation.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/gpt2.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/gpt_neo_125m.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/qwen2_5_0_5b.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/qwen3_0_6b_base.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/smollm2_135m.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/gpt2.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/gpt_neo_125m.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/qwen2_5_0_5b.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/qwen3_0_6b_base.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/smollm2_135m.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/smollm2_360m.json",
+    "experiments/a0x-six-model/freeze/a0-freeze.json",
+    "experiments/a0x-six-model/freeze/r1-freeze.json",
+    "experiments/a0x-six-model/r1/implementation.json",
+    "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
+)
+_CURRENT_BATCH_PRE_REGENERATION_PROFILE = "a0x-batch-pre-regeneration-ledger-v2"
+_CURRENT_BATCH_PRE_REGENERATION_PARENT = "ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9"
+_CURRENT_BATCH_PRE_REGENERATION_TREE = "ff90ef65cd1ca1c58be620c5241621db5091fa77"
+_HISTORICAL_BATCH_PRE_REGENERATION_LEDGERS = {
+    _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE: (
+        _HISTORICAL_BATCH_PRE_REGENERATION_PARENT,
+        _HISTORICAL_BATCH_PRE_REGENERATION_TREE,
+        _HISTORICAL_BATCH_PRE_REGENERATION_PATHS,
+    ),
+    _CURRENT_BATCH_PRE_REGENERATION_PROFILE: (
+        _CURRENT_BATCH_PRE_REGENERATION_PARENT,
+        _CURRENT_BATCH_PRE_REGENERATION_TREE,
+        _HISTORICAL_BATCH_PRE_REGENERATION_PATHS,
+    ),
+}
 _COMMON = {
     "empirical": True,
     "scientific_status": "exploratory",
@@ -93,6 +132,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "schemas/a0x-authorization-dossier.schema.json",
     "schemas/a0x-ccp-observation.schema.json",
     "schemas/a0x-execution-authorization.schema.json",
+    "schemas/a0x-execution-authorization-v4.schema.json",
     "schemas/a0x-guard-launch.schema.json",
     "schemas/a0x-material-execution-contract.schema.json",
     "schemas/a0x-publication-manifest.schema.json",
@@ -102,6 +142,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "scripts/a0x_compatibility_check.py",
     "scripts/a0x_build_gate_b_runtime.py",
     "scripts/a0x_compile_pair_schemas.py",
+    "scripts/schema_cross_validate.py",
     "scripts/repository_check.py",
     "scripts/a0x_material.py",
     "scripts/a0x_material_child.py",
@@ -109,6 +150,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "src/latent_triz/a0x_a0_activations.py",
     "src/latent_triz/a0x_a0_analysis.py",
     "src/latent_triz/a0x_apfs.py",
+    "src/latent_triz/a0x_validator.py",
     "src/latent_triz/a0x_gate_b_builder.py",
     "src/latent_triz/a0x_contract.py",
     "src/latent_triz/a0x_pair.py",
@@ -131,7 +173,9 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "src/latent_triz/a0x_runtime_readiness.py",
     "src/latent_triz/a0x_verify.py",
     "src/latent_triz/a0x_wheelhouse.py",
+    "src/latent_triz/validator.py",
     "tests/test_a0x_activations.py",
+    "tests/test_a0x_validator.py",
     "tests/test_a0x_a0_analysis.py",
     "tests/test_a0x_apfs.py",
     "tests/test_a0x_gate_b_builder.py",
@@ -178,6 +222,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "schemas/a0x-target-read-receipt.schema.json",
     "schemas/a0x-terminal-result.schema.json",
     "schemas/a0x-gate-b-authorization.schema.json",
+    "schemas/a0x-gate-b-authorization-v2.schema.json",
     "schemas/a0x-gh-2.97.0-verification-result.schema.json",
     "schemas/a0x-hosted-gate-a-evidence.schema.json",
     "schemas/a0x-hosted-gate-a-capture-request.schema.json",
@@ -185,8 +230,13 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "schemas/a0x-hosted-gate-a-lane-receipt.schema.json",
     "schemas/a0x-hosted-gate-a-transport.schema.json",
     "schemas/a0x-hosted-gate-a-verification-receipt.schema.json",
+    "schemas/a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1.schema.json",
     "schemas/a0x-hosted-gate-a-verifier-policy.schema.json",
     "schemas/a0x-vertical-slice-manifest.schema.json",
+    "schemas/a0x-vertical-gate-a-evidence-binding-v1.schema.json",
+    "schemas/a0x-vertical-gate-b-output-v2.schema.json",
+    "schemas/a0x-vertical-package-commitment-v2.schema.json",
+    "schemas/a0x-vertical-slice-manifest-v2.schema.json",
     "scripts/a0x_hosted_gate_a.py",
     "scripts/a0x_capture_hosted_gate_a.py",
     "scripts/a0x_materialize_no_model_receipt.py",
@@ -203,11 +253,17 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "tests/test_a0x_hosted_verifier.py",
     "tests/test_a0x_vertical_material.py",
     "tests/test_a0x_vertical_slice.py",
+    "tests/test_a0x_vertical_gate_chain_v2.py",
+    "tests/test_a0x_vertical_runtime_bundle.py",
+    "tests/test_a0x_vertical_slice_v2.py",
     "tests/fixtures/a0x/hosted-gate-a/positive/gate-b-authorization.json",
     "tests/fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json",
     "tests/fixtures/a0x/hosted-gate-a/positive/transport.json",
     "tests/fixtures/a0x/hosted-gate-a/positive/verification-receipt.json",
     "tests/fixtures/a0x/hosted-gate-a/positive/verifier-policy.json",
+    "docs/qualification/a0x-vertical-chain-historical-protection.json",
+    "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json",
+    "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json",
 }))
 
 _DOSSIER_FILENAMES = {
@@ -963,6 +1019,143 @@ def _file_binding(repository: Path, relative: str) -> dict[str, Any]:
     if path.stat().st_nlink != 1:
         raise A0XFreezeError(f"implementation binding is a hardlink: {relative}")
     return {"path": relative, "bytes": path.stat().st_size, "sha256": sha256_file(path)}
+
+
+def _historical_ledger_commitment(value: Mapping[str, Any]) -> str:
+    """Return the domain-separated digest for the non-self-hashing ledger body."""
+    try:
+        raw = json.dumps(dict(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise A0XFreezeError("historical ledger cannot encode canonically") from error
+    return hashlib.sha256(b"A0X-BATCH-PRE-REGENERATION-LEDGER-V1\\x00" + raw).hexdigest()
+
+
+def _historical_git(repository: Path, arguments: Sequence[str], *, missing_parent: bool = False) -> bytes:
+    """Read one historical Git object without consulting the working tree."""
+    completed = subprocess.run(
+        ["git", "-C", str(repository), *arguments],
+        check=False,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        message = "historical parent is unavailable" if missing_parent else "historical Git object is unavailable"
+        raise A0XFreezeError(message)
+    return completed.stdout
+
+
+def _historical_ledger_document(ledger_path: Path) -> dict[str, Any]:
+    try:
+        metadata = ledger_path.lstat()
+        raw = ledger_path.read_bytes()
+    except OSError as error:
+        raise A0XFreezeError("historical ledger is unavailable") from error
+    if not ledger_path.is_file() or ledger_path.is_symlink() or metadata.st_nlink != 1:
+        raise A0XFreezeError("historical ledger is not an independent regular file")
+    try:
+        document = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise A0XFreezeError("historical ledger is invalid JSON") from error
+    if not isinstance(document, dict):
+        raise A0XFreezeError("historical ledger is not an object")
+    return document
+
+
+def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Path) -> dict[str, Any]:
+    """Replay the one historical batch snapshot from Git blobs, never active loaders.
+
+    This is an explicit audit utility.  It deliberately reads `d7a8b5f` through
+    Git plumbing and must not be called by current P0 v2, Gate B v2, Gate C v2,
+    or ordinary no-model loaders.
+    """
+    lexical_root = Path(root)
+    repository = lexical_root.resolve()
+    candidate = Path(ledger_path)
+    if not candidate.is_absolute():
+        candidate = lexical_root / candidate
+    try:
+        relative_candidate = candidate.relative_to(lexical_root)
+    except ValueError as error:
+        raise A0XFreezeError("historical ledger escapes repository root") from error
+    if not relative_candidate.parts or any(component in {".", ".."} for component in relative_candidate.parts):
+        raise A0XFreezeError("historical ledger path is not lexically contained")
+    # Validate lexical components before any resolution.  Resolving first would
+    # normalize a symlinked parent into a trusted path and erase the evidence.
+    _reject_symlink_components(repository, relative_candidate.as_posix())
+    candidate = repository.joinpath(*relative_candidate.parts)
+    document = _historical_ledger_document(candidate)
+    expected_keys = {
+        "profile", "domain", "historical_only", "parent_head", "parent_tree",
+        "entry_count", "entries", "ledger_commitment_sha256",
+    }
+    if set(document) != expected_keys:
+        raise A0XFreezeError("historical ledger fields differ")
+    configuration = _HISTORICAL_BATCH_PRE_REGENERATION_LEDGERS.get(document["profile"])
+    if configuration is None:
+        raise A0XFreezeError("historical ledger identity differs")
+    parent_head, parent_tree, expected_paths = configuration
+    if (
+        document["domain"] != document["profile"]
+        or document["historical_only"] is not True
+        or document["parent_head"] != parent_head
+        or document["parent_tree"] != parent_tree
+        or document["entry_count"] != len(expected_paths)
+        or not isinstance(document["entries"], list)
+        or not isinstance(document["ledger_commitment_sha256"], str)
+        or _SHA256.fullmatch(document["ledger_commitment_sha256"]) is None
+    ):
+        raise A0XFreezeError("historical ledger identity differs")
+    projection = dict(document)
+    commitment = projection.pop("ledger_commitment_sha256")
+    if commitment != _historical_ledger_commitment(projection):
+        raise A0XFreezeError("historical ledger commitment differs")
+    _historical_git(repository, ["cat-file", "-e", f"{parent_head}^{{commit}}"], missing_parent=True)
+    observed_tree = _historical_git(repository, ["rev-parse", f"{parent_head}^{{tree}}"], missing_parent=True).decode("ascii", "strict").strip()
+    if observed_tree != parent_tree:
+        raise A0XFreezeError("historical parent tree differs")
+    entries = document["entries"]
+    paths: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"path", "mode", "blob_oid", "bytes", "sha256"}:
+            raise A0XFreezeError("historical ledger entry fields differ")
+        path = entry["path"]
+        if not isinstance(path, str) or _SAFE_RELATIVE.fullmatch(path) is None:
+            raise A0XFreezeError("historical ledger path is invalid")
+        if (
+            entry["mode"] != "100644"
+            or not isinstance(entry["blob_oid"], str)
+            or _REVISION.fullmatch(entry["blob_oid"]) is None
+            or type(entry["bytes"]) is not int
+            or entry["bytes"] < 0
+            or not isinstance(entry["sha256"], str)
+            or _SHA256.fullmatch(entry["sha256"]) is None
+        ):
+            raise A0XFreezeError("historical ledger entry is invalid")
+        paths.append(path)
+    if tuple(paths) != expected_paths:
+        raise A0XFreezeError("historical ledger path set differs")
+    for entry in entries:
+        path = entry["path"]
+        tree_line = _historical_git(
+            repository,
+            ["ls-tree", parent_head, "--", path],
+        ).decode("utf-8", "strict").rstrip("\n")
+        fields, separator, observed_path = tree_line.partition("\t")
+        parts = fields.split()
+        if separator != "\t" or observed_path != path or len(parts) != 3:
+            raise A0XFreezeError("historical Git tree entry differs")
+        mode, object_type, blob_oid = parts
+        if mode != entry["mode"] or object_type != "blob" or blob_oid != entry["blob_oid"]:
+            raise A0XFreezeError("historical Git tree binding differs")
+        raw = _historical_git(repository, ["cat-file", "blob", blob_oid])
+        if len(raw) != entry["bytes"] or hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+            raise A0XFreezeError("historical Git blob bytes differ")
+    return {
+        "profile": document["profile"],
+        "parent_head": parent_head,
+        "parent_tree": parent_tree,
+        "entry_count": len(entries),
+        "ledger_commitment_sha256": commitment,
+    }
 
 
 def _load_model_cards(

@@ -21,7 +21,7 @@ from latent_triz.validator import validate
 _ROOT = Path(__file__).resolve().parents[2]
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
-_RUNTIME_PATH = re.compile(r"^\.a0x-runtime/(?:authorizations|launches|claims|observations|qualification|bin)/[A-Za-z0-9._/-]+$")
+_RUNTIME_PATH = re.compile(r"^\.a0x-runtime/(?:authorizations|launches|claims|observations|qualification|bin|gate-b)/[A-Za-z0-9._/-]+$")
 _RUN_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 _ENVIRONMENT_TEMPLATE = (
     "HF_HUB_OFFLINE=1",
@@ -39,6 +39,7 @@ MEMORY_LIMIT_BYTES = 8_589_934_592
 GUARD_LAUNCH_PROFILE = "a0x-guard-launch-v2"
 QUALIFICATION_EVIDENCE_PROFILE = "a0x-qualification-evidence-v1"
 GATE_A_EVIDENCE_PROFILE = "a0x-gate-a-evidence-binding-v2"
+VERTICAL_GATE_A_EVIDENCE_PROFILE = "a0x-vertical-gate-a-evidence-binding-v1"
 GATE_A_PROVIDER = "github-hosted-attestation-v1"
 _GATE_A_VERIFIER = {
     "role": "github_cli_verifier",
@@ -190,7 +191,10 @@ class A0XGuardLaunch:
         _require_revision(source_head, "source head")
         child_script_path, child_script_sha256 = _child_script(value.get("child_script"))
         descriptor_path, descriptor_sha256 = _launch_descriptor(value.get("launch_descriptor"))
-        if not descriptor_path.startswith(".a0x-runtime/launches/"):
+        if not (
+            descriptor_path.startswith(".a0x-runtime/launches/")
+            or descriptor_path.startswith(".a0x-runtime/gate-b/v2/")
+        ):
             raise A0XContractError("guard launch descriptor is outside the runtime inlet")
         environment = _environment(value.get("environment_template"))
         resource = _resource(value.get("resource"))
@@ -290,6 +294,8 @@ def validate_gate_a_evidence(value: Mapping[str, Any], *, historical: bool = Fal
         if profile != QUALIFICATION_EVIDENCE_PROFILE:
             raise A0XContractError("historical Gate A evidence profile is unsupported")
         return validate_qualification_evidence(value)
+    if profile == VERTICAL_GATE_A_EVIDENCE_PROFILE:
+        return validate_vertical_gate_a_evidence(value)
     if profile != GATE_A_EVIDENCE_PROFILE:
         raise A0XContractError("current Gate A evidence profile is unsupported")
     schema = _read_schema("a0x-qualification-evidence.schema.json")
@@ -328,6 +334,68 @@ def validate_gate_a_evidence(value: Mapping[str, Any], *, historical: bool = Fal
         raise A0XContractError("Gate A verifier identity differs from the frozen policy")
     if _contains_local_or_private_value(evidence):
         raise A0XContractError("Gate A evidence contains a local path or private field")
+    return evidence
+
+
+def validate_vertical_gate_a_evidence(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the future-only Gate-B-rooted hosted evidence projection."""
+    if not isinstance(value, Mapping) or value.get("evidence_profile") != VERTICAL_GATE_A_EVIDENCE_PROFILE:
+        raise A0XContractError("vertical Gate A evidence profile is unsupported")
+    schema = _read_schema("a0x-vertical-gate-a-evidence-binding-v1.schema.json")
+    issues = validate(dict(value), schema)
+    if issues:
+        raise A0XContractError(f"vertical Gate A evidence schema rejected input: {issues[0].message}")
+    required = {
+        "evidence_profile", "provider", "repository", "source_head", "source_tree", "pair_binding",
+        "gate_b_authorization_path", "gate_b_authorization_raw_sha256", "hosted_inputs",
+        "verification_receipt", "verifier",
+    }
+    if set(value) != required:
+        raise A0XContractError("vertical Gate A evidence shape is invalid")
+    evidence = dict(value)
+    pair = PairBinding.from_mapping(evidence["pair_binding"])
+    if evidence["pair_binding"] != pair.as_mapping() or evidence["provider"] != GATE_A_PROVIDER or evidence["repository"] != "MarcoPorcellato/Latent-TRIZ":
+        raise A0XContractError("vertical Gate A evidence identity is invalid")
+    _require_revision(evidence["source_head"], "vertical Gate A source head")
+    _require_revision(evidence["source_tree"], "vertical Gate A source tree")
+    if not _SHA256.fullmatch(evidence["gate_b_authorization_raw_sha256"]):
+        raise A0XContractError("vertical Gate B authorization hash is invalid")
+    base = f".a0x-runtime/gate-b/v2/{evidence['source_head']}/{evidence['source_tree']}/{pair.leg.value}/{pair.model_key}/{pair.run_id}/"
+    if evidence["gate_b_authorization_path"] != base + "gate-b-authorization.json":
+        raise A0XContractError("vertical Gate B authorization path is not canonical")
+    receipt = evidence["verification_receipt"]
+    if not isinstance(receipt, Mapping) or receipt != {"path": base + "gate-a-verification-receipt.json", "sha256": receipt.get("sha256")} or not _SHA256.fullmatch(receipt["sha256"]):
+        raise A0XContractError("vertical Gate A receipt binding is invalid")
+    inputs = evidence["hosted_inputs"]
+    if not isinstance(inputs, Mapping) or set(inputs) != {"manifest", "attestation_bundle", "trusted_root", "transport"}:
+        raise A0XContractError("vertical Gate A hosted input set is invalid")
+    hosted_base = f".a0x-runtime/gate-a/evidence/{evidence['source_head']}/"
+    hosted_names = {
+        "manifest": "hosted-gate-a-evidence.json",
+        "attestation_bundle": "hosted-gate-a-attestation.bundle.jsonl",
+        "trusted_root": "github-trusted-root.jsonl",
+        "transport": "hosted-gate-a-transport.json",
+    }
+    for name, filename in hosted_names.items():
+        item = inputs[name]
+        if (
+            not isinstance(item, Mapping)
+            or set(item) != {"path", "sha256"}
+            or item.get("path") != hosted_base + filename
+            or not _SHA256.fullmatch(item["sha256"])
+        ):
+            raise A0XContractError("vertical Gate A hosted input binding is invalid")
+    verifier = evidence["verifier"]
+    if (
+        not isinstance(verifier, Mapping)
+        or set(verifier) != {"role", "version", "sha256", "policy_raw_sha256"}
+        or verifier.get("role") != "github_cli_verifier"
+        or not isinstance(verifier.get("version"), str)
+        or not verifier["version"].startswith("gh version ")
+        or not _SHA256.fullmatch(verifier.get("sha256", ""))
+        or not _SHA256.fullmatch(verifier.get("policy_raw_sha256", ""))
+    ):
+        raise A0XContractError("vertical Gate A verifier identity is invalid")
     return evidence
 
 

@@ -21,12 +21,13 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from .a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
     CURRENT_EXECUTION_AUTHORIZATION_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
+    VERTICAL_EXECUTION_AUTHORIZATION_PROFILE,
     A0XContractError,
     Leg,
     PairBinding,
@@ -42,16 +43,19 @@ from .a0x_material_contract import (
     OUTER_TIMEOUT_SECONDS,
     derive_runtime_paths,
     validate_gate_a_evidence,
+    validate_vertical_gate_a_evidence,
     validate_guard_launch_pair_binding,
     validate_qualification_evidence,
 )
+from .a0x_hosted_gate_a import canonical_json_bytes as hosted_gate_a_canonical_json_bytes
 from .a0x_runner import A0XRunnerError, planned_material_dossiers, vertical_slice_dossier_path
 from .a0x_runtime_readiness import (
     A0XRuntimeReadinessError,
     runtime_readiness_path,
     validate_runtime_readiness_live,
 )
-from .a0x_vertical_slice import A0XVerticalSliceError, load_vertical_slice
+from .a0x_vertical_slice import A0XVerticalSliceError, VerticalPackageBinding, load_vertical_runtime_package, load_vertical_slice
+from .validator import validate
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -146,6 +150,55 @@ class GuardPreflightProducer(Protocol):
     """Produce the six semantic, read-only guard-preflight observations."""
 
     def produce(self, *, ccp_path: Path, repository_root: Path) -> Sequence[GuardPreflightOutput]: ...
+
+
+@dataclass(frozen=True)
+class _ExecutableIdentityEvidence:
+    """One independently checked executable identity at a private boundary."""
+
+    role: str
+    path: Path
+    sha256: str
+    version: str | None
+    synthetic: bool = False
+
+
+class _ExecutableIdentityVerifier(Protocol):
+    """Private capability: production hashes bytes; tests may model an identity."""
+
+    def verify(
+        self, *, role: str, path: Path, expected_sha256: str, expected_version: str | None = None,
+    ) -> _ExecutableIdentityEvidence: ...
+
+
+class _ProductionExecutableIdentityVerifier:
+    """Fail-closed no-follow identity verifier used by the public production path."""
+
+    def verify(
+        self, *, role: str, path: Path, expected_sha256: str, expected_version: str | None = None,
+    ) -> _ExecutableIdentityEvidence:
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            raise A0XCcpExecutorError(f"{role} executable is unavailable") from error
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise A0XCcpExecutorError(f"{role} executable is not an independent regular file")
+        observed = sha256_file(path)
+        if observed != expected_sha256:
+            raise A0XCcpExecutorError(f"{role} executable bytes drifted")
+        version: str | None = None
+        if expected_version is not None:
+            completed = subprocess.run(
+                (str(path), "--version"), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, check=False, timeout=_PREFLIGHT_TIMEOUT_SECONDS,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+            if completed.returncode != 0:
+                raise A0XCcpExecutorError(f"{role} executable version probe failed")
+            version = _strict_text(completed.stdout, f"{role} executable version")
+            if version != expected_version:
+                raise A0XCcpExecutorError(f"{role} executable version differs")
+        return _ExecutableIdentityEvidence(role=role, path=path, sha256=observed, version=version)
 
 
 class SubprocessGuardPreflightProducer:
@@ -304,6 +357,515 @@ def launch_vertical_slice_dossier(
         expected_dossier_sha256=dossier_sha256,
         expected_vertical_package_head=package_head,
     )
+
+
+def vertical_execution_authorization_path(binding: VerticalPackageBinding) -> str:
+    """Derive the sole future-only Gate-C authorization inlet for one pair."""
+    if not isinstance(binding, VerticalPackageBinding):
+        raise A0XCcpExecutorError("vertical package binding is invalid")
+    pair = binding.pair_binding
+    return (
+        f".a0x-runtime/gate-c/v2/{binding.qualified_source_head}/"
+        f"{binding.qualified_source_tree}/{pair.leg.value}/{pair.model_key}/"
+        f"{pair.run_id}/execution-authorization.json"
+    )
+
+
+def launch_vertical_runtime_package(
+    *, repository_root: str | Path, package_binding: VerticalPackageBinding,
+    execution_authorization_path: str,
+) -> dict[str, Any]:
+    """Production v2 entry point: adapters are fixed, never caller selected."""
+    root = Path(repository_root).resolve(strict=True)
+    return _launch_validated_vertical_v2(
+        repository_root=root, package_binding=package_binding,
+        execution_authorization_path=execution_authorization_path,
+        source_state_probe=lambda: _production_vertical_source_state(root), process_executor=_SubprocessExecutor(),
+        guard_preflight_producer=SubprocessGuardPreflightProducer(),
+        executable_identity_verifier=_ProductionExecutableIdentityVerifier(),
+        expected_qualification_context="production",
+    )
+
+
+def _production_vertical_source_state(root: Path) -> tuple[str, str, bool]:
+    """Read the execution identity directly; public callers cannot inject it."""
+    def git(*argv: str) -> bytes:
+        try:
+            completed = subprocess.run(
+                ("git", *argv), cwd=str(root), stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+                timeout=_PREFLIGHT_TIMEOUT_SECONDS, env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise A0XCcpExecutorError("vertical Gate C production source probe failed") from error
+        if completed.returncode != 0:
+            raise A0XCcpExecutorError("vertical Gate C production source probe failed")
+        return completed.stdout
+    return (
+        _strict_text(git("rev-parse", "HEAD"), "vertical Gate C HEAD"),
+        _strict_text(git("rev-parse", "HEAD^{tree}"), "vertical Gate C tree"),
+        not git("status", "--porcelain=v1", "--untracked-files=all").strip(),
+    )
+
+
+def _launch_validated_vertical_v2(
+    *,
+    repository_root: str | Path,
+    package_binding: VerticalPackageBinding,
+    execution_authorization_path: str,
+    source_state_probe: Callable[[], tuple[str, str, bool]],
+    process_executor: ProcessExecutor,
+    guard_preflight_producer: GuardPreflightProducer,
+    executable_identity_verifier: _ExecutableIdentityVerifier,
+    expected_qualification_context: Literal["production", "synthetic-target-free"] = "synthetic-target-free",
+) -> dict[str, Any]:
+    """Validate the v2 P0/Gate-B graph before one injected future Gate-C guard.
+
+    This deliberately cannot route through the historical selector launcher.
+    A real material adapter is not supplied by this target-free task: callers
+    must provide an explicit process adapter under a later authorization.
+    """
+    if expected_qualification_context not in {"production", "synthetic-target-free"}:
+        raise A0XCcpExecutorError("vertical Gate C qualification context is invalid")
+    if not isinstance(package_binding, VerticalPackageBinding):
+        raise A0XCcpExecutorError("vertical Gate C package binding is invalid")
+    root = Path(repository_root).resolve(strict=True)
+    try:
+        source_head, source_tree, clean = source_state_probe()
+    except Exception as error:
+        raise A0XCcpExecutorError("vertical Gate C source-state probe failed") from error
+    if (
+        not isinstance(clean, bool)
+        or not clean
+        or source_head != package_binding.qualified_source_head
+        or source_tree != package_binding.qualified_source_tree
+    ):
+        raise A0XCcpExecutorError("vertical Gate C source state does not match package binding")
+    _revision(source_head, "vertical Gate C source HEAD")
+    _revision(source_tree, "vertical Gate C source tree")
+    expected_authorization = vertical_execution_authorization_path(package_binding)
+    if execution_authorization_path != expected_authorization:
+        raise A0XCcpExecutorError("vertical Gate C authorization path is not derived")
+    try:
+        # Local import avoids the intentional Gate-B -> Gate-C import cycle.
+        from .a0x_runtime_bundle import validate_vertical_runtime_output
+        load_vertical_runtime_package(root, package_binding)
+        paths = _vertical_gate_b_output_paths(package_binding)
+        outputs = {
+            name: validate_vertical_runtime_output(
+                root, path, package_binding, expected_qualification_context=expected_qualification_context,
+            )
+            for name, path in paths.items()
+        }
+    except Exception as error:
+        raise A0XCcpExecutorError("vertical Gate C package or Gate B output is invalid") from error
+    authorization_path = _unique_repository_file(root, execution_authorization_path, "vertical Gate C authorization")
+    authorization_raw = authorization_path.read_bytes()
+    authorization = _strict_object(authorization_raw, "vertical Gate C authorization")
+    if _canonical_json(authorization) != authorization_raw:
+        raise A0XCcpExecutorError("vertical Gate C authorization is not canonical JSON")
+    try:
+        canonical_commitment(authorization, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE)
+        pair = PairBinding.from_mapping(_mapping(authorization, "pair_binding", "vertical Gate C authorization"))
+    except (A0XContractError, TypeError, ValueError) as error:
+        raise A0XCcpExecutorError("vertical Gate C authorization is not schema-valid") from error
+    expected_source = {"head": source_head, "tree": source_tree, "ref": "refs/heads/main"}
+    expected_package = _vertical_package_projection(package_binding)
+    if (
+        authorization.get("artifact_class") != "a0x-vertical-execution-authorization"
+        or authorization.get("qualified_source") != expected_source
+        or pair != package_binding.pair_binding
+        or authorization.get("vertical_package") != expected_package
+        or authorization.get("qualification_context") != expected_qualification_context
+        or authorization.get("max_guard_exec_count") != 1
+        or authorization.get("stop_boundary") != "after_one_sealed_target_read"
+    ):
+        raise A0XCcpExecutorError("vertical Gate C authorization binding differs")
+    references = authorization.get("gate_b_outputs")
+    if not isinstance(references, Mapping) or set(references) != set(paths):
+        raise A0XCcpExecutorError("vertical Gate C Gate B output set is invalid")
+    for name, relative in paths.items():
+        reference = references.get(name)
+        raw = _unique_repository_file(root, relative, f"vertical Gate B {name} output").read_bytes()
+        if (
+            reference != {"path": relative, "sha256": _sha256_bytes(raw)}
+            or outputs[name].get("output_kind") != name
+            or outputs[name].get("qualification_context") != expected_qualification_context
+        ):
+            raise A0XCcpExecutorError("vertical Gate C Gate B output binding drifted")
+    gate_b_base = Path(next(iter(paths.values()))).parent
+    gate_b_authorization_relative = (gate_b_base / "gate-b-authorization.json").as_posix()
+    gate_b_receipt_relative = (gate_b_base / "gate-a-verification-receipt.json").as_posix()
+    gate_b_authorization_raw = _unique_repository_file(root, gate_b_authorization_relative, "vertical Gate B authorization").read_bytes()
+    gate_b_receipt_raw = _unique_repository_file(root, gate_b_receipt_relative, "vertical Gate B verification receipt").read_bytes()
+    if (
+        authorization.get("gate_b_authorization") != {"path": gate_b_authorization_relative, "sha256": _sha256_bytes(gate_b_authorization_raw)}
+        or authorization.get("gate_a_verification_receipt") != {"path": gate_b_receipt_relative, "sha256": _sha256_bytes(gate_b_receipt_raw)}
+    ):
+        raise A0XCcpExecutorError("vertical Gate C Gate B raw binding drifted")
+    reconstructed_evidence = _vertical_gate_a_evidence_from_raw(
+        gate_b_authorization_raw=gate_b_authorization_raw,
+        gate_b_authorization_path=gate_b_authorization_relative,
+        gate_b_receipt_raw=gate_b_receipt_raw,
+        gate_b_receipt_path=gate_b_receipt_relative,
+        expected_source=expected_source,
+        pair=pair,
+        expected_package=expected_package,
+        expected_qualification_context=expected_qualification_context,
+    )
+    gate_a_payload = _mapping(outputs["gate_a_evidence"], "payload", "vertical Gate B evidence")
+    try:
+        evidence = validate_vertical_gate_a_evidence(gate_a_payload)
+    except A0XContractError as error:
+        raise A0XCcpExecutorError("vertical Gate C Gate A evidence is invalid") from error
+    if evidence != reconstructed_evidence:
+        raise A0XCcpExecutorError("vertical Gate C Gate A evidence is not reconstructed from Gate B bytes")
+    try:
+        launch = A0XGuardLaunch.from_mapping(_mapping(authorization, "guard_launch", "vertical Gate C authorization"))
+    except (A0XContractError, TypeError, ValueError) as error:
+        raise A0XCcpExecutorError("vertical Gate C guard launch is invalid") from error
+    descriptor_raw = _unique_repository_file(root, paths["descriptor"], "vertical Gate B descriptor").read_bytes()
+    mapping_payload = _mapping(outputs["mapping"], "payload", "vertical Gate B mapping")
+    descriptor_payload = _mapping(outputs["descriptor"], "payload", "vertical Gate B descriptor")
+    if (
+        launch.source_head != source_head
+        or launch.launch_descriptor_path != paths["descriptor"]
+        or launch.launch_descriptor_sha256 != _sha256_bytes(descriptor_raw)
+        or descriptor_payload.get("child_script", {}).get("sha256") != launch.child_script_sha256
+        or descriptor_payload.get("python", {}).get("sha256") != launch.python_sha256
+        or mapping_payload.get("ccp", {}).get("sha256") != launch.ccp_sha256
+    ):
+        raise A0XCcpExecutorError("vertical Gate C guard launch graph differs")
+    ccp_path = _role_path(mapping_payload.get("ccp"), role="ccp", expected_hash=launch.ccp_sha256)
+    python_path = _role_path(mapping_payload.get("python"), role="python", expected_hash=launch.python_sha256)
+    child_path = _unique_repository_file(root, launch.child_script_path, "vertical Gate C child script")
+    ccp_identity = _mapping(
+        _mapping(outputs["authorization"], "payload", "vertical Gate B authorization"),
+        "ccp", "vertical Gate B authorization",
+    )
+    expected_synthetic_identity = expected_qualification_context == "synthetic-target-free"
+
+    def require_identity_context(observed: _ExecutableIdentityEvidence) -> None:
+        """Every identity observation must retain the selected Gate-C context."""
+        if (
+            not isinstance(observed, _ExecutableIdentityEvidence)
+            or observed.synthetic != expected_synthetic_identity
+        ):
+            raise A0XCcpExecutorError("vertical Gate C executable identity context differs")
+
+    child_identity = executable_identity_verifier.verify(
+        role="child", path=child_path, expected_sha256=launch.child_script_sha256,
+    )
+    ccp_executable_identity = executable_identity_verifier.verify(
+        role="ccp", path=ccp_path, expected_sha256=launch.ccp_sha256,
+        expected_version=ccp_identity.get("version"),
+    )
+    python_identity = executable_identity_verifier.verify(
+        role="python", path=python_path, expected_sha256=launch.python_sha256,
+    )
+    for observed in (child_identity, ccp_executable_identity, python_identity):
+        require_identity_context(observed)
+    synthetic_identity = expected_synthetic_identity
+    guard_preflight = _validate_guard_preflight(
+        guard_preflight_producer.produce(ccp_path=ccp_path, repository_root=root),
+        launch=launch, pair=pair, source_head=source_head,
+        ccp_identity=ccp_identity,
+    )
+
+    def revalidate_graph() -> None:
+        """Re-open every mutable P0, Gate-B and Gate-C trust byte."""
+        try:
+            live_head, live_tree, live_clean = source_state_probe()
+        except Exception as error:
+            raise A0XCcpExecutorError("vertical Gate C source-state revalidation failed") from error
+        if (live_head, live_tree, live_clean) != (source_head, source_tree, True):
+            raise A0XCcpExecutorError("vertical Gate C source state drifted")
+        try:
+            load_vertical_runtime_package(root, package_binding)
+            for name, relative in paths.items():
+                validate_vertical_runtime_output(
+                    root, relative, package_binding,
+                    expected_qualification_context=expected_qualification_context,
+                )
+        except Exception as error:
+            raise A0XCcpExecutorError("vertical Gate C package or Gate B output drifted") from error
+        if _sha256_bytes(_unique_repository_file(root, execution_authorization_path, "vertical Gate C authorization").read_bytes()) != _sha256_bytes(authorization_raw):
+            raise A0XCcpExecutorError("vertical Gate C authorization drifted")
+        if _sha256_bytes(_unique_repository_file(root, gate_b_authorization_relative, "vertical Gate B authorization").read_bytes()) != _sha256_bytes(gate_b_authorization_raw):
+            raise A0XCcpExecutorError("vertical Gate B authorization drifted")
+        if _sha256_bytes(_unique_repository_file(root, gate_b_receipt_relative, "vertical Gate B verification receipt").read_bytes()) != _sha256_bytes(gate_b_receipt_raw):
+            raise A0XCcpExecutorError("vertical Gate B verification receipt drifted")
+
+    # A preflight is not a reservation. Re-open every mutable trust input before claim.
+    revalidate_graph()
+    for role, path, digest, version in (
+        ("child", child_path, launch.child_script_sha256, None),
+        ("ccp", ccp_path, launch.ccp_sha256, ccp_identity.get("version")),
+        ("python", python_path, launch.python_sha256, None),
+    ):
+        observed = executable_identity_verifier.verify(
+            role=role, path=path, expected_sha256=digest, expected_version=version,
+        )
+        require_identity_context(observed)
+    claim_path = authorization_path.with_name("attempt-claim.json")
+    _reserve_claim(claim_path, {
+        "artifact_class": "a0x-vertical-gate-c-attempt-claim",
+        "qualified_source": expected_source,
+        "pair_binding": pair.as_mapping(),
+        "vertical_package": expected_package,
+        "authorization_raw_sha256": _sha256_bytes(authorization_raw),
+        "gate_b_authorization_raw_sha256": _sha256_bytes(gate_b_authorization_raw),
+        "gate_a_verification_receipt_raw_sha256": _sha256_bytes(gate_b_receipt_raw),
+        "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
+        "authorization_id": authorization["authorization_id"],
+        "attempt_id": authorization["attempt_id"],
+        "max_guard_exec_count": 1,
+        "qualification_context": expected_qualification_context,
+    })
+    pre_run_path: str | None = None
+    result: ProcessResult | None = None
+    argv: tuple[str, ...] | None = None
+    environment: dict[str, str] | None = None
+    # Claim precedes the final revalidation deliberately: a later drift consumes
+    # the one shot rather than silently authorizing a retry.
+    try:
+        pre_run_path = _write_vertical_pre_run(
+            root, authorization_path, pair, launch, claim_path,
+            _sha256_bytes(authorization_raw), synthetic_identity,
+        )
+        revalidate_graph()
+        for role, path, digest, version in (
+            ("child", child_path, launch.child_script_sha256, None),
+            ("ccp", ccp_path, launch.ccp_sha256, ccp_identity.get("version")),
+            ("python", python_path, launch.python_sha256, None),
+        ):
+            observed = executable_identity_verifier.verify(
+                role=role, path=path, expected_sha256=digest, expected_version=version,
+            )
+            require_identity_context(observed)
+        argv = _materialize_argv(launch, ccp_path=ccp_path, python_path=python_path, child_path=child_path)
+        environment = _frozen_environment(launch)
+        result = process_executor.run(
+            argv, cwd=root, env=environment, timeout_seconds=_SUPERVISION_TIMEOUT_SECONDS,
+            capture_limit_bytes=_CAPTURE_LIMIT_BYTES,
+        )
+        # A child outcome is not authority to skip the final identity boundary:
+        # a replacement during execution must seal recovery rather than publish
+        # a completed attempt.
+        for role, path, digest, version in (
+            ("child", child_path, launch.child_script_sha256, None),
+            ("ccp", ccp_path, launch.ccp_sha256, ccp_identity.get("version")),
+            ("python", python_path, launch.python_sha256, None),
+        ):
+            observed = executable_identity_verifier.verify(
+                role=role, path=path, expected_sha256=digest, expected_version=version,
+            )
+            require_identity_context(observed)
+    except BaseException as error:
+        _write_vertical_terminal(
+            root, authorization_path, pair, launch, result, "recovery_required",
+            _sha256_bytes(authorization_raw), error, pre_run_path=pre_run_path,
+            synthetic_identity=synthetic_identity,
+        )
+        raise A0XCcpExecutorError("vertical Gate C could not produce a terminal result") from error
+    _validate_process_result(result)
+    classification = _classify_outer_exit(result)
+    child_terminal_status = (
+        _parse_child_terminal(result.stdout_prefix)
+        if classification == "completed" and result.stdout_bytes == len(result.stdout_prefix)
+        else None
+    )
+    terminal_path = _write_vertical_terminal(
+        root, authorization_path, pair, launch, result, classification, _sha256_bytes(authorization_raw), None,
+        child_terminal_status=child_terminal_status, pre_run_path=pre_run_path,
+        synthetic_identity=synthetic_identity,
+    )
+    if classification != "completed" or child_terminal_status is None:
+        raise A0XCcpExecutorError("vertical Gate C terminal outcome is not a completed child terminal")
+    return {
+        "status": "synthetic_completed" if expected_qualification_context == "synthetic-target-free" else "completed",
+        "qualified_source": expected_source,
+        "pair_binding": pair.as_mapping(),
+        "package_commitment_sha256": package_binding.package_commitment_sha256,
+        "execution_authorization_raw_sha256": _sha256_bytes(authorization_raw),
+        "claim_path": claim_path.relative_to(root).as_posix(),
+        "terminal_observation_path": terminal_path,
+        "child_terminal_status": child_terminal_status,
+        "publication_eligible": expected_qualification_context == "production" and not synthetic_identity,
+    }
+
+
+def _vertical_gate_b_output_paths(binding: VerticalPackageBinding) -> dict[str, str]:
+    pair = binding.pair_binding
+    base = (
+        f".a0x-runtime/gate-b/v2/{binding.qualified_source_head}/"
+        f"{binding.qualified_source_tree}/{pair.leg.value}/{pair.model_key}/{pair.run_id}"
+    )
+    return {
+        "gate_a_evidence": f"{base}/gate-a-evidence.json",
+        "readiness": f"{base}/runtime-readiness.json",
+        "descriptor": f"{base}/launch-descriptor.json",
+        "authorization": f"{base}/execution-authorization.json",
+        "mapping": f"{base}/runtime-mapping.json",
+    }
+
+
+def _vertical_package_projection(binding: VerticalPackageBinding) -> dict[str, str]:
+    return {
+        "envelope_path": binding.envelope_path,
+        "package_path": binding.package_path,
+        "commitment_path": binding.commitment_path,
+        "commitment_raw_sha256": binding.commitment_raw_sha256,
+        "package_commitment_sha256": binding.package_commitment_sha256,
+        "dossier_path": binding.dossier_path,
+        "dossier_sha256": binding.dossier_sha256,
+    }
+
+
+def _vertical_gate_a_evidence_from_raw(
+    *, gate_b_authorization_raw: bytes, gate_b_authorization_path: str,
+    gate_b_receipt_raw: bytes, gate_b_receipt_path: str,
+    expected_source: Mapping[str, str], pair: PairBinding,
+    expected_package: Mapping[str, str],
+    expected_qualification_context: Literal["production", "synthetic-target-free"] = "production",
+) -> dict[str, Any]:
+    """Reconstruct the sole v2 Gate-A projection from raw Gate-B documents."""
+    authorization = _strict_object(gate_b_authorization_raw, "vertical Gate B authorization")
+    receipt = _strict_object(gate_b_receipt_raw, "vertical Gate B verification receipt")
+    if _canonical_json(authorization) != gate_b_authorization_raw:
+        raise A0XCcpExecutorError("vertical Gate B authorization is not canonical JSON")
+    if hosted_gate_a_canonical_json_bytes(receipt) != gate_b_receipt_raw:
+        raise A0XCcpExecutorError("vertical Gate B verification receipt is not canonical JSON")
+    _validate_vertical_raw_schema(
+        authorization, "a0x-gate-b-authorization-v2.schema.json", "vertical Gate B authorization",
+    )
+    receipt_schema = (
+        "a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1.schema.json"
+        if expected_qualification_context == "synthetic-target-free"
+        else "a0x-hosted-gate-a-verification-receipt.schema.json"
+    )
+    _validate_vertical_raw_schema(receipt, receipt_schema, "vertical Gate B verification receipt")
+    source_head, source_tree = expected_source["head"], expected_source["tree"]
+    if (
+        authorization.get("repository") != "MarcoPorcellato/Latent-TRIZ"
+        or authorization.get("authorization_profile") != "a0x-gate-b-authorization-v2"
+        or authorization.get("authorization_status") != "authorized"
+        or authorization.get("source_head") != source_head
+        or authorization.get("source_tree") != source_tree
+        or authorization.get("source_sha") != source_head
+        or authorization.get("job_workflow_sha") != source_head
+        or authorization.get("pair_binding") != pair.as_mapping()
+        or authorization.get("vertical_package") != dict(expected_package)
+        or authorization.get("verification_receipt_path") != gate_b_receipt_path
+        or authorization.get("max_verification_count") != 1
+        or authorization.get("stop_boundary") != "after_gate_b_runtime_bundle"
+        or authorization.get("qualification_context") != expected_qualification_context
+    ):
+        raise A0XCcpExecutorError("vertical Gate C Gate B authorization semantics differ")
+    if (
+        receipt.get("repository") != authorization["repository"]
+        or receipt.get("qualified_source_head") != source_head
+        or receipt.get("qualified_source_tree") != source_tree
+        or receipt.get("pair_binding") != pair.as_mapping()
+        or receipt.get("authorization_raw_sha256") != _sha256_bytes(gate_b_authorization_raw)
+        or receipt.get("hosted_inputs") != authorization.get("hosted_inputs")
+        or receipt.get("verifier") != authorization.get("verifier")
+        or receipt.get("verification_status") != "verified"
+        or receipt.get("qualification_context", "production") != expected_qualification_context
+        or receipt.get("receipt_profile") != (
+            "a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1"
+            if expected_qualification_context == "synthetic-target-free"
+            else "a0x-hosted-gate-a-verification-receipt-v1"
+        )
+    ):
+        raise A0XCcpExecutorError("vertical Gate C Gate B receipt semantics differ")
+    evidence = {
+        "evidence_profile": "a0x-vertical-gate-a-evidence-binding-v1",
+        "provider": "github-hosted-attestation-v1",
+        "repository": authorization["repository"],
+        "source_head": source_head,
+        "source_tree": source_tree,
+        "pair_binding": pair.as_mapping(),
+        "gate_b_authorization_path": gate_b_authorization_path,
+        "gate_b_authorization_raw_sha256": _sha256_bytes(gate_b_authorization_raw),
+        "hosted_inputs": authorization["hosted_inputs"],
+        "verification_receipt": {
+            "path": gate_b_receipt_path,
+            "sha256": _sha256_bytes(gate_b_receipt_raw),
+        },
+        "verifier": authorization["verifier"],
+    }
+    try:
+        return validate_vertical_gate_a_evidence(evidence)
+    except A0XContractError as error:
+        raise A0XCcpExecutorError("vertical Gate C reconstructed Gate A evidence is invalid") from error
+
+
+def _validate_vertical_raw_schema(value: Mapping[str, Any], filename: str, label: str) -> None:
+    path = Path(__file__).resolve().parents[2] / "schemas" / filename
+    try:
+        schema = json.loads(path.read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise A0XCcpExecutorError(f"{label} schema is unavailable") from error
+    issues = validate(dict(value), schema)
+    if issues:
+        raise A0XCcpExecutorError(f"{label} schema rejected input: {issues[0].message}")
+
+
+def _write_vertical_terminal(
+    root: Path, authorization_path: Path, pair: PairBinding, launch: A0XGuardLaunch,
+    result: ProcessResult | None, classification: str, authorization_raw_sha256: str,
+    error: BaseException | None, *, child_terminal_status: str | None = None,
+    pre_run_path: str | None = None, synthetic_identity: bool = False,
+) -> str:
+    """Seal a v2 terminal record without borrowing the historical namespace."""
+    directory = authorization_path.parent / "observations"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = directory / "terminal-observation.json"
+    payload: dict[str, Any] = {
+        "artifact_class": "a0x-vertical-gate-c-terminal-observation",
+        "qualified_source": {"head": launch.source_head, "ref": "refs/heads/main"},
+        "pair_binding": pair.as_mapping(),
+        "authorization_raw_sha256": authorization_raw_sha256,
+        "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
+        "outer_exit_classification": classification,
+        "recovery_required": classification != "completed" or child_terminal_status is None,
+        "child_terminal_status": child_terminal_status,
+        "pre_run_observation_path": pre_run_path,
+        "publication_eligible": not synthetic_identity,
+    }
+    if result is None:
+        payload["process"] = None
+        payload["error_type"] = type(error).__name__ if error is not None else "unknown"
+    else:
+        payload["process"] = {
+            "returncode": result.returncode, "timed_out": result.timed_out,
+            "stdout_sha256": result.stdout_sha256, "stdout_bytes": result.stdout_bytes,
+            "stderr_sha256": result.stderr_sha256, "stderr_bytes": result.stderr_bytes,
+        }
+    _exclusive_write(path, _canonical_json(payload), "vertical Gate C terminal observation")
+    return path.relative_to(root).as_posix()
+
+
+def _write_vertical_pre_run(
+    root: Path, authorization_path: Path, pair: PairBinding, launch: A0XGuardLaunch,
+    claim_path: Path, authorization_raw_sha256: str, synthetic_identity: bool,
+) -> str:
+    """Seal the claim-to-guard boundary without exposing argv or environment."""
+    directory = authorization_path.parent / "observations"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = directory / "pre-run-observation.json"
+    payload = {
+        "artifact_class": "a0x-vertical-gate-c-pre-run-observation",
+        "qualified_source": {"head": launch.source_head, "ref": "refs/heads/main"},
+        "pair_binding": pair.as_mapping(),
+        "claim_path": claim_path.relative_to(root).as_posix(),
+        "authorization_raw_sha256": authorization_raw_sha256,
+        "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
+        "publication_eligible": not synthetic_identity,
+    }
+    _exclusive_write(path, _canonical_json(payload), "vertical Gate C pre-run observation")
+    return path.relative_to(root).as_posix()
 
 
 def _launch_validated_dossier(
@@ -1182,7 +1744,12 @@ def _parse_child_terminal(raw: bytes) -> str | None:
 def _validate_process_result(value: ProcessResult) -> None:
     if not isinstance(value.returncode, int) or isinstance(value.returncode, bool):
         raise A0XCcpExecutorError("guard process return code is invalid")
-    if not isinstance(value.timed_out, bool) or value.stdout_bytes < 0 or value.stderr_bytes < 0:
+    if (
+        not isinstance(value.timed_out, bool)
+        or value.stdout_bytes < 0 or value.stderr_bytes < 0
+        or value.stdout_bytes < len(value.stdout_prefix)
+        or value.stderr_bytes < len(value.stderr_prefix)
+    ):
         raise A0XCcpExecutorError("guard process terminal metadata is invalid")
     for digest in (value.stdout_sha256, value.stderr_sha256):
         if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
@@ -1320,6 +1887,7 @@ def _sha256_bytes(value: bytes) -> str:
 __all__ = [
     "A0XCcpExecutorError", "GuardPreflightOutput", "GuardPreflightProducer",
     "ProcessExecutor", "ProcessResult", "SubprocessGuardPreflightProducer",
-    "launch_fixed_dossier", "launch_vertical_slice_dossier", "qualification_evidence_from_receipt", "rehash_gate_a_evidence",
+    "launch_fixed_dossier", "launch_vertical_runtime_package", "launch_vertical_slice_dossier", "qualification_evidence_from_receipt", "rehash_gate_a_evidence",
+    "vertical_execution_authorization_path",
     "runtime_mapping_path",
 ]

@@ -91,14 +91,14 @@ class A0XGateBBuilderTests(unittest.TestCase):
             })
         self.model_card = self.root / "experiments/a0x-six-model/model-cards/synthetic.json"
         self.model_card.parent.mkdir(parents=True)
-        self.model_card_raw = _canonical({
+        self.model_card_raw = json.dumps({
             "artifact_class": "a0x-model-card",
             "model_key": "synthetic",
             "model_id": "example/synthetic",
             "revision": "b" * 40,
             "runtime_root": "artifacts/models/synthetic-bbbbbbbb",
             "runtime_files": runtime_files,
-        })
+        }, separators=(",", ":")).encode()
         self.model_card.write_bytes(self.model_card_raw)
 
     def _request(self, **changes: object):
@@ -230,6 +230,57 @@ class A0XGateBBuilderTests(unittest.TestCase):
         self.assertIn(b"package-00==1.0 --hash=sha256:", requirements_raw)
         self.assertFalse(attempt_root.exists())
         self.assertFalse((self.root / "artifacts/models/synthetic-bbbbbbbb").exists())
+
+    def test_plan_accepts_model_card_with_one_final_lf(self) -> None:
+        from latent_triz.a0x_gate_b_builder import plan_gate_b_runtime
+
+        self.model_card_raw += b"\n"
+        self.model_card.write_bytes(self.model_card_raw)
+        plan = plan_gate_b_runtime(
+            self.root, self._request(model_card_sha256=hashlib.sha256(self.model_card_raw).hexdigest()),
+            runner=self._planning_runner, source_state_probe=self._source_state,
+        )
+
+        self.assertEqual("planned", plan["status"])
+        self.assertEqual(hashlib.sha256(self.model_card_raw).hexdigest(), plan["model"]["card_sha256"])
+
+    def test_plan_accepts_versioned_a0x_model_card_field_order_with_one_final_lf(self) -> None:
+        from latent_triz.a0x_gate_b_builder import plan_gate_b_runtime
+
+        value = json.loads(self.model_card_raw)
+        ordered = {key: value[key] for key in (
+            "artifact_class", "model_key", "model_id", "revision", "runtime_root", "runtime_files",
+        )}
+        self.model_card_raw = json.dumps(ordered, separators=(",", ":")).encode() + b"\n"
+        self.model_card.write_bytes(self.model_card_raw)
+        plan = plan_gate_b_runtime(
+            self.root, self._request(model_card_sha256=hashlib.sha256(self.model_card_raw).hexdigest()),
+            runner=self._planning_runner, source_state_probe=self._source_state,
+        )
+
+        self.assertEqual("planned", plan["status"])
+
+    def test_plan_rejects_model_card_with_more_than_one_final_lf(self) -> None:
+        from latent_triz.a0x_gate_b_builder import A0XGateBBuilderError, plan_gate_b_runtime
+
+        self.model_card_raw += b"\n\n"
+        self.model_card.write_bytes(self.model_card_raw)
+        with self.assertRaises(A0XGateBBuilderError):
+            plan_gate_b_runtime(
+                self.root, self._request(model_card_sha256=hashlib.sha256(self.model_card_raw).hexdigest()),
+                runner=self._planning_runner, source_state_probe=self._source_state,
+            )
+
+    def test_plan_rejects_model_card_with_trailing_space_after_final_lf(self) -> None:
+        from latent_triz.a0x_gate_b_builder import A0XGateBBuilderError, plan_gate_b_runtime
+
+        self.model_card_raw += b"\n "
+        self.model_card.write_bytes(self.model_card_raw)
+        with self.assertRaises(A0XGateBBuilderError):
+            plan_gate_b_runtime(
+                self.root, self._request(model_card_sha256=hashlib.sha256(self.model_card_raw).hexdigest()),
+                runner=self._planning_runner, source_state_probe=self._source_state,
+            )
 
     def test_plan_refuses_hash_cardinality_and_destination_drift_before_writes(self) -> None:
         from latent_triz.a0x_gate_b_builder import A0XGateBBuilderError, plan_gate_b_runtime

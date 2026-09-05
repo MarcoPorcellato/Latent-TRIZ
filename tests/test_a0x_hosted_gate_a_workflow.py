@@ -242,7 +242,7 @@ class A0XHostedGateAWorkflowTests(unittest.TestCase):
             checkout_index, checkout = self._step_with_id(job, "checkout")
             self.assertEqual(f"actions/checkout@{ACTION_PINS['actions/checkout']}", checkout["uses"])
             self.assertEqual(
-                {"persist-credentials": False, "ref": "${{ github.sha }}"},
+                {"fetch-depth": 0, "persist-credentials": False, "ref": "${{ github.sha }}"},
                 checkout["with"],
             )
             source_index, source = self._step_with_id(job, "source")
@@ -292,7 +292,7 @@ class A0XHostedGateAWorkflowTests(unittest.TestCase):
         aggregate_checkout_index, aggregate_checkout = self._step_with_id(aggregate, "checkout")
         self.assertEqual(f"actions/checkout@{ACTION_PINS['actions/checkout']}", aggregate_checkout["uses"])
         self.assertEqual(
-            {"persist-credentials": False, "ref": "${{ github.sha }}"},
+            {"fetch-depth": 0, "persist-credentials": False, "ref": "${{ github.sha }}"},
             aggregate_checkout["with"],
         )
         aggregate_source_index, aggregate_source = self._step_with_id(aggregate, "source")

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -16,7 +19,11 @@ from latent_triz.a0x_contract import (  # noqa: E402
     build_leg_freeze_binding,
     sha256_file,
 )
-from latent_triz.a0x_freeze import freeze_a0x_campaign  # noqa: E402
+from latent_triz.a0x_freeze import (  # noqa: E402
+    A0XFreezeError,
+    freeze_a0x_campaign,
+    verify_batch_pre_regeneration_ledger,
+)
 from latent_triz.a0x_runner import (  # noqa: E402
     A0XRunnerError,
     frozen_pair_dossiers,
@@ -28,6 +35,44 @@ from latent_triz.validator import validate  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN = ROOT / "experiments/a0x-six-model"
+CANONICAL_PUBLIC_REPOSITORY = "MarcoPorcellato/Latent-TRIZ"
+CANONICAL_PUBLIC_REMOTE = "https://github.com/MarcoPorcellato/Latent-TRIZ.git"
+
+
+def _prepare_historical_parent_for_hosted_replay(
+    parent_head: str,
+    parent_tree: str,
+) -> None:
+    """Fetch one immutable audit object only in the canonical hosted runner."""
+    available = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "-e", f"{parent_head}^{{commit}}"],
+        check=False,
+        capture_output=True,
+    )
+    if available.returncode != 0:
+        if (
+            os.environ.get("GITHUB_ACTIONS") != "true"
+            or os.environ.get("GITHUB_REPOSITORY") != CANONICAL_PUBLIC_REPOSITORY
+        ):
+            raise AssertionError("historical parent fetch is restricted to canonical hosted CI")
+        fetched = subprocess.run(
+            [
+                "git", "-C", str(ROOT), "fetch", "--no-tags", "--depth=1",
+                CANONICAL_PUBLIC_REMOTE, parent_head,
+            ],
+            check=False,
+            capture_output=True,
+        )
+        if fetched.returncode != 0:
+            raise AssertionError("historical parent fetch failed")
+    observed = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", f"{parent_head}^{{tree}}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if observed.returncode != 0 or observed.stdout.strip() != parent_tree:
+        raise AssertionError("historical parent tree differs after hosted preparation")
 
 A0_PROTOCOL_FIELDS = (
     "corpus_generation",
@@ -126,11 +171,181 @@ class A0XFrozenPackageTests(unittest.TestCase):
                     "tests/test_a0x_runtime_bundle.py",
                     "tests/test_a0x_runtime_readiness.py",
                     "tests/test_a0x_wheelhouse.py",
+                    "schemas/a0x-execution-authorization-v4.schema.json",
+                    "schemas/a0x-gate-b-authorization-v2.schema.json",
+                    "schemas/a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1.schema.json",
+                    "schemas/a0x-vertical-gate-a-evidence-binding-v1.schema.json",
+                    "schemas/a0x-vertical-gate-b-output-v2.schema.json",
+                    "schemas/a0x-vertical-package-commitment-v2.schema.json",
+                    "schemas/a0x-vertical-slice-manifest-v2.schema.json",
+                    "scripts/schema_cross_validate.py",
+                    "src/latent_triz/a0x_validator.py",
+                    "src/latent_triz/validator.py",
+                    "tests/test_a0x_validator.py",
+                    "tests/test_a0x_vertical_gate_chain_v2.py",
+                    "tests/test_a0x_vertical_runtime_bundle.py",
+                    "tests/test_a0x_vertical_slice_v2.py",
+                    "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json",
+                    "docs/qualification/a0x-vertical-chain-historical-protection.json",
                 }.issubset(paths))
                 for row in bindings:
-                    path = ROOT / row["path"]
-                    self.assertEqual(path.stat().st_size, row["bytes"])
-                    self.assertEqual(sha256_file(path), row["sha256"])
+                    with self.subTest(leg=leg, path=row["path"]):
+                        path = ROOT / row["path"]
+                        self.assertEqual(path.stat().st_size, row["bytes"])
+                        self.assertEqual(sha256_file(path), row["sha256"])
+
+    def test_implementation_inventory_rejects_a_nonfinal_binding_mutation(self) -> None:
+        """Catch an assertion loop that checks only the last implementation row."""
+        for leg in ("a0", "r1"):
+            with self.subTest(leg=leg), tempfile.TemporaryDirectory() as directory:
+                clone = Path(directory) / "repository"
+                completed = subprocess.run(
+                    ["git", "clone", "--no-hardlinks", str(ROOT), str(clone)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(0, completed.returncode, completed.stderr)
+                implementation_path = clone / f"experiments/a0x-six-model/{leg}/implementation.json"
+                implementation = json.loads(implementation_path.read_text(encoding="utf-8"))
+                rows = implementation["implementation_files"]
+                self.assertGreater(len(rows), 1)
+                nonfinal = rows[0]
+                source = clone / nonfinal["path"]
+                original = source.read_bytes()
+                source.write_bytes(original + b"# nonfinal inventory mutation\\n")
+                with self.assertRaisesRegex(A0XFreezeError, "source/test hash binding drifted"):
+                    from latent_triz import a0x_freeze
+                    with patch.object(a0x_freeze, "_IMPLEMENTATION_PATHS", tuple(implementation["implementation_paths"])):
+                        a0x_freeze.verify_frozen_legs(clone)
+
+    def test_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
+        """Keep the one historical batch snapshot auditable without making it active input."""
+        _prepare_historical_parent_for_hosted_replay(
+            "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+            "54c59868802af381f57f830102a01be54410e718",
+        )
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
+        self.assertEqual("d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d", verified["parent_head"])
+        self.assertEqual("54c59868802af381f57f830102a01be54410e718", verified["parent_tree"])
+        self.assertEqual(17, verified["entry_count"])
+        self.assertEqual(
+            "a0x-batch-pre-regeneration-ledger-v1",
+            verified["profile"],
+        )
+
+    def test_current_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
+        """Keep Task 5 generated artifacts auditable before Task 6 replaces them."""
+        _prepare_historical_parent_for_hosted_replay(
+            "ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9",
+            "ff90ef65cd1ca1c58be620c5241621db5091fa77",
+        )
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json"
+        verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
+        self.assertEqual("ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9", verified["parent_head"])
+        self.assertEqual("ff90ef65cd1ca1c58be620c5241621db5091fa77", verified["parent_tree"])
+        self.assertEqual(17, verified["entry_count"])
+        self.assertEqual("a0x-batch-pre-regeneration-ledger-v2", verified["profile"])
+
+    def test_batch_pre_regeneration_ledger_refuses_missing_parent(self) -> None:
+        """Historical verification must fail closed when Git lacks its exact parent."""
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        with tempfile.TemporaryDirectory() as directory:
+            shallow = Path(directory) / "shallow"
+            completed = subprocess.run(
+                ["git", "clone", "--depth", "1", f"file://{ROOT}", str(shallow)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            copied = shallow / ledger.relative_to(ROOT)
+            copied.parent.mkdir(parents=True, exist_ok=True)
+            copied.write_bytes(ledger.read_bytes())
+            with self.assertRaisesRegex(A0XFreezeError, "historical parent is unavailable"):
+                verify_batch_pre_regeneration_ledger(shallow, copied)
+
+    def test_historical_parent_preparation_refuses_network_outside_canonical_ci(self) -> None:
+        unavailable = subprocess.CompletedProcess(args=[], returncode=1, stdout=b"", stderr=b"")
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_ACTIONS": "false", "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+            ),
+            patch("tests.test_a0x_frozen_package.subprocess.run", return_value=unavailable),
+            self.assertRaisesRegex(AssertionError, "restricted to canonical hosted CI"),
+        ):
+            _prepare_historical_parent_for_hosted_replay(
+                "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+                "54c59868802af381f57f830102a01be54410e718",
+            )
+
+    def test_historical_parent_preparation_verifies_fetched_tree(self) -> None:
+        unavailable = subprocess.CompletedProcess(args=[], returncode=1, stdout=b"", stderr=b"")
+        fetched = subprocess.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b"")
+        wrong_tree = subprocess.CompletedProcess(args=[], returncode=0, stdout="0" * 40 + "\n", stderr="")
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+            ),
+            patch(
+                "tests.test_a0x_frozen_package.subprocess.run",
+                side_effect=[unavailable, fetched, wrong_tree],
+            ) as run,
+            self.assertRaisesRegex(AssertionError, "tree differs after hosted preparation"),
+        ):
+            _prepare_historical_parent_for_hosted_replay(
+                "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+                "54c59868802af381f57f830102a01be54410e718",
+            )
+        self.assertEqual(
+            [
+                "git", "-C", str(ROOT), "fetch", "--no-tags", "--depth=1",
+                CANONICAL_PUBLIC_REMOTE, "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+            ],
+            run.call_args_list[1].args[0],
+        )
+
+    def test_batch_pre_regeneration_ledger_refuses_symlink_before_resolution(self) -> None:
+        """A symlink must not be resolved into an accepted historical ledger."""
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            alias = Path(directory) / "ledger.json"
+            alias.symlink_to(ledger)
+            with self.assertRaisesRegex(A0XFreezeError, "symlink|independent regular file"):
+                verify_batch_pre_regeneration_ledger(ROOT, alias)
+
+    def test_batch_pre_regeneration_ledger_refuses_parent_symlink_before_resolution(self) -> None:
+        """A symlinked parent must not normalize into an accepted ledger path."""
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            parent = Path(directory)
+            real = parent / "real"
+            real.mkdir()
+            copied = real / "ledger.json"
+            copied.write_bytes(ledger.read_bytes())
+            alias = parent / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            with self.assertRaisesRegex(A0XFreezeError, "symlink"):
+                verify_batch_pre_regeneration_ledger(ROOT, alias / "ledger.json")
+
+    def test_historical_vertical_evidence_manifest_remains_byte_identical(self) -> None:
+        manifest = load("docs/qualification/a0x-vertical-chain-historical-protection.json")
+        self.assertEqual("a0x-vertical-chain-historical-protection-v1", manifest["profile"])
+        self.assertEqual("2026-09-05", manifest["recorded_on"])
+        protected = manifest["protected_files"]
+        self.assertEqual(7, len(protected))
+        self.assertEqual(sorted(item["path"] for item in protected), [item["path"] for item in protected])
+        for item in protected:
+            with self.subTest(path=item["path"]):
+                path = ROOT / item["path"]
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+                self.assertEqual(1, path.stat().st_nlink)
+                self.assertEqual(item["bytes"], path.stat().st_size)
+                self.assertEqual(item["sha256"], sha256_file(path))
 
     def test_protocol_implementation_and_freeze_do_not_self_hash(self) -> None:
         forbidden_by_kind = {
@@ -306,6 +521,13 @@ class A0XFrozenPackageTests(unittest.TestCase):
         self.assertEqual(0, receipt["sealed_target_content_reads"])
         self.assertFalse(receipt["ccp_invoked"])
         self.assertFalse(receipt["remote_mutations"])
+
+    def test_tracked_no_model_receipt_matches_canonical_recomputation(self) -> None:
+        """The tracked receipt is an exact canonical projection, not merely valid JSON."""
+        from scripts.a0x_materialize_no_model_receipt import _canonical_receipt_bytes
+
+        tracked = ROOT / "results/a0x/preexecution/a0x-no-model-verification-receipt.json"
+        self.assertEqual(_canonical_receipt_bytes(verify_a0x_no_model(ROOT)), tracked.read_bytes())
 
 
 if __name__ == "__main__":

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "vertical_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "envelope_path", "package_path", "commitment_path",
+        "commitment_raw_sha256", "package_commitment_sha256",
+        "dossier_path", "dossier_sha256"
+      ],
+      "properties": {
+        "envelope_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+$"},
+        "package_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/package$"},
+        "commitment_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/p0-commitment\\.json$"},
+        "commitment_raw_sha256": {"$ref": "#/$defs/sha256"},
+        "package_commitment_sha256": {"$ref": "#/$defs/sha256"},
+        "dossier_path": {"type": "string", "pattern": "^\\.a0x-runtime/p0/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/package/approval-dossier\\.json$"},
+        "dossier_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_class", "output_profile", "output_kind", "qualified_source",
+    "pair_binding", "vertical_package", "qualification_context", "payload", "payload_sha256"
+  ],
+  "properties": {
+    "artifact_class": {"const": "a0x-vertical-gate-b-output"},
+    "output_profile": {"const": "a0x-vertical-gate-b-output-v2"},
+    "output_kind": {"enum": ["gate_a_evidence", "readiness", "descriptor", "authorization", "mapping"]},
+    "qualified_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "tree", "ref"],
+      "properties": {
+        "head": {"$ref": "#/$defs/revision"},
+        "tree": {"$ref": "#/$defs/revision"},
+        "ref": {"const": "refs/heads/main"}
+      }
+    },
+    "pair_binding": {"type": "object", "minProperties": 1},
+    "vertical_package": {"$ref": "#/$defs/vertical_package"},
+    "qualification_context": {"enum": ["production", "synthetic-target-free"]},
+    "payload": {"type": "object"},
+    "payload_sha256": {"$ref": "#/$defs/sha256"}
+  }
+}

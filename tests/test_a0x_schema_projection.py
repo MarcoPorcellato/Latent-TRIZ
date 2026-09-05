@@ -63,6 +63,13 @@ class A0XSchemaProjectionTests(unittest.TestCase):
             "schemas/a0x-hosted-gate-a-capture-request.schema.json",
             "schemas/a0x-hosted-gate-a-capture-transport.schema.json",
             "schemas/a0x-vertical-slice-manifest.schema.json",
+            "schemas/a0x-execution-authorization-v4.schema.json",
+            "schemas/a0x-gate-b-authorization-v2.schema.json",
+            "schemas/a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1.schema.json",
+            "schemas/a0x-vertical-gate-a-evidence-binding-v1.schema.json",
+            "schemas/a0x-vertical-gate-b-output-v2.schema.json",
+            "schemas/a0x-vertical-package-commitment-v2.schema.json",
+            "schemas/a0x-vertical-slice-manifest-v2.schema.json",
         }.issubset(schema_paths))
         self.assertEqual(21, A0X_PAIR_DEFINITION_COUNT)
         self.assertEqual(21, len(discovered_pair_definitions(ROOT)))

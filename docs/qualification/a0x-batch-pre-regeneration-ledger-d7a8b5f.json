@@ -1,0 +1,28 @@
+{
+  "domain": "a0x-batch-pre-regeneration-ledger-v1",
+  "entries": [
+    {"blob_oid":"4cd35d4faa5d65864cea932a322983c8995ba249","bytes":29358,"mode":"100644","path":"experiments/a0x-six-model/a0/implementation.json","sha256":"5f231eafe877c803a7d0e48238187314b7d875022fc29c7f8c16713b1b52d329"},
+    {"blob_oid":"55ffb1dc6d23b7bd806b7b54f10f06b115255814","bytes":1561,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/a0/gpt2.json","sha256":"6419a6b2e1c64788ae061bd0c794e6937cdf51014138b2a4dcc0b2de69d771ae"},
+    {"blob_oid":"463bb9c75abc03da1eba252e3f991e35a6eac0bc","bytes":1611,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/a0/gpt_neo_125m.json","sha256":"c54bd6201946e3be89cbeefd5814a18bafa933dc42ac89413bbf7d727be208b4"},
+    {"blob_oid":"54df39cdfe9574c639f6ef3e79c55790eeb48fd8","bytes":1605,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/a0/qwen2_5_0_5b.json","sha256":"cb0c77a302d245d8513961b2f050430bfdad1d14781f856583dbbb51256ab8da"},
+    {"blob_oid":"2e1816ccceb968a9a972fe229613a8577a106e57","bytes":1627,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/a0/qwen3_0_6b_base.json","sha256":"b8c7b6d38a2e3fad9857acd5b943d5b883037abb6be2cf1130ae0ab5b63eac3d"},
+    {"blob_oid":"a34b54851bc67ac4f0b24d7d4483005b5f324ffe","bytes":1614,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/a0/smollm2_135m.json","sha256":"fb3691c76713f9e8ec764051dbda14e823d3e8d603beb7c3cd8124ba4a5eae87"},
+    {"blob_oid":"3ca7de535ac75edbb54968bbeefc0da09b6feaf0","bytes":1614,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json","sha256":"7901061723d29aad53ade22f0d51a30061c83c3b38e42da03f3ba6674d2d178d"},
+    {"blob_oid":"74a3d27c24622475d7bc7736ae0ccc4c38c63fa6","bytes":1554,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/r1/gpt2.json","sha256":"41709da2bd166388f72fc169b4adc4ebfc7cfcdc259a4a6ca77052efcb504c8f"},
+    {"blob_oid":"ca3f7a497e98c52ec52b5c42c69829eed5f77ea4","bytes":1604,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/r1/gpt_neo_125m.json","sha256":"719fd716c9d76f82ac193e570ba7eed98f37b92f323e8efee72c3c689ef14975"},
+    {"blob_oid":"840f9743fc5a316c6f36fb7f6cb70a2c5c36d7d0","bytes":1598,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/r1/qwen2_5_0_5b.json","sha256":"b46f73dc27b43c4b44039c382c3f264e3d562298c51bc5e8784da9c58804fe00"},
+    {"blob_oid":"1b1cba7744f449e3e3d603c48bd59692eb269de9","bytes":1620,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/r1/qwen3_0_6b_base.json","sha256":"5588ed0eb68a04cfd6f8621eae24553123eb359b5077513de54da7d0a42527fa"},
+    {"blob_oid":"edfcd8e88c72ac40cee53a1bbcaed8542210476e","bytes":1606,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/r1/smollm2_135m.json","sha256":"3b7d9fb845345913d4fbade7170d300ce09bb23b3b6d374001c4d4dec689df75"},
+    {"blob_oid":"57479d5f53ee76871f742c6ee2d32b7a3370237b","bytes":1607,"mode":"100644","path":"experiments/a0x-six-model/approval-dossiers/r1/smollm2_360m.json","sha256":"6d55da9d1631ef25a4309305b55d193c41f423a5ce1beb57d25f3c8a8261f68e"},
+    {"blob_oid":"8bc750a76921b890dc1ae684df78d141df5bf37a","bytes":745,"mode":"100644","path":"experiments/a0x-six-model/freeze/a0-freeze.json","sha256":"6d50a411f7d9cb4482a5aa8c6afcd3790a322bfd37bc8da72b5b9bc07c66c0b6"},
+    {"blob_oid":"e4ddf800818bf15ab9ce0dd056d992b838787a62","bytes":745,"mode":"100644","path":"experiments/a0x-six-model/freeze/r1-freeze.json","sha256":"dbc801a33f17eca3f1b90e7d2fed9db58bab1e762923c9af97761ffd9667c69f"},
+    {"blob_oid":"c76b9f00931d9393d05885e38784ce3b621774a3","bytes":29996,"mode":"100644","path":"experiments/a0x-six-model/r1/implementation.json","sha256":"d2d0fc972af22341e436a254571fb0f8b2251e75736ccdceb8fd21064433543b"},
+    {"blob_oid":"63e9f98433d104538793884c7397db70ba419c9e","bytes":426,"mode":"100644","path":"results/a0x/preexecution/a0x-no-model-verification-receipt.json","sha256":"d5e8c044110623a8f54bd10e4ba37f7d960c84a86f272a67b06d5975e91d3beb"}
+  ],
+  "entry_count": 17,
+  "historical_only": true,
+  "ledger_commitment_sha256": "4564ea730d67c473b5c531c40b7d753379302f151b3ad52daac5179ae47e9aba",
+  "parent_head": "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+  "parent_tree": "54c59868802af381f57f830102a01be54410e718",
+  "profile": "a0x-batch-pre-regeneration-ledger-v1"
+}

@@ -11,6 +11,7 @@ from jsonschema import Draft202012Validator
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0x_contract import A0XContractError, assert_pair_binding
+from latent_triz.a0x_validator import validate as validate_a0x
 from latent_triz.validator import validate
 from tests.a0x_test_support import artifact, pair_binding, rich_r1_statistical_result, rich_statistical_result
 from latent_triz.a0x_contract import Leg
@@ -108,6 +109,66 @@ class A0XSchemasTests(unittest.TestCase):
                 value = copy.deepcopy(artifact(name))
                 mutate(value)
                 self.assertTrue(validate(value, self.schemas[name]))
+
+    def test_v2_vertical_package_schemas_are_closed(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        manifest_schema = json.loads(
+            (root / "schemas/a0x-vertical-slice-manifest-v2.schema.json").read_text(encoding="utf-8"),
+        )
+        commitment_schema = json.loads(
+            (root / "schemas/a0x-vertical-package-commitment-v2.schema.json").read_text(encoding="utf-8"),
+        )
+        source = {"head": "a" * 40, "tree": "b" * 40, "ref": "refs/heads/main"}
+        names = (
+            "protocol.json",
+            "implementation.json",
+            "freeze.json",
+            "approval-dossier.json",
+            "slice-manifest.json",
+        )
+        members = [
+            {"name": name, "size": index + 1, "sha256": "c" * 64}
+            for index, name in enumerate(names)
+        ]
+        manifest = {
+            "artifact_class": "a0x-vertical-slice-manifest-v2",
+            "generator_profile": "a0x-vertical-slice-v2",
+            "repository": "MarcoPorcellato/Latent-TRIZ",
+            "qualified_source": source,
+            "pair_binding": {"one": "pair"},
+            "members": members[:-1],
+        }
+        commitment = {
+            "profile": "a0x-vertical-package-commitment-v2",
+            "qualified_source": source,
+            "pair_binding": {"one": "pair"},
+            "members": members,
+            "generator": {"profile": "a0x-vertical-slice-v2", "repository": "MarcoPorcellato/Latent-TRIZ"},
+            "authorization_id": "p0-auth-test-01",
+            "attempt_id": "p0-attempt-test-01",
+            "package_commitment_sha256": "d" * 64,
+        }
+        self.assertEqual([], validate_a0x(manifest, manifest_schema))
+        self.assertEqual([], validate_a0x(commitment, commitment_schema))
+        for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
+            rejected = copy.deepcopy(value)
+            rejected["unexpected"] = True
+            with self.subTest(value=value):
+                self.assertTrue(validate_a0x(rejected, schema))
+        for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
+            for mutate in (
+                lambda member_list: member_list.__setitem__(0, copy.deepcopy(member_list[1])),
+                lambda member_list: member_list.reverse(),
+            ):
+                rejected = copy.deepcopy(value)
+                mutate(rejected["members"])
+                with self.subTest(value=value, members=rejected["members"]):
+                    self.assertTrue(validate_a0x(rejected, schema))
+        for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
+            rejected = copy.deepcopy(value)
+            rejected["members"] = rejected["members"][:-1]
+            with self.subTest(value=value, members=rejected["members"]):
+                self.assertTrue(validate_a0x(rejected, schema))
 
     def test_terminal_taxonomy_requires_receipt_and_statistics_by_status(self) -> None:
         terminal_schema = self.schemas["a0x-terminal-result.schema.json"]

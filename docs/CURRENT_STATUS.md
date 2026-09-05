@@ -3,7 +3,7 @@ type: status-report
 title: Current Laboratory Status
 description: Public, receipt-backed snapshot of the Latent-TRIZ laboratory and its evidence boundary.
 status: canonical
-last_verified: 2026-09-01
+last_verified: 2026-09-05
 ---
 
 # Current laboratory status
@@ -14,7 +14,7 @@ and the event-by-event chronology remains in [`docs/log.md`](./log.md).
 
 ## Public checkpoint
 
-- **Public main:** `0e41e042ec9ded01075c5761ba1e6e7e4bc0e7b9`
+- **Public main:** `a2d2b5647524b81a746b2d375bf542e7ae190a0a`
 - **Repository:** [MarcoPorcellato/Latent-TRIZ](https://github.com/MarcoPorcellato/Latent-TRIZ)
 - **Scientific posture:** exploratory, reproducible, and claim-free
 - **Registered claims:** all remain `E0`; `data/claims.jsonl` is unchanged
@@ -24,6 +24,46 @@ The repository contains immutable positive automated-proxy packages from A0/R1
 and immutable null packages from the reference-integrated and comparative
 studies. None is expert-validated TRIZ evidence, causal evidence, or evidence
 for the Strong Latent TRIZ Hypothesis.
+
+## A0X vertical Gate-Chain Convergence — current local route
+
+The current target-free A0X route is:
+
+```text
+Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
+```
+
+The implementation inventory/freeze/dossier anchor is
+`eb33d7ad22a97e15bdea3475d88942231ba094a0`. Current regenerated hashes are A0
+implementation `e2f037569c7755095a38bbf0460ac0fd18a0f696836bc21e6f408a33fe9b3ebf`,
+R1 implementation `ee8fb1893340d6adf49e7075a62d4a9bdb7d2627da8e529de30f07b8705dd01e`,
+A0 freeze `b19f6fe744ed990bd8905a250ffd833bf62d0f166cfea79693bcaf4f2385ec1b`,
+R1 freeze `776f5a31a85744a26aad85a6831d42717c37ef3610c3d96b5e52d0c884ce72e8`,
+and no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
+The new pre-regeneration ledger hash is
+`6bf7391457b56ef91493a89112da77c3de4d5f7dc7d1756701020187778b16ad`. It is local target-free evidence,
+not a Hosted Gate A qualification. The ignored P0 v2 envelope is intentionally
+not generated yet. It will bind one protected-main `HEAD/tree`, one pair, and
+one external package commitment after separately authorized Hosted evidence
+capture.
+
+Hosted PR runs `33982279950`, `33983540338`, and `33984594646` are preserved as failed
+portability results. The first exposed shallow repository history and a Linux
+fixture crossing the intentional Darwin-only publication boundary. After that
+correction, the second proved that full history alone cannot supply two
+historical commits outside the pull-request ancestry. The third proved that a
+`pull_request_target` bootstrap uses the trusted base workflow before the
+candidate workflow can install that correction. The repository lanes now
+fetch those two immutable SHA-1 values explicitly and verify their bound trees
+before testing; the tests also contain a canonical-repository-only bootstrap
+path for this exact transition. The ledger verifier remains fail-closed, the production Darwin
+boundary remains unchanged, and neither failed run is reinterpreted. A fresh
+hosted run is required.
+
+Tracked v1 vertical packages, CCP/Matrix Gate A receipts, and earlier batch
+material interpretations are historical only. The six-model frozen science is
+unchanged. No Gate B/C material step, model/tokenizer access, target read,
+scoring, network action, CCP/Docker action, or publication is authorized.
 
 ## What is delivered
 
@@ -229,6 +269,15 @@ authorized until a new exact-head CCP authorization is granted.
 
 The historical detail below remains evidence, but this continuation statement
 governs the current gate.
+
+### A0X validator isolation checkpoint (target-free, 2026-09-05)
+
+The historical A0-R2 validator has been restored byte-exactly. A0X positional
+schemas use a separate dependency-free validator and retain independent pinned
+Draft 2020-12 validation. The pre-regeneration current A0X artifact set is
+preserved by `a0x-batch-pre-regeneration-ledger-ab047833.json`; it is audit
+evidence only. Regeneration, remote work, model/tokenizer access, Gate B/C,
+CCP, Docker, and publication remain separate stop boundaries.
 
 The A0X six-model campaign is now at its frozen no-model checkpoint. Two
 independent legs preserve the historical A0 and A0-R1 rules, and twelve
