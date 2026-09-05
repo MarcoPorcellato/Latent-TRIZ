@@ -9,8 +9,10 @@ boundary is reached elsewhere.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -39,6 +41,28 @@ SELECTION_PATH = "experiments/a0x-six-model/a0-selection-manifest.json"
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
 _SAFE_RELATIVE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$")
+_HISTORICAL_BATCH_PRE_REGENERATION_PROFILE = "a0x-batch-pre-regeneration-ledger-v1"
+_HISTORICAL_BATCH_PRE_REGENERATION_PARENT = "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d"
+_HISTORICAL_BATCH_PRE_REGENERATION_TREE = "54c59868802af381f57f830102a01be54410e718"
+_HISTORICAL_BATCH_PRE_REGENERATION_PATHS = (
+    "experiments/a0x-six-model/a0/implementation.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/gpt2.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/gpt_neo_125m.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/qwen2_5_0_5b.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/qwen3_0_6b_base.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/smollm2_135m.json",
+    "experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/gpt2.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/gpt_neo_125m.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/qwen2_5_0_5b.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/qwen3_0_6b_base.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/smollm2_135m.json",
+    "experiments/a0x-six-model/approval-dossiers/r1/smollm2_360m.json",
+    "experiments/a0x-six-model/freeze/a0-freeze.json",
+    "experiments/a0x-six-model/freeze/r1-freeze.json",
+    "experiments/a0x-six-model/r1/implementation.json",
+    "results/a0x/preexecution/a0x-no-model-verification-receipt.json",
+)
 _COMMON = {
     "empirical": True,
     "scientific_status": "exploratory",
@@ -220,6 +244,7 @@ _IMPLEMENTATION_PATHS = tuple(sorted({
     "tests/fixtures/a0x/hosted-gate-a/positive/verification-receipt.json",
     "tests/fixtures/a0x/hosted-gate-a/positive/verifier-policy.json",
     "docs/qualification/a0x-vertical-chain-historical-protection.json",
+    "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json",
 }))
 
 _DOSSIER_FILENAMES = {
@@ -975,6 +1000,131 @@ def _file_binding(repository: Path, relative: str) -> dict[str, Any]:
     if path.stat().st_nlink != 1:
         raise A0XFreezeError(f"implementation binding is a hardlink: {relative}")
     return {"path": relative, "bytes": path.stat().st_size, "sha256": sha256_file(path)}
+
+
+def _historical_ledger_commitment(value: Mapping[str, Any]) -> str:
+    """Return the domain-separated digest for the non-self-hashing ledger body."""
+    try:
+        raw = json.dumps(dict(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise A0XFreezeError("historical ledger cannot encode canonically") from error
+    return hashlib.sha256(b"A0X-BATCH-PRE-REGENERATION-LEDGER-V1\\x00" + raw).hexdigest()
+
+
+def _historical_git(repository: Path, arguments: Sequence[str], *, missing_parent: bool = False) -> bytes:
+    """Read one historical Git object without consulting the working tree."""
+    completed = subprocess.run(
+        ["git", "-C", str(repository), *arguments],
+        check=False,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        message = "historical parent is unavailable" if missing_parent else "historical Git object is unavailable"
+        raise A0XFreezeError(message)
+    return completed.stdout
+
+
+def _historical_ledger_document(ledger_path: Path) -> dict[str, Any]:
+    try:
+        metadata = ledger_path.lstat()
+        raw = ledger_path.read_bytes()
+    except OSError as error:
+        raise A0XFreezeError("historical ledger is unavailable") from error
+    if not ledger_path.is_file() or ledger_path.is_symlink() or metadata.st_nlink != 1:
+        raise A0XFreezeError("historical ledger is not an independent regular file")
+    try:
+        document = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise A0XFreezeError("historical ledger is invalid JSON") from error
+    if not isinstance(document, dict):
+        raise A0XFreezeError("historical ledger is not an object")
+    return document
+
+
+def verify_batch_pre_regeneration_ledger(root: str | Path, ledger_path: str | Path) -> dict[str, Any]:
+    """Replay the one historical batch snapshot from Git blobs, never active loaders.
+
+    This is an explicit audit utility.  It deliberately reads `d7a8b5f` through
+    Git plumbing and must not be called by current P0 v2, Gate B v2, Gate C v2,
+    or ordinary no-model loaders.
+    """
+    repository = Path(root).resolve()
+    candidate = Path(ledger_path).resolve()
+    try:
+        candidate.relative_to(repository)
+    except ValueError as error:
+        raise A0XFreezeError("historical ledger escapes repository root") from error
+    document = _historical_ledger_document(candidate)
+    expected_keys = {
+        "profile", "domain", "historical_only", "parent_head", "parent_tree",
+        "entry_count", "entries", "ledger_commitment_sha256",
+    }
+    if set(document) != expected_keys:
+        raise A0XFreezeError("historical ledger fields differ")
+    if (
+        document["profile"] != _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE
+        or document["domain"] != _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE
+        or document["historical_only"] is not True
+        or document["parent_head"] != _HISTORICAL_BATCH_PRE_REGENERATION_PARENT
+        or document["parent_tree"] != _HISTORICAL_BATCH_PRE_REGENERATION_TREE
+        or document["entry_count"] != len(_HISTORICAL_BATCH_PRE_REGENERATION_PATHS)
+        or not isinstance(document["entries"], list)
+        or not isinstance(document["ledger_commitment_sha256"], str)
+        or _SHA256.fullmatch(document["ledger_commitment_sha256"]) is None
+    ):
+        raise A0XFreezeError("historical ledger identity differs")
+    projection = dict(document)
+    commitment = projection.pop("ledger_commitment_sha256")
+    if commitment != _historical_ledger_commitment(projection):
+        raise A0XFreezeError("historical ledger commitment differs")
+    _historical_git(repository, ["cat-file", "-e", f"{_HISTORICAL_BATCH_PRE_REGENERATION_PARENT}^{{commit}}"], missing_parent=True)
+    observed_tree = _historical_git(repository, ["rev-parse", f"{_HISTORICAL_BATCH_PRE_REGENERATION_PARENT}^{{tree}}"], missing_parent=True).decode("ascii", "strict").strip()
+    if observed_tree != _HISTORICAL_BATCH_PRE_REGENERATION_TREE:
+        raise A0XFreezeError("historical parent tree differs")
+    entries = document["entries"]
+    paths: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"path", "mode", "blob_oid", "bytes", "sha256"}:
+            raise A0XFreezeError("historical ledger entry fields differ")
+        path = entry["path"]
+        if not isinstance(path, str) or _SAFE_RELATIVE.fullmatch(path) is None:
+            raise A0XFreezeError("historical ledger path is invalid")
+        if (
+            entry["mode"] != "100644"
+            or not isinstance(entry["blob_oid"], str)
+            or _REVISION.fullmatch(entry["blob_oid"]) is None
+            or type(entry["bytes"]) is not int
+            or entry["bytes"] < 0
+            or not isinstance(entry["sha256"], str)
+            or _SHA256.fullmatch(entry["sha256"]) is None
+        ):
+            raise A0XFreezeError("historical ledger entry is invalid")
+        paths.append(path)
+    if tuple(paths) != _HISTORICAL_BATCH_PRE_REGENERATION_PATHS:
+        raise A0XFreezeError("historical ledger path set differs")
+    for entry in entries:
+        path = entry["path"]
+        tree_line = _historical_git(
+            repository,
+            ["ls-tree", _HISTORICAL_BATCH_PRE_REGENERATION_PARENT, "--", path],
+        ).decode("utf-8", "strict").rstrip("\n")
+        fields, separator, observed_path = tree_line.partition("\t")
+        parts = fields.split()
+        if separator != "\t" or observed_path != path or len(parts) != 3:
+            raise A0XFreezeError("historical Git tree entry differs")
+        mode, object_type, blob_oid = parts
+        if mode != entry["mode"] or object_type != "blob" or blob_oid != entry["blob_oid"]:
+            raise A0XFreezeError("historical Git tree binding differs")
+        raw = _historical_git(repository, ["cat-file", "blob", blob_oid])
+        if len(raw) != entry["bytes"] or hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+            raise A0XFreezeError("historical Git blob bytes differ")
+    return {
+        "profile": _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE,
+        "parent_head": _HISTORICAL_BATCH_PRE_REGENERATION_PARENT,
+        "parent_tree": _HISTORICAL_BATCH_PRE_REGENERATION_TREE,
+        "entry_count": len(entries),
+        "ledger_commitment_sha256": commitment,
+    }
 
 
 def _load_model_cards(

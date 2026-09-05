@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -16,7 +18,11 @@ from latent_triz.a0x_contract import (  # noqa: E402
     build_leg_freeze_binding,
     sha256_file,
 )
-from latent_triz.a0x_freeze import freeze_a0x_campaign  # noqa: E402
+from latent_triz.a0x_freeze import (  # noqa: E402
+    A0XFreezeError,
+    freeze_a0x_campaign,
+    verify_batch_pre_regeneration_ledger,
+)
 from latent_triz.a0x_runner import (  # noqa: E402
     A0XRunnerError,
     frozen_pair_dossiers,
@@ -140,9 +146,65 @@ class A0XFrozenPackageTests(unittest.TestCase):
                     "docs/qualification/a0x-vertical-chain-historical-protection.json",
                 }.issubset(paths))
                 for row in bindings:
-                    path = ROOT / row["path"]
-                self.assertEqual(path.stat().st_size, row["bytes"])
-                self.assertEqual(sha256_file(path), row["sha256"])
+                    with self.subTest(leg=leg, path=row["path"]):
+                        path = ROOT / row["path"]
+                        self.assertEqual(path.stat().st_size, row["bytes"])
+                        self.assertEqual(sha256_file(path), row["sha256"])
+
+    def test_implementation_inventory_rejects_a_nonfinal_binding_mutation(self) -> None:
+        """Catch an assertion loop that checks only the last implementation row."""
+        for leg in ("a0", "r1"):
+            with self.subTest(leg=leg), tempfile.TemporaryDirectory() as directory:
+                clone = Path(directory) / "repository"
+                completed = subprocess.run(
+                    ["git", "clone", "--no-hardlinks", str(ROOT), str(clone)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(0, completed.returncode, completed.stderr)
+                implementation_path = clone / f"experiments/a0x-six-model/{leg}/implementation.json"
+                implementation = json.loads(implementation_path.read_text(encoding="utf-8"))
+                rows = implementation["implementation_files"]
+                self.assertGreater(len(rows), 1)
+                nonfinal = rows[0]
+                source = clone / nonfinal["path"]
+                original = source.read_bytes()
+                source.write_bytes(original + b"# nonfinal inventory mutation\\n")
+                with self.assertRaisesRegex(A0XFreezeError, "source/test hash binding drifted"):
+                    from latent_triz import a0x_freeze
+                    with patch.object(a0x_freeze, "_IMPLEMENTATION_PATHS", tuple(implementation["implementation_paths"])):
+                        a0x_freeze.verify_frozen_legs(clone)
+
+    def test_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
+        """Keep the one historical batch snapshot auditable without making it active input."""
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
+        self.assertEqual("d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d", verified["parent_head"])
+        self.assertEqual("54c59868802af381f57f830102a01be54410e718", verified["parent_tree"])
+        self.assertEqual(17, verified["entry_count"])
+        self.assertEqual(
+            "a0x-batch-pre-regeneration-ledger-v1",
+            verified["profile"],
+        )
+
+    def test_batch_pre_regeneration_ledger_refuses_missing_parent(self) -> None:
+        """Historical verification must fail closed when Git lacks its exact parent."""
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        with tempfile.TemporaryDirectory() as directory:
+            shallow = Path(directory) / "shallow"
+            completed = subprocess.run(
+                ["git", "clone", "--depth", "1", f"file://{ROOT}", str(shallow)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            copied = shallow / ledger.relative_to(ROOT)
+            copied.parent.mkdir(parents=True, exist_ok=True)
+            copied.write_bytes(ledger.read_bytes())
+            with self.assertRaisesRegex(A0XFreezeError, "historical parent is unavailable"):
+                verify_batch_pre_regeneration_ledger(shallow, copied)
 
     def test_historical_vertical_evidence_manifest_remains_byte_identical(self) -> None:
         manifest = load("docs/qualification/a0x-vertical-chain-historical-protection.json")
@@ -334,6 +396,13 @@ class A0XFrozenPackageTests(unittest.TestCase):
         self.assertEqual(0, receipt["sealed_target_content_reads"])
         self.assertFalse(receipt["ccp_invoked"])
         self.assertFalse(receipt["remote_mutations"])
+
+    def test_tracked_no_model_receipt_matches_canonical_recomputation(self) -> None:
+        """The tracked receipt is an exact canonical projection, not merely valid JSON."""
+        from scripts.a0x_materialize_no_model_receipt import _canonical_receipt_bytes
+
+        tracked = ROOT / "results/a0x/preexecution/a0x-no-model-verification-receipt.json"
+        self.assertEqual(_canonical_receipt_bytes(verify_a0x_no_model(ROOT)), tracked.read_bytes())
 
 
 if __name__ == "__main__":

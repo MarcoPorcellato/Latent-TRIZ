@@ -1273,3 +1273,26 @@ same-user concurrent-mutator threat without operator isolation.
 required first for one Hosted Gate A run on protected main, then separately for
 capture, P0 v2, Gate B v2, Gate C, and any publication. No model, tokenizer,
 target, scoring, CCP, Docker, network, or scientific claim is opened here.
+
+## 46. Historical batch derivatives required an independent Git-object ledger
+
+**Problem.** The original seven-file historical protection manifest preserves
+tracked v1 and review evidence, but intentionally excludes the seventeen
+batch-derived implementation, freeze, dossier, and no-model receipt files that
+were regenerated while Task 5 established the v2 route. A local working-tree
+comparison would not prove their pre-regeneration bytes, and a shallow hosted
+checkout would not retain their exact parent objects.
+
+**Correction.** `docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json`
+records exactly the seventeen generated paths from parent
+`d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d`, its tree, mode, blob object ID,
+byte count, SHA-256, and a domain-separated non-self commitment. The explicit
+historical verifier replays only `git ls-tree` and `git cat-file` objects,
+requires the complete exact path set, and refuses a missing parent. It is not
+an active P0, Gate B, Gate C, or no-model input. Hosted checkout depth is zero
+so the target-free test can prove the same historical object availability.
+
+**Status.** The original seven-file protection manifest remains byte-identical.
+The new ledger is historical audit evidence, not a qualification, authorization,
+or scientific result. Regeneration remains target-free and is followed by exact
+canonical recomputation of the tracked no-model receipt.
