@@ -131,12 +131,34 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             "qualified_source": {"head": head, "tree": tree, "ref": "refs/heads/main"},
             "pair_binding": binding.pair_binding.as_mapping(),
             "vertical_package": {"envelope_path": binding.envelope_path, "package_path": binding.package_path, "commitment_path": binding.commitment_path, "commitment_raw_sha256": binding.commitment_raw_sha256, "package_commitment_sha256": binding.package_commitment_sha256, "dossier_path": binding.dossier_path, "dossier_sha256": binding.dossier_sha256},
-            "gate_b_authorization": {"path": prepared["gate_b_authorization_path"], "sha256": prepared["gate_b_authorization_sha256"]},
-            "gate_a_verification_receipt": {"path": prepared["verification_receipt_path"], "sha256": prepared["verification_receipt_sha256"]},
+            "gate_b_authorization": {
+                "path": prepared["gate_b_authorization_path"],
+                "sha256": hashlib.sha256((root / prepared["gate_b_authorization_path"]).read_bytes()).hexdigest(),
+            },
+            "gate_a_verification_receipt": {
+                "path": prepared["verification_receipt_path"],
+                "sha256": hashlib.sha256((root / prepared["verification_receipt_path"]).read_bytes()).hexdigest(),
+            },
             "gate_b_outputs": references, "guard_launch": guard_launch,
             "authorization_id": "gate-c-auth-test-01", "attempt_id": "gate-c-attempt-test-01",
             "max_guard_exec_count": 1, "stop_boundary": "after_one_sealed_target_read",
         }
+
+    @staticmethod
+    def _compact_json(value) -> bytes:
+        return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    def _rewrite_vertical_output(self, root, relative, update_payload) -> str:
+        """Rewrite one real v2 output while preserving its canonical envelope."""
+        path = root / relative
+        document = json.loads(path.read_text())
+        update_payload(document["payload"])
+        document["payload_sha256"] = hashlib.sha256(
+            self._compact_json(document["payload"])
+        ).hexdigest()
+        raw = self._compact_json(document)
+        path.write_bytes(raw)
+        return hashlib.sha256(raw).hexdigest()
 
     def test_v2_gate_c_revalidates_package_and_every_gate_b_output_before_guard(self) -> None:
         from latent_triz.a0x_ccp_executor import (
@@ -261,7 +283,6 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         for label in ("authorization", "receipt"):
             with self.subTest(raw=label):
                 root, binding, prepared, head, tree = self._prepared_v2_graph()
-                authorization = self._v4_authorization(root, binding, prepared, head, tree)
                 gate_b_path = root / prepared["gate_b_authorization_path"]
                 receipt_path = root / prepared["verification_receipt_path"]
                 gate_b = json.loads(gate_b_path.read_text())
@@ -271,40 +292,61 @@ class A0XVerticalMaterialTests(unittest.TestCase):
                     gate_b_raw = json.dumps(gate_b, indent=2).encode("utf-8")
                     gate_b_path.write_bytes(gate_b_raw)
                     receipt["authorization_raw_sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
-                    receipt_raw = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                    from latent_triz.a0x_hosted_gate_a import canonical_json_bytes
+                    receipt_raw = canonical_json_bytes(receipt)
                     receipt_path.write_bytes(receipt_raw)
                 else:
                     gate_b_raw = gate_b_path.read_bytes()
                     receipt_raw = json.dumps(receipt, indent=2).encode("utf-8")
                     receipt_path.write_bytes(receipt_raw)
 
-                evidence_path = root / prepared["vertical_outputs"]["gate_a_evidence"]
-                evidence_document = json.loads(evidence_path.read_text())
-                evidence_document["payload"]["gate_b_authorization_raw_sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
-                evidence_document["payload"]["verification_receipt"]["sha256"] = hashlib.sha256(receipt_raw).hexdigest()
-                evidence_document["payload_sha256"] = hashlib.sha256(
-                    json.dumps(evidence_document["payload"], sort_keys=True, separators=(",", ":")).encode("utf-8")
-                ).hexdigest()
-                evidence_raw = json.dumps(evidence_document, sort_keys=True, separators=(",", ":")).encode("utf-8")
-                evidence_path.write_bytes(evidence_raw)
-                authorization["gate_b_authorization"]["sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
-                authorization["gate_a_verification_receipt"]["sha256"] = hashlib.sha256(receipt_raw).hexdigest()
-                authorization["gate_b_outputs"]["gate_a_evidence"]["sha256"] = hashlib.sha256(evidence_raw).hexdigest()
+                outputs = prepared["vertical_outputs"]
+                evidence_sha256 = self._rewrite_vertical_output(
+                    root, outputs["gate_a_evidence"],
+                    lambda payload: payload.update({
+                        "gate_b_authorization_raw_sha256": hashlib.sha256(gate_b_raw).hexdigest(),
+                        "verification_receipt": {
+                            **payload["verification_receipt"],
+                            "sha256": hashlib.sha256(receipt_raw).hexdigest(),
+                        },
+                    }),
+                )
+                evidence_reference = {
+                    "role": "gate_a_evidence", "path": outputs["gate_a_evidence"], "sha256": evidence_sha256,
+                }
+                descriptor_sha256 = self._rewrite_vertical_output(
+                    root, outputs["descriptor"],
+                    lambda payload: payload.update({"gate_a_evidence": evidence_reference}),
+                )
+                descriptor_reference = {
+                    "role": "descriptor", "path": outputs["descriptor"], "sha256": descriptor_sha256,
+                }
+                authorization_sha256 = self._rewrite_vertical_output(
+                    root, outputs["authorization"],
+                    lambda payload: payload.update({
+                        "gate_a_evidence": evidence_reference,
+                        "descriptor": descriptor_reference,
+                    }),
+                )
+                authorization_reference = {
+                    "role": "authorization", "path": outputs["authorization"], "sha256": authorization_sha256,
+                }
+                self._rewrite_vertical_output(
+                    root, outputs["mapping"],
+                    lambda payload: payload.update({
+                        "descriptor": descriptor_reference,
+                        "authorization": authorization_reference,
+                    }),
+                )
+                authorization = self._v4_authorization(root, binding, prepared, head, tree)
                 path = root / vertical_execution_authorization_path(binding)
                 path.parent.mkdir(parents=True)
-                path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+                path.write_bytes(self._compact_json(authorization))
 
                 preflight = mock.Mock()
                 preflight.produce.side_effect = AssertionError("preflight reached")
                 executor = mock.Mock(side_effect=AssertionError("guard reached"))
-                with (
-                    patch("latent_triz.a0x_runtime_bundle.load_vertical_runtime_package"),
-                    patch(
-                        "latent_triz.a0x_runtime_bundle.validate_vertical_runtime_output",
-                        side_effect=lambda _root, relative, _binding: json.loads((root / relative).read_text()),
-                    ),
-                    self.assertRaises(A0XCcpExecutorError) as caught,
-                ):
+                with self.assertRaises(A0XCcpExecutorError) as caught:
                     _launch_validated_vertical_v2(
                         repository_root=root, package_binding=binding,
                         execution_authorization_path=path.relative_to(root).as_posix(),
