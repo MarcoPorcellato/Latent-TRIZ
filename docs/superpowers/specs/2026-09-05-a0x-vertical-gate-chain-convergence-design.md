@@ -104,29 +104,42 @@ external commitment defined below.
 
 ## P0 v2 runtime package
 
-P0 writes exactly one five-member package under:
+P0 publishes one atomic envelope under:
 
 ```text
 .a0x-runtime/p0/v2/<head>/<tree>/<leg>/<model-key>/
-  protocol.json
-  implementation.json
-  freeze.json
-  approval-dossier.json
-  slice-manifest.json
+  package/
+    protocol.json
+    implementation.json
+    freeze.json
+    approval-dossier.json
+    slice-manifest.json
+  p0-commitment.json
 ```
 
-The path is derived, not caller-selected. P0 requires the destination to be
-absent and publishes through an exclusive atomic rename. It never overwrites,
+The envelope, package, and commitment paths are derived together, not
+caller-selected. P0 requires the final `<model-key>/` destination to be absent,
+builds both children within one private sibling staging directory, and
+publishes the complete envelope through one exclusive atomic rename. It fsyncs
+the staged files, both staged directories, and the destination parent. It
+never publishes the package and commitment separately and never overwrites,
 repairs, resumes, or reuses a previous destination.
 
-The five members remain canonical UTF-8 JSON. `slice-manifest.json` binds the
-source, pair, generator profile, member paths, member sizes, and the hashes of
-the other four members. It does not hash itself.
+The envelope contains exactly `package/` and `p0-commitment.json`. `package/`
+contains exactly the five canonical UTF-8 JSON members.
+`slice-manifest.json` binds the source, pair, generator profile, member paths,
+member sizes, and the hashes of the other four members. It does not hash
+itself. Extra entries, partial staging, cleanup uncertainty, or ownership loss
+are terminal refusals.
 
 ### External package commitment
 
-The P0 terminal receipt contains the package commitment. The commitment is the
-SHA-256 of canonical JSON with this semantic content:
+`p0-commitment.json` is both the external commitment document and the durable
+P0 terminal receipt. It contains the package commitment plus the P0
+authorization ID, attempt ID, and generator/bootstrap identities. It does not
+contain its own hash. Its raw SHA-256 is calculated after canonical
+serialization. The package commitment is the SHA-256 of a domain-separated
+canonical projection with this semantic content:
 
 ```json
 {
@@ -144,8 +157,10 @@ SHA-256 of canonical JSON with this semantic content:
 ```
 
 Member order is fixed. The commitment is external to the five members, so no
-self-hash cycle exists. The raw commitment document and its SHA-256 become
-inputs to Gate B and Gate C.
+self-hash cycle exists. The raw `p0-commitment.json` bytes, their SHA-256, and
+the independently recomputed package commitment become inputs to Gate B and
+Gate C. A crash cannot expose an accepted package without its matching
+commitment because both are published in one envelope rename.
 
 ### Namespace threat model
 
@@ -186,9 +201,11 @@ class VerticalRuntimePackageRequest:
 
 @dataclass(frozen=True)
 class VerticalPackageBinding:
+    envelope_path: str
     package_root: str
     commitment_path: str
-    commitment_sha256: str
+    commitment_raw_sha256: str
+    package_commitment_sha256: str
     dossier_path: str
     dossier_sha256: str
     qualified_source_head: str
@@ -207,7 +224,8 @@ def load_vertical_runtime_package(
 ```
 
 Names may be adjusted to existing local conventions, but the two versioned
-roles and all fields above are mandatory.
+roles and all fields above are mandatory. The three paths are derived from the
+same source/pair selector and cannot be supplied independently.
 
 ### Gate B
 
@@ -372,4 +390,3 @@ After the correction merges, wait for the push-only Hosted Gate A on the new
 protected-main commit. Capture requires a new exact authorization. P0 v2 then
 requires its own authorization. Gate B and Gate C remain separate later
 authorizations. No current artifact or earlier authorization carries forward.
-
