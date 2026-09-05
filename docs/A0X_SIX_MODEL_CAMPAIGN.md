@@ -21,7 +21,7 @@ publication.
 ## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
 The current target-free implementation anchor is
-`5e6204217c2fdf675a8c6dbce0310e8882c893c2` (final branch HEAD may postdate
+`3c502133442601e3bd25dad92ff27096f62b9350` (final branch HEAD may postdate
 this implementation anchor). Current regenerated hashes are A0/R1
 implementation `b7154e101879795e7c7e3802b4ece095a226728b283121e2e806967f3850b269` /
 `43b591531b3f5b7df87c198a1218937fbbbc6c3f1737e936c1318faf2c0c771e`, A0/R1
@@ -33,11 +33,14 @@ implementation inventories, two freezes, twelve approval-request dossiers, and
 the no-model receipt. Those regenerated batch artifacts remain current only
 for deterministic no-model verification; they are **not** a new material route.
 
-Hosted PR run `33982279950` remains a failed, non-material portability result.
-Its two causes—shallow history in the repository lanes and an unpatched
-Darwin-only syscall in the Linux real-Git fixture—are corrected at the anchor
-above. The production syscall and fail-closed platform boundary are unchanged;
-a new hosted run must prove the corrected exact head.
+Hosted PR runs `33982279950` and `33983540338` remain failed, non-material
+portability results. The first exposed shallow history and an unpatched
+Darwin-only syscall in the Linux real-Git fixture. The second proved that full
+history cannot supply historical commits outside the PR ancestry. Each
+repository lane now fetches the two ledger-bound commit SHA-1 values explicitly
+and verifies their exact trees before testing. The production syscall and all
+fail-closed verification remain unchanged; a new hosted run must prove the
+corrected exact head.
 
 The sole future execution route is:
 

@@ -34,7 +34,7 @@ Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
 ```
 
 The implementation inventory/freeze/dossier anchor is
-`5e6204217c2fdf675a8c6dbce0310e8882c893c2`. Current regenerated hashes are A0
+`3c502133442601e3bd25dad92ff27096f62b9350`. Current regenerated hashes are A0
 implementation `b7154e101879795e7c7e3802b4ece095a226728b283121e2e806967f3850b269`,
 R1 implementation `43b591531b3f5b7df87c198a1218937fbbbc6c3f1737e936c1318faf2c0c771e`,
 A0 freeze `6b4394ee07bd6309656c20b86e0de02042a6d2bc5a6c140593a7818ea7cab398`,
@@ -47,12 +47,15 @@ not generated yet. It will bind one protected-main `HEAD/tree`, one pair, and
 one external package commitment after separately authorized Hosted evidence
 capture.
 
-The first hosted PR run for this convergence, `33982279950`, is preserved as a
-failed portability result: shallow repository-check lanes could not replay the
-bound historical Git objects, and the Linux fixture reached the intentional
-Darwin-only publication refusal. Both causes are corrected at the anchor above;
-the production Darwin boundary remains unchanged. A fresh hosted run is
-required and the failed run is not reinterpreted.
+Hosted PR runs `33982279950` and `33983540338` are preserved as failed
+portability results. The first exposed shallow repository history and a Linux
+fixture crossing the intentional Darwin-only publication boundary. After that
+correction, the second proved that full history alone cannot supply two
+historical commits outside the pull-request ancestry. The repository lanes now
+fetch those two immutable SHA-1 values explicitly and verify their bound trees
+before testing. The ledger verifier remains fail-closed, the production Darwin
+boundary remains unchanged, and neither failed run is reinterpreted. A fresh
+hosted run is required.
 
 Tracked v1 vertical packages, CCP/Matrix Gate A receipts, and earlier batch
 material interpretations are historical only. The six-model frozen science is
