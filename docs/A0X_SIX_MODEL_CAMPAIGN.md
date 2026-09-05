@@ -21,24 +21,27 @@ publication.
 ## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
 The current target-free implementation anchor is
-`3c502133442601e3bd25dad92ff27096f62b9350` (final branch HEAD may postdate
+`eb33d7ad22a97e15bdea3475d88942231ba094a0` (final branch HEAD may postdate
 this implementation anchor). Current regenerated hashes are A0/R1
-implementation `b7154e101879795e7c7e3802b4ece095a226728b283121e2e806967f3850b269` /
-`43b591531b3f5b7df87c198a1218937fbbbc6c3f1737e936c1318faf2c0c771e`, A0/R1
-freeze `6b4394ee07bd6309656c20b86e0de02042a6d2bc5a6c140593a7818ea7cab398` /
-`d56011da52080de43e8af8722a685e9ea851efd3afead8506ab1a59e43879ae6`, and
+implementation `e2f037569c7755095a38bbf0460ac0fd18a0f696836bc21e6f408a33fe9b3ebf` /
+`ee8fb1893340d6adf49e7075a62d4a9bdb7d2627da8e529de30f07b8705dd01e`, A0/R1
+freeze `b19f6fe744ed990bd8905a250ffd833bf62d0f166cfea79693bcaf4f2385ec1b` /
+`776f5a31a85744a26aad85a6831d42717c37ef3610c3d96b5e52d0c884ce72e8`, and
 no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
 It regenerated the two leg
 implementation inventories, two freezes, twelve approval-request dossiers, and
 the no-model receipt. Those regenerated batch artifacts remain current only
 for deterministic no-model verification; they are **not** a new material route.
 
-Hosted PR runs `33982279950` and `33983540338` remain failed, non-material
+Hosted PR runs `33982279950`, `33983540338`, and `33984594646` remain failed, non-material
 portability results. The first exposed shallow history and an unpatched
 Darwin-only syscall in the Linux real-Git fixture. The second proved that full
-history cannot supply historical commits outside the PR ancestry. Each
-repository lane now fetches the two ledger-bound commit SHA-1 values explicitly
-and verifies their exact trees before testing. The production syscall and all
+history cannot supply historical commits outside the PR ancestry. The third
+showed that `pull_request_target` used the pre-correction trusted-base workflow
+during bootstrap. Each repository lane now fetches the two ledger-bound commit
+SHA-1 values explicitly and verifies their exact trees before testing, while a
+canonical-repository-only test bootstrap preserves the same verification during
+this transition. The production syscall and all
 fail-closed verification remain unchanged; a new hosted run must prove the
 corrected exact head.
 

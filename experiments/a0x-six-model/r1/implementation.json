@@ -563,9 +563,9 @@
       "sha256": "1c43b16ae9a67d80a75f267e94f84f22c70eca9b26509d550e1c7c3ca5ad1732"
     },
     {
-      "bytes": 22426,
+      "bytes": 26323,
       "path": "tests/test_a0x_frozen_package.py",
-      "sha256": "6f6e310db55f3a20695b24d5dfc8d4c2b759c7dc637f6f17621f2b76c6fc6701"
+      "sha256": "2a4d2f032e4d3ba954ca222140821173cf0166db022d78d3a60bdc5b2285ccf9"
     },
     {
       "bytes": 36391,

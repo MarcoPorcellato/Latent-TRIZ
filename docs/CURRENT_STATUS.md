@@ -34,11 +34,11 @@ Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
 ```
 
 The implementation inventory/freeze/dossier anchor is
-`3c502133442601e3bd25dad92ff27096f62b9350`. Current regenerated hashes are A0
-implementation `b7154e101879795e7c7e3802b4ece095a226728b283121e2e806967f3850b269`,
-R1 implementation `43b591531b3f5b7df87c198a1218937fbbbc6c3f1737e936c1318faf2c0c771e`,
-A0 freeze `6b4394ee07bd6309656c20b86e0de02042a6d2bc5a6c140593a7818ea7cab398`,
-R1 freeze `d56011da52080de43e8af8722a685e9ea851efd3afead8506ab1a59e43879ae6`,
+`eb33d7ad22a97e15bdea3475d88942231ba094a0`. Current regenerated hashes are A0
+implementation `e2f037569c7755095a38bbf0460ac0fd18a0f696836bc21e6f408a33fe9b3ebf`,
+R1 implementation `ee8fb1893340d6adf49e7075a62d4a9bdb7d2627da8e529de30f07b8705dd01e`,
+A0 freeze `b19f6fe744ed990bd8905a250ffd833bf62d0f166cfea79693bcaf4f2385ec1b`,
+R1 freeze `776f5a31a85744a26aad85a6831d42717c37ef3610c3d96b5e52d0c884ce72e8`,
 and no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
 The new pre-regeneration ledger hash is
 `6bf7391457b56ef91493a89112da77c3de4d5f7dc7d1756701020187778b16ad`. It is local target-free evidence,
@@ -47,13 +47,16 @@ not generated yet. It will bind one protected-main `HEAD/tree`, one pair, and
 one external package commitment after separately authorized Hosted evidence
 capture.
 
-Hosted PR runs `33982279950` and `33983540338` are preserved as failed
+Hosted PR runs `33982279950`, `33983540338`, and `33984594646` are preserved as failed
 portability results. The first exposed shallow repository history and a Linux
 fixture crossing the intentional Darwin-only publication boundary. After that
 correction, the second proved that full history alone cannot supply two
-historical commits outside the pull-request ancestry. The repository lanes now
+historical commits outside the pull-request ancestry. The third proved that a
+`pull_request_target` bootstrap uses the trusted base workflow before the
+candidate workflow can install that correction. The repository lanes now
 fetch those two immutable SHA-1 values explicitly and verify their bound trees
-before testing. The ledger verifier remains fail-closed, the production Darwin
+before testing; the tests also contain a canonical-repository-only bootstrap
+path for this exact transition. The ledger verifier remains fail-closed, the production Darwin
 boundary remains unchanged, and neither failed run is reinterpreted. A fresh
 hosted run is required.
 

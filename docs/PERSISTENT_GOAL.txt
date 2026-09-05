@@ -4,7 +4,7 @@ Current A0X lifecycle, hashes, and active boundary: see the sole ledger in
 historical.
 
 Current vertical Gate-Chain Convergence checkpoint (2026-09-05): target-free
-implementation/inventory anchor `3c502133442601e3bd25dad92ff27096f62b9350`.
+implementation/inventory anchor `eb33d7ad22a97e15bdea3475d88942231ba094a0`.
 Canonical route: `Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2
 -> verification`. P0 v2 is the only future package route: an ignored, atomic
 envelope bound to one protected-main HEAD/tree, one pair, and an external
@@ -17,10 +17,12 @@ earlier batch material interpretations are historical. The next required
 authorization is one exact protected-main Hosted Gate A run; capture, P0 v2,
 Gate B v2, Gate C v2, and publication remain separate later authorizations.
 
-Hosted PR runs `33982279950` and `33983540338` are preserved as failed
+Hosted PR runs `33982279950`, `33983540338`, and `33984594646` are preserved as failed
 portability results. The shallow-history and Linux test-fixture causes are
-corrected, and the repository lanes now fetch and tree-verify the two exact
-ledger-bound historical commits that are outside PR ancestry. No material
+corrected; the third run exposed the trusted-base workflow bootstrap boundary
+of `pull_request_target`. The repository lanes now fetch and tree-verify the two
+exact ledger-bound historical commits, and the tests preserve the same exact
+verification during this bootstrap. No material
 capability was reached; a fresh exact-head hosted run is still required.
 
 First future pair remains `A0 / smollm2_360m`; A0-R1 remains blocked until the
