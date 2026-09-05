@@ -1259,7 +1259,7 @@ are recorded in
 `docs/qualification/a0x-vertical-chain-historical-protection.json`. Generated
 batch inventories/freezes/dossiers and the no-model receipt are explicitly
 distinguished as current target-free derivatives and were regenerated from
-implementation anchor `2bed9da6cd51877162f7efa39d2b1906219b1101`; they do
+implementation anchor `bf49a48106b77e65f16aa6763035f9ab2fa9a67f`; they do
 not authorize material work.
 
 **Residual limitation.** Ignored runtime storage is not Git-attested. Every
@@ -1296,3 +1296,35 @@ so the target-free test can prove the same historical object availability.
 The new ledger is historical audit evidence, not a qualification, authorization,
 or scientific result. Regeneration remains target-free and is followed by exact
 canonical recomputation of the tracked no-model receipt.
+
+## 47. Production Gate A receipts had an implicit production context
+
+**Problem.** The production Hosted Gate A verification receipt schema correctly
+forbids a `qualification_context` field. The Gate B receipt-to-authorization
+comparison nevertheless read that absent field without its production default,
+which rejected the canonical production receipt before any runtime work.
+
+**Correction.** Gate B now treats an omitted receipt context as `production`,
+matching the authorization default while retaining the separate synthetic
+schema's required explicit `synthetic-target-free` value. Regression tests prove
+both canonical production acceptance and synthetic/production refusal.
+
+**Status.** Target-free correction at implementation anchor
+`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. It does not authorize Hosted Gate
+A, P0 v2, Gate B, Gate C, model or tokenizer access, targets, scoring, CCP,
+Docker, network, or publication.
+
+## 48. Historical ledger containment must precede path resolution
+
+**Problem.** The historical batch-ledger verifier resolved a caller-supplied
+parent directory before checking controlled path components. A symlinked parent
+could therefore normalize to an otherwise trusted path.
+
+**Correction.** The verifier now checks lexical containment and every component
+before resolution, then reconstructs the canonical repository path. A regression
+test proves that a parent symlink is rejected; existing missing-parent and
+historical-byte checks remain fail-closed.
+
+**Status.** Target-free correction at implementation anchor
+`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. The ledger remains historical audit
+evidence only and is not an active P0, Gate B, Gate C, or no-model input.

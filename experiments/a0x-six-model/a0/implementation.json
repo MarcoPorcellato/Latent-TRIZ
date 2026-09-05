@@ -348,9 +348,9 @@
       "sha256": "8c7f52a69a41e0f8a9e946b0d023c4caa620420fef9bb7e9daa28d4454205b6f"
     },
     {
-      "bytes": 57887,
+      "bytes": 58125,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "0df2cc2ea0f332cda6cd74c27a1947e567f446234d0a38818cc99cd581d7dec6"
+      "sha256": "bf39767cbfd87a98fd96858b13e7f92abf22a1689292b9a2f3038d050fe29285"
     },
     {
       "bytes": 50136,
@@ -428,9 +428,9 @@
       "sha256": "fcd7ec2c2eb110ab45a886f1998f8cef3d45848e72c62c6b34c160ff7690b9b8"
     },
     {
-      "bytes": 90481,
+      "bytes": 90503,
       "path": "src/latent_triz/a0x_runtime_bundle.py",
-      "sha256": "7c0fc87894eee7f230f5db154a4059f5e4868bac9a785af725044c50e6582d2a"
+      "sha256": "c8008a3573b5849d0ee223917ac86ab0f81c8a3adf5286eb05a49ba66c2a0f02"
     },
     {
       "bytes": 14151,
@@ -548,9 +548,9 @@
       "sha256": "4eccc59caba77c00924871075e419c4f2f689da9a052614d4de1f789eb5435e6"
     },
     {
-      "bytes": 20725,
+      "bytes": 21503,
       "path": "tests/test_a0x_frozen_package.py",
-      "sha256": "f98de37af12982d916279e65de06332c1e76426dca82618aae11509424954d46"
+      "sha256": "73e4d67d269c71a6919a38c363e99ce4ac27d633f4d311d116c55180afa8978f"
     },
     {
       "bytes": 36391,
@@ -633,9 +633,9 @@
       "sha256": "c27f52b1fadcd222c41da596dc9afd0ef013647f8c261908f84617250f667e6b"
     },
     {
-      "bytes": 77812,
+      "bytes": 80692,
       "path": "tests/test_a0x_runtime_bundle.py",
-      "sha256": "0b41ce3fcf92c724269f568a017d1fa4290d34f8bdfcd949b8a395433210aebb"
+      "sha256": "161368a7d1081f7b73f1b55eb0a962a4dfd8d3ea260a7f7284638de57bfbf540"
     },
     {
       "bytes": 8229,

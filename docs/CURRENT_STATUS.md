@@ -34,7 +34,7 @@ Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
 ```
 
 The implementation inventory/freeze/dossier anchor is
-`2bed9da6cd51877162f7efa39d2b1906219b1101`. It is local target-free evidence,
+`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. It is local target-free evidence,
 not a Hosted Gate A qualification. The ignored P0 v2 envelope is intentionally
 not generated yet. It will bind one protected-main `HEAD/tree`, one pair, and
 one external package commitment after separately authorized Hosted evidence

@@ -21,7 +21,7 @@ publication.
 ## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
 The current target-free implementation anchor is
-`2bed9da6cd51877162f7efa39d2b1906219b1101`. It regenerated the two leg
+`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. It regenerated the two leg
 implementation inventories, two freezes, twelve approval-request dossiers, and
 the no-model receipt. Those regenerated batch artifacts remain current only
 for deterministic no-model verification; they are **not** a new material route.
