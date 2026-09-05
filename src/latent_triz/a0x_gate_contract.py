@@ -164,7 +164,7 @@ def _vertical_package_paths(pair: PairBinding, source_head: str, source_tree: st
 def _vertical_verification_receipt_path(pair: PairBinding, source_head: str, source_tree: str) -> str:
     return (
         f".a0x-runtime/gate-b/v2/{source_head}/{source_tree}/"
-        f"{pair.leg.value}/{pair.model_key}/{pair.run_id}/gate-a-verification-raw.json"
+        f"{pair.leg.value}/{pair.model_key}/{pair.run_id}/gate-a-verification-receipt.json"
     )
 
 

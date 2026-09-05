@@ -111,6 +111,7 @@ class _VerticalOutputPaths:
     """All v2 durable Gate-B paths derived from one source and pair."""
 
     raw_receipt: str
+    gate_b_authorization: str
     gate_a_evidence: str
     readiness: str
     descriptor: str
@@ -300,7 +301,8 @@ def prepare_vertical_runtime_bundle(
         raise A0XRuntimeBundleError("vertical Gate B source state does not match package binding")
     package = _load_vertical_package(repository, binding)
     dossier, pair = _vertical_dossier(package, binding)
-    _preflight_vertical_output_paths(repository, pair, _vertical_output_paths(binding))
+    paths = _vertical_output_paths(binding)
+    _preflight_vertical_output_paths(repository, pair, paths)
     inputs = _validate_preparation_inputs(
         repository, request, dossier=dossier, pair=pair, source_head=source_head,
         ccp_version_probe=ccp_version_probe, derive_legacy_paths=False,
@@ -314,6 +316,7 @@ def prepare_vertical_runtime_bundle(
     gate_a_evidence = _verify_vertical_gate_a_evidence(
         repository, request, authorization_path, authorization_raw, authorization,
         pair=pair, source_head=source_head, source_tree=source_tree, verifier=verifier,
+        canonical_authorization_path=paths.gate_b_authorization,
     )
     # The hosted verifier is an external capability. Re-bind the P0 envelope
     # before spending the next capability (the readiness probe).
@@ -336,14 +339,14 @@ def prepare_vertical_runtime_bundle(
     )
     revalidated_evidence = _gate_a_evidence_from_receipt(
         repository, authorization_path, authorization_raw, authorization, raw_receipt.read_bytes(),
-        pair=pair, source_head=source_head,
+        pair=pair, source_head=source_head, canonical_authorization_path=paths.gate_b_authorization,
     )
     if revalidated_evidence != gate_a_evidence:
         raise A0XRuntimeBundleError("vertical Gate B verification evidence drifted before output")
     if _vertical_source_state(source_state_probe) != (source_head, source_tree, True):
         raise A0XRuntimeBundleError("vertical Gate B source state drifted before output")
     summary = _write_and_verify_vertical_bundle(
-        repository, binding, pair, source_head, source_tree, documents,
+        repository, binding, pair, source_head, source_tree, documents, authorization_raw,
     )
     summary.update({
         "qualified_source": {"head": source_head, "tree": source_tree},
@@ -408,7 +411,8 @@ def _vertical_output_paths(binding: VerticalPackageBinding) -> _VerticalOutputPa
         f"{binding.qualified_source_tree}/{pair.leg.value}/{pair.model_key}/{pair.run_id}"
     )
     return _VerticalOutputPaths(
-        raw_receipt=f"{base}/gate-a-verification-raw.json",
+        raw_receipt=f"{base}/gate-a-verification-receipt.json",
+        gate_b_authorization=f"{base}/gate-b-authorization.json",
         gate_a_evidence=f"{base}/gate-a-evidence.json",
         readiness=f"{base}/runtime-readiness.json",
         descriptor=f"{base}/launch-descriptor.json",
@@ -643,7 +647,7 @@ def _preflight_vertical_output_paths(
     root: Path, pair: PairBinding, paths: _VerticalOutputPaths, *, raw_receipt_must_be_absent: bool = True,
 ) -> None:
     """Refuse reused v2 documents and later material destinations before probes."""
-    candidates = [*paths.durable().values(), pair.output_path]
+    candidates = [paths.gate_b_authorization, *paths.durable().values(), pair.output_path]
     if raw_receipt_must_be_absent:
         candidates.append(paths.raw_receipt)
     for relative in candidates:
@@ -782,7 +786,7 @@ def _write_and_verify_vertical_bundle(
     pair: PairBinding,
     source_head: str,
     source_tree: str,
-    documents: Mapping[str, Mapping[str, Any]],
+    documents: Mapping[str, Mapping[str, Any]], gate_b_authorization_raw: bytes,
 ) -> dict[str, Any]:
     """Publish only v2 projections; v1/batch bytes are never reused or changed."""
     paths = _vertical_output_paths(binding)
@@ -791,6 +795,11 @@ def _write_and_verify_vertical_bundle(
         raise A0XRuntimeBundleError("vertical Gate B durable output set is invalid")
     created: list[tuple[Path, os.stat_result]] = []
     try:
+        authorization_copy = _write_path(root, paths.gate_b_authorization)
+        authorization_copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _exclusive_write(authorization_copy, gate_b_authorization_raw)
+        created.append((authorization_copy, authorization_copy.stat(follow_symlinks=False)))
+        _independent_repository_file(root, paths.gate_b_authorization, "vertical Gate B authorization")
         for name, relative in paths.durable().items():
             destination = _write_path(root, relative)
             destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -811,6 +820,8 @@ def _write_and_verify_vertical_bundle(
         "qualified_source": {"head": source_head, "tree": source_tree},
         "pair_binding": pair.as_mapping(),
         "vertical_outputs": paths.durable(),
+        "gate_b_authorization_path": paths.gate_b_authorization,
+        "gate_b_authorization_sha256": hashlib.sha256(gate_b_authorization_raw).hexdigest(),
         "verification_receipt_path": paths.raw_receipt,
         "verification_receipt_sha256": hashlib.sha256(
             _repository_file(root, paths.raw_receipt).read_bytes()
@@ -1157,6 +1168,7 @@ def _verify_vertical_gate_a_evidence(
     source_head: str,
     source_tree: str,
     verifier: Callable[[GateBVerificationRequest], bytes],
+    canonical_authorization_path: str,
 ) -> dict[str, Any]:
     policy_path, executable = _validate_vertical_gate_b_static(
         root, request, authorization_path, authorization_raw, authorization,
@@ -1175,7 +1187,7 @@ def _verify_vertical_gate_a_evidence(
         raise A0XRuntimeBundleError("vertical Gate B verifier returned invalid receipt bytes")
     return _gate_a_evidence_from_receipt(
         root, authorization_path, authorization_raw, authorization, returned_raw,
-        pair=pair, source_head=source_head,
+        pair=pair, source_head=source_head, canonical_authorization_path=canonical_authorization_path,
     )
 
 
@@ -1216,6 +1228,7 @@ def _gate_a_evidence_from_receipt(
     *,
     pair: PairBinding,
     source_head: str,
+    canonical_authorization_path: str | None = None,
 ) -> dict[str, Any]:
     receipt_path = _repository_file(root, authorization["verification_receipt_path"])
     receipt_raw = receipt_path.read_bytes()
@@ -1236,12 +1249,16 @@ def _gate_a_evidence_from_receipt(
         or receipt["verifier"] != authorization["verifier"]
     ):
         raise A0XRuntimeBundleError("Gate B verifier receipt does not bind authorized hosted evidence")
+    vertical = authorization.get("authorization_profile") == VERTICAL_GATE_B_AUTHORIZATION_PROFILE
+    if vertical and canonical_authorization_path is None:
+        raise A0XRuntimeBundleError("vertical Gate B canonical authorization path is required")
     evidence = {
-        "evidence_profile": "a0x-gate-a-evidence-binding-v2",
+        "evidence_profile": "a0x-vertical-gate-a-evidence-binding-v1" if vertical else "a0x-gate-a-evidence-binding-v2",
         "provider": "github-hosted-attestation-v1",
         "repository": authorization["repository"],
         "source_head": source_head,
         "source_tree": authorization["source_tree"],
+        **({"pair_binding": pair.as_mapping(), "gate_b_authorization_path": canonical_authorization_path} if vertical else {}),
         "gate_b_authorization_raw_sha256": hashlib.sha256(authorization_raw).hexdigest(),
         "hosted_inputs": dict(authorization["hosted_inputs"]),
         "verification_receipt": {

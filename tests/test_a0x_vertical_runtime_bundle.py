@@ -80,7 +80,7 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
                 sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
             )
         verifier = self.root / "bin/gh"
-        verifier.parent.mkdir(parents=True)
+        verifier.parent.mkdir(parents=True, exist_ok=True)
         verifier.write_bytes(b"synthetic verifier")
         verifier.chmod(0o700)
         policy = self.root / "gate-b/verifier-policy.json"
