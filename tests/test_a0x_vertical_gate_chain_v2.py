@@ -17,6 +17,7 @@ import unittest
 import inspect
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -115,7 +116,7 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
     def _synthetic_gate_b_request(self, binding) -> VerticalRuntimePreparationRequest:
         """Create ignored, exact-bound synthetic external inputs for private core only."""
         hosted_root = self.root / f".a0x-runtime/gate-a/evidence/{self.head}"
-        hosted_root.mkdir(parents=True)
+        hosted_root.mkdir(parents=True, exist_ok=True)
         hosted: dict[str, HashBoundPath] = {}
         for name, filename in (
             ("manifest", "hosted-gate-a-evidence.json"),
@@ -258,6 +259,34 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
             readiness_probe=readiness, context="synthetic-target-free",
         )
 
+    def _assert_gate_b_refuses_before_hosted_or_readiness(self, binding, request) -> None:
+        """A v2 selector/static binding failure spends neither external Gate-B capability."""
+        from latent_triz.a0x_runtime_bundle import (
+            A0XRuntimeBundleError, _prepare_vertical_runtime_bundle_core,
+        )
+
+        capabilities = {
+            "guard": 0, "model": 0, "tokenizer": 0, "target": 0,
+            "network": 0, "ccp": 0, "docker": 0, "hosted": 0, "readiness": 0,
+        }
+        with self.assertRaises(A0XRuntimeBundleError):
+            _prepare_vertical_runtime_bundle_core(
+                self.root, request, source_state_probe=self._source_state,
+                dependencies=self._synthetic_gate_b_dependencies(request, capabilities),
+            )
+        self.assertEqual(0, capabilities["hosted"])
+        self.assertEqual(0, capabilities["readiness"])
+        self.assertEqual(
+            {"guard": 0, "model": 0, "tokenizer": 0, "target": 0, "network": 0, "ccp": 0, "docker": 0},
+            {name: capabilities[name] for name in ("guard", "model", "tokenizer", "target", "network", "ccp", "docker")},
+        )
+
+    def _rewrite_gate_b_authorization(self, request, mutate) -> None:
+        """Apply one canonical raw-authority mutation before any Gate-B capability."""
+        value = json.loads(request.gate_b_authorization.read_text(encoding="utf-8"))
+        mutate(value)
+        request.gate_b_authorization.write_bytes(canonical_json_bytes(value))
+
     def test_public_gate_b_entrypoint_has_no_dependency_injection(self) -> None:
         """Only the private core may accept synthetic target-free dependencies."""
         from latent_triz.a0x_runtime_bundle import prepare_vertical_runtime_bundle
@@ -316,7 +345,8 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
         """Every damaged ignored P0 envelope is terminal before Gate-B hooks."""
         mutations = (
             "member_bytes", "manifest_member_order", "extra_member", "missing_member",
-            "symlink", "hardlink", "commitment", "dossier",
+            "symlink", "hardlink", "nonregular_member", "renamed_member_same_cardinality",
+            "commitment", "dossier",
         )
         for mutation in mutations:
             with self.subTest(mutation=mutation):
@@ -340,6 +370,11 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
                 elif mutation == "hardlink":
                     member.unlink()
                     os.link(package / "implementation.json", member)
+                elif mutation == "nonregular_member":
+                    member.unlink()
+                    member.mkdir()
+                elif mutation == "renamed_member_same_cardinality":
+                    member.rename(package / "protocol-renamed.json")
                 elif mutation == "commitment":
                     commitment = self.root / binding.commitment_path
                     commitment.write_bytes(commitment.read_bytes() + b" ")
@@ -348,6 +383,58 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
                     dossier.write_bytes(dossier.read_bytes() + b" ")
                 self._assert_pre_gate_b_refusal(binding)
                 shutil.rmtree(self.root / binding.envelope_path)
+
+    def test_real_git_p0_v1_package_and_historical_batch_dossier_refuse_before_gate_b(self) -> None:
+        """A v2 binding cannot reuse a historical package shape or the twelve-dossier batch."""
+        historical = self.root / "experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json"
+        for mutation in ("v1_package", "historical_batch_dossier"):
+            with self.subTest(mutation=mutation):
+                binding = self._binding()
+                package = self.root / binding.package_path
+                if mutation == "v1_package":
+                    manifest = package / "slice-manifest.json"
+                    value = json.loads(manifest.read_text(encoding="utf-8"))
+                    value["artifact_class"] = "a0x-vertical-slice-manifest"
+                    value["generator_profile"] = "a0x-vertical-slice-v1"
+                    manifest.write_bytes(canonical_json_bytes(value))
+                else:
+                    (package / "approval-dossier.json").write_bytes(historical.read_bytes())
+                self._assert_pre_gate_b_refusal(binding)
+                shutil.rmtree(self.root / binding.envelope_path)
+
+    def test_real_git_gate_b_refuses_pair_selector_drift_before_hosted_or_readiness(self) -> None:
+        """Leg, model key, and revision are all typed selector fields, not labels."""
+        for mutation in (
+            lambda binding: replace(binding, leg=Leg.R1),
+            lambda binding: replace(binding, model_key="gpt2"),
+            lambda binding: replace(binding, model_revision="0" * 40),
+        ):
+            with self.subTest(mutation=mutation):
+                binding = mutation(self._binding())
+                request = self._synthetic_gate_b_request(binding)
+                self._assert_gate_b_refuses_before_hosted_or_readiness(binding, request)
+                shutil.rmtree(self.root / ".a0x-runtime/p0", ignore_errors=True)
+
+    def test_real_git_gate_b_refuses_hosted_gate_a_head_or_tree_mismatch_before_verifier(self) -> None:
+        """Hosted Gate-A source identity is not a mutable annotation on the Gate-B request."""
+        for field in ("source_head", "source_tree"):
+            with self.subTest(field=field):
+                binding = self._binding()
+                request = self._synthetic_gate_b_request(binding)
+                self._rewrite_gate_b_authorization(request, lambda value, field=field: value.__setitem__(field, "0" * 40))
+                self._assert_gate_b_refuses_before_hosted_or_readiness(binding, request)
+                shutil.rmtree(self.root / ".a0x-runtime/p0", ignore_errors=True)
+
+    def test_real_git_gate_b_occupied_destination_refuses_before_verifier_or_readiness(self) -> None:
+        """One occupied derived output is terminal before external Gate-B capabilities."""
+        from latent_triz.a0x_runtime_bundle import _vertical_output_paths
+
+        binding = self._binding()
+        request = self._synthetic_gate_b_request(binding)
+        occupied = self.root / _vertical_output_paths(binding).readiness
+        occupied.parent.mkdir(parents=True, exist_ok=True)
+        occupied.write_bytes(b"occupied")
+        self._assert_gate_b_refuses_before_hosted_or_readiness(binding, request)
 
     def test_real_git_p0_source_drift_refuses_before_gate_b_capabilities(self) -> None:
         binding = self._binding()
@@ -484,10 +571,32 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
         (self.root / prepared["verification_receipt_path"]).write_bytes(b"{}")
         self._assert_gate_c_refuses_before_guard(binding, execution_path)
 
-    def test_real_git_gate_c_refuses_gate_b_output_drift_before_guard(self) -> None:
-        binding, prepared, _capabilities, execution_path = self._private_synthetic_chain()
-        (self.root / prepared["vertical_outputs"]["readiness"]).write_bytes(b"{}")
+    def test_real_git_gate_c_refuses_every_gate_b_wrapper_drift_before_guard(self) -> None:
+        """Every durable Gate-B wrapper is independently rebound before the one-shot guard."""
+        for wrapper in ("gate_a_evidence", "readiness", "descriptor", "authorization", "mapping"):
+            with self.subTest(wrapper=wrapper):
+                binding, prepared, _capabilities, execution_path = self._private_synthetic_chain()
+                (self.root / prepared["vertical_outputs"][wrapper]).write_bytes(b"{}")
+                self._assert_gate_c_refuses_before_guard(binding, execution_path)
+                shutil.rmtree(self.root / ".a0x-runtime", ignore_errors=True)
+
+    def test_real_git_gate_c_refuses_source_tree_drift_after_gate_b(self) -> None:
+        """Gate C reopens real Git state after Gate B rather than trusting its former snapshot."""
+        binding, _prepared, capabilities, execution_path = self._private_synthetic_chain()
+        tracked = self.root / "post-gate-b-source.txt"
+        tracked.write_text("new commit\n", encoding="utf-8")
+        self._git("add", tracked.name)
+        self._git("commit", "-q", "-m", "post Gate-B source drift")
         self._assert_gate_c_refuses_before_guard(binding, execution_path)
+        self.assertEqual(1, capabilities["hosted"])
+        self.assertEqual(1, capabilities["readiness"])
+
+    def test_real_git_gate_c_refuses_dirty_source_after_gate_b(self) -> None:
+        binding, _prepared, capabilities, execution_path = self._private_synthetic_chain()
+        (self.root / "post-gate-b-dirty.txt").write_text("dirty\n", encoding="utf-8")
+        self._assert_gate_c_refuses_before_guard(binding, execution_path)
+        self.assertEqual(1, capabilities["hosted"])
+        self.assertEqual(1, capabilities["readiness"])
 
     def test_real_git_gate_c_refuses_execution_pair_drift_before_guard(self) -> None:
         binding, _prepared, _capabilities, execution_path = self._private_synthetic_chain()
