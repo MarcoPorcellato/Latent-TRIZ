@@ -118,20 +118,30 @@ class A0XSchemasTests(unittest.TestCase):
             (root / "schemas/a0x-vertical-package-commitment-v2.schema.json").read_text(encoding="utf-8"),
         )
         source = {"head": "a" * 40, "tree": "b" * 40, "ref": "refs/heads/main"}
-        member = {"name": "protocol.json", "size": 1, "sha256": "c" * 64}
+        names = (
+            "protocol.json",
+            "implementation.json",
+            "freeze.json",
+            "approval-dossier.json",
+            "slice-manifest.json",
+        )
+        members = [
+            {"name": name, "size": index + 1, "sha256": "c" * 64}
+            for index, name in enumerate(names)
+        ]
         manifest = {
             "artifact_class": "a0x-vertical-slice-manifest-v2",
             "generator_profile": "a0x-vertical-slice-v2",
             "repository": "MarcoPorcellato/Latent-TRIZ",
             "qualified_source": source,
             "pair_binding": {"one": "pair"},
-            "members": [member] * 4,
+            "members": members[:-1],
         }
         commitment = {
             "profile": "a0x-vertical-package-commitment-v2",
             "qualified_source": source,
             "pair_binding": {"one": "pair"},
-            "members": [member] * 5,
+            "members": members,
             "generator": {"profile": "a0x-vertical-slice-v2", "repository": "MarcoPorcellato/Latent-TRIZ"},
             "authorization_id": "p0-auth-test-01",
             "attempt_id": "p0-attempt-test-01",
@@ -144,6 +154,15 @@ class A0XSchemasTests(unittest.TestCase):
             rejected["unexpected"] = True
             with self.subTest(value=value):
                 self.assertTrue(validate(rejected, schema))
+        for value, schema in ((manifest, manifest_schema), (commitment, commitment_schema)):
+            for mutate in (
+                lambda member_list: member_list.__setitem__(0, copy.deepcopy(member_list[1])),
+                lambda member_list: member_list.reverse(),
+            ):
+                rejected = copy.deepcopy(value)
+                mutate(rejected["members"])
+                with self.subTest(value=value, members=rejected["members"]):
+                    self.assertTrue(validate(rejected, schema))
 
     def test_terminal_taxonomy_requires_receipt_and_statistics_by_status(self) -> None:
         terminal_schema = self.schemas["a0x-terminal-result.schema.json"]

@@ -32,6 +32,15 @@
       }
     },
     "pair_binding": {"type": "object", "minProperties": 1},
-    "members": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "#/$defs/member"}}
+    "members": {
+      "type": "array",
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "protocol.json"}}}]},
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "implementation.json"}}}]},
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "freeze.json"}}}]},
+        {"allOf": [{"$ref": "#/$defs/member"}, {"properties": {"name": {"const": "approval-dossier.json"}}}]}
+      ],
+      "items": false
+    }
   }
 }

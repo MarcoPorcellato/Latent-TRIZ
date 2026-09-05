@@ -142,6 +142,15 @@ class _BoundFile:
         return {"path": self.relative, "bytes": len(self.raw), "sha256": self.sha256}
 
 
+@dataclass(frozen=True)
+class _V2StageSnapshot:
+    package_identity: tuple[int, int]
+    member_identities: Mapping[str, tuple[int, int, int]]
+    commitment_identity: tuple[int, int, int]
+    members: Mapping[str, tuple[bytes, str]]
+    commitment: tuple[bytes, str]
+
+
 class _RepositoryReader:
     """Single-read, descriptor-relative access to repository prerequisites."""
 
@@ -1474,6 +1483,7 @@ def _publish_v2_envelope(
     parent = _open_package_parent(repository, envelope_relative, create=True)
     transaction: _PublicationTransaction | None = None
     package_fd: int | None = None
+    snapshot: _V2StageSnapshot | None = None
     try:
         _revalidate_chain(parent)
         if _exists_at(parent.fd, parent.destination_name):
@@ -1486,14 +1496,15 @@ def _publish_v2_envelope(
         for name in V2_MEMBER_NAMES:
             _write_member_at(package_fd, name, encoded[name])
         _write_member_at(transaction.stage_fd, "p0-commitment.json", commitment_raw)
-        if set(os.listdir(package_fd)) != set(V2_MEMBER_NAMES) or set(os.listdir(transaction.stage_fd)) != {"package", "p0-commitment.json"}:
-            raise A0XVerticalSliceError(V2_PUBLICATION_FAILED)
+        snapshot = _capture_v2_stage(transaction, package_fd, encoded, commitment_raw)
+        _assert_v2_stage(transaction, package_fd, snapshot)
         os.fsync(package_fd)
         os.fsync(transaction.stage_fd)
         os.fsync(parent.fd)
         _before_publish(transaction)
         _revalidate_chain(parent)
         _assert_owned_stage(transaction)
+        _assert_v2_stage(transaction, package_fd, snapshot)
         if _exists_at(parent.fd, parent.destination_name):
             raise A0XVerticalSliceError(V2_OUTPUT_EXISTS)
         _require_v2_checkout(repository, request.qualified_source_head, request.qualified_source_tree)
@@ -1504,14 +1515,14 @@ def _publish_v2_envelope(
         _assert_published_chain(transaction)
         os.fsync(parent.fd)
     except A0XVerticalSliceError as error:
-        _cleanup_v2_stage(transaction)
+        _cleanup_v2_stage(transaction, package_fd, snapshot)
         if error.code in {V2_OUTPUT_EXISTS, V2_INVALID_REQUEST}:
             raise
         if error.code == PUBLICATION_OWNERSHIP_LOST:
             raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST) from error
         raise A0XVerticalSliceError(V2_PUBLICATION_FAILED) from error
     except (OSError, ValueError) as error:
-        _cleanup_v2_stage(transaction)
+        _cleanup_v2_stage(transaction, package_fd, snapshot)
         raise A0XVerticalSliceError(V2_PUBLICATION_FAILED) from error
     finally:
         if package_fd is not None:
@@ -1553,35 +1564,102 @@ def _sha256_pattern_invalid(value: object) -> bool:
     return not isinstance(value, str) or re.fullmatch(r"[a-f0-9]{64}", value) is None
 
 
-def _cleanup_v2_stage(transaction: _PublicationTransaction | None) -> None:
+def _capture_v2_stage(
+    transaction: _PublicationTransaction,
+    package_fd: int,
+    encoded: Mapping[str, bytes],
+    commitment_raw: bytes,
+) -> _V2StageSnapshot:
+    members = {name: (encoded[name], _sha256(encoded[name])) for name in V2_MEMBER_NAMES}
+    commitment = (commitment_raw, _sha256(commitment_raw))
+    try:
+        package = os.stat("package", dir_fd=transaction.stage_fd, follow_symlinks=False)
+        if not stat.S_ISDIR(package.st_mode) or (package.st_dev, package.st_ino) != _fd_identity(package_fd):
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+        member_identities = {
+            name: _v2_stage_file_identity(package_fd, name, members[name][0]) for name in V2_MEMBER_NAMES
+        }
+        commitment_identity = _v2_stage_file_identity(transaction.stage_fd, "p0-commitment.json", commitment_raw)
+        return _V2StageSnapshot(
+            package_identity=(package.st_dev, package.st_ino),
+            member_identities=member_identities,
+            commitment_identity=commitment_identity,
+            members=members,
+            commitment=commitment,
+        )
+    except A0XVerticalSliceError:
+        raise
+    except OSError as error:
+        raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST) from error
+
+
+def _v2_stage_file_identity(parent_fd: int, name: str, expected_raw: bytes) -> tuple[int, int, int]:
+    metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+    raw = _read_regular_at(parent_fd, name, len(expected_raw), V2_PUBLICATION_OWNERSHIP_LOST)
+    if raw != expected_raw:
+        raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+    return metadata.st_dev, metadata.st_ino, metadata.st_size
+
+
+def _assert_v2_stage(
+    transaction: _PublicationTransaction,
+    package_fd: int,
+    snapshot: _V2StageSnapshot,
+) -> None:
+    try:
+        if set(os.listdir(transaction.stage_fd)) != {"package", "p0-commitment.json"}:
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+        package = os.stat("package", dir_fd=transaction.stage_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(package.st_mode)
+            or (package.st_dev, package.st_ino) != snapshot.package_identity
+            or _fd_identity(package_fd) != snapshot.package_identity
+            or set(os.listdir(package_fd)) != set(V2_MEMBER_NAMES)
+        ):
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+        for name, (expected_raw, expected_hash) in snapshot.members.items():
+            identity = _v2_stage_file_identity(package_fd, name, expected_raw)
+            if identity != snapshot.member_identities[name] or _sha256(expected_raw) != expected_hash:
+                raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+        commitment_identity = _v2_stage_file_identity(
+            transaction.stage_fd, "p0-commitment.json", snapshot.commitment[0],
+        )
+        if (
+            commitment_identity != snapshot.commitment_identity
+            or _sha256(snapshot.commitment[0]) != snapshot.commitment[1]
+        ):
+            raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
+    except A0XVerticalSliceError:
+        raise
+    except OSError as error:
+        raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST) from error
+
+
+def _cleanup_v2_stage(
+    transaction: _PublicationTransaction | None,
+    package_fd: int | None,
+    snapshot: _V2StageSnapshot | None,
+) -> None:
     """Remove only an unchanged unpublished v2 staging inode."""
     if transaction is None or transaction.state != "staged":
         return
+    if package_fd is None or snapshot is None:
+        raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
     try:
         metadata = os.stat(transaction.stage_name, dir_fd=transaction.parent.fd, follow_symlinks=False)
-        if (
-            not stat.S_ISDIR(metadata.st_mode)
-            or (metadata.st_dev, metadata.st_ino) != transaction.stage_identity
-            or set(os.listdir(transaction.stage_fd)) != {"package", "p0-commitment.json"}
-        ):
+        if not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != transaction.stage_identity:
             raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
-        package_fd = os.open(
-            "package", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
-            dir_fd=transaction.stage_fd,
-        )
-        try:
-            if set(os.listdir(package_fd)) != set(V2_MEMBER_NAMES):
+        _assert_v2_stage(transaction, package_fd, snapshot)
+        for name in V2_MEMBER_NAMES:
+            if _v2_stage_file_identity(package_fd, name, snapshot.members[name][0]) != snapshot.member_identities[name]:
                 raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
-            for name in V2_MEMBER_NAMES:
-                member = os.stat(name, dir_fd=package_fd, follow_symlinks=False)
-                if not stat.S_ISREG(member.st_mode) or member.st_nlink != 1:
-                    raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
-                os.unlink(name, dir_fd=package_fd)
-        finally:
-            os.close(package_fd)
+            os.unlink(name, dir_fd=package_fd)
         os.rmdir("package", dir_fd=transaction.stage_fd)
-        commitment = os.stat("p0-commitment.json", dir_fd=transaction.stage_fd, follow_symlinks=False)
-        if not stat.S_ISREG(commitment.st_mode) or commitment.st_nlink != 1:
+        if _v2_stage_file_identity(
+            transaction.stage_fd, "p0-commitment.json", snapshot.commitment[0],
+        ) != snapshot.commitment_identity:
             raise A0XVerticalSliceError(V2_PUBLICATION_OWNERSHIP_LOST)
         os.unlink("p0-commitment.json", dir_fd=transaction.stage_fd)
         metadata = os.stat(transaction.stage_name, dir_fd=transaction.parent.fd, follow_symlinks=False)
@@ -1610,6 +1688,7 @@ def _validate_v2_loaded_documents(
     if (
         commitment.get("qualified_source") != expected_source
         or commitment.get("pair_binding") != pair.as_mapping()
+        or pair != binding.pair_binding
         or commitment.get("members") != members
         or manifest.get("qualified_source") != expected_source
         or manifest.get("pair_binding") != pair.as_mapping()

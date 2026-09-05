@@ -17,7 +17,7 @@ _SUPPORTED_SCHEMA_KEYWORDS = frozenset(
         "allOf", "const", "contains", "default", "deprecated", "description",
         "else", "enum", "examples", "exclusiveMaximum", "exclusiveMinimum",
         "format", "if", "items", "maxItems", "maximum", "minItems", "minLength",
-        "minProperties", "minimum", "pattern", "properties", "readOnly", "required",
+        "minProperties", "minimum", "pattern", "prefixItems", "properties", "readOnly", "required",
         "then", "title", "type", "uniqueItems", "writeOnly",
     }
 )
@@ -144,6 +144,14 @@ def _check_schema_node(
     for child_name in ("items", "contains", "if", "then", "else"):
         if child_name in schema:
             _check_schema_node(schema[child_name], root_schema, f"{path}.{child_name}", issues, ref_stack)
+
+    prefix_items = schema.get("prefixItems")
+    if prefix_items is not None:
+        if not isinstance(prefix_items, list):
+            issues.append(ValidationIssue(f"{path}.prefixItems", "prefixItems must be an array"))
+        else:
+            for index, child in enumerate(prefix_items):
+                _check_schema_node(child, root_schema, f"{path}.prefixItems[{index}]", issues, ref_stack)
 
     additional = schema.get("additionalProperties")
     if isinstance(additional, dict):
@@ -295,7 +303,16 @@ def _validate_arrays(
             if any(item == previous for previous in instance[:index]):
                 issues.append(ValidationIssue(f"{path}[{index}]", "Array items must be unique"))
 
-    if "items" in schema:
+    prefix_items = schema.get("prefixItems")
+    if isinstance(prefix_items, list):
+        for index, item in enumerate(instance):
+            if index < len(prefix_items):
+                _validate(item, prefix_items[index], f"{path}[{index}]", issues, root_schema=root_schema, ref_stack=ref_stack)
+            elif schema.get("items") is False:
+                issues.append(ValidationIssue(f"{path}[{index}]", "Additional array item not allowed"))
+            elif "items" in schema:
+                _validate(item, schema["items"], f"{path}[{index}]", issues, root_schema=root_schema, ref_stack=ref_stack)
+    elif "items" in schema:
         for index, item in enumerate(instance):
             _validate(item, schema["items"], f"{path}[{index}]", issues, root_schema=root_schema, ref_stack=ref_stack)
 
