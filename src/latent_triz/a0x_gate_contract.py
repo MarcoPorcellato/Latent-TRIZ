@@ -161,6 +161,13 @@ def _vertical_package_paths(pair: PairBinding, source_head: str, source_tree: st
     return base, f"{base}/package", f"{base}/p0-commitment.json", f"{base}/package/approval-dossier.json"
 
 
+def _vertical_verification_receipt_path(pair: PairBinding, source_head: str, source_tree: str) -> str:
+    return (
+        f".a0x-runtime/gate-b/v2/{source_head}/{source_tree}/"
+        f"{pair.leg.value}/{pair.model_key}/{pair.run_id}/gate-a-verification-raw.json"
+    )
+
+
 @dataclass(frozen=True)
 class VerificationReceiptInputs:
     """Typed immutable values required to project one verified Hosted receipt."""
@@ -246,10 +253,8 @@ def build_vertical_gate_b_authorization(
                 "dossier_path": inputs.dossier_path,
                 "dossier_sha256": inputs.dossier_sha256,
             },
-            "verification_receipt_path": (
-                f".a0x-runtime/gate-b-verifications/{base.source_head}/"
-                f"{pair.leg.value}/{pair.model_key}/{pair.run_id}/"
-                "gate-a-verification-receipt.json"
+            "verification_receipt_path": _vertical_verification_receipt_path(
+                pair, base.source_head, base.source_tree,
             ),
         },
     )

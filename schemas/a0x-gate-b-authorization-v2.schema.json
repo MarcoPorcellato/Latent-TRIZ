@@ -64,7 +64,7 @@
         "dossier_sha256": {"$ref": "#/$defs/sha256"}
       }
     },
-    "verification_receipt_path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-b-verifications/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/gate-a-verification-receipt\\.json$"},
+    "verification_receipt_path": {"type": "string", "pattern": "^\\.a0x-runtime/gate-b/v2/[a-f0-9]{40}/[a-f0-9]{40}/(?:a0|r1)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/gate-a-verification-raw\\.json$"},
     "max_verification_count": {"const": 1},
     "stop_boundary": {"const": "after_gate_b_runtime_bundle"},
     "authorization_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}
