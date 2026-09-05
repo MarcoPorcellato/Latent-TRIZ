@@ -21,7 +21,14 @@ publication.
 ## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
 The current target-free implementation anchor is
-`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. It regenerated the two leg
+`513742e492fc0b53e9f5d2c4bfa5f74c9b510722` (final branch HEAD may postdate
+this implementation anchor). Current regenerated hashes are A0/R1
+implementation `0d1efb54ab6752e35c7999fe7e704e1f818cab95ffefbc40e82b3af681d2bc3e` /
+`a6ee9f3b04c7472a8babef503aef2dd348727380f2463f1a9bc2093c9d67e493`, A0/R1
+freeze `5d61aa4299a87dcb63068584b22717440f8328f640a632527c56a4f3c7b5eff4` /
+`988b3fe6daab02885d05bfe345e9f344773cfaddbedced9287240e807a9452fd`, and
+no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
+It regenerated the two leg
 implementation inventories, two freezes, twelve approval-request dossiers, and
 the no-model receipt. Those regenerated batch artifacts remain current only
 for deterministic no-model verification; they are **not** a new material route.

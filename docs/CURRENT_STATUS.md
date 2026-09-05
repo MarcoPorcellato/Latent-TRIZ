@@ -34,7 +34,14 @@ Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
 ```
 
 The implementation inventory/freeze/dossier anchor is
-`bf49a48106b77e65f16aa6763035f9ab2fa9a67f`. It is local target-free evidence,
+`513742e492fc0b53e9f5d2c4bfa5f74c9b510722`. Current regenerated hashes are A0
+implementation `0d1efb54ab6752e35c7999fe7e704e1f818cab95ffefbc40e82b3af681d2bc3e`,
+R1 implementation `a6ee9f3b04c7472a8babef503aef2dd348727380f2463f1a9bc2093c9d67e493`,
+A0 freeze `5d61aa4299a87dcb63068584b22717440f8328f640a632527c56a4f3c7b5eff4`,
+R1 freeze `988b3fe6daab02885d05bfe345e9f344773cfaddbedced9287240e807a9452fd`,
+and no-model receipt `9090f693ffef1bdb3852bca368629d3fc7d651427543bedcdf0d09840bef5816`.
+The new pre-regeneration ledger hash is
+`6bf7391457b56ef91493a89112da77c3de4d5f7dc7d1756701020187778b16ad`. It is local target-free evidence,
 not a Hosted Gate A qualification. The ignored P0 v2 envelope is intentionally
 not generated yet. It will bind one protected-main `HEAD/tree`, one pair, and
 one external package commitment after separately authorized Hosted evidence
