@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -34,44 +37,61 @@ def _source_head() -> str:
     return completed.stdout.decode("ascii", "strict").strip()
 
 
-def _source_state() -> tuple[str, str, bool]:
-    """Read the future v2 source identity; this remains target-free."""
-    base = {"PATH": "/usr/bin:/bin", "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1", "GIT_NO_REPLACE_OBJECTS": "1"}
-    commands = (("rev-parse", "HEAD"), ("write-tree",), ("status", "--short"))
-    outputs: list[bytes] = []
-    for command in commands:
-        completed = subprocess.run(("git", *command), cwd=str(ROOT), check=False, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=base)
-        if completed.returncode != 0:
-            raise A0XCcpExecutorError("repository source state is unavailable")
-        outputs.append(completed.stdout)
-    return (
-        outputs[0].decode("ascii", "strict").strip(),
-        outputs[1].decode("ascii", "strict").strip(),
-        outputs[2] == b"",
-    )
+_SHA256 = re.compile(r"^[a-f0-9]{64}$")
+
+
+def _external_raw_sha256(relative: str, *, expected: str, label: str) -> None:
+    """Bind a v2 external raw file before JSON parsing or path selection."""
+    if not isinstance(relative, str) or not isinstance(expected, str) or _SHA256.fullmatch(expected) is None:
+        raise A0XCcpExecutorError(f"{label} external raw binding is invalid")
+    parts = Path(relative).parts
+    if Path(relative).is_absolute() or not parts or any(part in {"", ".", ".."} for part in parts):
+        raise A0XCcpExecutorError(f"{label} external raw path is invalid")
+    candidate = ROOT.resolve(strict=True)
+    for part in parts:
+        candidate = candidate / part
+        try:
+            metadata = candidate.lstat()
+        except OSError as error:
+            raise A0XCcpExecutorError(f"{label} external raw file is unavailable") from error
+        if stat.S_ISLNK(metadata.st_mode):
+            raise A0XCcpExecutorError(f"{label} external raw path contains a symlink")
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        raise A0XCcpExecutorError(f"{label} external raw file is not independent")
+    observed = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    if observed != expected:
+        raise A0XCcpExecutorError(f"{label} external raw SHA-256 differs")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    selector = parser.add_mutually_exclusive_group(required=True)
-    selector.add_argument("--implementation-source-head")
-    selector.add_argument("--vertical-commitment")
-    parser.add_argument("--leg", required=True)
-    parser.add_argument("--model-key", required=True)
-    parser.add_argument("--execution-authorization")
+    commands = parser.add_subparsers(dest="command", required=True)
+    historical = commands.add_parser("historical-v1")
+    historical.add_argument("--implementation-source-head", required=True)
+    historical.add_argument("--leg", required=True)
+    historical.add_argument("--model-key", required=True)
+    vertical = commands.add_parser("vertical-v2")
+    vertical.add_argument("--vertical-commitment", required=True)
+    vertical.add_argument("--vertical-commitment-raw-sha256", required=True)
+    vertical.add_argument("--execution-authorization", required=True)
+    vertical.add_argument("--execution-authorization-raw-sha256", required=True)
     args = parser.parse_args(argv)
     try:
-        if args.vertical_commitment is not None:
-            if args.execution_authorization is None:
-                raise A0XCcpExecutorError("v2 vertical Gate C requires an execution authorization path")
+        if args.command == "vertical-v2":
+            _external_raw_sha256(
+                args.vertical_commitment,
+                expected=args.vertical_commitment_raw_sha256,
+                label="vertical commitment",
+            )
+            _external_raw_sha256(
+                args.execution_authorization,
+                expected=args.execution_authorization_raw_sha256,
+                label="vertical execution authorization",
+            )
             binding = vertical_package_binding_from_commitment(ROOT, args.vertical_commitment)
-            if args.leg != binding.leg.value or args.model_key != binding.model_key:
-                raise A0XCcpExecutorError("v2 vertical selector differs from package binding")
             result = launch_vertical_runtime_package(
                 repository_root=ROOT, package_binding=binding,
                 execution_authorization_path=args.execution_authorization,
-                source_state_probe=_source_state,
             )
         else:
             result = launch_vertical_slice_dossier(
