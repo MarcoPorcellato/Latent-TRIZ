@@ -126,11 +126,39 @@ class A0XFrozenPackageTests(unittest.TestCase):
                     "tests/test_a0x_runtime_bundle.py",
                     "tests/test_a0x_runtime_readiness.py",
                     "tests/test_a0x_wheelhouse.py",
+                    "schemas/a0x-execution-authorization-v4.schema.json",
+                    "schemas/a0x-gate-b-authorization-v2.schema.json",
+                    "schemas/a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1.schema.json",
+                    "schemas/a0x-vertical-gate-a-evidence-binding-v1.schema.json",
+                    "schemas/a0x-vertical-gate-b-output-v2.schema.json",
+                    "schemas/a0x-vertical-package-commitment-v2.schema.json",
+                    "schemas/a0x-vertical-slice-manifest-v2.schema.json",
+                    "src/latent_triz/validator.py",
+                    "tests/test_a0x_vertical_gate_chain_v2.py",
+                    "tests/test_a0x_vertical_runtime_bundle.py",
+                    "tests/test_a0x_vertical_slice_v2.py",
+                    "docs/qualification/a0x-vertical-chain-historical-protection.json",
                 }.issubset(paths))
                 for row in bindings:
                     path = ROOT / row["path"]
-                    self.assertEqual(path.stat().st_size, row["bytes"])
-                    self.assertEqual(sha256_file(path), row["sha256"])
+                self.assertEqual(path.stat().st_size, row["bytes"])
+                self.assertEqual(sha256_file(path), row["sha256"])
+
+    def test_historical_vertical_evidence_manifest_remains_byte_identical(self) -> None:
+        manifest = load("docs/qualification/a0x-vertical-chain-historical-protection.json")
+        self.assertEqual("a0x-vertical-chain-historical-protection-v1", manifest["profile"])
+        self.assertEqual("2026-09-05", manifest["recorded_on"])
+        protected = manifest["protected_files"]
+        self.assertEqual(7, len(protected))
+        self.assertEqual(sorted(item["path"] for item in protected), [item["path"] for item in protected])
+        for item in protected:
+            with self.subTest(path=item["path"]):
+                path = ROOT / item["path"]
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+                self.assertEqual(1, path.stat().st_nlink)
+                self.assertEqual(item["bytes"], path.stat().st_size)
+                self.assertEqual(item["sha256"], sha256_file(path))
 
     def test_protocol_implementation_and_freeze_do_not_self_hash(self) -> None:
         forbidden_by_kind = {
