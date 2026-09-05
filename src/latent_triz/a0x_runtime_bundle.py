@@ -37,6 +37,7 @@ from .a0x_material_contract import (
     OUTER_TIMEOUT_SECONDS,
     derive_runtime_paths,
     validate_gate_a_evidence,
+    validate_vertical_gate_a_evidence,
 )
 from .a0x_hosted_verifier import GateBVerificationRequest
 from .a0x_runner import planned_material_dossiers
@@ -1267,8 +1268,9 @@ def _gate_a_evidence_from_receipt(
         },
         "verifier": dict(authorization["verifier"]),
     }
+    validator = validate_vertical_gate_a_evidence if vertical else validate_gate_a_evidence
     try:
-        return validate_gate_a_evidence(evidence)
+        return validator(evidence)
     except A0XContractError as error:
         raise A0XRuntimeBundleError("Gate A evidence binding is invalid") from error
 

@@ -355,7 +355,6 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
                 ),
             ),
             mock.patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value=readiness),
-            mock.patch("latent_triz.a0x_runtime_bundle.validate_gate_a_evidence", side_effect=lambda value: dict(value)),
         ):
             result = prepare_vertical_runtime_bundle(
                 self.root,
@@ -396,7 +395,6 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
                     else actual_hash(path)
                 ),
             ),
-            mock.patch("latent_triz.a0x_runtime_bundle.validate_gate_a_evidence", side_effect=lambda value: dict(value)),
             self.assertRaises(A0XRuntimeBundleError),
         ):
             prepare_vertical_runtime_bundle(
@@ -433,7 +431,6 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
                 ),
             ),
             mock.patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value={"artifact_class": "synthetic-readiness"}),
-            mock.patch("latent_triz.a0x_runtime_bundle.validate_gate_a_evidence", side_effect=lambda value: dict(value)),
         ):
             result = prepare_vertical_runtime_bundle(
                 self.root,
@@ -495,6 +492,20 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
             mapping["authorization"]["sha256"],
         )
 
+        from latent_triz.a0x_material_contract import validate_vertical_gate_a_evidence
+        from latent_triz.a0x_contract import A0XContractError
+        gate_a_payload = json.loads(
+            (self.root / outputs["gate_a_evidence"]).read_text(encoding="utf-8")
+        )["payload"]
+        self.assertEqual(
+            "a0x-vertical-gate-a-evidence-binding-v1",
+            validate_vertical_gate_a_evidence(gate_a_payload)["evidence_profile"],
+        )
+        legacy_payload = dict(gate_a_payload)
+        legacy_payload["evidence_profile"] = "a0x-gate-a-evidence-binding-v2"
+        with self.assertRaises(A0XContractError):
+            validate_vertical_gate_a_evidence(legacy_payload)
+
         for relative, field, replacement in (
             (outputs["descriptor"], "authorization_reference", {"role": "authorization", "path": ".a0x-runtime/legacy.json"}),
             (outputs["mapping"], "descriptor", {"role": "descriptor", "path": ".a0x-runtime/legacy.json", "sha256": "0" * 64}),
@@ -541,7 +552,6 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
                 ),
             ),
             mock.patch("latent_triz.a0x_runtime_bundle._runtime_readiness", return_value={"artifact_class": "synthetic-readiness"}),
-            mock.patch("latent_triz.a0x_runtime_bundle.validate_gate_a_evidence", side_effect=lambda value: dict(value)),
         ):
             result = prepare_vertical_runtime_bundle(
                 self.root, request, source_state_probe=lambda: (HEAD, TREE, True),

@@ -254,6 +254,78 @@ class A0XVerticalMaterialTests(unittest.TestCase):
                     )
                 self.assertEqual(0, inert.calls)
 
+    def test_v2_gate_c_reconstructs_evidence_and_refuses_a_rebound_gate_b_package(self) -> None:
+        """Raw Gate-B bytes cannot be rebound to a different P0 package graph."""
+        from latent_triz.a0x_ccp_executor import (
+            ProcessResult, _launch_validated_vertical_v2, vertical_execution_authorization_path,
+        )
+        from tests.test_a0x_ccp_executor import _FakeGuardPreflight
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        authorization = self._v4_authorization(root, binding, prepared, head, tree)
+        gate_b_path = root / prepared["gate_b_authorization_path"]
+        gate_b = json.loads(gate_b_path.read_text())
+        gate_b["vertical_package"]["dossier_sha256"] = "f" * 64
+        gate_b_raw = json.dumps(gate_b, sort_keys=True, separators=(",", ":")).encode()
+        gate_b_path.write_bytes(gate_b_raw)
+        receipt_path = root / prepared["verification_receipt_path"]
+        receipt = json.loads(receipt_path.read_text())
+        receipt["authorization_raw_sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
+        receipt_raw = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+        receipt_path.write_bytes(receipt_raw)
+        evidence_path = root / prepared["vertical_outputs"]["gate_a_evidence"]
+        evidence_document = json.loads(evidence_path.read_text())
+        evidence_document["payload"]["gate_b_authorization_raw_sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
+        evidence_document["payload"]["verification_receipt"]["sha256"] = hashlib.sha256(receipt_raw).hexdigest()
+        evidence_raw = json.dumps(evidence_document, sort_keys=True, separators=(",", ":")).encode()
+        evidence_path.write_bytes(evidence_raw)
+        authorization["gate_b_authorization"]["sha256"] = hashlib.sha256(gate_b_raw).hexdigest()
+        authorization["gate_a_verification_receipt"]["sha256"] = hashlib.sha256(receipt_raw).hexdigest()
+        authorization["gate_b_outputs"]["gate_a_evidence"]["sha256"] = hashlib.sha256(evidence_raw).hexdigest()
+        path = root / vertical_execution_authorization_path(binding)
+        path.parent.mkdir(parents=True)
+        path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+        from latent_triz.a0x_ccp_executor import _vertical_gate_a_evidence_from_raw
+        with self.assertRaises(A0XCcpExecutorError):
+            _vertical_gate_a_evidence_from_raw(
+                gate_b_authorization_raw=gate_b_raw,
+                gate_b_authorization_path=prepared["gate_b_authorization_path"],
+                gate_b_receipt_raw=receipt_raw,
+                gate_b_receipt_path=prepared["verification_receipt_path"],
+                expected_source={"head": head, "tree": tree, "ref": "refs/heads/main"},
+                pair=binding.pair_binding,
+                expected_package={
+                    "envelope_path": binding.envelope_path,
+                    "package_path": binding.package_path,
+                    "commitment_path": binding.commitment_path,
+                    "commitment_raw_sha256": binding.commitment_raw_sha256,
+                    "package_commitment_sha256": binding.package_commitment_sha256,
+                    "dossier_path": binding.dossier_path,
+                    "dossier_sha256": binding.dossier_sha256,
+                },
+            )
+
+        class Inert:
+            calls = 0
+            def run(self, *args, **kwargs):
+                self.calls += 1
+                terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+                return ProcessResult(0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0, stdout_prefix=terminal)
+
+        inert = Inert()
+        with self.assertRaises(A0XCcpExecutorError):
+            _launch_validated_vertical_v2(
+                repository_root=root, package_binding=binding,
+                execution_authorization_path=path.relative_to(root).as_posix(),
+                source_state_probe=lambda: (head, tree, True), process_executor=inert,
+                guard_preflight_producer=_FakeGuardPreflight(
+                    version=json.loads((root / prepared["vertical_outputs"]["authorization"]).read_text())["payload"]["ccp"]["version"],
+                ),
+                executable_identity_verifier=_SyntheticExecutableIdentityVerifier(),
+            )
+        self.assertEqual(0, inert.calls)
+
     def test_v2_gate_c_post_claim_source_drift_seals_recovery_before_guard(self) -> None:
         """A claim is consumed when the final source boundary drifts."""
         from latent_triz.a0x_ccp_executor import _launch_validated_vertical_v2, vertical_execution_authorization_path

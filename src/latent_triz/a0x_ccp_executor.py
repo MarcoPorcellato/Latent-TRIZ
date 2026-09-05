@@ -54,6 +54,7 @@ from .a0x_runtime_readiness import (
     validate_runtime_readiness_live,
 )
 from .a0x_vertical_slice import A0XVerticalSliceError, VerticalPackageBinding, load_vertical_runtime_package, load_vertical_slice
+from .validator import validate
 
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
@@ -487,26 +488,21 @@ def _launch_validated_vertical_v2(
         or authorization.get("gate_a_verification_receipt") != {"path": gate_b_receipt_relative, "sha256": _sha256_bytes(gate_b_receipt_raw)}
     ):
         raise A0XCcpExecutorError("vertical Gate C Gate B raw binding drifted")
-    gate_b_authorization = _strict_object(gate_b_authorization_raw, "vertical Gate B authorization")
-    gate_b_receipt = _strict_object(gate_b_receipt_raw, "vertical Gate B verification receipt")
-    if (
-        gate_b_authorization.get("authorization_profile") != "a0x-gate-b-authorization-v2"
-        or gate_b_authorization.get("source_head") != source_head
-        or gate_b_authorization.get("source_tree") != source_tree
-        or gate_b_authorization.get("pair_binding") != pair.as_mapping()
-        or gate_b_receipt.get("authorization_raw_sha256") != _sha256_bytes(gate_b_authorization_raw)
-    ):
-        raise A0XCcpExecutorError("vertical Gate C Gate B authorization/receipt semantics differ")
+    reconstructed_evidence = _vertical_gate_a_evidence_from_raw(
+        gate_b_authorization_raw=gate_b_authorization_raw,
+        gate_b_authorization_path=gate_b_authorization_relative,
+        gate_b_receipt_raw=gate_b_receipt_raw,
+        gate_b_receipt_path=gate_b_receipt_relative,
+        expected_source=expected_source,
+        pair=pair,
+        expected_package=expected_package,
+    )
     gate_a_payload = _mapping(outputs["gate_a_evidence"], "payload", "vertical Gate B evidence")
     try:
         evidence = validate_vertical_gate_a_evidence(gate_a_payload)
     except A0XContractError as error:
         raise A0XCcpExecutorError("vertical Gate C Gate A evidence is invalid") from error
-    if (
-        evidence.get("gate_b_authorization_path") != gate_b_authorization_relative
-        or evidence.get("gate_b_authorization_raw_sha256") != _sha256_bytes(gate_b_authorization_raw)
-        or evidence.get("verification_receipt") != {"path": gate_b_receipt_relative, "sha256": _sha256_bytes(gate_b_receipt_raw)}
-    ):
+    if evidence != reconstructed_evidence:
         raise A0XCcpExecutorError("vertical Gate C Gate A evidence is not reconstructed from Gate B bytes")
     try:
         launch = A0XGuardLaunch.from_mapping(_mapping(authorization, "guard_launch", "vertical Gate C authorization"))
@@ -692,6 +688,82 @@ def _vertical_package_projection(binding: VerticalPackageBinding) -> dict[str, s
         "dossier_path": binding.dossier_path,
         "dossier_sha256": binding.dossier_sha256,
     }
+
+
+def _vertical_gate_a_evidence_from_raw(
+    *, gate_b_authorization_raw: bytes, gate_b_authorization_path: str,
+    gate_b_receipt_raw: bytes, gate_b_receipt_path: str,
+    expected_source: Mapping[str, str], pair: PairBinding,
+    expected_package: Mapping[str, str],
+) -> dict[str, Any]:
+    """Reconstruct the sole v2 Gate-A projection from raw Gate-B documents."""
+    authorization = _strict_object(gate_b_authorization_raw, "vertical Gate B authorization")
+    receipt = _strict_object(gate_b_receipt_raw, "vertical Gate B verification receipt")
+    _validate_vertical_raw_schema(
+        authorization, "a0x-gate-b-authorization-v2.schema.json", "vertical Gate B authorization",
+    )
+    _validate_vertical_raw_schema(
+        receipt, "a0x-hosted-gate-a-verification-receipt.schema.json", "vertical Gate B verification receipt",
+    )
+    source_head, source_tree = expected_source["head"], expected_source["tree"]
+    if (
+        authorization.get("repository") != "MarcoPorcellato/Latent-TRIZ"
+        or authorization.get("authorization_profile") != "a0x-gate-b-authorization-v2"
+        or authorization.get("authorization_status") != "authorized"
+        or authorization.get("source_head") != source_head
+        or authorization.get("source_tree") != source_tree
+        or authorization.get("source_sha") != source_head
+        or authorization.get("job_workflow_sha") != source_head
+        or authorization.get("pair_binding") != pair.as_mapping()
+        or authorization.get("vertical_package") != dict(expected_package)
+        or authorization.get("verification_receipt_path") != gate_b_receipt_path
+        or authorization.get("max_verification_count") != 1
+        or authorization.get("stop_boundary") != "after_gate_b_runtime_bundle"
+    ):
+        raise A0XCcpExecutorError("vertical Gate C Gate B authorization semantics differ")
+    if (
+        receipt.get("repository") != authorization["repository"]
+        or receipt.get("qualified_source_head") != source_head
+        or receipt.get("qualified_source_tree") != source_tree
+        or receipt.get("pair_binding") != pair.as_mapping()
+        or receipt.get("authorization_raw_sha256") != _sha256_bytes(gate_b_authorization_raw)
+        or receipt.get("hosted_inputs") != authorization.get("hosted_inputs")
+        or receipt.get("verifier") != authorization.get("verifier")
+        or receipt.get("verification_status") != "verified"
+        or receipt.get("receipt_profile") != "a0x-hosted-gate-a-verification-receipt-v1"
+    ):
+        raise A0XCcpExecutorError("vertical Gate C Gate B receipt semantics differ")
+    evidence = {
+        "evidence_profile": "a0x-vertical-gate-a-evidence-binding-v1",
+        "provider": "github-hosted-attestation-v1",
+        "repository": authorization["repository"],
+        "source_head": source_head,
+        "source_tree": source_tree,
+        "pair_binding": pair.as_mapping(),
+        "gate_b_authorization_path": gate_b_authorization_path,
+        "gate_b_authorization_raw_sha256": _sha256_bytes(gate_b_authorization_raw),
+        "hosted_inputs": authorization["hosted_inputs"],
+        "verification_receipt": {
+            "path": gate_b_receipt_path,
+            "sha256": _sha256_bytes(gate_b_receipt_raw),
+        },
+        "verifier": authorization["verifier"],
+    }
+    try:
+        return validate_vertical_gate_a_evidence(evidence)
+    except A0XContractError as error:
+        raise A0XCcpExecutorError("vertical Gate C reconstructed Gate A evidence is invalid") from error
+
+
+def _validate_vertical_raw_schema(value: Mapping[str, Any], filename: str, label: str) -> None:
+    path = Path(__file__).resolve().parents[2] / "schemas" / filename
+    try:
+        schema = json.loads(path.read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise A0XCcpExecutorError(f"{label} schema is unavailable") from error
+    issues = validate(dict(value), schema)
+    if issues:
+        raise A0XCcpExecutorError(f"{label} schema rejected input: {issues[0].message}")
 
 
 def _write_vertical_terminal(
