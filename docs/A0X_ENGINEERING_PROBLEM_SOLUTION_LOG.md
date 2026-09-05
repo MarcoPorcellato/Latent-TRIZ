@@ -1377,3 +1377,23 @@ inventory, freezes, dossiers, and no-model receipt must be regenerated from the
 new correction commit before a fresh push. No model, tokenizer, target, Gate
 B/C, CCP, Docker, scoring, or scientific execution is authorized by this
 record.
+
+## 51. Full history did not include unreachable historical audit objects
+
+**Problem.** GitHub run `33983540338` showed that `fetch-depth: 0` was
+necessary but insufficient. Both repository lanes still refused the two
+historical-ledger replay tests because their exact parent commits are not
+reachable from the pull-request ancestry. A full checkout cannot include an
+unreachable object unless that object is requested explicitly.
+
+**Correction.** Each repository lane now fetches only the two immutable commit
+SHA-1 values bound by the ledgers, at depth one and without tags, then verifies
+their exact tree identities before any test executes. A missing object, failed
+fetch, or tree mismatch stops the lane. The public ledger verifier and its
+missing-parent regression remain fail-closed; no historical check is skipped.
+
+**Status.** Target-free hosted-portability correction. Run `33983540338`
+remains negative hosted evidence. The two commit and tree pairs were confirmed
+through the public repository API and an isolated shallow-clone fetch before
+implementation. No model, tokenizer, target, Gate B/C, CCP, Docker, scoring, or
+scientific execution is authorized by this record.
