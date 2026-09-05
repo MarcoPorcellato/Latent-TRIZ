@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,44 @@ from latent_triz.validator import validate  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN = ROOT / "experiments/a0x-six-model"
+CANONICAL_PUBLIC_REPOSITORY = "MarcoPorcellato/Latent-TRIZ"
+CANONICAL_PUBLIC_REMOTE = "https://github.com/MarcoPorcellato/Latent-TRIZ.git"
+
+
+def _prepare_historical_parent_for_hosted_replay(
+    parent_head: str,
+    parent_tree: str,
+) -> None:
+    """Fetch one immutable audit object only in the canonical hosted runner."""
+    available = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "-e", f"{parent_head}^{{commit}}"],
+        check=False,
+        capture_output=True,
+    )
+    if available.returncode != 0:
+        if (
+            os.environ.get("GITHUB_ACTIONS") != "true"
+            or os.environ.get("GITHUB_REPOSITORY") != CANONICAL_PUBLIC_REPOSITORY
+        ):
+            raise AssertionError("historical parent fetch is restricted to canonical hosted CI")
+        fetched = subprocess.run(
+            [
+                "git", "-C", str(ROOT), "fetch", "--no-tags", "--depth=1",
+                CANONICAL_PUBLIC_REMOTE, parent_head,
+            ],
+            check=False,
+            capture_output=True,
+        )
+        if fetched.returncode != 0:
+            raise AssertionError("historical parent fetch failed")
+    observed = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", f"{parent_head}^{{tree}}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if observed.returncode != 0 or observed.stdout.strip() != parent_tree:
+        raise AssertionError("historical parent tree differs after hosted preparation")
 
 A0_PROTOCOL_FIELDS = (
     "corpus_generation",
@@ -182,6 +221,10 @@ class A0XFrozenPackageTests(unittest.TestCase):
 
     def test_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
         """Keep the one historical batch snapshot auditable without making it active input."""
+        _prepare_historical_parent_for_hosted_replay(
+            "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+            "54c59868802af381f57f830102a01be54410e718",
+        )
         ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
         verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
         self.assertEqual("d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d", verified["parent_head"])
@@ -194,6 +237,10 @@ class A0XFrozenPackageTests(unittest.TestCase):
 
     def test_current_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
         """Keep Task 5 generated artifacts auditable before Task 6 replaces them."""
+        _prepare_historical_parent_for_hosted_replay(
+            "ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9",
+            "ff90ef65cd1ca1c58be620c5241621db5091fa77",
+        )
         ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json"
         verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
         self.assertEqual("ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9", verified["parent_head"])
@@ -218,6 +265,48 @@ class A0XFrozenPackageTests(unittest.TestCase):
             copied.write_bytes(ledger.read_bytes())
             with self.assertRaisesRegex(A0XFreezeError, "historical parent is unavailable"):
                 verify_batch_pre_regeneration_ledger(shallow, copied)
+
+    def test_historical_parent_preparation_refuses_network_outside_canonical_ci(self) -> None:
+        unavailable = subprocess.CompletedProcess(args=[], returncode=1, stdout=b"", stderr=b"")
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_ACTIONS": "false", "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+            ),
+            patch("tests.test_a0x_frozen_package.subprocess.run", return_value=unavailable),
+            self.assertRaisesRegex(AssertionError, "restricted to canonical hosted CI"),
+        ):
+            _prepare_historical_parent_for_hosted_replay(
+                "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+                "54c59868802af381f57f830102a01be54410e718",
+            )
+
+    def test_historical_parent_preparation_verifies_fetched_tree(self) -> None:
+        unavailable = subprocess.CompletedProcess(args=[], returncode=1, stdout=b"", stderr=b"")
+        fetched = subprocess.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b"")
+        wrong_tree = subprocess.CompletedProcess(args=[], returncode=0, stdout="0" * 40 + "\n", stderr="")
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+            ),
+            patch(
+                "tests.test_a0x_frozen_package.subprocess.run",
+                side_effect=[unavailable, fetched, wrong_tree],
+            ) as run,
+            self.assertRaisesRegex(AssertionError, "tree differs after hosted preparation"),
+        ):
+            _prepare_historical_parent_for_hosted_replay(
+                "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+                "54c59868802af381f57f830102a01be54410e718",
+            )
+        self.assertEqual(
+            [
+                "git", "-C", str(ROOT), "fetch", "--no-tags", "--depth=1",
+                CANONICAL_PUBLIC_REMOTE, "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
+            ],
+            run.call_args_list[1].args[0],
+        )
 
     def test_batch_pre_regeneration_ledger_refuses_symlink_before_resolution(self) -> None:
         """A symlink must not be resolved into an accepted historical ledger."""

@@ -1397,3 +1397,25 @@ remains negative hosted evidence. The two commit and tree pairs were confirmed
 through the public repository API and an isolated shallow-clone fetch before
 implementation. No model, tokenizer, target, Gate B/C, CCP, Docker, scoring, or
 scientific execution is authorized by this record.
+
+## 52. Pull-request-target used the trusted base workflow during bootstrap
+
+**Problem.** GitHub run `33984594646` still lacked the historical objects even
+though the candidate workflow contained the correct fetch step. The event is
+`pull_request_target`, so GitHub executed the workflow definition from the
+trusted base branch. Candidate workflow corrections cannot prepare their own
+bootstrap run.
+
+**Correction.** The two historical replay tests may prepare their exact object
+only when GitHub identifies the canonical public repository and hosted Actions
+environment. The preparation uses the fixed public repository URL, immutable
+commit SHA-1, no tags, and depth one, then verifies the exact ledger-bound tree
+before calling the unchanged fail-closed verifier. It refuses automatic network
+access everywhere else. After merge, the trusted-base workflow performs the
+same fetch and tree verification before the full suite, so this bootstrap path
+is normally dormant.
+
+**Status.** Target-free bootstrap correction. Run `33984594646` remains
+negative hosted evidence and is not reinterpreted. No gate is skipped, no
+untrusted ref is fetched, and no model, tokenizer, target, Gate B/C, CCP,
+Docker, scoring, or scientific execution is authorized.
