@@ -543,6 +543,16 @@ def _launch_validated_vertical_v2(
         _mapping(outputs["authorization"], "payload", "vertical Gate B authorization"),
         "ccp", "vertical Gate B authorization",
     )
+    expected_synthetic_identity = expected_qualification_context == "synthetic-target-free"
+
+    def require_identity_context(observed: _ExecutableIdentityEvidence) -> None:
+        """Every identity observation must retain the selected Gate-C context."""
+        if (
+            not isinstance(observed, _ExecutableIdentityEvidence)
+            or observed.synthetic != expected_synthetic_identity
+        ):
+            raise A0XCcpExecutorError("vertical Gate C executable identity context differs")
+
     child_identity = executable_identity_verifier.verify(
         role="child", path=child_path, expected_sha256=launch.child_script_sha256,
     )
@@ -553,9 +563,9 @@ def _launch_validated_vertical_v2(
     python_identity = executable_identity_verifier.verify(
         role="python", path=python_path, expected_sha256=launch.python_sha256,
     )
-    synthetic_identity = any(item.synthetic for item in (child_identity, ccp_executable_identity, python_identity))
-    if synthetic_identity != (expected_qualification_context == "synthetic-target-free"):
-        raise A0XCcpExecutorError("vertical Gate C executable identity context differs")
+    for observed in (child_identity, ccp_executable_identity, python_identity):
+        require_identity_context(observed)
+    synthetic_identity = expected_synthetic_identity
     guard_preflight = _validate_guard_preflight(
         guard_preflight_producer.produce(ccp_path=ccp_path, repository_root=root),
         launch=launch, pair=pair, source_head=source_head,
@@ -596,7 +606,7 @@ def _launch_validated_vertical_v2(
         observed = executable_identity_verifier.verify(
             role=role, path=path, expected_sha256=digest, expected_version=version,
         )
-        synthetic_identity = synthetic_identity or observed.synthetic
+        require_identity_context(observed)
     claim_path = authorization_path.with_name("attempt-claim.json")
     _reserve_claim(claim_path, {
         "artifact_class": "a0x-vertical-gate-c-attempt-claim",
@@ -632,7 +642,7 @@ def _launch_validated_vertical_v2(
             observed = executable_identity_verifier.verify(
                 role=role, path=path, expected_sha256=digest, expected_version=version,
             )
-            synthetic_identity = synthetic_identity or observed.synthetic
+            require_identity_context(observed)
         argv = _materialize_argv(launch, ccp_path=ccp_path, python_path=python_path, child_path=child_path)
         environment = _frozen_environment(launch)
         result = process_executor.run(
@@ -650,7 +660,7 @@ def _launch_validated_vertical_v2(
             observed = executable_identity_verifier.verify(
                 role=role, path=path, expected_sha256=digest, expected_version=version,
             )
-            synthetic_identity = synthetic_identity or observed.synthetic
+            require_identity_context(observed)
     except BaseException as error:
         _write_vertical_terminal(
             root, authorization_path, pair, launch, result, "recovery_required",

@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -169,8 +171,9 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
                 return _HostedVerificationResult(
                     raw,
                     _ExecutableIdentityEvidence(
-                        role="hosted_verifier", path=verifier_request.verifier_executable,
-                        sha256=sha256_file(verifier_request.verifier_executable), version=None, synthetic=True,
+                        role=value["verifier"]["role"], path=verifier_request.verifier_executable,
+                        sha256=sha256_file(verifier_request.verifier_executable),
+                        version=value["verifier"]["version"], synthetic=True,
                     ),
                     "synthetic-target-free",
                 )
@@ -220,6 +223,52 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
             self.root, request, source_state_probe=lambda: (HEAD, TREE, True), dependencies=dependencies,
         )
         return result, request, verifier
+
+    def test_synthetic_hosted_verifier_identity_fields_refuse_before_readiness(self) -> None:
+        """Private Gate B accepts no synthetic identity weaker than its raw authorization."""
+        from latent_triz.a0x_runtime_bundle import (
+            A0XRuntimeBundleError, _GateBDependencies, _prepare_vertical_runtime_bundle_core,
+            _vertical_output_paths,
+        )
+
+        binding = self._binding()
+        request = self._request(binding)
+        dependencies, verifier = self._synthetic_dependencies(request)
+        for field, value in (
+            ("role", "wrong-role"),
+            ("path", request.verifier_executable.with_name("wrong-gh")),
+            ("sha256", "0" * 64),
+            ("version", "wrong-version"),
+        ):
+            with self.subTest(field=field):
+                class WrongIdentityVerifier:
+                    calls = 0
+
+                    def verify(inner_self, verifier_request):
+                        inner_self.calls += 1
+                        result = verifier.verify(verifier_request)
+                        return replace(result, identity=replace(result.identity, **{field: value}))
+
+                readiness = mock.Mock(side_effect=AssertionError("readiness reached"))
+                wrong = WrongIdentityVerifier()
+                rejected_dependencies = _GateBDependencies(
+                    hosted_verifier=wrong,
+                    ccp_identity_verifier=dependencies.ccp_identity_verifier,
+                    readiness_probe=readiness,
+                    context="synthetic-target-free",
+                )
+                try:
+                    with self.assertRaises(A0XRuntimeBundleError):
+                        _prepare_vertical_runtime_bundle_core(
+                            self.root, request, source_state_probe=lambda: (HEAD, TREE, True),
+                            dependencies=rejected_dependencies,
+                        )
+                    self.assertEqual(1, wrong.calls)
+                    readiness.assert_not_called()
+                    for relative in _vertical_output_paths(binding).durable().values():
+                        self.assertFalse((self.root / relative).exists())
+                finally:
+                    shutil.rmtree(self.root / ".a0x-runtime/gate-b", ignore_errors=True)
 
     def test_preflight_binds_real_v2_package_before_external_probes(self) -> None:
         from latent_triz.a0x_runtime_bundle import preflight_vertical_runtime_bundle

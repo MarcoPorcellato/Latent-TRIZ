@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import tempfile
+from dataclasses import replace
 from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
@@ -209,6 +210,50 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             ["child", "ccp", "python"] * 4,
             verifier.calls,
         )
+
+    def test_v2_gate_c_refuses_mixed_identity_context_before_guard(self) -> None:
+        """A later non-synthetic identity cannot reuse a synthetic private run."""
+        from latent_triz.a0x_ccp_executor import (
+            ProcessResult, _launch_validated_vertical_v2, vertical_execution_authorization_path,
+        )
+        from tests.test_a0x_ccp_executor import _FakeGuardPreflight
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        authorization = self._v4_authorization(root, binding, prepared, head, tree)
+        path = root / vertical_execution_authorization_path(binding)
+        path.parent.mkdir(parents=True)
+        path.write_bytes(self._compact_json(authorization))
+
+        class MixedAfterPreflight(_SyntheticExecutableIdentityVerifier):
+            def __init__(self):
+                self.calls = 0
+
+            def verify(self, **kwargs):
+                self.calls += 1
+                evidence = super().verify(**kwargs)
+                return replace(evidence, synthetic=False) if self.calls == 4 else evidence
+
+        class Inert:
+            calls = 0
+
+            def run(self, *args, **kwargs):
+                self.calls += 1
+                terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+                return ProcessResult(0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0, stdout_prefix=terminal)
+
+        inert = Inert()
+        with self.assertRaises(A0XCcpExecutorError):
+            _launch_validated_vertical_v2(
+                repository_root=root, package_binding=binding,
+                execution_authorization_path=path.relative_to(root).as_posix(),
+                source_state_probe=lambda: (head, tree, True), process_executor=inert,
+                guard_preflight_producer=_FakeGuardPreflight(
+                    version=json.loads((root / prepared["vertical_outputs"]["authorization"]).read_text())["payload"]["ccp"]["version"],
+                ),
+                executable_identity_verifier=MixedAfterPreflight(),
+            )
+        self.assertEqual(0, inert.calls)
+        self.assertFalse(path.with_name("attempt-claim.json").exists())
 
     def test_v2_gate_c_refuses_raw_gate_b_auth_or_receipt_drift_after_preflight(self) -> None:
         """Both non-wrapper Gate-B raw files are re-read before the one-shot claim."""

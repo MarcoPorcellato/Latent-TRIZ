@@ -123,13 +123,14 @@ class _ProductionHostedGateAVerifier:
             request.repository_root, request.authorization_path, "vertical Gate B authorization",
         )
         verifier = _mapping(authorization, "verifier", "vertical Gate B authorization")
+        expected_role = verifier.get("role")
         expected_sha256 = verifier.get("sha256")
         expected_version = verifier.get("version")
-        if not isinstance(expected_sha256, str) or not isinstance(expected_version, str):
+        if not all(isinstance(value, str) for value in (expected_role, expected_sha256, expected_version)):
             raise A0XRuntimeBundleError("vertical Gate B verifier identity is invalid")
         identity_verifier = _ProductionExecutableIdentityVerifier()
         before = identity_verifier.verify(
-            role="hosted_verifier", path=request.verifier_executable,
+            role=expected_role, path=request.verifier_executable,
             expected_sha256=expected_sha256, expected_version=expected_version,
         )
 
@@ -148,7 +149,7 @@ class _ProductionHostedGateAVerifier:
             request, runner=runner, source_state_probe=_production_vertical_source_state,
         )
         after = identity_verifier.verify(
-            role="hosted_verifier", path=request.verifier_executable,
+            role=expected_role, path=request.verifier_executable,
             expected_sha256=expected_sha256, expected_version=expected_version,
         )
         if after != before:
@@ -1420,6 +1421,11 @@ def _verify_vertical_gate_a_evidence(
     if (
         not isinstance(result, _HostedVerificationResult)
         or result.context != context
+        or not isinstance(result.identity, _ExecutableIdentityEvidence)
+        or result.identity.role != authorization["verifier"]["role"]
+        or result.identity.path != executable
+        or result.identity.sha256 != authorization["verifier"]["sha256"]
+        or result.identity.version != authorization["verifier"]["version"]
         or result.identity.synthetic != (context == "synthetic-target-free")
         or not isinstance(result.receipt_raw, bytes)
     ):
