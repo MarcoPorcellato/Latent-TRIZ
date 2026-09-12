@@ -50,9 +50,11 @@ non-owned data outranks canonical-name cleanup.
 `src/latent_triz/a0x_hosted_capture.py` owns pure request validation, safe
 archive validation, cross-binding checks, inode-owned staging cleanup, and
 atomic exclusive directory publication. `scripts/a0x_capture_hosted_gate_a.py`
-is a thin explicit-argument, shell-free adapter. Every real subprocess path is
-injected in tests. The production adapter exists only for a later exact real
-capture authorization.
+is a thin explicit-argument, shell-free adapter. The recovered 2026-09-01 design
+initially kept every subprocess injected; the 2026-09-12 correction added the
+authorization-gated operational runner after freezing its GitHub CLI 2.97.0
+contract. Tests still inject every subprocess. The real runner accepts a token
+only through its minimal child environment and cannot authorize itself.
 
 Darwin descriptor-relative `renameatx_np(..., RENAME_EXCL |
 RENAME_NOFOLLOW_ANY)` is the only no-overwrite publication primitive. The

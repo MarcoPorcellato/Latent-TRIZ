@@ -13,6 +13,38 @@ C, load a model or tokenizer, read a target, use CCP heavy work, use Docker, or
 contact GitHub. Each listed external step needs its own separate authorization
 bound to the exact source and files involved.
 
+## Operational capture contract — 2026-09-12
+
+The capture command is operational but remains authorization-gated. It accepts
+only artifact name `a0x-hosted-gate-a-<exact-source-head>` and binds it to the
+repository, source `HEAD/tree`, workflow run, and attempt `1`. The operator does
+not provide a manifest hash: the wrapper downloads the authorized archive once,
+validates its size and archive hash, extracts the sole canonical member, derives
+the manifest SHA-256 from those bytes, and reuses the same archive for final
+publication.
+
+The JSON Schema enforces the artifact-name shape. The runtime equality check
+enforces that its suffix is the same `source_head`; schema validation alone is
+not evidence of that cross-field invariant.
+
+GitHub CLI 2.97.0 receives the extracted manifest as the positional subject of
+`gh attestation download`, plus the exact repository and SLSA provenance
+predicate. The command writes `sha256:<manifest-sha256>.jsonl` into its private
+current directory; the wrapper reads that regular independent file. It obtains
+the trusted root from `gh attestation trusted-root` standard output. The obsolete
+`--digest` form is forbidden because GitHub CLI 2.97.0 does not expose it.
+
+The real entry point is shell-free and accepts the GitHub credential only from
+`GH_TOKEN`. It passes only that credential plus a minimal fixed environment to
+child processes; the token is absent from argv, logs, and published artifacts.
+Every CLI operation revalidates the executable path, SHA-256, and exact version.
+Before archive transport, the wrapper also checks the pinned executable's exact
+download and trusted-root help shapes. Timeout, stdout, and stderr are bounded
+during pipe acquisition; an over-limit byte terminates the child. Temporary
+archive and subject files are exclusive, no-follow regular files. Final
+publication remains atomic, overwrite-refusing, descriptor-relative, and
+ownership-checked.
+
 ## Current vertical-chain consumer — 2026-09-05
 
 Hosted Gate A qualifies a protected-main source `HEAD/tree`; it does not create
@@ -28,14 +60,14 @@ substitute for a new Hosted Gate A run or for a v2 package. This text grants no
 capture, network, GitHub CLI, P0, Gate B, Gate C, model, tokenizer, target,
 CCP, Docker, or publication authority.
 
-## Capture-wrapper recovery checkpoint — 2026-09-02
+## Historical capture-wrapper recovery checkpoint — 2026-09-02
 
 The target-free capture library and shell-free adapter are restored locally.
 Both wrapper test modules are part of the A0X synthetic aggregate, and the
 request/transport schemas, library, adapter, and both tests are trusted
-implementation inputs for both leg inventories. No real CLI runner is enabled:
-the production entry point refuses until a separately authorized capture
-qualifies its exact pinned CLI help and output shapes.
+implementation inputs for both leg inventories. At this checkpoint no real CLI
+runner was enabled. That historical limitation was removed by the later
+operational contract above; it must not be treated as the current state.
 
 Tracked inventories, freezes, twelve dossiers, and the no-model receipt predate
 these trusted inputs. They are deliberately stale and cannot authorize any

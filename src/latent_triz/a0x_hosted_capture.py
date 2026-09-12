@@ -27,7 +27,7 @@ PUBLICATION_FAILED = "A0X_HOSTED_CAPTURE_PUBLICATION_FAILED"
 PUBLICATION_OWNERSHIP_LOST = "A0X_HOSTED_CAPTURE_PUBLICATION_OWNERSHIP_LOST"
 PIN_INVALID = "A0X_HOSTED_CAPTURE_PIN_INVALID"
 REPOSITORY = "MarcoPorcellato/Latent-TRIZ"
-ARTIFACT_NAME = "a0x-hosted-gate-a-evidence"
+ARTIFACT_NAME_PREFIX = "a0x-hosted-gate-a-"
 MANIFEST_NAME = "a0x-hosted-gate-a-evidence.json"
 FINAL_NAMES = ("hosted-gate-a-evidence.json", "hosted-gate-a-attestation.bundle.jsonl", "github-trusted-root.jsonl", "hosted-gate-a-transport.json")
 GH_VERSION = "gh version 2.97.0 (2026-07-31)"
@@ -66,6 +66,26 @@ def _sha(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 @dataclass(frozen=True)
+class CaptureBootstrapRequest:
+    repository: str; source_head: str; source_tree: str; run_id: int; run_attempt: int; artifact_id: int; artifact_name: str; archive_sha256: str; archive_size_bytes: int; expires_at: str; output_root: Path
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> "CaptureBootstrapRequest":
+        keys = {"repository", "source_head", "source_tree", "run_id", "run_attempt", "artifact_id", "artifact_name", "archive_sha256", "archive_size_bytes", "expires_at", "output_root"}
+        if not isinstance(value, Mapping) or set(value) != keys:
+            raise A0XHostedCaptureError(CAPTURE_INVALID)
+        try:
+            result = cls(**{key: (Path(value[key]) if key == "output_root" else value[key]) for key in keys})
+        except (TypeError, ValueError) as error:
+            raise A0XHostedCaptureError(CAPTURE_INVALID) from error
+        result.validate()
+        return result
+
+    def validate(self) -> None:
+        if not (self.repository == REPOSITORY and _revision(self.source_head) and _revision(self.source_tree) and _positive(self.run_id) and type(self.run_attempt) is int and self.run_attempt == 1 and _positive(self.artifact_id) and self.artifact_name == ARTIFACT_NAME_PREFIX + self.source_head and _sha256(self.archive_sha256) and _positive(self.archive_size_bytes) and self.archive_size_bytes <= MAX_ARCHIVE_BYTES and _timestamp(self.expires_at) and self.output_root.is_absolute()):
+            raise A0XHostedCaptureError(CAPTURE_INVALID)
+
+@dataclass(frozen=True)
 class CaptureRequest:
     repository: str; source_head: str; source_tree: str; run_id: int; run_attempt: int; artifact_id: int; artifact_name: str; archive_sha256: str; archive_size_bytes: int; manifest_sha256: str; expires_at: str; output_root: Path
 
@@ -82,8 +102,22 @@ class CaptureRequest:
         return result
 
     def validate(self) -> None:
-        if not (self.repository == REPOSITORY and _revision(self.source_head) and _revision(self.source_tree) and _positive(self.run_id) and self.run_attempt == 1 and _positive(self.artifact_id) and self.artifact_name == ARTIFACT_NAME and _sha256(self.archive_sha256) and _positive(self.archive_size_bytes) and self.archive_size_bytes <= MAX_ARCHIVE_BYTES and _sha256(self.manifest_sha256) and _timestamp(self.expires_at) and self.output_root.is_absolute()):
+        if not (self.repository == REPOSITORY and _revision(self.source_head) and _revision(self.source_tree) and _positive(self.run_id) and type(self.run_attempt) is int and self.run_attempt == 1 and _positive(self.artifact_id) and self.artifact_name == ARTIFACT_NAME_PREFIX + self.source_head and _sha256(self.archive_sha256) and _positive(self.archive_size_bytes) and self.archive_size_bytes <= MAX_ARCHIVE_BYTES and _sha256(self.manifest_sha256) and _timestamp(self.expires_at) and self.output_root.is_absolute()):
             raise A0XHostedCaptureError(CAPTURE_INVALID)
+
+    @classmethod
+    def from_bootstrap(cls, request: CaptureBootstrapRequest, manifest_sha256: str) -> "CaptureRequest":
+        if not isinstance(request, CaptureBootstrapRequest):
+            raise A0XHostedCaptureError(CAPTURE_INVALID)
+        request.validate()
+        result = cls(
+            request.repository, request.source_head, request.source_tree, request.run_id,
+            request.run_attempt, request.artifact_id, request.artifact_name,
+            request.archive_sha256, request.archive_size_bytes, manifest_sha256,
+            request.expires_at, request.output_root,
+        )
+        result.validate()
+        return result
 
 @dataclass(frozen=True)
 class CaptureTransport:
@@ -100,7 +134,7 @@ class CaptureTransport:
 
     def validate(self) -> None:
         timestamps = (self.created_at, self.captured_at, self.expires_at)
-        if not (_positive(self.artifact_id) and _positive(self.run_id) and self.run_attempt == 1 and _revision(self.head_sha) and isinstance(self.archive_digest, str) and self.archive_digest.startswith("sha256:") and _sha256(self.archive_digest[7:]) and _positive(self.archive_size_bytes) and self.archive_size_bytes <= MAX_ARCHIVE_BYTES and all(_timestamp(value) for value in timestamps)):
+        if not (_positive(self.artifact_id) and _positive(self.run_id) and type(self.run_attempt) is int and self.run_attempt == 1 and _revision(self.head_sha) and isinstance(self.archive_digest, str) and self.archive_digest.startswith("sha256:") and _sha256(self.archive_digest[7:]) and _positive(self.archive_size_bytes) and self.archive_size_bytes <= MAX_ARCHIVE_BYTES and all(_timestamp(value) for value in timestamps)):
             raise A0XHostedCaptureError(CAPTURE_INVALID)
         created_at, captured_at, expires_at = (_timestamp_value(value) for value in timestamps)
         if not created_at <= captured_at < expires_at: raise A0XHostedCaptureError(CAPTURE_INVALID)
@@ -157,13 +191,8 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
         if _exists_at(preflight_parent.fd, preflight_parent.destination_name): raise A0XHostedCaptureError(OUTPUT_EXISTS)
     finally:
         _close_parent(preflight_parent)
-    archive = _read_regular(Path(archive_path), ARCHIVE_INVALID, request.archive_size_bytes)
-    if len(archive) != request.archive_size_bytes or _sha(archive) != request.archive_sha256: raise A0XHostedCaptureError(ARCHIVE_INVALID)
-    manifest = _extract_manifest(archive)
+    manifest = derive_verified_manifest(request, archive_path)
     if _sha(manifest) != request.manifest_sha256: raise A0XHostedCaptureError(BINDING_MISMATCH)
-    try: parsed = parse_manifest_bytes(manifest)
-    except A0XHostedGateAError as error: raise A0XHostedCaptureError(ARCHIVE_INVALID) from error
-    if not (parsed["repository"] == request.repository and parsed["qualified_source_head"] == request.source_head and parsed["qualified_source_tree"] == request.source_tree and parsed["workflow"]["run_id"] == request.run_id and parsed["workflow"]["run_attempt"] == request.run_attempt): raise A0XHostedCaptureError(BINDING_MISMATCH)
     if not isinstance(attestation_bundle, bytes) or not attestation_bundle or len(attestation_bundle) > MAX_BUNDLE_BYTES or not isinstance(trusted_root, bytes) or not trusted_root or len(trusted_root) > MAX_TRUSTED_ROOT_BYTES: raise A0XHostedCaptureError(CAPTURE_INVALID)
     parent = _open_output_parent(destination)
     transaction: _OutputTransaction | None = None
@@ -196,6 +225,25 @@ def capture_hosted_gate_a(request: CaptureRequest, transport: CaptureTransport, 
         if transaction is not None: os.close(transaction.stage_fd)
         _close_parent(parent)
     return destination
+
+def derive_verified_manifest(request: CaptureBootstrapRequest | CaptureRequest, archive_path: Path) -> bytes:
+    if not isinstance(request, (CaptureBootstrapRequest, CaptureRequest)):
+        raise A0XHostedCaptureError(CAPTURE_INVALID)
+    request.validate()
+    archive = _read_regular(Path(archive_path), ARCHIVE_INVALID, request.archive_size_bytes)
+    if len(archive) != request.archive_size_bytes or _sha(archive) != request.archive_sha256:
+        raise A0XHostedCaptureError(ARCHIVE_INVALID)
+    manifest = _extract_manifest(archive)
+    try:
+        parsed = parse_manifest_bytes(manifest)
+    except A0XHostedGateAError as error:
+        raise A0XHostedCaptureError(ARCHIVE_INVALID) from error
+    if not (parsed["repository"] == request.repository and parsed["qualified_source_head"] == request.source_head and parsed["qualified_source_tree"] == request.source_tree and parsed["workflow"]["run_id"] == request.run_id and parsed["workflow"]["run_attempt"] == request.run_attempt):
+        raise A0XHostedCaptureError(BINDING_MISMATCH)
+    return manifest
+
+def read_regular_file(path: Path, code: str, maximum_bytes: int) -> bytes:
+    return _read_regular(Path(path), code, maximum_bytes)
 
 def _extract_manifest(archive: bytes) -> bytes:
     try:
@@ -342,4 +390,4 @@ def _darwin_publish_exclusive_at(parent_fd: int, stage_name: str, destination_na
         if ctypes.get_errno() == errno.EEXIST: raise A0XHostedCaptureError(OUTPUT_EXISTS)
         raise A0XHostedCaptureError(PUBLICATION_FAILED)
 
-__all__ = ["ARCHIVE_INVALID", "A0XHostedCaptureError", "BINDING_MISMATCH", "CAPTURE_INVALID", "CaptureRequest", "CaptureTransport", "FINAL_NAMES", "GH_SHA256", "GH_VERSION", "OUTPUT_EXISTS", "PIN_INVALID", "PinnedGitHubCLI", "PUBLICATION_FAILED", "PUBLICATION_OWNERSHIP_LOST", "PUBLICATION_UNSUPPORTED", "capture_hosted_gate_a", "revalidate_pinned_cli"]
+__all__ = ["ARCHIVE_INVALID", "A0XHostedCaptureError", "BINDING_MISMATCH", "CAPTURE_INVALID", "CaptureBootstrapRequest", "CaptureRequest", "CaptureTransport", "FINAL_NAMES", "GH_SHA256", "GH_VERSION", "OUTPUT_EXISTS", "PIN_INVALID", "PinnedGitHubCLI", "PUBLICATION_FAILED", "PUBLICATION_OWNERSHIP_LOST", "PUBLICATION_UNSUPPORTED", "capture_hosted_gate_a", "derive_verified_manifest", "read_regular_file", "revalidate_pinned_cli"]
