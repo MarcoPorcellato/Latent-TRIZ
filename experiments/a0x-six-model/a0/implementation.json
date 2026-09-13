@@ -533,9 +533,9 @@
       "sha256": "013897727eca3a7533f38f70dec57277fdb0a6ad2547593809801926cee5a958"
     },
     {
-      "bytes": 32631,
+      "bytes": 32940,
       "path": "tests/test_a0x_capture_hosted_gate_a.py",
-      "sha256": "480b682590dd6728e87e6b6ca4fdb1d2fa63d44649c6c85a119280efbdb4fb7c"
+      "sha256": "1e325bd99d9986e03d8d4426c113cba617d1ea60e4157be009417c15996bcfb7"
     },
     {
       "bytes": 43992,
