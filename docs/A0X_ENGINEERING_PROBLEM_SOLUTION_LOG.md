@@ -1462,3 +1462,24 @@ construction. They perform no network or material access.
 attempts remain negative evidence. No GitHub request, Gate B/C, model, tokenizer,
 target, scoring, CCP, Docker, push, PR, merge, or publication is authorized by
 this record.
+
+## 54. Capture-runner tests used a macOS-only temporary path
+
+**Problem.** Pull-request workflow `34751641631` failed identically on Python
+3.11 and 3.12 because three capture-runner fixtures used `/private/tmp`
+directly. That path exists on macOS but not on the hosted Linux runner. One
+test therefore raised `A0X_HOSTED_CAPTURE_INVALID` before exercising its
+credential-isolation assertions; two negative tests could also pass on Linux
+for the wrong missing-directory reason.
+
+**Correction.** All three fixtures now create and resolve their own portable
+temporary directory. The production runner remains unchanged: it still
+requires an existing absolute working directory and refuses invalid input.
+The credential-isolation, oversized-stderr, and bounded-stdout tests now reach
+their intended boundaries on every supported host.
+
+**Status.** Target-free fixture correction. Workflow `34751641631` remains
+negative hosted evidence and is not retried or reinterpreted. A source-bound
+commit requires regenerated implementation inventories, freezes, and dossiers
+before any new publication. No model, tokenizer, target, Gate B/C, scoring,
+CCP, Docker, or material execution is authorized by this record.

@@ -464,7 +464,11 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
         runner = module._production_runner(
             environ={"GH_TOKEN": token, "UNRELATED_SECRET": "must-not-pass"}, run=fake_run,
         )
-        result = runner(("/absolute/gh", "--version"), dict(module.FIXED_ENV), 9, 32, Path("/private/tmp"))
+        with TemporaryDirectory() as temporary:
+            result = runner(
+                ("/absolute/gh", "--version"), dict(module.FIXED_ENV), 9, 32,
+                Path(temporary).resolve(),
+            )
 
         self.assertEqual((0, b"ok\n", b""), result)
         self.assertEqual(1, len(observed))
@@ -493,22 +497,27 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
             )
 
         runner = module._production_runner(environ={"GH_TOKEN": "secret"}, run=fake_run)
-        with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
-            runner(("/absolute/gh", "api"), dict(module.FIXED_ENV), 9, 32, Path("/private/tmp"))
+        with TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                runner(
+                    ("/absolute/gh", "api"), dict(module.FIXED_ENV), 9, 32,
+                    Path(temporary).resolve(),
+                )
 
     def test_bounded_subprocess_stops_while_stdout_exceeds_limit(self) -> None:
         """The real pipe reader must reject during acquisition, not after unbounded buffering."""
         from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID
 
         module = _script_module()
-        with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
-            module._run_bounded_subprocess(
-                (sys.executable, "-c", "import os; os.write(1, b'x' * 65536)"),
-                cwd=Path("/private/tmp"), stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
-                env=dict(module.FIXED_ENV), timeout=5, shell=False,
-                stdout_limit=32, stderr_limit=32,
-            )
+        with TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                module._run_bounded_subprocess(
+                    (sys.executable, "-c", "import os; os.write(1, b'x' * 65536)"),
+                    cwd=Path(temporary).resolve(), stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+                    env=dict(module.FIXED_ENV), timeout=5, shell=False,
+                    stdout_limit=32, stderr_limit=32,
+                )
 
     def test_private_input_writer_refuses_symlink_and_existing_file(self) -> None:
         """Temporary archive and subject bytes must never follow or overwrite a path."""
