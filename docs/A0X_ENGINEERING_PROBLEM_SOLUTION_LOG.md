@@ -1419,3 +1419,67 @@ is normally dormant.
 negative hosted evidence and is not reinterpreted. No gate is skipped, no
 untrusted ref is fetched, and no model, tokenizer, target, Gate B/C, CCP,
 Docker, scoring, or scientific execution is authorized.
+
+## 53. Hosted capture assumed three false GitHub CLI contracts
+
+**Problem.** The public workflow emitted artifact names as
+`a0x-hosted-gate-a-<source-head>`, while the capture request admitted only one
+generic literal. The adapter also required the manifest SHA-256 before it had
+retrieved the archive, which encouraged a second-download or operator-injected
+binding. Finally, it constructed `gh attestation download` with an unsupported
+`--digest` flag and expected the bundle on standard output. GitHub CLI 2.97.0
+instead requires a positional subject file and writes the matching JSONL bundle
+into the current directory. The production entry point therefore remained an
+unconditional refusal.
+
+**Correction.** The request now accepts only the source-bound artifact name and
+keeps repository, `HEAD/tree`, run, and attempt bindings intact. The adapter
+downloads the archive once, validates and extracts the sole canonical manifest,
+derives its SHA-256, and reuses the same bytes for final capture. It invokes the
+frozen CLI with the manifest path, exact repository, SLSA predicate, and bounded
+limit, then reads the expected digest-named regular independent bundle from a
+private working directory. Trusted-root output follows the documented 2.97.0
+stdout contract. A shell-free operational runner requires `GH_TOKEN`, passes a
+minimal child environment, bounds timeout/stdout/stderr, and never places the
+credential in argv or artifacts. Existing descriptor-relative, no-overwrite,
+inode-ownership publication remains unchanged.
+
+The wrapper validates the exact pinned CLI help shapes before the archive
+request. Its subprocess reader consumes both pipes incrementally, terminates at
+the first over-limit byte, and cannot buffer arbitrary output before rejection.
+Temporary archive and subject writes use exclusive no-follow descriptors.
+Runtime validators also require `run_attempt` to be an actual integer, rejecting
+Python booleans consistently with JSON Schema.
+
+**Regression evidence.** Synthetic mutation tests reject generic and other-head
+artifact names, an externally supplied or invalid derived manifest hash, missing
+credentials, substituted CLI bytes, malformed bindings, oversized output, and
+timeouts. Command-shape tests prove one archive request, the positional subject,
+the digest-named bundle file, trusted-root stdout, and shell-free subprocess
+construction. They perform no network or material access.
+
+**Status.** Offline target-free correction only. Historical failed capture
+attempts remain negative evidence. No GitHub request, Gate B/C, model, tokenizer,
+target, scoring, CCP, Docker, push, PR, merge, or publication is authorized by
+this record.
+
+## 54. Capture-runner tests used a macOS-only temporary path
+
+**Problem.** Pull-request workflow `34751641631` failed identically on Python
+3.11 and 3.12 because three capture-runner fixtures used `/private/tmp`
+directly. That path exists on macOS but not on the hosted Linux runner. One
+test therefore raised `A0X_HOSTED_CAPTURE_INVALID` before exercising its
+credential-isolation assertions; two negative tests could also pass on Linux
+for the wrong missing-directory reason.
+
+**Correction.** All three fixtures now create and resolve their own portable
+temporary directory. The production runner remains unchanged: it still
+requires an existing absolute working directory and refuses invalid input.
+The credential-isolation, oversized-stderr, and bounded-stdout tests now reach
+their intended boundaries on every supported host.
+
+**Status.** Target-free fixture correction. Workflow `34751641631` remains
+negative hosted evidence and is not retried or reinterpreted. A source-bound
+commit requires regenerated implementation inventories, freezes, and dossiers
+before any new publication. No model, tokenizer, target, Gate B/C, scoring,
+CCP, Docker, or material execution is authorized by this record.

@@ -65,7 +65,7 @@ class HostedCaptureTest(unittest.TestCase):
             "run_id": 123,
             "run_attempt": 1,
             "artifact_id": 456,
-            "artifact_name": "a0x-hosted-gate-a-evidence",
+            "artifact_name": f"a0x-hosted-gate-a-{HEAD}",
             "archive_sha256": "",
             "archive_size_bytes": 0,
             "manifest_sha256": "",
@@ -185,10 +185,57 @@ class HostedCaptureTest(unittest.TestCase):
             request["output_root"] = "relative/capture"
             with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
                 CaptureRequest.from_mapping(request)
+
+    def test_request_accepts_only_artifact_name_bound_to_exact_source_head(self) -> None:
+        """A generic or other-head artifact name must never satisfy capture admission."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID, CaptureRequest
+
+        with TemporaryDirectory() as temporary:
+            request, _transport, _archive, _bundle, _trusted = self._inputs(Path(temporary).resolve())
+            CaptureRequest.from_mapping(request)
+            for artifact_name in (
+                "a0x-hosted-gate-a-evidence",
+                "a0x-hosted-gate-a-" + "c" * 40,
+            ):
+                with self.subTest(artifact_name=artifact_name):
+                    drifted = dict(request)
+                    drifted["artifact_name"] = artifact_name
+                    with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                        CaptureRequest.from_mapping(drifted)
             request = self._request(Path(temporary).resolve() / "capture")
             request["unknown"] = "must-refuse"
             with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
                 CaptureRequest.from_mapping(request)
+
+    def test_bootstrap_conversion_revalidates_derived_manifest_hash(self) -> None:
+        """An invalid derived hash must not bypass final request validation."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            request, _transport, _archive, _bundle, _trusted = self._inputs(Path(temporary).resolve())
+            bootstrap = capture.CaptureBootstrapRequest.from_mapping({
+                key: value for key, value in request.items() if key != "manifest_sha256"
+            })
+            with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.CAPTURE_INVALID):
+                capture.CaptureRequest.from_bootstrap(bootstrap, "not-a-sha256")
+
+    def test_runtime_requests_and_transport_reject_boolean_attempt(self) -> None:
+        """Python booleans must not satisfy the schema's exact integer attempt."""
+        from latent_triz import a0x_hosted_capture as capture
+
+        with TemporaryDirectory() as temporary:
+            request, transport, _archive, _bundle, _trusted = self._inputs(Path(temporary).resolve())
+            request["run_attempt"] = True
+            transport["run_attempt"] = True
+            bootstrap = {key: value for key, value in request.items() if key != "manifest_sha256"}
+            for constructor, value in (
+                (capture.CaptureBootstrapRequest.from_mapping, bootstrap),
+                (capture.CaptureRequest.from_mapping, request),
+                (capture.CaptureTransport.from_mapping, transport),
+            ):
+                with self.subTest(constructor=constructor.__qualname__):
+                    with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.CAPTURE_INVALID):
+                        constructor(value)
 
     def test_pinned_cli_revalidation_refuses_version_path_or_bytes_drift(self) -> None:
         """Removing any per-call executable binding check would admit a substituted CLI."""
@@ -285,9 +332,18 @@ class HostedCaptureTest(unittest.TestCase):
                 json.loads(CaptureTransport.from_mapping(transport).as_document()),
                 schemas["a0x-hosted-gate-a-capture-transport.schema.json"],
             ))
-            request["output_root"] = "relative/capture"
-            self.assertTrue(validate(request, schemas["a0x-hosted-gate-a-capture-request.schema.json"]))
-            transport["run_attempt"] = 2
+            for field, value in (
+                ("output_root", "relative/capture"),
+                ("artifact_name", "a0x-hosted-gate-a-evidence"),
+                ("run_attempt", True),
+            ):
+                invalid = dict(request)
+                invalid[field] = value
+                with self.subTest(field=field):
+                    self.assertTrue(validate(
+                        invalid, schemas["a0x-hosted-gate-a-capture-request.schema.json"],
+                    ))
+            transport["run_attempt"] = True
             with self.assertRaises(ValueError):
                 CaptureTransport.from_mapping(transport)
 

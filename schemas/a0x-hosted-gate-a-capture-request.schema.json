@@ -11,7 +11,7 @@
     "run_id": {"$ref": "#/$defs/positive_integer"},
     "run_attempt": {"type": "integer", "const": 1},
     "artifact_id": {"$ref": "#/$defs/positive_integer"},
-    "artifact_name": {"const": "a0x-hosted-gate-a-evidence"},
+    "artifact_name": {"type": "string", "pattern": "^a0x-hosted-gate-a-[a-f0-9]{40}$"},
     "archive_sha256": {"$ref": "#/$defs/sha256"},
     "archive_size_bytes": {"$ref": "#/$defs/positive_integer"},
     "manifest_sha256": {"$ref": "#/$defs/sha256"},
