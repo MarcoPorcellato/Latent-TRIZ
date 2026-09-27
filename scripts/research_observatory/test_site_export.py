@@ -125,6 +125,8 @@ class SiteExportTests(unittest.TestCase):
             site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
         self.catalogue["observations"][-1]["status"] = "not_interpretable"
         self.catalogue["claims"][0]["status"] = "supported"
+        with self.assertRaises(PermissionError):
+            site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
         self.catalogue["claims"][0]["evidence_level"] = "E1"
         with self.assertRaises(PermissionError):
             site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
@@ -271,6 +273,44 @@ class SiteExportTests(unittest.TestCase):
         destination.mkdir()
         with self.assertRaises(PermissionError):
             site_export.write_public_payload(payload, destination)
+        self.assertFalse((destination / "site-data.json").exists())
+
+    def test_writer_rejects_wrong_primitive_types_for_known_fields(self):
+        del self.catalogue["observations"][-1]
+        valid = site_export.build_public_payload(
+            self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+        )
+        for index, (record_group, field, value) in enumerate((
+            ("claims", "statement", None),
+            ("claims", "status", "supported"),
+            ("observations", "model", 7),
+            ("sources", "stale_markers", [False]),
+        )):
+            with self.subTest(record_group=record_group, field=field):
+                payload = json.loads(json.dumps(valid))
+                payload[record_group][0][field] = value
+                destination = self.root / f"bad-type-{index}"
+                destination.mkdir()
+                with self.assertRaises(PermissionError):
+                    site_export.write_public_payload(payload, destination)
+                self.assertFalse((destination / "site-data.json").exists())
+
+    def test_writer_validates_exact_bytes_after_serialization(self):
+        del self.catalogue["observations"][-1]
+        payload = site_export.build_public_payload(
+            self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+        )
+        destination = self.root / "mutated-output"
+        destination.mkdir()
+        real_dumps = json.dumps
+
+        def mutate_then_serialize(value, *args, **kwargs):
+            value["claims"][0]["statement"] = "private `/Users/private/race`"
+            return real_dumps(value, *args, **kwargs)
+
+        with mock.patch.object(site_export.json, "dumps", side_effect=mutate_then_serialize):
+            with self.assertRaises(PermissionError):
+                site_export.write_public_payload(payload, destination)
         self.assertFalse((destination / "site-data.json").exists())
 
     def _write_inventory(self):

@@ -186,6 +186,8 @@ def _project_records(
             raise PermissionError("Malformed public claim evidence level")
         if claim["evidence_level"] not in {"E0", None}:
             raise PermissionError("Future claim evidence promotion is not admitted")
+        if claim["evidence_level"] == "E0" and claim["status"] != "untested":
+            raise PermissionError("E0 claim must remain untested")
         for key in _CLAIM_FIELDS - {"evidence_level"}:
             _validate_text(claim[key], f"claim {key}", allow_none=key == "source")
         if claim["source"] not in observatory_data.SOURCE_FAMILIES:
@@ -324,30 +326,46 @@ def _validate_writer_payload(payload: Mapping[str, object]) -> None:
     claims = _validate_writer_records(payload, "claims", _CLAIM_FIELDS)
     claim_statuses = {"untested", "in-progress", "preliminary", "supported", "weakened", "falsified", "retracted", "not_interpretable"}
     for item in claims:
-        if not isinstance(item["status"], str) or item["status"] not in claim_statuses:
+        if (not isinstance(item["status"], str) or item["status"] not in claim_statuses
+                or not isinstance(item["statement"], str)
+                or not isinstance(item["claim_id"], str)
+                or not isinstance(item["last_verified"], str)
+                or not isinstance(item["source"], str)):
             raise PermissionError("Public export claim is not admitted")
         if item["evidence_level"] is not None and item["evidence_level"] != "E0":
             raise PermissionError("Public export claim is not admitted")
+        if item["evidence_level"] == "E0" and item["status"] != "untested":
+            raise PermissionError("E0 claim must remain untested")
         if not isinstance(item["source"], str) or item["source"] not in observatory_data.SOURCE_FAMILIES:
             raise PermissionError("Public export claim source is not allowlisted")
 
     observations = _validate_writer_records(payload, "observations", _OBSERVATION_FIELDS)
     for item in observations:
-        if not isinstance(item["status"], str) or item["status"] not in STATUS_LABELS or item["metric"] is not None:
+        if (not isinstance(item["status"], str) or item["status"] not in STATUS_LABELS
+                or not isinstance(item["model"], str)
+                or not isinstance(item["campaign"], str)
+                or not isinstance(item["scope"], str)
+                or not isinstance(item["notes"], str)
+                or item["metric"] is not None):
             raise PermissionError("Public export observation is not admitted")
         if item["source"] is not None and (
             not isinstance(item["source"], str) or item["source"] not in observatory_data.SOURCE_FAMILIES
         ):
             raise PermissionError("Public export observation source is not allowlisted")
-        if not isinstance(item["source_paths"], list) or any(
-            not isinstance(path, str) or path not in observatory_data.SOURCE_FAMILIES
-            for path in item["source_paths"]
-        ):
+        if (not isinstance(item["source_paths"], list) or any(
+                not isinstance(path, str) or path not in observatory_data.SOURCE_FAMILIES
+                for path in item["source_paths"]
+        )):
             raise PermissionError("Public export observation paths are not allowlisted")
 
     decisions = _validate_writer_records(payload, "decisions", _DECISION_FIELDS)
     for item in decisions:
-        if not isinstance(item["source"], str) or item["source"] not in observatory_data.SOURCE_FAMILIES:
+        if (not isinstance(item["id"], str) or not isinstance(item["title"], str)
+                or not isinstance(item["category"], str)
+                or (item["declared_date"] is not None and not isinstance(item["declared_date"], str))
+                or not isinstance(item["notes"], str)
+                or not isinstance(item["source"], str)
+                or item["source"] not in observatory_data.SOURCE_FAMILIES):
             raise PermissionError("Public export decision source is not allowlisted")
 
     sources = payload.get("sources")
@@ -358,12 +376,17 @@ def _validate_writer_payload(payload: Mapping[str, object]) -> None:
     for item in sources:
         if (not isinstance(item, dict) or set(item) != _SOURCE_FIELDS
                 or not isinstance(item["path"], str)
+                or not isinstance(item["sha256"], str)
+                or not isinstance(item["family"], str)
+                or not isinstance(item["summary"], str)
+                or not isinstance(item["freshness"], str)
+                or (item["declared_date"] is not None and not isinstance(item["declared_date"], str))
                 or item["path"] not in observatory_data.SOURCE_FAMILIES):
             raise PermissionError("Public export source fields or path are invalid")
         if item["family"] != observatory_data.SOURCE_FAMILIES[item["path"]] or not _is_hex(item["sha256"], 64):
             raise PermissionError("Public export source identity is invalid")
         for key in ("stale_markers", "conflict_markers"):
-            if not isinstance(item[key], list):
+            if not isinstance(item[key], list) or any(not isinstance(marker, str) for marker in item[key]):
                 raise PermissionError("Public export source markers are malformed")
 
     for name in ("warnings", "model_names", "campaign_names"):
@@ -425,7 +448,6 @@ def write_public_payload(payload: Mapping[str, object], destination: Path) -> Pa
     """Write validated public JSON as site-data.json inside an owned directory."""
     if not isinstance(payload, dict):
         raise TypeError("payload must be a plain validated export mapping")
-    _validate_writer_payload(payload)
     try:
         encoded = (json.dumps(
             payload, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"),
@@ -434,6 +456,13 @@ def write_public_payload(payload: Mapping[str, object], destination: Path) -> Pa
         raise ValueError("payload is not canonical JSON data") from exc
     if len(encoded) > _MAX_PAYLOAD_BYTES:
         raise PermissionError("Public export exceeds the 1 MiB size limit")
+    try:
+        frozen_payload = json.loads(encoded.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PermissionError("Public export did not serialize to valid UTF-8 JSON") from exc
+    if not isinstance(frozen_payload, dict):
+        raise PermissionError("Public export root must be an object")
+    _validate_writer_payload(frozen_payload)
     directory = Path(destination)
     directory_fd = _open_owned_directory(directory)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
