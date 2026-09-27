@@ -39,19 +39,6 @@ STATUS_COLORS = {
     "not_interpretable": ("#fecaca", "#7f1d1d"),
 }
 
-FAMILY_QUESTIONS = {
-    "selected_docs": "Which research design, method, or decision does this document describe?",
-    "navigation_snapshot": "Where was repository status summarized, and is that summary still current?",
-    "formal_claims": "Which formal hypothesis and evidence level are registered?",
-    "triz_reference": "Which expert TRIZ source is recorded for reference?",
-    "study_protocol": "Which frozen protocol defines this experiment?",
-    "a0": "What did the original A0 proxy study report?",
-    "a0_r1": "What did the independent A0-R1 proxy study report?",
-    "a0_r2_c3": "What did the C3 analysis-only recovery report?",
-    "exp001_comparative": "What did this model's EXP-001 comparison report?",
-    "exp002_baseline": "What did this model's EXP-002A baseline report?",
-}
-
 VIEW_TITLES = (
     "Start here",
     "Experiments × models",
@@ -118,6 +105,12 @@ def page_css() -> str:
   .lt-card h3 { font-size:1.02rem; margin:0 0 7px; color:#123a68; }
   .lt-card p, .lt-card li { color:#334155; line-height:1.52; }
   .lt-card p { margin:4px 0 11px; }
+  .lt-hypotheses { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+                   gap:14px; margin:15px 0 23px; }
+  .lt-hypothesis { border-top:5px solid var(--lt-teal); }
+  .lt-hypothesis-strong { border-top-color:#7c3aed; }
+  .lt-hypothesis h3 { font-size:1.18rem; }
+  .lt-hypothesis .lt-mini { font-weight:700; }
   .lt-card ul { margin:6px 0 0; padding-left:20px; }
   .lt-note { border-left:4px solid #f59e0b; background:#fffbeb; padding:13px 16px;
              border-radius:0 11px 11px 0; color:#713f12; line-height:1.48; }
@@ -152,6 +145,12 @@ def page_css() -> str:
   .lt-level { border-radius:10px; padding:11px 7px; text-align:center; background:#edf2f7;
               border:1px solid #cfd9e4; font-weight:800; color:#516174; }
   .lt-level.current { background:#d1fae5; color:#065f46; border-color:#0f766e; }
+  .lt-level-legend { display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr));
+                     gap:9px; margin:14px 0; }
+  .lt-level-detail { background:#fff; border:1px solid var(--lt-edge); border-radius:11px;
+                     padding:11px 13px; line-height:1.4; }
+  .lt-level-detail strong { display:block; color:var(--lt-blue); margin-bottom:4px; }
+  .lt-level-detail span { color:var(--lt-muted); font-size:.83rem; }
   .lt-timeline { margin:12px 0 0; padding:0 0 0 19px; border-left:3px solid #b5c9dc; }
   .lt-event { position:relative; margin:0 0 14px; padding:12px 16px;
               border:1px solid var(--lt-edge); border-radius:12px; background:#fff; }
@@ -162,6 +161,9 @@ def page_css() -> str:
   .lt-event p { color:#334155; line-height:1.46; margin:5px 0; }
   .lt-source-row { padding:13px 0; border-bottom:1px solid var(--lt-edge); }
   .lt-source-row p { margin:5px 0; color:#526179; }
+  .lt-source-row .lt-source-summary { max-width:90ch; margin:8px 0;
+                                    color:var(--lt-ink); font-size:.94rem;
+                                    font-weight:600; line-height:1.5; }
   .lt-mini { font-size:.77rem; color:#64748b; }
   .lt-svg-wrap { overflow-x:auto; border:1px solid var(--lt-edge); border-radius:14px;
                  background:white; padding:8px; margin-top:15px; }
@@ -218,11 +220,30 @@ def overview_html(data: Mapping[str, object]) -> str:
     return (
         '<div class="lt-page lt-section"><div class="lt-kicker">Start here</div>'
         '<h2>What is being tested?</h2>'
-        '<p class="lt-intro">The weak hypothesis asks whether a language model '
-        'has a transferable internal representation of an inventive operation. '
-        'The strong hypothesis asks whether a model trained without TRIZ source '
-        'language develops a comparable operator. Both require tests beyond '
-        'recognizing words or reusing known examples.</p>'
+        '<p class="lt-intro">Two distinct hypotheses share a research program, '
+        'but require different evidence. Neither is established by recognizing '
+        'TRIZ words or reusing known examples.</p>'
+        '<div class="lt-hypotheses">'
+        '<article class="lt-card lt-hypothesis lt-hypothesis-weak">'
+        '<h3>Weak hypothesis</h3>'
+        '<p>In a pretrained model, at least one abstract inventive operation '
+        'has an internal representation that can be decoded and transfers to '
+        'unseen domains beyond lexical, template and source shortcuts.</p>'
+        '<p class="lt-mini">Current boundary: exploratory automated-proxy '
+        'observations; independent expert construct validation and controlled '
+        'representation tests remain open.</p>'
+        + _source("docs/HYPOTHESES_AND_FALSIFICATION.md") + '</article>'
+        '<article class="lt-card lt-hypothesis lt-hypothesis-strong">'
+        '<h3>Strong hypothesis</h3>'
+        '<p>A model trained from scratch without TRIZ terminology, source '
+        'wording or canonical examples develops a functionally comparable '
+        'operator that transfers to new domains and supports a controlled '
+        'causal intervention.</p>'
+        '<p class="lt-mini">Current boundary: pretrained-model observations '
+        'cannot establish controlled emergence. No such training study is '
+        'qualified here.</p>'
+        + _source("docs/HYPOTHESES_AND_FALSIFICATION.md") + '</article></div>'
+        '<p class="lt-note">The current catalogue does not establish either hypothesis.</p>'
         '<div class="lt-grid">'
         '<div class="lt-card"><h3>Observed so far</h3><p>' + _e(early_text) + '</p>'
         f'<p><strong>{exp1_null} separate model packages in EXP-001</strong> '
@@ -422,6 +443,16 @@ ROUTE_STAGES = (
      "Two-operation and contradiction tasks only after the single-operator causal gate passes.", "docs/HYPOTHESES_AND_FALSIFICATION.md"),
 )
 
+EVIDENCE_LEVELS = (
+    ("E0", "Hypothesis", "Precise claim, model scope and falsification condition; untested."),
+    ("E1", "Behavioral observation", "A qualified behavioral effect."),
+    ("E2", "Cross-domain decodability", "E1 plus lexical controls, cross-domain transfer and decodability."),
+    ("E3", "Causal steering", "E2 plus positive intervention, dose response and preserved capability."),
+    ("E4", "Bidirectional causality", "E3 plus a negative or opposite-sign intervention."),
+    ("E5", "Cross-model replication", "E4 plus independent and cross-model replication."),
+    ("E6", "Controlled emergence", "E5 plus controlled training from scratch."),
+)
+
 
 def route_html(selected_stage: str, claims: Iterable[Mapping[str, object]]) -> str:
     claims = list(claims)
@@ -435,6 +466,11 @@ def route_html(selected_stage: str, claims: Iterable[Mapping[str, object]]) -> s
     e0 = sum(item.get("evidence_level") == "E0" for item in claims)
     levels = ''.join(
         f'<div class="lt-level{" current" if i == 0 else ""}">E{i}</div>' for i in range(7)
+    )
+    level_legend = ''.join(
+        '<div class="lt-level-detail">'
+        f'<strong>{_e(code)} · {_e(name)}</strong><span>{_e(requirement)}</span></div>'
+        for code, name, requirement in EVIDENCE_LEVELS
     )
     return (
         '<div class="lt-page lt-section"><div class="lt-kicker">Scientific route</div>'
@@ -453,6 +489,7 @@ def route_html(selected_stage: str, claims: Iterable[Mapping[str, object]]) -> s
         '<div class="lt-section"><div class="lt-kicker">Formal claims</div>'
         f'<h2>{e0} of {len(claims)} registered claims remain E0</h2>'
         f'<div class="lt-levels">{levels}</div>'
+        f'<div class="lt-level-legend">{level_legend}</div>'
         '<p class="lt-mini">Levels are cumulative proof obligations, not a '
         'generic maturity score. A result package does not change a claim level '
         'until the claim registry links and qualifies it.</p>'
@@ -489,13 +526,13 @@ def source_list_html(sources: Iterable[Mapping[str, object]], query: str = "") -
         item for item in source_list
         if not needle or needle in (
             str(item.get("path", "")) + " " + str(item.get("family", "")) + " "
-            + FAMILY_QUESTIONS.get(str(item.get("family", "")), "")
+            + str(item.get("summary", ""))
         ).casefold()
     ]
     cards = ''.join(
         '<div class="lt-source-row">'
         + _source(item.get("path", ""))
-        + f'<p><strong>Question:</strong> {_e(FAMILY_QUESTIONS.get(str(item.get("family", "")), "What does this source record?"))}</p>'
+        + f'<p class="lt-source-summary">{_e(item.get("summary") or "Summary unavailable; inspect source directly.")}</p>'
         + f'<p>Family: {_e(item.get("family", "unknown"))} · '
         f'Declared date: {_e(item.get("declared_date") or "not stated")} · '
         f'Freshness: {_e(item.get("freshness") or "unknown")} · '

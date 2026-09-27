@@ -370,9 +370,101 @@ def _read_allowlisted(
             os.close(root_fd)
 
 
-def _build_source_records(bytes_by_path: dict[str, bytes | None]) -> list[dict[str, Any]]:
+_MODEL_SLUGS = {
+    "smollm2-135m": "SmolLM2-135M",
+    "smollm2-360m": "SmolLM2-360M",
+    "gpt2": "GPT-2",
+    "gpt-neo-125m": "GPT-Neo-125M",
+    "pythia-70m": "Pythia-70M",
+    "qwen3-0.6b": "Qwen3-0.6B-Base",
+    "qwen2.5-0.5b": "Qwen2.5-0.5B",
+    "qwen-qwen3-0-6b-base": "Qwen3-0.6B-Base",
+    "qwen-qwen2-5-0-5b": "Qwen2.5-0.5B",
+    "eleutherai-pythia-70m-deduped": "Pythia-70M",
+    "eleutherai-gpt-neo-125m": "GPT-Neo-125M",
+    "openai-community-gpt2": "GPT-2",
+    "huggingfacetb-smollm2-135m": "SmolLM2-135M",
+    "huggingfacetb-smollm2-360m": "SmolLM2-360M",
+}
+
+
+def _source_summary(path: str, family: str, text: str, exists: bool) -> str:
+    """Derive a short navigation synopsis only from allowlisted, hash-inventoried bytes."""
+    if not exists:
+        return "This allowlisted source is missing from the local checkout. No content or outcome is inferred."
+    if family in {"selected_docs", "navigation_snapshot"}:
+        if path == "docs/ARTICLE.md":
+            return ("Founding research article proposing weak and strong Latent-TRIZ hypotheses. "
+                    "It links TRIZ concepts to model training and sets the investigation's scope.")
+        description = re.search(r"(?m)^description:\s*(.+)$", text)
+        if description:
+            return description.group(1).strip()
+        if path == "docs/decisions/index.md":
+            return "Index of architecture and research decision records. Use it to locate the rationale for each laboratory stage."
+        return "Results index and navigation notes. Check its freshness marker before treating it as current status."
+    if family == "formal_claims":
+        if path.endswith(".jsonl"):
+            return "Machine-readable registry of formal hypotheses and evidence levels. Each entry tracks scope, status and falsification conditions."
+        return "Validation schema for claim records and evidence profiles. It constrains allowed fields and levels before promotion."
+    if family == "triz_reference":
+        if "web-corpus" in path:
+            return "Catalogue of public TRIZ-consulting web resources. It records provenance and rights for source-aware research."
+        return "Registry of expert TRIZ reference sources, including principles, Matrix 2003 and tool relationships. It records provenance and use limits."
+    if family == "study_protocol":
+        study = {"a0-automated-weak-proxy": "A0 automated weak-proxy",
+                 "a0r1-independent-proxy": "A0-R1 independent proxy",
+                 "a0r2-independent-model": "A0-R2 independent-model"}
+        label = next((name for key, name in study.items() if key in path), "Experimental")
+        return f"{label} frozen study protocol. It defines model, controls, analysis and result boundaries before execution."
+    if family in {"a0", "a0_r1", "a0_r2_c3"}:
+        label = {"a0": "A0 exploratory proxy", "a0_r1": "A0-R1 independent proxy",
+                 "a0_r2_c3": "A0-R2-C3 analysis-only recovery"}[family]
+        if path.endswith("publication-manifest.json"):
+            try:
+                manifest = json.loads(text)
+                manifest_status = manifest.get("status") if isinstance(manifest, dict) else None
+                if not isinstance(manifest_status, str):
+                    manifest_status = "not stated"
+            except json.JSONDecodeError:
+                manifest_status = "not readable"
+            return (f"{label} manifest; recorded manifest status: {manifest_status}. "
+                    "Binds report and results to exact hashes.")
+        plain_text = re.sub(r"<[^>]+>", " ", text)
+        status = re.search(r"(?i)(?:final|result|terminal)\s+status\s*:\s*`?([a-z_]+)", plain_text)
+        outcome = status.group(1).lower() if status else "not stated"
+        return (f"{label} report; recorded outcome: {outcome}. "
+                "Exploratory proxy evidence, not a general TRIZ mechanism.")
+    if family in {"exp001_comparative", "exp002_baseline"}:
+        model = next((name for slug, name in _MODEL_SLUGS.items() if slug in path), "model")
+        campaign = "EXP-001 comparative" if family == "exp001_comparative" else "EXP-002A baseline"
+        status = re.search(r"(?i)(?:terminal|result|final) status[^\n:]*:\s*[`\"']?([a-z_]+)", text)
+        if status is None and path.endswith("publication-manifest.json"):
+            try:
+                value = json.loads(text)
+                observed = value.get("terminal_status") if isinstance(value, dict) else None
+                if observed is None and isinstance(value, dict):
+                    packages = value.get("packages")
+                    if isinstance(packages, list) and len(packages) == 1 and isinstance(packages[0], dict):
+                        observed = packages[0].get("terminal_status")
+                status_word = observed if isinstance(observed, str) else "not stated"
+            except json.JSONDecodeError:
+                status_word = "not readable"
+        else:
+            status_word = status.group(1) if status else "not stated"
+        if path.endswith("publication-manifest.json"):
+            return (f"{campaign} manifest for {model}; recorded terminal status: {status_word}. "
+                    "It binds this model's report and external assets to hashes.")
+        return (f"{campaign} report for {model}; recorded terminal status: {status_word}. "
+                "It describes this package's scope without promoting a general TRIZ claim.")
+    return "Allowlisted research source. Open its preview to inspect scope and provenance."
+
+
+def _build_source_records(
+    bytes_by_path: dict[str, bytes | None], *, paths: Any = None
+) -> list[dict[str, Any]]:
     records = []
-    for path, family in SOURCE_FAMILIES.items():
+    for path in (SOURCE_FAMILIES if paths is None else paths):
+        family = SOURCE_FAMILIES[path]
         payload = bytes_by_path[path]
         text = payload.decode("utf-8", errors="replace") if payload is not None else ""
         stale: list[str] = []
@@ -388,6 +480,7 @@ def _build_source_records(bytes_by_path: dict[str, bytes | None]) -> list[dict[s
             "path": path,
             "sha256": hashlib.sha256(payload).hexdigest() if payload is not None else None,
             "family": family,
+            "summary": _source_summary(path, family, text, payload is not None),
             "declared_date": _declared_date(text),
             "freshness": freshness,
             "stale_markers": stale,

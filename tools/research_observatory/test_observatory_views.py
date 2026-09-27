@@ -142,6 +142,46 @@ class ObservatoryViewTests(unittest.TestCase):
         self.assertIn("separate model packages", output)
         self.assertNotIn("independent EXP-001 comparative results", output)
 
+    def test_overview_gives_each_hypothesis_a_distinct_scoped_card(self):
+        output = views.overview_html({"claims": [], "observations": []})
+        self.assertIn('<h3>Weak hypothesis</h3>', output)
+        self.assertIn('<h3>Strong hypothesis</h3>', output)
+        self.assertIn('lt-hypothesis-weak', output)
+        self.assertIn('lt-hypothesis-strong', output)
+        self.assertIn('pretrained', output)
+        self.assertIn('trained from scratch', output)
+        self.assertIn('does not establish either hypothesis', output)
+
+    def test_route_explains_each_cumulative_evidence_level(self):
+        output = views.route_html("Decodability", [{"evidence_level": "E0"}])
+        for name in (
+            "Hypothesis", "Behavioral observation", "Cross-domain decodability",
+            "Causal steering", "Bidirectional causality", "Cross-model replication",
+            "Controlled emergence",
+        ):
+            self.assertIn(name, output)
+        self.assertIn("cumulative", output)
+        self.assertIn("E0", output)
+        self.assertIn("E6", output)
+
+    def test_source_cards_show_specific_summary_and_search_it(self):
+        sources = [{"path": "docs/LAB03.md", "family": "selected_docs",
+                    "summary": "Behavioral baseline plan for model responses, including controls and failure conditions.",
+                    "sha256": "a" * 64}]
+        output = views.source_list_html(sources, "failure conditions")
+        self.assertIn("Behavioral baseline plan", output)
+        self.assertNotIn("Which research design", output)
+        self.assertIn("1</strong>", output)
+
+    def test_source_synopsis_is_escaped_in_cards(self):
+        hostile = '<img src="https://example.invalid/x" onerror="alert(1)">'
+        output = views.source_list_html([{
+            "path": "docs/LAB03.md", "family": "selected_docs",
+            "summary": hostile, "sha256": "a" * 64,
+        }], "")
+        self.assertNotIn(hostile, output)
+        self.assertIn("&lt;img", output)
+
 
 if __name__ == "__main__":
     unittest.main()

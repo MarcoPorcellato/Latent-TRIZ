@@ -18,6 +18,15 @@ are citations, not links; use the source selector to preview their local bytes.
 The registered claims remain governed by `data/claims.jsonl` and
 `docs/EVIDENCE_LADDER.md`, not by this app.
 
+The opening view separates the weak pretrained-model hypothesis from the
+strong controlled-emergence hypothesis. Scientific route explains the
+cumulative E0–E6 obligations without treating its five research questions as
+completed milestones. Explore sources shows a short, searchable synopsis for
+each of the 66 admitted files instead of a repeated question by file family.
+These synopses are derived from the locally hash-inventoried source bytes and
+their fixed source roles; they are navigation aids, not new scientific claims.
+If a source is missing, its synopsis does not infer an outcome.
+
 ## Run locally
 
 From `tools/research_observatory` in a fresh clone:

@@ -62,7 +62,7 @@ def _(mo, snapshot, views):
         options=["All", *decision_categories], value="All", label="Decision category",
     )
     source_search = mo.ui.text(
-        value="", placeholder="Search path or source family",
+        value="", placeholder="Search path, family or synopsis",
         label="Find a source", full_width=True,
     )
     source_options = [item["path"] for item in snapshot["sources"]]

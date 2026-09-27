@@ -11,6 +11,86 @@ from observatory_data import SOURCE_FAMILIES, load_observatory, read_allowed_pre
 
 
 class ObservatoryDataTests(unittest.TestCase):
+    def test_source_summaries_are_specific_to_their_verified_content(self):
+        files = {
+            "docs/ARTICLE.md": b"# Do Large Language Models Rediscover TRIZ?\n",
+            "docs/LAB03.md": b"---\ntitle: Lab 03 behavioral baseline contract\n"
+            b"description: Public contract for fail-closed behavioral baselines.\n---\n",
+        }
+        records = observatory_data._build_source_records(files, paths=files)
+        by_path = {record["path"]: record for record in records}
+        self.assertIn("hypothes", by_path["docs/ARTICLE.md"]["summary"].lower())
+        self.assertIn("behavioral baselines", by_path["docs/LAB03.md"]["summary"].lower())
+        self.assertEqual(
+            by_path["docs/LAB03.md"]["summary"],
+            "Public contract for fail-closed behavioral baselines.",
+        )
+        self.assertNotEqual(by_path["docs/ARTICLE.md"]["summary"], by_path["docs/LAB03.md"]["summary"])
+        self.assertEqual(
+            by_path["docs/LAB03.md"]["sha256"], hashlib.sha256(files["docs/LAB03.md"]).hexdigest()
+        )
+
+    def test_result_summary_does_not_invent_outcome_for_missing_file(self):
+        path = "results/exp001-comparative/qwen3-0.6b-da87bfb-qwen3-20260818-01/report.md"
+        records = observatory_data._build_source_records({path: None}, paths=[path])
+        self.assertIn("missing", records[0]["summary"].lower())
+        self.assertNotIn("null", records[0]["summary"].lower())
+
+    def test_exp002_manifest_summary_reads_nested_terminal_status(self):
+        path = ("results/exp002/qwen-qwen3-0-6b-base/"
+                "exp002-qwen3-0-6b-exp002a-20260820-01/publication-manifest.json")
+        payload = json.dumps({"status": "published", "packages": [
+            {"model_id": "Qwen/Qwen3-0.6B-Base", "terminal_status": "null"}
+        ]}).encode()
+        record = observatory_data._build_source_records({path: payload}, paths=[path])[0]
+        self.assertIn("Qwen3-0.6B-Base", record["summary"])
+        self.assertIn("terminal status: null", record["summary"])
+        self.assertNotIn("not stated", record["summary"])
+
+    def test_a0_reports_name_only_their_own_recorded_outcome(self):
+        examples = {
+            "results/a0/a0-v1.0.3-e93a9faa/report.html":
+                b"<p><strong>Final status:</strong> positive</p>",
+            "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/report.md":
+                b"- Result status: positive\n",
+            "results/a0r2/a0r2c3-analysis-only-v1.0.0-f8027fd0-r1/report.md":
+                b"- Terminal status: `positive`\n",
+        }
+        by_path = {record["path"]: record for record in
+                   observatory_data._build_source_records(examples, paths=examples)}
+        for path, record in by_path.items():
+            with self.subTest(path=path):
+                self.assertIn("recorded outcome: positive", record["summary"])
+                self.assertIn("exploratory", record["summary"].lower())
+        self.assertIn("analysis-only", by_path[next(path for path in examples if "a0r2c3" in path)]["summary"])
+
+    def test_a0_manifest_does_not_confuse_status_with_publication_or_outcome(self):
+        path = "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json"
+        record = observatory_data._build_source_records(
+            {path: b'{"status":"pass","scientific_status":"exploratory"}'}, paths=[path]
+        )[0]
+        self.assertIn("recorded manifest status: pass", record["summary"])
+        self.assertNotIn("recorded outcome: pass", record["summary"])
+        c3_path = ("results/a0r2/a0r2c3-analysis-only-v1.0.0-f8027fd0-r1/"
+                   "publication-manifest.json")
+        c3 = observatory_data._build_source_records(
+            {c3_path: b'{"status":"positive","terminal_status":"positive"}'},
+            paths=[c3_path],
+        )[0]
+        self.assertIn("recorded manifest status: positive", c3["summary"])
+        self.assertNotIn("publication status", c3["summary"])
+
+    def test_public_source_synopses_cover_all_66_hash_bound_files(self):
+        root = Path(__file__).resolve().parents[2]
+        data = load_observatory(root, strict_public=True)
+        self.assertEqual(len(data["sources"]), 66)
+        self.assertTrue(all(source["sha256"] and source["summary"] for source in data["sources"]))
+        self.assertFalse(any("Allowlisted research source" in source["summary"]
+                             for source in data["sources"]))
+        qwen = next(source for source in data["sources"]
+                    if source["path"].endswith("exp002-qwen3-0-6b-exp002a-20260820-01/publication-manifest.json"))
+        self.assertIn("terminal status: null", qwen["summary"])
+
     def test_repository_root_is_validated_from_packaged_app_location(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
