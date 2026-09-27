@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
+import errno
 import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
+import sys
+import tempfile
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +37,13 @@ _PAYLOAD_FIELDS = {
     "claims", "observations", "decisions", "sources", "warnings", "model_names", "campaign_names",
 }
 _MAX_PAYLOAD_BYTES = 1024 * 1024
+_SITE_ASSETS = ("index.html", "style.css", "app.mjs")
+_MAX_SITE_ASSET_BYTES = 256 * 1024
+_REVIEWED_SITE_ASSET_SHA256 = {
+    "index.html": "4513e970f66406de71566060e84356c502e29cb042a28b17409c406112c1909e",
+    "style.css": "5052e21ab615012eb8a376a8c7a7c71b17b09b637442b986651fe17f213ee37e",
+    "app.mjs": "def23938abc4352a73a98054f7492d62653183f8b7eb6be6ee0ef2dca9e1995e",
+}
 _CLAIM_FIELDS = {
     "claim_id", "statement", "status", "evidence_level", "last_verified", "source",
 }
@@ -478,3 +490,173 @@ def write_public_payload(payload: Mapping[str, object], destination: Path) -> Pa
     finally:
         os.close(directory_fd)
     return directory / "site-data.json"
+
+
+def _read_site_asset(site_directory_fd: int, name: str) -> bytes:
+    """Read one reviewed static asset without following or copying links."""
+    if name not in _SITE_ASSETS:
+        raise PermissionError("Unreviewed public site asset")
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise PermissionError("No-follow site asset reads are unavailable")
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=site_directory_fd)
+        with os.fdopen(fd, "rb") as source:
+            metadata = os.fstat(source.fileno())
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                    or metadata.st_size > _MAX_SITE_ASSET_BYTES):
+                raise PermissionError("Public site asset is not an independent bounded file")
+            raw = source.read(_MAX_SITE_ASSET_BYTES + 1)
+    except OSError as exc:
+        raise PermissionError("Unable to read reviewed public site asset") from exc
+    if len(raw) > _MAX_SITE_ASSET_BYTES:
+        raise PermissionError("Public site asset exceeded its size limit")
+    if hashlib.sha256(raw).hexdigest() != _REVIEWED_SITE_ASSET_SHA256[name]:
+        raise PermissionError("Public site asset differs from its reviewed bytes")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PermissionError("Public site asset is not UTF-8") from exc
+    _validate_site_asset(name, text)
+    return raw
+
+
+def _validate_site_asset(name: str, text: str) -> None:
+    """Reject deployment-time external or unreviewed asset references."""
+    if name == "index.html":
+        references = re.findall(r"(?:href|src)=\"([^\"]+)\"", text, flags=re.IGNORECASE)
+        if any(reference not in {"./style.css", "./app.mjs"} for reference in references):
+            raise PermissionError("HTML references an unreviewed or external asset")
+        if len(references) != 2 or re.search(r"<script\b[^>]*\bsrc=\"https?://", text, re.IGNORECASE):
+            raise PermissionError("HTML asset references are incomplete or external")
+    elif name == "style.css":
+        if re.search(r"@import\b|url\(\s*['\"]?\s*(?:https?:|//|data:)", text, re.IGNORECASE):
+            raise PermissionError("Stylesheet references an external asset")
+    elif name == "app.mjs":
+        if re.search(r"\bimport\s*(?:\(|[^;]*?from\s*)['\"](?:https?:|//)", text):
+            raise PermissionError("Browser module imports an external asset")
+        if re.search(r"\bfetch\(\s*['\"]https?://", text):
+            raise PermissionError("Browser module requests an external resource automatically")
+
+
+def _copy_static_assets(repo_root: Path, staging: Path) -> None:
+    source = repo_root / "scripts/research_observatory/site"
+    source_fd = _open_owned_directory(source)
+    try:
+        for name in _SITE_ASSETS:
+            raw = _read_site_asset(source_fd, name)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+            fd = os.open(staging / name, flags, 0o644)
+            with os.fdopen(fd, "wb") as output:
+                metadata = os.fstat(output.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                    raise PermissionError("Staged public asset is not an independent regular file")
+                output.write(raw)
+    finally:
+        os.close(source_fd)
+
+
+def _publish_directory_exclusively(staging: Path, destination: Path) -> None:
+    """Atomically publish a complete bundle while refusing an existing path."""
+    if os.path.lexists(destination):
+        raise FileExistsError("Public site destination already exists")
+    import ctypes
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        if sys.platform == "darwin":
+            # RENAME_EXCL guarantees destination remains untouched on races.
+            rename = libc.renamex_np
+            rename.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+            result = rename(os.fsencode(staging), os.fsencode(destination), 0x00000004)
+        elif sys.platform.startswith("linux"):
+            # RENAME_NOREPLACE gives an atomic no-clobber directory publish.
+            rename = libc.renameat2
+            rename.argtypes = (
+                ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint,
+            )
+            result = rename(-100, os.fsencode(staging), -100, os.fsencode(destination), 0x00000001)
+        else:
+            raise PermissionError("Atomic no-replace directory publication is unsupported")
+    except AttributeError as exc:
+        raise PermissionError("Atomic no-replace directory publication is unavailable") from exc
+    if result == 0:
+        return
+    error = ctypes.get_errno()
+    if error == errno.EEXIST:
+        raise FileExistsError("Public site destination already exists")
+    unsupported = {errno.ENOSYS, errno.EINVAL, errno.ENOTSUP}
+    if hasattr(errno, "EOPNOTSUPP"):
+        unsupported.add(errno.EOPNOTSUPP)
+    if error in unsupported:
+        raise PermissionError("Atomic no-replace directory publication is unsupported")
+    raise OSError(error, os.strerror(error), str(destination))
+
+
+def build_site(
+    repo_root: Path, destination: Path, *, expected_head: str, generated_at: str,
+) -> Path:
+    """Build and atomically publish exactly four files into a fresh directory."""
+    root = Path(repo_root).resolve(strict=True)
+    target = Path(os.path.abspath(destination))
+    try:
+        parent = target.parent.resolve(strict=True)
+    except OSError as exc:
+        raise PermissionError("Public site destination parent must already exist") from exc
+    target = parent / target.name
+    if target == root or root in target.parents:
+        raise PermissionError("Public site destination must be outside the repository")
+    if os.path.lexists(target):
+        raise FileExistsError("Public site destination already exists")
+
+    # Validate output-parent ownership and link-free traversal before creating
+    # an owned sibling staging directory. All four public files appear at once.
+    parent_fd = _open_owned_directory(parent)
+    os.close(parent_fd)
+    staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.staging-", dir=parent))
+    try:
+        os.chmod(staging, 0o755)
+        _copy_static_assets(root, staging)
+        payload = build_public_payload(root, expected_head=expected_head, generated_at=generated_at)
+        write_public_payload(payload, staging)
+        members = {entry.name for entry in staging.iterdir()}
+        if members != set(_SITE_ASSETS) | {"site-data.json"}:
+            raise PermissionError("Public site staging directory has unexpected members")
+        data_path = staging / "site-data.json"
+        data_info = data_path.lstat()
+        if (not stat.S_ISREG(data_info.st_mode) or data_info.st_nlink != 1
+                or data_info.st_size > _MAX_PAYLOAD_BYTES):
+            raise PermissionError("Public site data is not a bounded independent file")
+        serialized = data_path.read_bytes()
+        decoded = json.loads(serialized.decode("utf-8"))
+        _validate_writer_payload(decoded)
+        canonical = (json.dumps(
+            decoded, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"),
+        ) + "\n").encode("utf-8")
+        if serialized != canonical:
+            raise PermissionError("Public site data is not canonical JSON")
+        _publish_directory_exclusively(staging, target)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return target
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Build a verified static Research Observatory site")
+    parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--destination", type=Path, required=True)
+    parser.add_argument("--expected-head", required=True)
+    parser.add_argument("--generated-at", required=True)
+    args = parser.parse_args(argv)
+    try:
+        result = build_site(
+            args.repo_root, args.destination,
+            expected_head=args.expected_head, generated_at=args.generated_at,
+        )
+    except (OSError, PermissionError, ValueError, TypeError) as exc:
+        parser.exit(2, f"site build refused: {exc}\n")
+    print(result)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
