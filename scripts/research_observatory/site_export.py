@@ -27,6 +27,11 @@ _HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 _INVENTORY_SCHEMA = "research-observatory-source-inventory-v1"
 _PAYLOAD_SCHEMA = "research-observatory-site-v1"
+_PAYLOAD_FIELDS = {
+    "schema", "generated_at", "build_source", "source_inventory", "catalogue_sha256",
+    "claims", "observations", "decisions", "sources", "warnings", "model_names", "campaign_names",
+}
+_MAX_PAYLOAD_BYTES = 1024 * 1024
 _CLAIM_FIELDS = {
     "claim_id", "statement", "status", "evidence_level", "last_verified", "source",
 }
@@ -298,26 +303,150 @@ def _validate_public_tree(value: object) -> None:
         raise PermissionError("Unsupported value in public export")
 
 
+def _validate_writer_payload(payload: Mapping[str, object]) -> None:
+    if set(payload) != _PAYLOAD_FIELDS or payload.get("schema") != _PAYLOAD_SCHEMA:
+        raise PermissionError("Public export payload schema or fields are invalid")
+    _validate_generation_time(payload.get("generated_at"))
+    for name, fields in (("build_source", {"head", "tree"}),
+                         ("source_inventory", {"sha256", "source_base_head", "source_base_tree"})):
+        value = payload.get(name)
+        if not isinstance(value, dict) or set(value) != fields:
+            raise PermissionError(f"Public export {name} schema is invalid")
+    build_source = payload["build_source"]
+    inventory = payload["source_inventory"]
+    if not _is_hex(build_source["head"], 40) or not _is_hex(build_source["tree"], 40):
+        raise PermissionError("Public export source identity is invalid")
+    if not _is_hex(inventory["sha256"], 64) or not _is_hex(inventory["source_base_head"], 40) or not _is_hex(inventory["source_base_tree"], 40):
+        raise PermissionError("Public export inventory identity is invalid")
+    if not _is_hex(payload.get("catalogue_sha256"), 64):
+        raise PermissionError("Public export catalogue digest is invalid")
+
+    claims = _validate_writer_records(payload, "claims", _CLAIM_FIELDS)
+    claim_statuses = {"untested", "in-progress", "preliminary", "supported", "weakened", "falsified", "retracted", "not_interpretable"}
+    for item in claims:
+        if not isinstance(item["status"], str) or item["status"] not in claim_statuses:
+            raise PermissionError("Public export claim is not admitted")
+        if item["evidence_level"] is not None and item["evidence_level"] != "E0":
+            raise PermissionError("Public export claim is not admitted")
+        if not isinstance(item["source"], str) or item["source"] not in observatory_data.SOURCE_FAMILIES:
+            raise PermissionError("Public export claim source is not allowlisted")
+
+    observations = _validate_writer_records(payload, "observations", _OBSERVATION_FIELDS)
+    for item in observations:
+        if not isinstance(item["status"], str) or item["status"] not in STATUS_LABELS or item["metric"] is not None:
+            raise PermissionError("Public export observation is not admitted")
+        if item["source"] is not None and (
+            not isinstance(item["source"], str) or item["source"] not in observatory_data.SOURCE_FAMILIES
+        ):
+            raise PermissionError("Public export observation source is not allowlisted")
+        if not isinstance(item["source_paths"], list) or any(
+            not isinstance(path, str) or path not in observatory_data.SOURCE_FAMILIES
+            for path in item["source_paths"]
+        ):
+            raise PermissionError("Public export observation paths are not allowlisted")
+
+    decisions = _validate_writer_records(payload, "decisions", _DECISION_FIELDS)
+    for item in decisions:
+        if not isinstance(item["source"], str) or item["source"] not in observatory_data.SOURCE_FAMILIES:
+            raise PermissionError("Public export decision source is not allowlisted")
+
+    sources = payload.get("sources")
+    if not isinstance(sources, list):
+        raise PermissionError("Public export sources are malformed")
+    # V1 intentionally has no raw excerpts. Reject unknown source fields and
+    # reject even an empty preview marker so future callers cannot bypass policy.
+    for item in sources:
+        if (not isinstance(item, dict) or set(item) != _SOURCE_FIELDS
+                or not isinstance(item["path"], str)
+                or item["path"] not in observatory_data.SOURCE_FAMILIES):
+            raise PermissionError("Public export source fields or path are invalid")
+        if item["family"] != observatory_data.SOURCE_FAMILIES[item["path"]] or not _is_hex(item["sha256"], 64):
+            raise PermissionError("Public export source identity is invalid")
+        for key in ("stale_markers", "conflict_markers"):
+            if not isinstance(item[key], list):
+                raise PermissionError("Public export source markers are malformed")
+
+    for name in ("warnings", "model_names", "campaign_names"):
+        values = payload.get(name)
+        if not isinstance(values, list):
+            raise PermissionError(f"Public export {name} is malformed")
+        for value in values:
+            _validate_text(value, name)
+    _validate_public_tree(dict(payload))
+
+
+def _validate_writer_records(
+    payload: Mapping[str, object], name: str, fields: set[str],
+) -> list[dict[str, object]]:
+    values = payload.get(name)
+    if not isinstance(values, list):
+        raise PermissionError(f"Public export {name} is malformed")
+    for value in values:
+        if not isinstance(value, dict) or set(value) != fields:
+            raise PermissionError(f"Public export {name} record fields are invalid")
+    return values
+
+
+def _is_hex(value: object, length: int) -> bool:
+    return isinstance(value, str) and re.fullmatch(rf"[0-9a-f]{{{length}}}", value) is not None
+
+
+def _validate_generation_time(value: object) -> None:
+    if not isinstance(value, str) or not _UTC_RFC3339.fullmatch(value):
+        raise PermissionError("Public export generation timestamp is invalid")
+    try:
+        datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise PermissionError("Public export generation timestamp is invalid") from exc
+
+
+def _open_owned_directory(path: Path) -> int:
+    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+        raise PermissionError("No-follow directory traversal is unavailable")
+    absolute = Path(os.path.abspath(path))
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        current_fd = os.open(absolute.anchor, flags)
+        for part in absolute.parts[1:]:
+            next_fd = os.open(part, flags, dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        metadata = os.fstat(current_fd)
+        if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid():
+            raise PermissionError("Public export destination is not an owned directory")
+        return current_fd
+    except OSError as exc:
+        if "current_fd" in locals():
+            os.close(current_fd)
+        raise PermissionError("Public export destination has an unsafe or non-directory parent") from exc
+
+
 def write_public_payload(payload: Mapping[str, object], destination: Path) -> Path:
-    """Write canonical UTF-8 JSON to a new independent regular file only."""
-    if not isinstance(payload, Mapping):
-        raise TypeError("payload must be a mapping")
+    """Write validated public JSON as site-data.json inside an owned directory."""
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be a plain validated export mapping")
+    _validate_writer_payload(payload)
     try:
         encoded = (json.dumps(
             payload, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"),
         ) + "\n").encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise ValueError("payload is not canonical JSON data") from exc
-    path = Path(destination)
-    if not hasattr(os, "O_NOFOLLOW"):
-        raise PermissionError("No-follow output creation is unavailable")
+    if len(encoded) > _MAX_PAYLOAD_BYTES:
+        raise PermissionError("Public export exceeds the 1 MiB size limit")
+    directory = Path(destination)
+    directory_fd = _open_owned_directory(directory)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     try:
-        fd = os.open(path, flags, 0o644)
-    except FileExistsError as exc:
-        raise FileExistsError("Public export destination already exists") from exc
-    with os.fdopen(fd, "wb") as output:
-        if not stat.S_ISREG(os.fstat(output.fileno()).st_mode):
-            raise PermissionError("Public export destination is not a regular file")
-        output.write(encoded)
-    return path
+        try:
+            fd = os.open("site-data.json", flags, 0o644, dir_fd=directory_fd)
+        except FileExistsError as exc:
+            raise FileExistsError("Public export destination already exists") from exc
+        with os.fdopen(fd, "wb") as output:
+            metadata = os.fstat(output.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or metadata.st_uid != os.getuid():
+                raise PermissionError("Public export output is not an independent owned file")
+            output.write(encoded)
+    finally:
+        os.close(directory_fd)
+    return directory / "site-data.json"

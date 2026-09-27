@@ -204,13 +204,74 @@ class SiteExportTests(unittest.TestCase):
         self.assertNotEqual(payload["source_inventory"]["sha256"], payload["catalogue_sha256"])
 
     def test_writes_canonical_json_without_overwriting_existing_file(self):
-        destination = self.root / "export.json"
-        result = site_export.write_public_payload({"z": "café", "a": 1}, destination)
-        self.assertEqual(result, destination)
-        self.assertEqual(destination.read_bytes(), '{"a":1,"z":"café"}\n'.encode("utf-8"))
+        del self.catalogue["observations"][-1]
+        payload = site_export.build_public_payload(
+            self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+        )
+        payload["claims"][0]["statement"] = "Café claim"
+        destination = self.root / "owned-output"
+        destination.mkdir()
+        result = site_export.write_public_payload(payload, destination)
+        expected = destination / "site-data.json"
+        self.assertEqual(result, expected)
+        encoded = expected.read_bytes()
+        self.assertIn("Café claim".encode("utf-8"), encoded)
+        self.assertNotIn(b"\\u00e9", encoded)
+        self.assertTrue(encoded.endswith(b"\n"))
+        self.assertEqual(json.loads(encoded.decode("utf-8")), payload)
         with self.assertRaises(FileExistsError):
-            site_export.write_public_payload({"changed": True}, destination)
-        self.assertEqual(destination.read_bytes(), '{"a":1,"z":"café"}\n'.encode("utf-8"))
+            site_export.write_public_payload(payload, destination)
+
+    def test_writer_rejects_arbitrary_unknown_and_private_payloads(self):
+        del self.catalogue["observations"][-1]
+        valid = site_export.build_public_payload(
+            self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+        )
+        private = json.loads(json.dumps(valid))
+        private["claims"][0]["statement"] = "private `/Users/private/key`"
+        unknown = json.loads(json.dumps(valid))
+        unknown["unreviewed"] = "not allowed"
+        bad_schema = json.loads(json.dumps(valid))
+        bad_schema["schema"] = "research-observatory-site-v2"
+        for index, payload in enumerate((
+            {"z": "café"},
+            unknown, bad_schema, private,
+        )):
+            destination = self.root / f"invalid-{index}"
+            destination.mkdir()
+            with self.subTest(payload=payload), self.assertRaises((PermissionError, TypeError)):
+                site_export.write_public_payload(payload, destination)
+            self.assertFalse((destination / "site-data.json").exists())
+
+    def test_writer_rejects_file_destination_and_symlinked_parent(self):
+        del self.catalogue["observations"][-1]
+        payload = site_export.build_public_payload(
+            self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+        )
+        file_destination = self.root / "not-a-directory"
+        file_destination.write_text("x", encoding="utf-8")
+        with self.assertRaises(PermissionError):
+            site_export.write_public_payload(payload, file_destination)
+
+        real_directory = self.root / "real-output"
+        real_directory.mkdir()
+        parent_link = self.root / "linked-output"
+        parent_link.symlink_to(real_directory, target_is_directory=True)
+        with self.assertRaises(PermissionError):
+            site_export.write_public_payload(payload, parent_link)
+        self.assertFalse((real_directory / "site-data.json").exists())
+
+    def test_writer_rejects_oversized_serialized_payload(self):
+        del self.catalogue["observations"][-1]
+        payload = site_export.build_public_payload(
+            self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+        )
+        payload["warnings"] = ["w" * 1200 for _ in range(900)]
+        destination = self.root / "large-output"
+        destination.mkdir()
+        with self.assertRaises(PermissionError):
+            site_export.write_public_payload(payload, destination)
+        self.assertFalse((destination / "site-data.json").exists())
 
     def _write_inventory(self):
         self.inventory_path.write_text(json.dumps(self.inventory), encoding="utf-8")
