@@ -47,6 +47,7 @@ label { display: inline-flex; align-items: center; gap: .4rem; max-width: 100%; 
 .status-descriptive { color: #3730a3; background: #e0e7ff; }
 .status-recovered_unbound { color: #9d174d; background: #fce7f3; }
 .status-not_run, .status-not_inspected { color: #475569; background: #f1f5f9; }
+.source-card h3 { overflow-wrap: anywhere; }
 .source-card code { display: inline-block; background: #edf3f7; padding: .3rem; overflow-wrap: anywhere; }
 .source-card p { overflow-wrap: anywhere; }
 .error { max-width: 50rem; }

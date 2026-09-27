@@ -317,6 +317,7 @@ test('bounds form controls and flexible navigation at narrow viewport widths', (
   const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
   assert.match(css, /button, select, input\s*\{[^}]*max-width:\s*100%/s);
   assert.match(css, /label\s*\{[^}]*max-width:\s*100%/s);
+  assert.match(css, /\.source-card h3\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /\.source-card p\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /@media\s*\(max-width:\s*580px\)[\s\S]*nav\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(css, /nav button\s*\{[^}]*min-width:\s*0/s);
