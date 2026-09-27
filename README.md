@@ -33,6 +33,8 @@ PYTHONPATH=src python3 -m latent_triz.cli lab-suite --root . --output artifacts/
 
 The dashboard does not rerun models or experiments. It verifies and links the tracked reports so a fresh user can inspect the current laboratory immediately. Red readiness cards are documented scientific gaps, not dashboard failures.
 
+Explore the [public Research Observatory](https://marcoporcellato.github.io/Latent-TRIZ/), a curated static snapshot and read-only navigation aid—not a live GitHub monitor or scientific evidence. Canonical records and verifiers remain authoritative; the [optional local Marimo app](scripts/research_observatory/README.md) remains available.
+
 Developer validation and target-specific readiness reports are separate:
 
 ```bash
@@ -66,11 +68,6 @@ PYTHONPATH=src python3 -m latent_triz.cli lab-suite --root . --output artifacts/
 ```
 
 Use `make lab00` for the standalone synthetic Stage 1 smoke view. See the [Lab Suite runbook](docs/LAB_SUITE.md) for the aggregation and no-claim contract.
-
-For a guided, interactive orientation across selected public studies, models,
-decisions, and source documents, see the optional [Research Observatory](scripts/research_observatory/README.md).
-It is a read-only navigation aid; the Lab Suite, source records, and verifiers
-remain authoritative. It excludes unpublished local recovery material.
 
 ## The hypothesis
 

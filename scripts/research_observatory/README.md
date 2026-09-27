@@ -69,5 +69,16 @@ remain authoritative.
   engineering or research choices. Its categories are a reviewed editorial
   index, not labels inferred from incidental words in the ADR body.
 
-No public live service or GitHub Pages export is included. Such deployment
-would require separate review of every rendered or bundled input.
+## Public static snapshot
+
+The [public Research Observatory](https://marcoporcellato.github.io/Latent-TRIZ/)
+is a curated GitHub Pages snapshot generated from an admitted repository
+revision. It is a static, read-only navigation aid, not a live GitHub monitor;
+later repository changes appear only after a subsequent successful build and
+deployment. The local Marimo app remains optional and separate. Neither
+interface is canonical evidence:
+repository records, schemas, result manifests, receipts, and verifiers remain
+authoritative. Issue [#119](https://github.com/MarcoPorcellato/Latent-TRIZ/issues/119)
+tracks future dynamic updates. See the
+[release and operation note](../../docs/qualification/research-observatory-pages-release-2026-09-27.md)
+for this deployment's exact source and integrity checks.
