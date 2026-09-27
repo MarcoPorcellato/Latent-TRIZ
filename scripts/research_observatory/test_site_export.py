@@ -17,7 +17,7 @@ class SiteExportTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()
         self.files = {
-            "docs/ARTICLE.md": "Reviewed first-party source.\n" + "x" * 1500,
+            "docs/ARTICLE.md": "Reviewed first-party source. Local cache: `/Users/private/laptop.txt`\n" + "x" * 1500,
             "data/triz-reference-sources.json": '{"provider_text":"DO_NOT_EXPORT_PROVIDER_TEXT"}\n',
         }
         self.hashes = {}
@@ -131,6 +131,7 @@ class SiteExportTests(unittest.TestCase):
 
     def test_exports_only_reviewed_fields_and_bounded_previews(self):
         del self.catalogue["observations"][-1]
+        self.catalogue["sources"][0]["summary"] = "Description copied from `file:///Users/private/notes.md`"
         payload = site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
         self.assertEqual(set(payload), {
             "schema", "generated_at", "build_source", "source_inventory",
@@ -147,12 +148,53 @@ class SiteExportTests(unittest.TestCase):
             "id", "title", "category", "declared_date", "source", "notes",
         })
         sources = {record["path"]: record for record in payload["sources"]}
-        self.assertLessEqual(len(sources["docs/ARTICLE.md"]["preview"]), 1200)
-        self.assertNotIn("preview", sources["data/triz-reference-sources.json"])
+        self.assertTrue(all("preview" not in source for source in sources.values()))
+        self.assertIn("Reviewed project document", sources["docs/ARTICLE.md"]["summary"])
         serialized = json.dumps(payload)
         self.assertNotIn("DO_NOT_EXPORT_PROVIDER_TEXT", serialized)
         self.assertNotIn("/Users/private", serialized)
+        self.assertNotIn("file:", serialized)
         self.assertEqual({item["status"] for item in payload["observations"]}, set(STATUS_LABELS))
+
+    def test_rejects_private_paths_and_unbounded_or_controlled_public_text(self):
+        bad_values = (
+            "quoted `/Users/private/profile.txt`",
+            "provider file file:///Users/private/provider.pdf",
+            "nested /private/tmp/export.json",
+        )
+        for field, value in (
+            ("claim", bad_values[0]),
+            ("notes", bad_values[1]),
+            ("warning", bad_values[2]),
+            ("oversized", "x" * 1201),
+            ("control", "unsafe\x00text"),
+            ("bidi", "unsafe\u202etext"),
+        ):
+            with self.subTest(field=field):
+                original = json.loads(json.dumps(self.catalogue))
+                if field in {"claim", "oversized", "control", "bidi"}:
+                    self.catalogue["claims"][0]["statement"] = value
+                elif field == "notes":
+                    self.catalogue["observations"][0]["notes"] = value
+                else:
+                    self.catalogue["warnings"] = [value]
+                with self.assertRaises(PermissionError):
+                    site_export.build_public_payload(
+                        self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+                    )
+                self.catalogue.clear()
+                self.catalogue.update(original)
+
+    def test_requires_utc_rfc3339_generation_time(self):
+        for generated_at in (
+            "2026-09-27T12:00:00+01:00", "2026-09-27 12:00:00Z",
+            "2026-02-30T12:00:00Z", "2026-09-27T12:00:00",
+            "2026-09-27T12:00:00Z`/Users/private/file",
+        ):
+            with self.subTest(generated_at=generated_at), self.assertRaises(PermissionError):
+                site_export.build_public_payload(
+                    self.root, expected_head=self.head, generated_at=generated_at,
+                )
 
     def test_records_distinct_inventory_and_catalogue_digests(self):
         del self.catalogue["observations"][-1]

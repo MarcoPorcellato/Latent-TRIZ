@@ -8,6 +8,8 @@ import os
 import re
 import stat
 import subprocess
+import unicodedata
+from datetime import datetime
 from pathlib import Path
 from typing import Mapping
 
@@ -36,13 +38,28 @@ _SOURCE_FIELDS = {
     "path", "sha256", "family", "summary", "declared_date", "freshness",
     "stale_markers", "conflict_markers",
 }
-_FIRST_PARTY_FAMILIES = {
-    "selected_docs", "navigation_snapshot", "formal_claims", "study_protocol",
-    "a0", "a0_r1", "a0_r2_c3", "exp001_comparative", "exp002_baseline",
-}
-_LOCAL_PATH = re.compile(
-    r"(?:^|[\s\"'=:(])(?:/(?!/)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+|[A-Za-z]:[\\/])"
+_MAX_PUBLIC_TEXT = 1200
+_FILE_URI = re.compile(r"(?i)\bfile:(?:/{1,3}|\\\\)[^\s\"'<>`]+")
+_ABSOLUTE_PATH = re.compile(
+    r"(?<![A-Za-z0-9:/])/(?!/)[^\s\"'<>`]+|"
+    r"(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s\"'<>`]+|"
+    r"(?<![A-Za-z0-9])\\\\[^\s\"'<>`]+"
 )
+_UTC_RFC3339 = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z\Z"
+)
+_FAMILY_SUMMARIES = {
+    "selected_docs": "Reviewed project document. Open source path for authoritative text.",
+    "navigation_snapshot": "Project navigation or status snapshot. Verify referenced canonical records.",
+    "formal_claims": "Formal claim registry or schema. Claim status and evidence stay source-bound.",
+    "triz_reference": "Citation metadata only. Third-party source text is not redistributed.",
+    "study_protocol": "Study protocol defining scope and evidence boundaries.",
+    "a0": "Published A0 manifest or report. Outcome applies only to its bound package.",
+    "a0_r1": "Published A0-R1 manifest or report. Outcome applies only to its bound package.",
+    "a0_r2_c3": "Published A0-R2-C3 manifest or report. Recovery is not claim promotion.",
+    "exp001_comparative": "Published EXP-001 manifest or report. Outcomes remain package-specific.",
+    "exp002_baseline": "Published EXP-002A manifest or report. Outcomes are not pooled.",
+}
 
 
 def _git(root: Path, *args: str) -> str:
@@ -96,8 +113,12 @@ def _validate_text(value: object, label: str, *, allow_none: bool = False) -> st
         return None
     if not isinstance(value, str):
         raise PermissionError(f"Malformed public {label}")
-    if _LOCAL_PATH.search(value):
+    if len(value) > _MAX_PUBLIC_TEXT:
+        raise PermissionError(f"Oversized public {label}")
+    if _FILE_URI.search(value) or _ABSOLUTE_PATH.search(value):
         raise PermissionError(f"Local path in public {label}")
+    if any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in value):
+        raise PermissionError(f"Control character in public {label}")
     return value
 
 
@@ -132,15 +153,13 @@ def _project_records(
         family = str(family)
         # Read each source again against its catalogue hash to close the gap
         # between loader validation and data assembly.
-        preview = read_allowed_preview(
-            root, path, max_chars=1200 if family in _FIRST_PARTY_FAMILIES else 0,
-            expected_sha256=digest,
-        )
+        # Verify bytes and hash, but never redistribute source excerpts in v1.
+        read_allowed_preview(root, path, max_chars=0, expected_sha256=digest)
         record = {
             "path": _validate_text(path, "source path"),
             "sha256": digest,
             "family": family,
-            "summary": _validate_text(source["summary"], "source summary"),
+            "summary": _FAMILY_SUMMARIES[family],
             "declared_date": _validate_text(source["declared_date"], "source date", allow_none=True),
             "freshness": _validate_text(source["freshness"], "source freshness"),
             "stale_markers": source["stale_markers"],
@@ -151,8 +170,6 @@ def _project_records(
             if not isinstance(values, list):
                 raise PermissionError("Malformed public source markers")
             record[key] = [_validate_text(value, "source marker") for value in values]
-        if family in _FIRST_PARTY_FAMILIES:
-            record["preview"] = _validate_text(preview, "source preview")
         exported_sources.append(record)
 
     claims = _records(data["claims"], _CLAIM_FIELDS, "claim")
@@ -214,8 +231,12 @@ def build_public_payload(
     root = Path(repo_root)
     if not isinstance(expected_head, str) or not _HEX40.fullmatch(expected_head):
         raise PermissionError("Expected public export HEAD must be a full 40-hex commit")
-    if not isinstance(generated_at, str) or not generated_at.strip() or _LOCAL_PATH.search(generated_at):
+    if not isinstance(generated_at, str) or not _UTC_RFC3339.fullmatch(generated_at):
         raise PermissionError("Public export generation timestamp is invalid")
+    try:
+        datetime.fromisoformat(generated_at[:-1] + "+00:00")
+    except ValueError as exc:
+        raise PermissionError("Public export generation timestamp is invalid") from exc
     head = _git(root, "rev-parse", "--verify", "HEAD")
     tree = _git(root, "rev-parse", "--verify", "HEAD^{tree}")
     if head != expected_head or not _HEX40.fullmatch(head) or not _HEX40.fullmatch(tree):
@@ -238,7 +259,7 @@ def build_public_payload(
     catalogue_digest = data["snapshot_sha256"]
     if not isinstance(catalogue_digest, str) or not _HEX64.fullmatch(catalogue_digest):
         raise PermissionError("Observatory catalogue digest is invalid")
-    return {
+    payload = {
         "schema": _PAYLOAD_SCHEMA,
         "generated_at": generated_at,
         "build_source": {"head": head, "tree": tree},
@@ -256,6 +277,25 @@ def build_public_payload(
         "model_names": [_validate_text(item, "model name") for item in data["model_names"]],
         "campaign_names": [_validate_text(item, "campaign name") for item in data["campaign_names"]],
     }
+    _validate_public_tree(payload)
+    return payload
+
+
+def _validate_public_tree(value: object) -> None:
+    """Apply string safety bounds to every nested public value, not just records."""
+    if isinstance(value, str):
+        _validate_text(value, "field")
+    elif isinstance(value, dict):
+        for key, nested in value.items():
+            _validate_text(key, "field name")
+            _validate_public_tree(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _validate_public_tree(nested)
+    elif value is None or isinstance(value, (bool, int, float)):
+        return
+    else:
+        raise PermissionError("Unsupported value in public export")
 
 
 def write_public_payload(payload: Mapping[str, object], destination: Path) -> Path:
