@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from scripts.research_observatory import observatory_data, site_export
+from scripts.research_observatory import observatory_data, site_export, site_synopses
 from scripts.research_observatory.observatory_views import STATUS_LABELS
 
 
@@ -134,7 +134,7 @@ class SiteExportTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
 
-    def test_exports_only_reviewed_fields_and_bounded_previews(self):
+    def test_exports_only_reviewed_fields_and_source_specific_synopses(self):
         del self.catalogue["observations"][-1]
         self.catalogue["sources"][0]["summary"] = "Description copied from `file:///Users/private/notes.md`"
         payload = site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
@@ -154,12 +154,58 @@ class SiteExportTests(unittest.TestCase):
         })
         sources = {record["path"]: record for record in payload["sources"]}
         self.assertTrue(all("preview" not in source for source in sources.values()))
-        self.assertIn("Reviewed project document", sources["docs/ARTICLE.md"]["summary"])
+        self.assertEqual(
+            sources["docs/ARTICLE.md"]["summary"],
+            "Introduces the Latent-TRIZ research question and its public experimental framing. "
+            "Use it for the project’s motivation and scope, not as a result report.",
+        )
+        self.assertNotEqual(
+            sources["docs/ARTICLE.md"]["summary"],
+            sources["data/triz-reference-sources.json"]["summary"],
+        )
         serialized = json.dumps(payload)
         self.assertNotIn("DO_NOT_EXPORT_PROVIDER_TEXT", serialized)
         self.assertNotIn("/Users/private", serialized)
         self.assertNotIn("file:", serialized)
         self.assertEqual({item["status"] for item in payload["observations"]}, set(STATUS_LABELS))
+
+    def test_synopsis_catalogue_exactly_covers_sources_with_distinct_two_part_entries(self):
+        site_synopses.validate_synopsis_catalogue(observatory_data.SOURCE_FAMILIES)
+        self.assertEqual(set(site_synopses.SOURCE_SYNOPSES), set(observatory_data.SOURCE_FAMILIES))
+        self.assertEqual(len(set(site_synopses.SOURCE_SYNOPSES.values())), len(observatory_data.SOURCE_FAMILIES))
+        self.assertTrue(all(
+            isinstance(parts, tuple) and len(parts) == 2
+            and all(isinstance(part, str) and part.strip() and len(part) <= 180 for part in parts)
+            for parts in site_synopses.SOURCE_SYNOPSES.values()
+        ))
+
+    def test_synopsis_catalogue_fails_closed_on_missing_extra_or_duplicate_entries(self):
+        complete = dict(site_synopses.SOURCE_SYNOPSES)
+        missing = dict(complete)
+        missing.pop("docs/ARTICLE.md")
+        extra = {**complete, "private/notes.md": ("Private note.", "Must not be admitted.")}
+        duplicate = dict(complete)
+        duplicate["docs/ARTICLE.md"] = duplicate["docs/EVIDENCE_LADDER.md"]
+        for candidate in (missing, extra, duplicate):
+            with self.subTest(size=len(candidate)):
+                with self.assertRaises(PermissionError):
+                    site_synopses.validate_synopsis_catalogue(
+                        observatory_data.SOURCE_FAMILIES, candidate,
+                    )
+        with self.assertRaises(PermissionError):
+            site_synopses.source_synopsis("private/notes.md", observatory_data.SOURCE_FAMILIES)
+
+    def test_writer_rejects_summary_mutated_away_from_reviewed_source_synopsis(self):
+        del self.catalogue["observations"][-1]
+        valid = site_export.build_public_payload(
+            self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z",
+        )
+        valid["sources"][0]["summary"] = "Arbitrary text with a private path /Users/person/notes.md"
+        destination = self.root / "mutated-source-summary"
+        destination.mkdir()
+        with self.assertRaises(PermissionError):
+            site_export.write_public_payload(valid, destination)
+        self.assertFalse((destination / "site-data.json").exists())
 
     def test_rejects_private_paths_and_unbounded_or_controlled_public_text(self):
         bad_values = (

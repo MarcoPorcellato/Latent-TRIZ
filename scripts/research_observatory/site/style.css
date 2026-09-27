@@ -27,11 +27,11 @@ h2 { margin-top: 2rem; }
 .notice, .warning { border-left: 4px solid #d18a00; border-radius: 0 .5rem .5rem 0; background: #fff7df; padding: .8rem 1rem; }
 .snapshot { color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
 nav { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0; }
-button, select, input { min-height: 2.7rem; border: 1px solid #8298aa; border-radius: .45rem; background: white; color: var(--ink); font: inherit; padding: .45rem .7rem; }
+button, select, input { min-height: 2.7rem; max-width: 100%; border: 1px solid #8298aa; border-radius: .45rem; background: white; color: var(--ink); font: inherit; padding: .45rem .7rem; }
 button { cursor: pointer; font-weight: 650; }
 button:hover, button[aria-current="page"] { background: #e0f1f0; border-color: var(--teal); }
-label { display: inline-flex; align-items: center; gap: .4rem; margin: .3rem .7rem .3rem 0; font-weight: 650; }
-.controls { margin: 1rem 0; padding: .7rem; border: 1px solid var(--edge); border-radius: .6rem; background: #eaf0f5; }
+label { display: inline-flex; align-items: center; gap: .4rem; max-width: 100%; margin: .3rem .7rem .3rem 0; font-weight: 650; }
+.controls { display: flex; flex-wrap: wrap; min-width: 0; margin: 1rem 0; padding: .7rem; border: 1px solid var(--edge); border-radius: .6rem; background: #eaf0f5; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 1rem; }
 .card { min-width: 0; margin: .8rem 0; padding: 1rem 1.15rem; border: 1px solid var(--edge); border-radius: .75rem; background: white; box-shadow: 0 3px 14px #102a400a; }
 .card h3 { color: var(--blue); margin-top: 0; }
@@ -49,8 +49,10 @@ label { display: inline-flex; align-items: center; gap: .4rem; margin: .3rem .7r
 .status-not_run, .status-not_inspected { color: #475569; background: #f1f5f9; }
 .source-card code { display: inline-block; background: #edf3f7; padding: .3rem; overflow-wrap: anywhere; }
 .error { max-width: 50rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 580px) {
-  nav { display: grid; grid-template-columns: 1fr 1fr; }
-  nav button { text-align: left; }
-  label { align-items: flex-start; flex-direction: column; }
+  nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  nav button { min-width: 0; text-align: left; overflow-wrap: anywhere; }
+  label { width: 100%; margin-right: 0; align-items: flex-start; flex-direction: column; }
+  select, input { width: 100%; }
 }

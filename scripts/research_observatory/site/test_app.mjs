@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   renderInto,
@@ -7,6 +8,7 @@ import {
   selectMatrix,
   selectSources,
   sourceUrl,
+  updateLiveStatus,
 } from './app.mjs';
 
 const statuses = [
@@ -148,6 +150,7 @@ class FakeNode {
     this.ownerDocument = fakeDocument;
     this.selectionStart = 0;
     this.selectionEnd = 0;
+    this.selectionRangeCalls = 0;
   }
   set textContent(value) { this._textContent = String(value); this.children = []; }
   get textContent() { return this._textContent + this.children.map((item) => item.textContent).join(''); }
@@ -166,7 +169,11 @@ class FakeNode {
     this.listeners[type]?.({ target: { value } });
   }
   focus() { this.ownerDocument.activeElement = this; }
-  setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
+  setSelectionRange(start, end) {
+    this.selectionRangeCalls += 1;
+    this.selectionStart = start;
+    this.selectionEnd = end;
+  }
 }
 
 const fakeDocument = {
@@ -288,6 +295,88 @@ test('source search keeps focus and caret while successive characters trigger re
   assert.equal(input.selectionStart, 2);
   assert.equal(input.selectionEnd, 2);
   assert.equal(filters.query, 'de');
+});
+
+test('uses a dedicated status region instead of announcing the full app on redraw', () => {
+  const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  assert.match(html, /<div id="app">/);
+  assert.doesNotMatch(html, /<div id="app"[^>]*aria-live=/);
+  assert.match(html, /id="app-status"[^>]*role="status"[^>]*aria-live="polite"/);
+
+  const status = new FakeNode('p');
+  const document = { querySelector: (selector) => selector === '#app-status' ? status : null };
+  updateLiveStatus(document, '3 sources match.');
+  assert.equal(status.textContent, '3 sources match.');
+  updateLiveStatus(document, 'Start here view selected.');
+  assert.equal(status.textContent, 'Start here view selected.');
+  updateLiveStatus({ querySelector: () => null }, 'ignored');
+  assert.equal(status.textContent, 'Start here view selected.');
+});
+
+test('bounds form controls and flexible navigation at narrow viewport widths', () => {
+  const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  assert.match(css, /button, select, input\s*\{[^}]*max-width:\s*100%/s);
+  assert.match(css, /label\s*\{[^}]*max-width:\s*100%/s);
+  assert.match(css, /@media\s*\(max-width:\s*580px\)[\s\S]*nav\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(css, /nav button\s*\{[^}]*min-width:\s*0/s);
+  assert.match(css, /@media\s*\(max-width:\s*580px\)[\s\S]*label\s*\{[^}]*margin-right:\s*0/s);
+  assert.match(css, /@media\s*\(max-width:\s*580px\)[\s\S]*select,\s*input\s*\{[^}]*width:\s*100%/s);
+});
+
+test('restores focus to stable navigation, filter, and source-selection controls after redraw', () => {
+  const root = new FakeNode();
+  let view = 'start';
+  let filters = {};
+  const draw = () => {
+    const model = renderViewModel(payload, view, filters);
+    model.onNavigate = (next) => { view = next; draw(); };
+    model.onFilter = (next) => { filters = next; draw(); };
+    renderInto(fakeDocument, root, model);
+  };
+  draw();
+
+  let control = findNode(root, (node) => node.tagName === 'button' && node.textContent === 'Experiments × models');
+  control.focus();
+  control.dispatch('click');
+  control = findNode(root, (node) => node.tagName === 'button' && node.textContent === 'Experiments × models');
+  assert.equal(fakeDocument.activeElement, control);
+
+  control = findNode(root, (node) => node.tagName === 'select' && node.attributes['aria-label'] === 'Campaign');
+  control.focus();
+  control.dispatch('change', 'EXP-002 baseline');
+  control = findNode(root, (node) => node.tagName === 'select' && node.attributes['aria-label'] === 'Campaign');
+  assert.equal(fakeDocument.activeElement, control);
+
+  const sourcesNav = findNode(root, (node) => node.tagName === 'button' && node.textContent === 'Explore sources');
+  sourcesNav.focus();
+  sourcesNav.dispatch('click');
+  let chooseSource = findNode(root, (node) => node.attributes['aria-label'] === 'Select source docs/decisions.md');
+  chooseSource.focus();
+  chooseSource.dispatch('click');
+  chooseSource = findNode(root, (node) => node.attributes['aria-label'] === 'Select source docs/decisions.md');
+  assert.equal(fakeDocument.activeElement, chooseSource);
+});
+
+test('focuses the current view heading when a previously focused control disappears', () => {
+  const root = new FakeNode();
+  const staleControl = new FakeNode('button');
+  staleControl.setAttribute('data-focus-key', 'missing-control');
+  staleControl.focus();
+  renderInto(fakeDocument, root, renderViewModel(payload, 'start', {}));
+  const heading = findNode(root, (node) => node.tagName === 'h2' && node.attributes['data-focus-fallback'] === 'view-heading');
+  assert.ok(heading);
+  assert.equal(fakeDocument.activeElement, heading);
+});
+
+test('does not restore search caret onto a fallback heading when search disappears', () => {
+  const root = new FakeNode();
+  const staleSearch = new FakeNode('input');
+  staleSearch.setAttribute('data-focus-key', 'search:sources');
+  staleSearch.focus();
+  renderInto(fakeDocument, root, renderViewModel(payload, 'start', {}));
+  const heading = findNode(root, (node) => node.tagName === 'h2' && node.attributes['data-focus-fallback'] === 'view-heading');
+  assert.equal(fakeDocument.activeElement, heading);
+  assert.equal(heading.selectionRangeCalls, 0);
 });
 
 function findNode(root, predicate) {

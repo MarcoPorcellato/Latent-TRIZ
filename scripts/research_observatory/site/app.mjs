@@ -218,6 +218,19 @@ function appendText(document, parent, tag, value, className = '') {
   return node;
 }
 
+export function updateLiveStatus(document, message) {
+  const status = document.querySelector('#app-status');
+  if (status) status.textContent = String(message || '');
+}
+
+function statusSummary(model) {
+  if (model.view === 'sources') return `${model.sources.length} sources match.`;
+  if (model.view === 'matrix' || model.view === 'results') return `${(model.records || []).length} records shown.`;
+  if (model.view === 'decisions') return `${model.decisions.length} decisions shown.`;
+  if (model.view === 'route') return `${model.selectedStage} stage selected.`;
+  return 'Start here view selected.';
+}
+
 function appendLink(document, parent, link) {
   if (!link) return;
   const anchor = document.createElement('a');
@@ -233,6 +246,7 @@ function appendSelect(document, parent, label, options, selected, onChange) {
   wrapper.textContent = `${label} `;
   const select = document.createElement('select');
   select.setAttribute('aria-label', label);
+  select.setAttribute('data-focus-key', `filter:${label}`);
   for (const option of options) {
     const item = document.createElement('option');
     item.setAttribute('value', option.value);
@@ -265,7 +279,8 @@ function renderRecords(document, root, model) {
 }
 
 export function renderInto(document, root, viewModel) {
-  const focusedSearch = document.activeElement?.getAttribute?.('aria-label') === 'Search sources';
+  const focusKey = document.activeElement?.getAttribute?.('data-focus-key');
+  const focusedSearch = focusKey === 'search:sources';
   const searchSelection = focusedSearch
     ? [document.activeElement.selectionStart ?? 0, document.activeElement.selectionEnd ?? 0]
     : null;
@@ -283,13 +298,16 @@ export function renderInto(document, root, viewModel) {
   for (const view of viewModel.views) {
     const button = document.createElement('button');
     button.setAttribute('type', 'button');
+    button.setAttribute('data-focus-key', `nav:${view.id}`);
     if (viewModel.view === view.id) button.setAttribute('aria-current', 'page');
     button.textContent = view.title;
     if (viewModel.onNavigate) button.addEventListener('click', () => viewModel.onNavigate(view.id));
     nav.appendChild(button);
   }
   main.appendChild(nav);
-  appendText(document, main, 'h2', viewModel.views.find((item) => item.id === viewModel.view)?.title || 'Observatory');
+  const viewHeading = appendText(document, main, 'h2', viewModel.views.find((item) => item.id === viewModel.view)?.title || 'Observatory');
+  viewHeading.setAttribute('tabindex', '-1');
+  viewHeading.setAttribute('data-focus-fallback', 'view-heading');
 
   if (viewModel.view === 'start') {
     appendText(document, main, 'p', 'Two distinct hypotheses share a research program, but need different evidence. The current catalogue establishes neither.');
@@ -363,6 +381,7 @@ export function renderInto(document, root, viewModel) {
     const input = document.createElement('input');
     input.setAttribute('type', 'search');
     input.setAttribute('aria-label', 'Search sources');
+    input.setAttribute('data-focus-key', 'search:sources');
     input.setAttribute('value', viewModel.filters.query || '');
     input.value = viewModel.filters.query || '';
     input.addEventListener('input', (event) => viewModel.onFilter?.({ ...viewModel.filters, query: event.target.value }));
@@ -378,6 +397,7 @@ export function renderInto(document, root, viewModel) {
       const choose = document.createElement('button');
       choose.setAttribute('type', 'button');
       choose.setAttribute('aria-label', `Select source ${item.path}`);
+      choose.setAttribute('data-focus-key', `source:${item.path}`);
       choose.textContent = viewModel.selectedSource?.path === item.path ? 'Selected source' : 'Select source';
       choose.addEventListener('click', () => viewModel.onFilter?.({ ...viewModel.filters, sourcePath: item.path }));
       row.appendChild(choose);
@@ -393,19 +413,29 @@ export function renderInto(document, root, viewModel) {
   }
   for (const warning of viewModel.warnings || []) appendText(document, main, 'p', `Source note: ${warning}`, 'warning');
   root.appendChild(main);
-  if (focusedSearch) {
-    const input = findByAriaLabel(root, 'Search sources');
-    if (input) {
-      input.focus();
-      input.setSelectionRange(...searchSelection);
+  if (focusKey) {
+    const control = findByFocusKey(root, focusKey) || findByFocusFallback(root);
+    control?.focus();
+    if (focusedSearch && control?.getAttribute?.('data-focus-key') === 'search:sources'
+        && typeof control.setSelectionRange === 'function') {
+      control.setSelectionRange(...searchSelection);
     }
   }
 }
 
-function findByAriaLabel(root, label) {
-  if (root.getAttribute?.('aria-label') === label) return root;
+function findByFocusKey(root, key) {
+  if (root.getAttribute?.('data-focus-key') === key) return root;
   for (const child of root.children || []) {
-    const match = findByAriaLabel(child, label);
+    const match = findByFocusKey(child, key);
+    if (match) return match;
+  }
+  return null;
+}
+
+function findByFocusFallback(root) {
+  if (root.getAttribute?.('data-focus-fallback') === 'view-heading') return root;
+  for (const child of root.children || []) {
+    const match = findByFocusFallback(child);
     if (match) return match;
   }
   return null;
@@ -434,15 +464,36 @@ function startBrowser() {
     try {
       const model = renderViewModel(payload, state.view, state.filters);
       model.allowedSources = payload.sources;
-      model.onNavigate = (view) => { state = { ...state, view }; draw(); };
-      model.onFilter = (filters) => { state = { ...state, filters }; draw(); };
+      model.onNavigate = (view) => {
+        state = { ...state, view };
+        const next = draw();
+        if (next) updateLiveStatus(document, `${next.views.find((item) => item.id === view)?.title || 'Observatory'} view selected.`);
+      };
+      model.onFilter = (filters) => {
+        state = { ...state, filters };
+        const next = draw();
+        if (next) updateLiveStatus(document, statusSummary(next));
+      };
       renderInto(document, root, model);
-    } catch (error) { showError(error.message); }
+      return model;
+    } catch (error) {
+      showError(error.message);
+      updateLiveStatus(document, 'Snapshot unavailable.');
+      return null;
+    }
   };
   fetch('./site-data.json', { cache: 'no-cache' })
     .then((response) => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); })
-    .then((value) => { validatePayload(value); payload = value; draw(); })
-    .catch((error) => showError(error.message));
+    .then((value) => {
+      validatePayload(value);
+      payload = value;
+      const model = draw();
+      if (model) updateLiveStatus(document, 'Observatory snapshot loaded. Start here view selected.');
+    })
+    .catch((error) => {
+      showError(error.message);
+      updateLiveStatus(document, 'Snapshot unavailable.');
+    });
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') startBrowser();

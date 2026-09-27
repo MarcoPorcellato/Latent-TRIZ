@@ -20,10 +20,12 @@ from typing import Mapping
 
 try:  # Support both package invocation and the local Observatory script path.
     from . import observatory_data
+    from . import site_synopses
     from .observatory_data import load_observatory, read_allowed_preview
     from .observatory_views import STATUS_LABELS
 except ImportError:  # pragma: no cover - exercised by direct script imports
     import observatory_data
+    import site_synopses
     from observatory_data import load_observatory, read_allowed_preview
     from observatory_views import STATUS_LABELS
 
@@ -40,9 +42,9 @@ _MAX_PAYLOAD_BYTES = 1024 * 1024
 _SITE_ASSETS = ("index.html", "style.css", "app.mjs")
 _MAX_SITE_ASSET_BYTES = 256 * 1024
 _REVIEWED_SITE_ASSET_SHA256 = {
-    "index.html": "4513e970f66406de71566060e84356c502e29cb042a28b17409c406112c1909e",
-    "style.css": "5052e21ab615012eb8a376a8c7a7c71b17b09b637442b986651fe17f213ee37e",
-    "app.mjs": "def23938abc4352a73a98054f7492d62653183f8b7eb6be6ee0ef2dca9e1995e",
+    "index.html": "73e9cf6861a1207f54519d49e27bfe2c29873d147bc139e158dcf68f94887bb8",
+    "style.css": "918c21bb2116644c68d73bf43f23c7285ad0bc419f0f7c0005239cd51d4465a8",
+    "app.mjs": "9be7ed9f65ba1c478a3896c9f5d04d7c897b9bfacb603958c5a0096aa7347eb0",
 }
 _CLAIM_FIELDS = {
     "claim_id", "statement", "status", "evidence_level", "last_verified", "source",
@@ -66,20 +68,6 @@ _ABSOLUTE_PATH = re.compile(
 _UTC_RFC3339 = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z\Z"
 )
-_FAMILY_SUMMARIES = {
-    "selected_docs": "Reviewed project document. Open source path for authoritative text.",
-    "navigation_snapshot": "Project navigation or status snapshot. Verify referenced canonical records.",
-    "formal_claims": "Formal claim registry or schema. Claim status and evidence stay source-bound.",
-    "triz_reference": "Citation metadata only. Third-party source text is not redistributed.",
-    "study_protocol": "Study protocol defining scope and evidence boundaries.",
-    "a0": "Published A0 manifest or report. Outcome applies only to its bound package.",
-    "a0_r1": "Published A0-R1 manifest or report. Outcome applies only to its bound package.",
-    "a0_r2_c3": "Published A0-R2-C3 manifest or report. Recovery is not claim promotion.",
-    "exp001_comparative": "Published EXP-001 manifest or report. Outcomes remain package-specific.",
-    "exp002_baseline": "Published EXP-002A manifest or report. Outcomes are not pooled.",
-}
-
-
 def _git(root: Path, *args: str) -> str:
     try:
         result = subprocess.run(
@@ -154,6 +142,7 @@ def _project_records(
         observatory_data.validate_source_inventory(sources, inventory)
     except (PermissionError, TypeError, KeyError) as exc:
         raise PermissionError("Public source inventory differs from catalogue") from exc
+    site_synopses.validate_synopsis_catalogue(observatory_data.SOURCE_FAMILIES)
 
     exported_sources: list[dict[str, object]] = []
     for source in sources:
@@ -177,7 +166,7 @@ def _project_records(
             "path": _validate_text(path, "source path"),
             "sha256": digest,
             "family": family,
-            "summary": _FAMILY_SUMMARIES[family],
+            "summary": site_synopses.source_synopsis(path, observatory_data.SOURCE_FAMILIES),
             "declared_date": _validate_text(source["declared_date"], "source date", allow_none=True),
             "freshness": _validate_text(source["freshness"], "source freshness"),
             "stale_markers": source["stale_markers"],
@@ -396,6 +385,8 @@ def _validate_writer_payload(payload: Mapping[str, object]) -> None:
             raise PermissionError("Public export source fields or path are invalid")
         if item["family"] != observatory_data.SOURCE_FAMILIES[item["path"]] or not _is_hex(item["sha256"], 64):
             raise PermissionError("Public export source identity is invalid")
+        if item["summary"] != site_synopses.source_synopsis(item["path"], observatory_data.SOURCE_FAMILIES):
+            raise PermissionError("Public export source synopsis differs from its reviewed editorial entry")
         for key in ("stale_markers", "conflict_markers"):
             if not isinstance(item[key], list) or any(not isinstance(marker, str) for marker in item[key]):
                 raise PermissionError("Public export source markers are malformed")

@@ -15,7 +15,7 @@
 - Work in a clean isolated clone; preserve the dirty primary checkout and historical research artifacts.
 - No models, tokenizers, sealed targets, private mappings, scoring, CCP, Docker, external browser scripts, analytics, or GitHub API polling.
 - Keep the local Marimo app optional and unchanged. The website is a derived snapshot, not evidence or a live monitor; issue #119 tracks self-updating behavior.
-- Export only reviewed public fields and bounded previews from `source-inventory.json`; no third-party PDFs or provider text. Preserve all 11 statuses in `observatory_views.STATUS_LABELS`, distinct campaigns, E0-only claim interpretation, and null/failure/missing boundaries.
+- Export only reviewed public fields from `source-inventory.json`; v1 exports **zero raw source excerpts or previews**. Every admitted source path must have an exact-path-bound, reviewed, authored two-sentence editorial synopsis; no generic fallback. The TRIZ corpus is citation-only. No third-party PDFs or provider text. Preserve all 11 statuses in `observatory_views.STATUS_LABELS`, distinct campaigns, E0-only claim interpretation, and null/failure/missing boundaries.
 - Bind the export to a clean, complete Git HEAD/tree, inventory-file SHA-256, and separate path/hash catalogue digest. Unknown inputs fail closed.
 - Generate the disposable site directory outside the Git checkout so the build itself cannot make source provenance dirty.
 - Pull-request jobs have `contents: read` only and no secrets or deploy token. `main` deployment is a dependent job with `pages: write`, `id-token: write`, and `github-pages` environment. Pin every action to a reviewed full commit.
@@ -25,13 +25,14 @@
 
 1. Historical inventory base differs from build HEAD: display both accurately, reject missing Git identity, never label inventory base as current `main` (Task 1 tests).
 2. A newly introduced status or claim level: reject unknown status and render future claim content as unverified, never silently classify it as positive (Tasks 1–2 tests).
-3. Source synopsis containing markup, control characters, or a malicious URL: render text only and construct GitHub links from admitted paths plus exact commit (Task 2 tests).
+3. Catalogue path lacks a reviewed synopsis, or a source record contains a hostile description, markup, control characters, or malicious URL: reject missing/extra/duplicate synopsis coverage, ignore source-derived descriptions, render authored synopsis text only, and construct GitHub links from admitted paths plus exact commit (Tasks 1–2 tests).
 4. Missing data file, failed build, or stale browser cache: show a visible error/staleness state; do not show an empty success dashboard or deploy failed output (Tasks 2–3 tests).
 5. Fork pull request changing build code: run without secrets/deploy permission, and never execute a privileged `pull_request_target` build (Task 3 workflow test).
 
 ## File structure
 
-- `scripts/research_observatory/site_export.py`: strict source identity, public-field admission, canonical JSON, bounded previews, output-directory writing.
+- `scripts/research_observatory/site_export.py`: strict source identity, public-field admission, canonical JSON, source-integrity checks without excerpt export, output-directory writing.
+- `scripts/research_observatory/site_synopses.py`: complete path-bound authored synopsis catalogue; fail closed on missing, extra, duplicate, or empty entries.
 - `scripts/research_observatory/test_site_export.py`: export contract and refusal tests using disposable synthetic Git repositories.
 - `scripts/research_observatory/site/index.html`, `site/style.css`, `site/app.mjs`: dependency-free six-view browser UI; `site/app.mjs` exports pure selectors/render-model helpers for Node tests.
 - `scripts/research_observatory/site/test_app.mjs`: Node built-in tests for status/filter/navigation/escaping/link semantics.
@@ -41,13 +42,13 @@
 
 ### Task 1: Strict public data export
 
-**Files:** Create `scripts/research_observatory/site_export.py` and `scripts/research_observatory/test_site_export.py`.
+**Files:** Create `scripts/research_observatory/site_export.py`, `scripts/research_observatory/site_synopses.py`, and `scripts/research_observatory/test_site_export.py`.
 
-**Interfaces:** Consume `observatory_data.load_observatory(repo_root, strict_public=True)`, `observatory_data.read_allowed_preview`, `observatory_views.STATUS_LABELS`, and `source-inventory.json`. Produce `build_public_payload(repo_root: Path, *, expected_head: str, generated_at: str) -> dict[str, object]` and `write_public_payload(payload: Mapping[str, object], destination: Path) -> Path`.
+**Interfaces:** Consume `observatory_data.load_observatory(repo_root, strict_public=True)`, source-integrity verification, `site_synopses.SOURCE_SYNOPSES`, `observatory_views.STATUS_LABELS`, and `source-inventory.json`. Produce `build_public_payload(repo_root: Path, *, expected_head: str, generated_at: str) -> dict[str, object]` and `write_public_payload(payload: Mapping[str, object], destination: Path) -> Path`.
 
-- [ ] Write tests named `test_rejects_missing_or_mismatched_git_identity`, `test_rejects_dirty_or_mutated_inventory`, `test_rejects_unknown_status_and_future_claim_promotion`, `test_exports_only_reviewed_fields_and_bounded_previews`, and `test_records_distinct_inventory_and_catalogue_digests`. Use synthetic repositories and assert exact accepted keys, all 11 status values, max preview length of 1,200 characters for first-party sources, no preview for `triz_reference` family, no raw provider text, and no absolute local paths.
+- [ ] Write tests named `test_rejects_missing_or_mismatched_git_identity`, `test_rejects_dirty_or_mutated_inventory`, `test_rejects_unknown_status_and_future_claim_promotion`, `test_exports_only_reviewed_fields_and_source_specific_synopses`, and `test_records_distinct_inventory_and_catalogue_digests`. Use synthetic repositories and assert exact accepted keys, all 11 status values, zero `preview`/excerpt fields, exact two-sentence synopsis coverage for every catalogue path, no raw source/provider text, and no absolute local paths. Also prove stale `summary`/`description` fields from source metadata cannot override the authored catalogue.
 - [ ] Run `rtk python3 -m unittest scripts.research_observatory.test_site_export -v`; confirm the new tests fail for missing implementation, not bad fixtures.
-- [ ] Implement the two interfaces. Require full 40-hex `expected_head`, exact `HEAD`, valid 40-hex tree, clean checkout, regular single-link inventory and sources, exact inventory entry hashes, and explicit record-field allowlists. Build-source identity and historical inventory base are separate fields. Reject an unknown schema/status; never convert it to a positive label. Write canonical UTF-8 JSON to a new regular file without overwrite.
+- [ ] Implement the two interfaces. Require full 40-hex `expected_head`, exact `HEAD`, valid 40-hex tree, clean checkout, regular single-link inventory and sources, exact inventory entry hashes, explicit record-field allowlists, and complete exact-path synopsis catalogue validation. Verify source bytes/hashes without exporting excerpts. Build-source identity and historical inventory base are separate fields. Reject an unknown schema/status; never convert it to a positive label. Write canonical UTF-8 JSON to a new regular file without overwrite.
 - [ ] Re-run the targeted tests and existing `rtk python3 -m unittest scripts.research_observatory.test_observatory_data -v`; expect PASS.
 - [ ] Commit only this task's exporter and tests.
 
@@ -57,9 +58,9 @@
 
 **Interfaces:** Consume `research-observatory-site-v1` from Task 1. Export pure `selectMatrix(records, filters)`, `selectSources(sources, query)`, `sourceUrl(head, path)`, and `renderViewModel(payload, view, filters)` from `app.mjs`; browser startup fetches only same-origin `site-data.json`.
 
-- [ ] Write Node tests for all six view models, every current status, campaign/model/status filters, result-to-source links, route stages, decision categories, source search/selection, unknown-status refusal, and malicious synopsis/path input. Use a tiny injected fake DOM to assert source-derived content enters through `textContent`/`createTextNode`, not `innerHTML`; URLs contain only admitted paths and the exact HEAD.
+- [ ] Write Node tests for all six view models, every current status, campaign/model/status filters, result-to-source links, route stages, decision categories, source synopsis search/selection, unknown-status refusal, and malicious synopsis/path input. Use a tiny injected fake DOM to assert synopsis content enters through `textContent`/`createTextNode`, not `innerHTML`; URLs contain only admitted paths and the exact HEAD.
 - [ ] Run `rtk node --test scripts/research_observatory/site/test_app.mjs`; confirm expected missing-implementation failure.
-- [ ] Implement accessible navigation, explicit weak/strong hypothesis panels, E0–E6 legend, matrix/result/route/decision/source views, a visible snapshot timestamp and not-live notice, and visible data-load failure. Use relative site assets so `/Latent-TRIZ/` and local preview both work. No external fonts, scripts, analytics, tokens, or automatic GitHub API requests.
+- [ ] Implement accessible navigation, explicit weak/strong hypothesis panels, E0–E6 legend, matrix/result/route/decision/source views, two-line authored per-source synopses, a visible snapshot timestamp and not-live notice, and visible data-load failure. Use relative site assets so `/Latent-TRIZ/` and local preview both work. No external fonts, scripts, analytics, tokens, or automatic GitHub API requests.
 - [ ] Run targeted Node tests and `rtk node --check scripts/research_observatory/site/app.mjs`; expect PASS. Commit browser files only.
 
 ### Task 3: Hermetic build and parity audit
@@ -91,9 +92,9 @@
 **Interfaces:** Consume verified Task 1–4 output and hosted checks. Do not change canonical results, claims, model artifacts, or evidence gates.
 
 - [ ] Run full deterministic Python/Node checks and `rtk git diff --check` from the exact candidate; inspect the four-member site directory and compare with the local Observatory oracle. Request independent Sol code and security reviews before publication; repair any blocking finding.
-- [ ] In a real browser, visit all six views and exercise every interaction named in the spec, mobile width, keyboard navigation, and visible load failure. Record observations; do not infer usability from build success.
+- [ ] In a real browser, visit all six views and exercise every interaction named in the spec. Record desktop and representative mobile viewport results, full keyboard-only operation/focus visibility, and inspect the browser accessibility tree for exposed names, roles, and states. This does not require or claim a full screen-reader/assistive-technology or usability validation. A blocked or unavailable mobile/keyboard/browser accessibility-tree check is `INCONCLUSIVE`, not PASS; leave the relevant release gate open and do not claim full accessibility.
 - [ ] Push a single reviewed branch, open a PR, and observe existing required checks plus the new site build. Do not merge while any gate is pending or failing.
-- [ ] After PR gates pass, configure Pages source as GitHub Actions before merging, if not already configured. Recheck exact head/base and required gates, merge, then verify the merge-triggered HTTPS deployment, source commit, and site-data hash. Only then add the live link to README and Observatory docs in a follow-up reviewed PR. If Pages configuration or deployment fails, keep documents honest and report the precise external gate.
+- [ ] After PR gates pass, configure Pages source as GitHub Actions before merging, if not already configured. This is an external repository setting and must be observed/verified, not assumed from workflow code. Recheck exact head/base and required gates, merge, then verify the merge-triggered HTTPS deployment, source commit, and `site-data.json` hash. Only then add the live link to README and Observatory docs in a follow-up reviewed PR. If Pages configuration or deployment fails, keep documents honest and report the precise external gate.
 
 ## Handoff
 
