@@ -1,0 +1,86 @@
+name: Research Observatory Pages
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the triggering commit without saved credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Install hash-locked schema and workflow-test dependencies
+        run: python -m pip install --require-hashes -r requirements-schema.lock
+
+      - name: Run Python Observatory and Pages policy tests
+        run: >-
+          PYTHONPATH=scripts/research_observatory
+          python -m unittest
+          tests.test_research_observatory_pages_workflow
+          scripts.research_observatory.test_site_export
+          scripts.research_observatory.test_site_build
+          scripts.research_observatory.test_observatory_data
+          -v
+
+      - name: Run JavaScript tests and syntax check
+        run: |
+          node --test scripts/research_observatory/site/test_app.mjs
+          node --check scripts/research_observatory/site/app.mjs
+
+      - name: Configure GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+
+      - name: Build verified snapshot outside the checkout
+        env:
+          SOURCE_HEAD: ${{ github.sha }}
+          SITE_DIRECTORY: ${{ runner.temp }}/research-observatory-site
+        run: |
+          python -m scripts.research_observatory.site_export \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --destination "$SITE_DIRECTORY" \
+            --expected-head "$SOURCE_HEAD" \
+            --generated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python -c 'import os, pathlib, stat, sys; root=pathlib.Path(sys.argv[1]); expected={"index.html", "style.css", "app.mjs", "site-data.json"}; entries=list(root.iterdir()); assert {p.name for p in entries} == expected; assert all(stat.S_ISREG(p.lstat().st_mode) and p.lstat().st_nlink == 1 for p in entries)' "$SITE_DIRECTORY"
+
+      - name: Upload the verified site artifact from main only
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: ${{ runner.temp }}/research-observatory-site
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy the verified Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
