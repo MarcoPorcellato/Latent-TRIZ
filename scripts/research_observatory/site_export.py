@@ -35,6 +35,7 @@ _MAX_PAYLOAD_BYTES = 1024 * 1024
 _CLAIM_FIELDS = {
     "claim_id", "statement", "status", "evidence_level", "last_verified", "source",
 }
+_ALLOWED_CLAIM_PAIRS = {("untested", "E0"), ("not_interpretable", None)}
 _OBSERVATION_FIELDS = {
     "model", "campaign", "status", "source", "source_paths", "scope", "notes", "metric",
 }
@@ -184,10 +185,8 @@ def _project_records(
             raise PermissionError("Unknown public claim status")
         if claim["evidence_level"] is not None and not isinstance(claim["evidence_level"], str):
             raise PermissionError("Malformed public claim evidence level")
-        if claim["evidence_level"] not in {"E0", None}:
-            raise PermissionError("Future claim evidence promotion is not admitted")
-        if claim["evidence_level"] == "E0" and claim["status"] != "untested":
-            raise PermissionError("E0 claim must remain untested")
+        if (claim["status"], claim["evidence_level"]) not in _ALLOWED_CLAIM_PAIRS:
+            raise PermissionError("Public claim status/evidence pair is not admitted")
         for key in _CLAIM_FIELDS - {"evidence_level"}:
             _validate_text(claim[key], f"claim {key}", allow_none=key == "source")
         if claim["source"] not in observatory_data.SOURCE_FAMILIES:
@@ -332,10 +331,10 @@ def _validate_writer_payload(payload: Mapping[str, object]) -> None:
                 or not isinstance(item["last_verified"], str)
                 or not isinstance(item["source"], str)):
             raise PermissionError("Public export claim is not admitted")
-        if item["evidence_level"] is not None and item["evidence_level"] != "E0":
-            raise PermissionError("Public export claim is not admitted")
-        if item["evidence_level"] == "E0" and item["status"] != "untested":
-            raise PermissionError("E0 claim must remain untested")
+        if item["evidence_level"] is not None and not isinstance(item["evidence_level"], str):
+            raise PermissionError("Public export claim evidence level is malformed")
+        if (item["status"], item["evidence_level"]) not in _ALLOWED_CLAIM_PAIRS:
+            raise PermissionError("Public export claim status/evidence pair is not admitted")
         if not isinstance(item["source"], str) or item["source"] not in observatory_data.SOURCE_FAMILIES:
             raise PermissionError("Public export claim source is not allowlisted")
 

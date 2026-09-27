@@ -127,6 +127,9 @@ class SiteExportTests(unittest.TestCase):
         self.catalogue["claims"][0]["status"] = "supported"
         with self.assertRaises(PermissionError):
             site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
+        self.catalogue["claims"][0]["evidence_level"] = None
+        with self.assertRaises(PermissionError):
+            site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
         self.catalogue["claims"][0]["evidence_level"] = "E1"
         with self.assertRaises(PermissionError):
             site_export.build_public_payload(self.root, expected_head=self.head, generated_at="2026-09-27T00:00:00Z")
@@ -231,13 +234,16 @@ class SiteExportTests(unittest.TestCase):
         )
         private = json.loads(json.dumps(valid))
         private["claims"][0]["statement"] = "private `/Users/private/key`"
+        unsupported_claim_pair = json.loads(json.dumps(valid))
+        unsupported_claim_pair["claims"][0]["status"] = "supported"
+        unsupported_claim_pair["claims"][0]["evidence_level"] = None
         unknown = json.loads(json.dumps(valid))
         unknown["unreviewed"] = "not allowed"
         bad_schema = json.loads(json.dumps(valid))
         bad_schema["schema"] = "research-observatory-site-v2"
         for index, payload in enumerate((
             {"z": "café"},
-            unknown, bad_schema, private,
+            unknown, bad_schema, private, unsupported_claim_pair,
         )):
             destination = self.root / f"invalid-{index}"
             destination.mkdir()
