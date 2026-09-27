@@ -29,7 +29,7 @@ If a source is missing, its synopsis does not infer an outcome.
 
 ## Run locally
 
-From `tools/research_observatory` in a fresh clone:
+From `scripts/research_observatory` in a fresh clone:
 
 ```bash
 uv run --locked marimo check --strict app.py

@@ -94,8 +94,8 @@ class ObservatoryDataTests(unittest.TestCase):
     def test_repository_root_is_validated_from_packaged_app_location(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
-            app_file = root / "tools/research_observatory/app.py"
-            self._write(root, "tools/research_observatory/app.py", "# app\n")
+            app_file = root / "scripts/research_observatory/app.py"
+            self._write(root, "scripts/research_observatory/app.py", "# app\n")
             self._write(root, "pyproject.toml", "[project]\nname = 'latent-triz'\n")
             self._write(root, "docs/ARTICLE.md", "Public article\n")
             resolver = getattr(observatory_data, "resolve_repository_root", None)

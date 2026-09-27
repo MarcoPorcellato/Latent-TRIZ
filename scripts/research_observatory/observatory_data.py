@@ -145,7 +145,7 @@ _CAMPAIGN_SOURCE_PATHS: dict[str, tuple[str, ...]] = {
 def resolve_repository_root(app_file: Path) -> Path:
     """Resolve the documented optional-tool layout, refusing an invalid checkout."""
     app_path = Path(os.path.abspath(app_file))
-    if app_path.name != "app.py" or app_path.parent.name != "research_observatory" or app_path.parent.parent.name != "tools":
+    if app_path.name != "app.py" or app_path.parent.name != "research_observatory" or app_path.parent.parent.name != "scripts":
         raise ValueError("Observatory app is outside its documented repository layout")
     root = app_path.parents[2]
     for marker in (app_path, root / "pyproject.toml", root / "docs/ARTICLE.md"):

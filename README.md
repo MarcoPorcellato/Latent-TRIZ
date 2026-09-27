@@ -68,7 +68,7 @@ PYTHONPATH=src python3 -m latent_triz.cli lab-suite --root . --output artifacts/
 Use `make lab00` for the standalone synthetic Stage 1 smoke view. See the [Lab Suite runbook](docs/LAB_SUITE.md) for the aggregation and no-claim contract.
 
 For a guided, interactive orientation across selected public studies, models,
-decisions, and source documents, see the optional [Research Observatory](tools/research_observatory/README.md).
+decisions, and source documents, see the optional [Research Observatory](scripts/research_observatory/README.md).
 It is a read-only navigation aid; the Lab Suite, source records, and verifiers
 remain authoritative. It excludes unpublished local recovery material.
 
