@@ -11,6 +11,10 @@ const STATUS_LABELS = Object.freeze({
   not_inspected: 'Not inspected',
   not_interpretable: 'Not interpretable',
 });
+const CLAIM_STATUSES = new Set([
+  'untested', 'in-progress', 'preliminary', 'supported', 'weakened',
+  'falsified', 'retracted', 'not_interpretable',
+]);
 
 const VIEWS = Object.freeze([
   { id: 'start', title: 'Start here' },
@@ -65,6 +69,14 @@ function validatePayload(payload) {
       throw new TypeError(`Unknown status in observatory snapshot: ${String(item?.status)}`);
     }
   }
+  for (const claim of payload.claims) {
+    if (!isObject(claim) || !CLAIM_STATUSES.has(claim.status)) {
+      throw new TypeError(`Unknown claim status in observatory snapshot: ${String(claim?.status)}`);
+    }
+    if (claim.evidence_level !== 'E0' && claim.evidence_level !== null) {
+      throw new TypeError(`Unverified claim evidence level in observatory snapshot: ${String(claim.evidence_level)}`);
+    }
+  }
 }
 
 function validateSourcePath(path) {
@@ -114,13 +126,18 @@ function sourceLink(payload, path) {
   return item ? { path: item.path, title: sourceTitle(item.path), url: sourceUrl(payload.build_source.head, item.path) } : null;
 }
 
-function resultRecords(payload, filters) {
-  return selectMatrix(payload.observations, filters).map((item) => ({
+function resultRecords(payload, campaign) {
+  return selectMatrix(payload.observations, { campaign }).map((item) => ({
     ...item,
     statusLabel: STATUS_LABELS[item.status],
+    sourceScope: item.scope,
     sources: [...new Set([...(Array.isArray(item.source_paths) ? item.source_paths : []), item.source])]
       .filter((path) => typeof path === 'string')
-      .map((path) => sourceLink(payload, path))
+      .map((path) => {
+        const link = sourceLink(payload, path);
+        const admitted = admittedSource(payload, path);
+        return link ? { ...link, summary: admitted.summary } : null;
+      })
       .filter(Boolean),
   }));
 }
@@ -130,6 +147,16 @@ export function renderViewModel(payload, view, filters = {}) {
   if (!VIEWS.some((item) => item.id === view)) throw new TypeError(`Unknown observatory view: ${view}`);
   const sources = payload.sources;
   const selectedSources = selectSources(sources, filters.query || '');
+  const selectedCampaign = payload.campaign_names?.includes(filters.campaign)
+    ? filters.campaign
+    : payload.campaign_names?.[0] || [...new Set(payload.observations.map((item) => item.campaign))][0] || '';
+  const selectedResults = view === 'results' ? resultRecords(payload, selectedCampaign) : undefined;
+  const resultModelCount = payload.model_names?.length || new Set(payload.observations.map((item) => item.model)).size;
+  const resultRecordedModels = new Set((selectedResults || []).map((item) => item.model));
+  const resultInspectedModels = new Set((selectedResults || [])
+    .filter((item) => !['not_inspected', 'not_run'].includes(item.status)).map((item) => item.model));
+  const resultUninspectedModels = new Set((selectedResults || [])
+    .filter((item) => ['not_inspected', 'not_run'].includes(item.status)).map((item) => item.model));
   const requestedPath = filters.sourcePath;
   const selectedSource = (requestedPath && selectedSources.find((item) => item.path === requestedPath)) || selectedSources[0] || null;
   const safeSelectedSource = selectedSource ? {
@@ -143,6 +170,8 @@ export function renderViewModel(payload, view, filters = {}) {
     generatedAt: payload.generated_at,
     head: payload.build_source.head,
     tree: payload.build_source.tree,
+    sourceInventorySha256: payload.source_inventory.sha256,
+    catalogueSha256: payload.catalogue_sha256,
     snapshotNotice: 'Curated snapshot — not live GitHub. Repository documents and evidence remain authoritative.',
     warnings: payload.warnings,
     allowedSources: payload.sources,
@@ -151,8 +180,22 @@ export function renderViewModel(payload, view, filters = {}) {
     modelNames: payload.model_names || [...new Set(payload.observations.map((item) => item.model))],
     campaignNames: payload.campaign_names || [...new Set(payload.observations.map((item) => item.campaign))],
     hypotheses: view === 'start' ? HYPOTHESES : undefined,
-    claims: view === 'start' ? payload.claims : undefined,
-    records: view === 'matrix' || view === 'results' ? resultRecords(payload, filters) : undefined,
+    claims: view === 'start' ? payload.claims.map((claim) => ({
+      ...claim,
+      registryStatus: claim.status,
+      evidenceLabel: claim.evidence_level === 'E0' ? 'E0 — hypothesis, untested' : 'No evidence level asserted',
+    })) : undefined,
+    records: view === 'matrix' ? resultRecords(payload, filters.campaign || 'All').filter((item) =>
+      (!filters.model || filters.model === 'All' || item.model === filters.model)
+      && (!filters.status || filters.status === 'All' || item.status === filters.status)) : selectedResults,
+    selectedCampaign: view === 'results' ? selectedCampaign : undefined,
+    coverage: view === 'results' ? {
+      totalModels: resultModelCount,
+      recorded: resultRecordedModels.size,
+      inspected: resultInspectedModels.size,
+      notInspected: resultUninspectedModels.size,
+      missing: Math.max(0, resultModelCount - resultRecordedModels.size),
+    } : undefined,
     categories: view === 'decisions' ? ['All', ...new Set(payload.decisions.map((item) => item.category))] : undefined,
     decisions: view === 'decisions'
       ? payload.decisions.filter((item) => !filters.category || filters.category === 'All' || item.category === filters.category)
@@ -222,6 +265,10 @@ function renderRecords(document, root, model) {
 }
 
 export function renderInto(document, root, viewModel) {
+  const focusedSearch = document.activeElement?.getAttribute?.('aria-label') === 'Search sources';
+  const searchSelection = focusedSearch
+    ? [document.activeElement.selectionStart ?? 0, document.activeElement.selectionEnd ?? 0]
+    : null;
   root.replaceChildren();
   const main = document.createElement('main');
   main.setAttribute('class', 'shell');
@@ -229,6 +276,8 @@ export function renderInto(document, root, viewModel) {
   appendText(document, main, 'h1', 'See the whole investigation');
   appendText(document, main, 'p', viewModel.snapshotNotice, 'notice');
   appendText(document, main, 'p', `Snapshot generated ${viewModel.generatedAt} · commit ${viewModel.head} · tree ${viewModel.tree}`, 'snapshot');
+  appendText(document, main, 'p', `Source inventory SHA-256: ${viewModel.sourceInventorySha256}`, 'snapshot');
+  appendText(document, main, 'p', `Catalogue SHA-256: ${viewModel.catalogueSha256}`, 'snapshot');
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Observatory views');
   for (const view of viewModel.views) {
@@ -258,9 +307,33 @@ export function renderInto(document, root, viewModel) {
     main.appendChild(hypotheses);
     appendText(document, main, 'h3', 'Evidence levels E0–E6');
     for (const item of EVIDENCE_LEVELS) appendText(document, main, 'p', `${item.code} · ${item.name}: ${item.requirement}`);
-    for (const claim of viewModel.claims) appendText(document, main, 'p', `${claim.claim_id}: ${claim.statement} · ${claim.status} · ${claim.evidence_level}`);
-  } else if (viewModel.view === 'matrix' || viewModel.view === 'results') {
+    for (const claim of viewModel.claims) {
+      const card = document.createElement('article');
+      card.setAttribute('class', 'card');
+      appendText(document, card, 'h3', `${claim.claim_id}: ${claim.statement}`);
+      appendText(document, card, 'p', `Registry status (source label only): ${claim.registryStatus}`);
+      appendText(document, card, 'p', `Evidence: ${claim.evidenceLabel}. The browser does not verify or promote claims.`);
+      main.appendChild(card);
+    }
+  } else if (viewModel.view === 'matrix') {
     renderRecords(document, main, viewModel);
+  } else if (viewModel.view === 'results') {
+    appendSelect(document, main, 'Study campaign', viewModel.campaignNames.map((value) => ({ value, label: value })), viewModel.selectedCampaign,
+      viewModel.onFilter && ((campaign) => viewModel.onFilter({ ...viewModel.filters, campaign })));
+    appendText(document, main, 'p', `${viewModel.selectedCampaign}: ${viewModel.coverage.inspected} inspected of ${viewModel.coverage.totalModels} model slots; ${viewModel.coverage.notInspected} not run/not inspected; ${viewModel.coverage.missing} absent from this campaign catalogue. No cross-study pooling.`, 'notice');
+    for (const record of viewModel.records || []) {
+      const card = document.createElement('article');
+      card.setAttribute('class', 'card');
+      appendText(document, card, 'h3', record.model);
+      appendText(document, card, 'p', record.statusLabel, `status status-${record.status}`);
+      appendText(document, card, 'p', `Source-scoped record: ${record.sourceScope}`);
+      appendText(document, card, 'p', record.notes);
+      for (const link of record.sources) {
+        appendText(document, card, 'p', `Cited source scope: ${link.summary}`);
+        appendLink(document, card, link);
+      }
+      main.appendChild(card);
+    }
   } else if (viewModel.view === 'route') {
     const stageOptions = viewModel.stages.map((item) => ({ value: item.title, label: item.title }));
     appendSelect(document, main, 'Route stage', stageOptions, viewModel.selectedStage, viewModel.onFilter && ((stage) => viewModel.onFilter({ ...viewModel.filters, stage })));
@@ -291,6 +364,7 @@ export function renderInto(document, root, viewModel) {
     input.setAttribute('type', 'search');
     input.setAttribute('aria-label', 'Search sources');
     input.setAttribute('value', viewModel.filters.query || '');
+    input.value = viewModel.filters.query || '';
     input.addEventListener('input', (event) => viewModel.onFilter?.({ ...viewModel.filters, query: event.target.value }));
     label.appendChild(input);
     main.appendChild(label);
@@ -319,6 +393,22 @@ export function renderInto(document, root, viewModel) {
   }
   for (const warning of viewModel.warnings || []) appendText(document, main, 'p', `Source note: ${warning}`, 'warning');
   root.appendChild(main);
+  if (focusedSearch) {
+    const input = findByAriaLabel(root, 'Search sources');
+    if (input) {
+      input.focus();
+      input.setSelectionRange(...searchSelection);
+    }
+  }
+}
+
+function findByAriaLabel(root, label) {
+  if (root.getAttribute?.('aria-label') === label) return root;
+  for (const child of root.children || []) {
+    const match = findByAriaLabel(child, label);
+    if (match) return match;
+  }
+  return null;
 }
 
 function sourceLinkFromView(viewModel, path) {

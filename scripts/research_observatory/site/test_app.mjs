@@ -68,6 +68,20 @@ test('renders a view model for each of the six observatory views', () => {
   ]);
   assert.deepEqual(renderViewModel(payload, 'route', {}).evidenceLevels.map((item) => item.code), ['E0', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6']);
   assert.deepEqual(renderViewModel(payload, 'decisions', {}).categories, ['All', 'method', 'validation']);
+  assert.equal(renderViewModel(payload, 'start', {}).sourceInventorySha256, 'd'.repeat(64));
+  assert.equal(renderViewModel(payload, 'start', {}).catalogueSha256, '1'.repeat(64));
+});
+
+test('results are scoped to one selected campaign and disclose its complete denominator', () => {
+  const model = renderViewModel(payload, 'results', {});
+  assert.equal(model.selectedCampaign, 'EXP-001 comparative');
+  assert.deepEqual(new Set(model.records.map((item) => item.campaign)), new Set(['EXP-001 comparative']));
+  assert.deepEqual(model.coverage, { totalModels: 11, recorded: 6, inspected: 5, notInspected: 1, missing: 5 });
+  assert.equal(model.records[0].sourceScope, 'Frozen study scope');
+  assert.deepEqual(model.records[0].sources.map((item) => item.path), ['results/a0/report.json']);
+  const other = renderViewModel(payload, 'results', { campaign: 'EXP-002 baseline' });
+  assert.equal(other.selectedCampaign, 'EXP-002 baseline');
+  assert.ok(other.records.every((item) => item.campaign === 'EXP-002 baseline'));
 });
 
 test('preserves all admitted outcome states and rejects an unknown status', () => {
@@ -76,6 +90,15 @@ test('preserves all admitted outcome states and rejects an unknown status', () =
   const bad = structuredClone(payload);
   bad.observations[0].status = 'future_positive';
   assert.throws(() => renderViewModel(bad, 'matrix', {}), /unknown status/i);
+});
+
+test('rejects unknown claim status and future evidence level rather than implying verification', () => {
+  const unknownStatus = structuredClone(payload);
+  unknownStatus.claims[0].status = 'confirmed_future';
+  assert.throws(() => renderViewModel(unknownStatus, 'start', {}), /unknown claim status/i);
+  const futureLevel = structuredClone(payload);
+  futureLevel.claims[0].evidence_level = 'E1';
+  assert.throws(() => renderViewModel(futureLevel, 'start', {}), /unverified claim evidence level/i);
 });
 
 test('filters matrix records by campaign, model, and status without pooling campaigns', () => {
@@ -122,6 +145,9 @@ class FakeNode {
     this._textContent = '';
     this.innerHTMLWrites = [];
     this.listeners = {};
+    this.ownerDocument = fakeDocument;
+    this.selectionStart = 0;
+    this.selectionEnd = 0;
   }
   set textContent(value) { this._textContent = String(value); this.children = []; }
   get textContent() { return this._textContent + this.children.map((item) => item.textContent).join(''); }
@@ -129,11 +155,22 @@ class FakeNode {
   appendChild(node) { this.children.push(node); return node; }
   replaceChildren(...nodes) { this.children = nodes; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return this.attributes[name] ?? null; }
   addEventListener(type, callback) { this.listeners[type] = callback; }
-  dispatch(type, value) { this.listeners[type]?.({ target: { value } }); }
+  dispatch(type, value) {
+    if (type === 'input') {
+      this.value = value;
+      this.selectionStart = String(value).length;
+      this.selectionEnd = String(value).length;
+    }
+    this.listeners[type]?.({ target: { value } });
+  }
+  focus() { this.ownerDocument.activeElement = this; }
+  setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
 }
 
 const fakeDocument = {
+  activeElement: null,
   createElement: (tag) => new FakeNode(tag),
   createTextNode: (text) => { const node = new FakeNode('#text'); node.textContent = text; return node; },
 };
@@ -178,6 +215,14 @@ test('fake DOM renders all six views and wires accessible filters and source sel
   campaign.dispatch('change', 'EXP-002 baseline');
   assert.equal(changed.campaign, 'EXP-002 baseline');
 
+  const results = renderViewModel(payload, 'results', {});
+  results.onFilter = (filters) => { changed = filters; };
+  const resultsRoot = new FakeNode();
+  renderInto(fakeDocument, resultsRoot, results);
+  findNode(resultsRoot, (node) => node.attributes['aria-label'] === 'Study campaign')
+    .dispatch('change', 'EXP-002 baseline');
+  assert.equal(changed.campaign, 'EXP-002 baseline');
+
   let selected;
   const sourceView = renderViewModel(payload, 'sources', {});
   sourceView.allowedSources = payload.sources;
@@ -191,6 +236,58 @@ test('fake DOM renders all six views and wires accessible filters and source sel
   selectSource.dispatch('click');
   assert.equal(selected.sourcePath, 'docs/decisions.md');
   assert.equal(roots.length, 6);
+});
+
+test('UI exposes distinct snapshot digests, study coverage, cited scope, and non-validating claim labels', () => {
+  const root = new FakeNode();
+  const start = renderViewModel(payload, 'start', {});
+  renderInto(fakeDocument, root, start);
+  assert.ok(root.textContent.includes(`Source inventory SHA-256: ${'d'.repeat(64)}`));
+  assert.ok(root.textContent.includes(`Catalogue SHA-256: ${'1'.repeat(64)}`));
+  assert.ok(root.textContent.includes('Registry status (source label only): untested'));
+  assert.ok(root.textContent.includes('E0 — hypothesis, untested'));
+  assert.ok(root.textContent.includes('browser does not verify or promote claims'));
+
+  const resultsRoot = new FakeNode();
+  const results = renderViewModel(payload, 'results', {});
+  results.onFilter = () => {};
+  renderInto(fakeDocument, resultsRoot, results);
+  assert.ok(resultsRoot.textContent.includes('5 inspected of 11 model slots'));
+  assert.ok(resultsRoot.textContent.includes('1 not run/not inspected'));
+  assert.ok(resultsRoot.textContent.includes('5 absent from this campaign catalogue'));
+  assert.ok(resultsRoot.textContent.includes('Source-scoped record: Frozen study scope'));
+  assert.ok(resultsRoot.textContent.includes('Cited source scope: Published result manifest.'));
+  const resultHeadings = [];
+  const collectHeadings = (node) => {
+    if (node.tagName === 'h3') resultHeadings.push(node.textContent);
+    node.children.forEach(collectHeadings);
+  };
+  collectHeadings(resultsRoot);
+  assert.equal(resultHeadings.includes('Model 1'), false);
+});
+
+test('source search keeps focus and caret while successive characters trigger redraws', () => {
+  const root = new FakeNode();
+  let filters = {};
+  const draw = () => {
+    const model = renderViewModel(payload, 'sources', filters);
+    model.onFilter = (next) => { filters = next; draw(); };
+    renderInto(fakeDocument, root, model);
+  };
+  draw();
+  let input = findNode(root, (node) => node.attributes['aria-label'] === 'Search sources');
+  input.focus();
+  input.setSelectionRange(0, 0);
+  input.dispatch('input', 'd');
+  input = findNode(root, (node) => node.attributes['aria-label'] === 'Search sources');
+  assert.equal(fakeDocument.activeElement, input);
+  input.setSelectionRange(1, 1);
+  input.dispatch('input', 'de');
+  input = findNode(root, (node) => node.attributes['aria-label'] === 'Search sources');
+  assert.equal(fakeDocument.activeElement, input);
+  assert.equal(input.selectionStart, 2);
+  assert.equal(input.selectionEnd, 2);
+  assert.equal(filters.query, 'de');
 });
 
 function findNode(root, predicate) {
