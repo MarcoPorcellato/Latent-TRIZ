@@ -43,7 +43,7 @@ _SITE_ASSETS = ("index.html", "style.css", "app.mjs")
 _MAX_SITE_ASSET_BYTES = 256 * 1024
 _REVIEWED_SITE_ASSET_SHA256 = {
     "index.html": "73e9cf6861a1207f54519d49e27bfe2c29873d147bc139e158dcf68f94887bb8",
-    "style.css": "918c21bb2116644c68d73bf43f23c7285ad0bc419f0f7c0005239cd51d4465a8",
+    "style.css": "fd3b8442a80d8d91b754fef30d7492e00ca91d6f2a4df94bc41332490ca10cde",
     "app.mjs": "9be7ed9f65ba1c478a3896c9f5d04d7c897b9bfacb603958c5a0096aa7347eb0",
 }
 _CLAIM_FIELDS = {
