@@ -14,6 +14,9 @@ and the event-by-event chronology remains in [`docs/log.md`](./log.md).
 
 ## Public checkpoint
 
+- The public-main SHA below is the last value recorded by this document; it
+  was **not** live-verified during the local A0X target-free tranche dated
+  2026-09-25. Do not treat it as current remote state.
 - **Public main:** `a2d2b5647524b81a746b2d375bf542e7ae190a0a`
 - **Repository:** [MarcoPorcellato/Latent-TRIZ](https://github.com/MarcoPorcellato/Latent-TRIZ)
 - **Scientific posture:** exploratory, reproducible, and claim-free
@@ -25,7 +28,29 @@ and immutable null packages from the reference-integrated and comparative
 studies. None is expert-validated TRIZ evidence, causal evidence, or evidence
 for the Strong Latent TRIZ Hypothesis.
 
-## A0X vertical Gate-Chain Convergence — current local route
+## A0X local target-free engineering update — 2026-09-25
+
+This update describes an unpublished local candidate, not a public-main change
+or scientific result. Exact source is documented in the [canonical A0X
+ledger](./A0X_SIX_MODEL_CAMPAIGN.md) and durable
+[restart checkpoint](./A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md).
+The candidate implements the target-free public-closure contract and
+parent/child/production-verifier bindings. Focused tests passed 186/186; broad
+target-free A0X tests passed 706 with 1 skipped; synthetic contract check and
+diff validation passed. Sol reviews are `PASS_WITH_NOTES`; Astra is
+`GO_WITH_CONDITIONS` for this slice, but `NO-GO` for regeneration/material work
+until behavioral refusal tests are added and separately authorized regeneration
+is completed.
+
+No inventory/freeze/dossier regeneration, hosted qualification, Gate B/C,
+model/tokenizer/target/private-mapping access, network, CCP, Docker, commit,
+push, PR, merge, or public status update occurred. The existing README's
+scientific summary is intentionally unchanged.
+
+## Historical A0X vertical Gate-Chain Convergence snapshot — 2026-09-05
+
+The values and remote-state descriptions in this block are historical. They
+were not revalidated during the 2026-09-25 target-free tranche.
 
 The current target-free A0X route is:
 
@@ -161,19 +186,16 @@ asset or recompute a scientific result.
 
 ## Next evidence gate
 
-### A0X contract-convergence checkpoint (current)
+### Historical A0X contract-convergence checkpoint — 2026-09-05
 
 Current A0X lifecycle and hash authority is the sole ledger in
 [A0X six-model campaign](./A0X_SIX_MODEL_CAMPAIGN.md). Architecture authority
 is [A0X architecture convergence](./A0X_ARCHITECTURE_CONVERGENCE.md). Earlier
 A0X checkpoint blocks below are historical.
 
-The next target-free tranche implements an offline Gate B prerequisite builder
-from synthetic fixtures. It binds a clean exact HEAD, the verified 39-wheel
-Python 3.11 manifest, exact base Python/bootstrap pip identity, a model card,
-and APFS-only snapshot materialization. This code does not itself authorize or
-perform the real environment build. The current state remains
-`sealed_gate_pending` before material Gate B.
+At that historical point, the next tranche was an offline Gate B prerequisite
+builder. It is not the current next action. Current A0X state and the next
+allowed target-free action are recorded above and in the canonical ledger.
 
 ### Historical A0X Hosted Gate A implementation boundary
 

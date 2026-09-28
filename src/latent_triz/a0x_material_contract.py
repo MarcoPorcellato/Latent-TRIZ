@@ -240,6 +240,52 @@ class A0XGuardLaunch:
         }
 
 
+@dataclass(frozen=True)
+class VerticalA0XGuardLaunch(A0XGuardLaunch):
+    """The v2-only Guard binding; it never widens the historical child route."""
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> "VerticalA0XGuardLaunch":
+        expected_keys = {
+            "launch_profile", "ccp", "python", "cwd_kind", "source_head", "child_script",
+            "launch_descriptor", "environment_template", "resource", "timeouts", "argv_template",
+        }
+        if not isinstance(value, Mapping) or set(value) != expected_keys:
+            raise A0XContractError("vertical guard launch fields do not match the frozen profile")
+        if value["launch_profile"] != GUARD_LAUNCH_PROFILE:
+            raise A0XContractError("vertical guard launch profile is unsupported")
+        ccp_role, ccp_sha256 = _runtime_role(value.get("ccp"), "CCP", "ccp")
+        python_role, python_sha256 = _runtime_role(value.get("python"), "Python", "python")
+        if value.get("cwd_kind") != "repository_root":
+            raise A0XContractError("vertical guard launch cwd kind must identify the repository root")
+        source_head = value.get("source_head")
+        _require_revision(source_head, "vertical source head")
+        child = value.get("child_script")
+        if (
+            not isinstance(child, Mapping) or set(child) != {"role", "path", "sha256"}
+            or child.get("role") != "child" or child.get("path") != "scripts/a0x_vertical_material_child.py"
+            or not isinstance(child.get("sha256"), str) or not _SHA256.fullmatch(child["sha256"])
+        ):
+            raise A0XContractError("vertical guard launch child script must be the fixed v2 script")
+        descriptor_path, descriptor_sha256 = _launch_descriptor(value.get("launch_descriptor"))
+        if not descriptor_path.startswith(".a0x-runtime/gate-b/v2/"):
+            raise A0XContractError("vertical guard launch descriptor is outside the v2 runtime inlet")
+        environment = _environment(value.get("environment_template"))
+        resource = _resource(value.get("resource"))
+        timeouts = TimeoutEnvelope.from_mapping(_mapping(value, "timeouts", "vertical guard launch"))
+        argv = _argv_template(value.get("argv_template"))
+        if argv != _build_guard_argv_template(resource=dict(resource), timeouts=timeouts):
+            raise A0XContractError("vertical guard launch argv template does not match the canonical shell-free command")
+        return cls(
+            launch_profile=GUARD_LAUNCH_PROFILE, ccp_role=ccp_role, ccp_sha256=ccp_sha256,
+            python_role=python_role, python_sha256=python_sha256, cwd_kind="repository_root",
+            source_head=source_head, child_script_path="scripts/a0x_vertical_material_child.py",
+            child_script_sha256=child["sha256"], launch_descriptor_path=descriptor_path,
+            launch_descriptor_sha256=descriptor_sha256, environment_template=environment,
+            resource=resource, timeouts=timeouts, argv_template=argv,
+        )
+
+
 def canonical_guard_commitment(value: A0XGuardLaunch | Mapping[str, Any]) -> str:
     """Return the canonical SHA-256 commitment of a complete guard launch."""
     launch = value if isinstance(value, A0XGuardLaunch) else A0XGuardLaunch.from_mapping(value)

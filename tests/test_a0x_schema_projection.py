@@ -70,10 +70,23 @@ class A0XSchemaProjectionTests(unittest.TestCase):
             "schemas/a0x-vertical-gate-b-output-v2.schema.json",
             "schemas/a0x-vertical-package-commitment-v2.schema.json",
             "schemas/a0x-vertical-slice-manifest-v2.schema.json",
+            "schemas/a0x-vertical-child-terminal-v1.schema.json",
+            "schemas/a0x-vertical-external-assets-locator-v1.schema.json",
+            "schemas/a0x-vertical-terminal-manifest-v1.schema.json",
+            "schemas/a0x-vertical-terminal-result-v1.schema.json",
+            "schemas/a0x-vertical-terminal-root-v1.schema.json",
+            "schemas/a0x-vertical-trust-manifest-v1.schema.json",
+            "schemas/a0x-public-authorization-extension-v1.schema.json",
+            "schemas/a0x-public-closure-experimental-v1.schema.json",
+            "schemas/a0x-public-closure-manifest-v1.schema.json",
         }.issubset(schema_paths))
-        self.assertEqual(21, A0X_PAIR_DEFINITION_COUNT)
-        self.assertEqual(21, len(discovered_pair_definitions(ROOT)))
-        self.assertEqual(21, len(registered_pair_definitions(ROOT)))
+        self.assertNotIn(
+            ("schemas/a0x-public-closure-manifest-v1.schema.json", "pair_binding"),
+            discovered_pair_definitions(ROOT),
+        )
+        self.assertEqual(28, A0X_PAIR_DEFINITION_COUNT)
+        self.assertEqual(28, len(discovered_pair_definitions(ROOT)))
+        self.assertEqual(28, len(registered_pair_definitions(ROOT)))
 
     def test_tracked_schemas_equal_compiled_bytes(self) -> None:
         for relative, expected in compile_pair_projections(ROOT).items():
@@ -263,7 +276,7 @@ class A0XSchemaProjectionTests(unittest.TestCase):
     def test_registry_requires_explicit_overlays_and_compiled_refs_are_local(self) -> None:
         registry = json.loads((ROOT / "schemas/a0x-pair-projections.json").read_text(encoding="utf-8"))
         projections = registry["projections"]
-        self.assertEqual(21, len(projections))
+        self.assertEqual(28, len(projections))
         self.assertTrue(all("overlay" in projection for projection in projections))
         self.assertTrue(all(isinstance(projection["overlay"], dict) for projection in projections))
         for relative, payload in compile_pair_projections(ROOT).items():
@@ -280,6 +293,18 @@ class A0XSchemaProjectionTests(unittest.TestCase):
         compiled = compile_pair_projections(ROOT)
         for relative, payload in compiled.items():
             if relative.endswith(".fragment.json"):
+                continue
+            if Path(relative).name in {
+                "a0x-execution-authorization-v4.schema.json",
+                "a0x-vertical-child-terminal-v1.schema.json",
+                "a0x-vertical-external-assets-locator-v1.schema.json",
+                "a0x-vertical-terminal-manifest-v1.schema.json",
+                "a0x-vertical-terminal-result-v1.schema.json",
+                "a0x-vertical-terminal-root-v1.schema.json",
+                "a0x-vertical-trust-manifest-v1.schema.json",
+            }:
+                # These new vertical-only contracts have dedicated, richer
+                # fixtures in the v4 authorization and terminal test suites.
                 continue
             schema = json.loads(payload)
             Draft202012Validator.check_schema(schema)
@@ -307,6 +332,31 @@ class A0XSchemaProjectionTests(unittest.TestCase):
                 self.assertEqual([], list(Draft202012Validator(schema).iter_errors(envelope)), (dossier_path, schema_path))
                 cases += 1
         self.assertEqual(24, cases)
+
+    def test_new_vertical_pair_projections_validate_and_reject_mutations(self) -> None:
+        from latent_triz.validator import validate
+        from tests.a0x_test_support import pair_binding
+
+        names = (
+            "a0x-vertical-external-assets-locator-v1.schema.json",
+            "a0x-vertical-terminal-manifest-v1.schema.json",
+            "a0x-vertical-terminal-result-v1.schema.json",
+            "a0x-vertical-terminal-root-v1.schema.json",
+            "a0x-vertical-trust-manifest-v1.schema.json",
+        )
+        compiled = compile_pair_projections(ROOT)
+        pair = pair_binding()
+        invalid = copy.deepcopy(pair)
+        invalid["output_path"] = "results/a0x/a0/gpt2/"
+        for name in names:
+            with self.subTest(schema=name):
+                document = json.loads(compiled[f"schemas/{name}"])
+                Draft202012Validator.check_schema(document)
+                pair_schema = document["$defs"]["pair_binding"]
+                self.assertEqual([], validate(pair, pair_schema))
+                self.assertEqual([], list(Draft202012Validator(pair_schema).iter_errors(pair)))
+                self.assertTrue(validate(invalid, pair_schema))
+                self.assertTrue(list(Draft202012Validator(pair_schema).iter_errors(invalid)))
 
 
 if __name__ == "__main__":

@@ -125,6 +125,24 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         }
 
     @staticmethod
+    def _synthetic_vertical_terminal(authorization) -> bytes:
+        """Build the only acceptable target-free v1 terminal wire."""
+        terminal = {
+            "artifact_class": "a0x-vertical-material-child-terminal",
+            "terminal_profile": "a0x-vertical-child-terminal-v1",
+            "exit_class": "completed",
+            "qualified_source": authorization["qualified_source"],
+            "pair_binding": authorization["pair_binding"],
+            "authorization_id": authorization["authorization_id"],
+            "attempt_id": authorization["attempt_id"],
+            "qualification_context": authorization["qualification_context"],
+            "reached_frontier": "validated_graph",
+            "scientific_outcome": None,
+            "terminal_package": None,
+        }
+        return json.dumps(terminal, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+
+    @staticmethod
     def _compact_json(value) -> bytes:
         return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -150,12 +168,13 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path = root / vertical_execution_authorization_path(binding)
         path.parent.mkdir(parents=True)
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        self_terminal = self._synthetic_vertical_terminal(authorization)
 
         class Inert:
             calls = 0
             def run(self, *args, **kwargs):
                 self.calls += 1
-                terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+                terminal = self_terminal
                 return ProcessResult(0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0, stdout_prefix=terminal)
 
         inert = Inert()
@@ -182,6 +201,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path = root / vertical_execution_authorization_path(binding)
         path.parent.mkdir(parents=True)
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        self_terminal = self._synthetic_vertical_terminal(authorization)
 
         class CountingSynthetic(_SyntheticExecutableIdentityVerifier):
             def __init__(self):
@@ -193,7 +213,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
 
         class Inert:
             def run(self, *args, **kwargs):
-                terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+                terminal = self_terminal
                 return ProcessResult(0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0, stdout_prefix=terminal)
 
         verifier = CountingSynthetic()
@@ -496,7 +516,16 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path = root / vertical_execution_authorization_path(binding)
         path.parent.mkdir(parents=True)
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-        terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+        terminal = self._synthetic_vertical_terminal(authorization)
+        from latent_triz.a0x_ccp_executor import _parse_vertical_child_terminal
+        self.assertIsNotNone(_parse_vertical_child_terminal(
+            terminal,
+            expected_source=authorization["qualified_source"],
+            expected_pair=authorization["pair_binding"],
+            expected_authorization_id=authorization["authorization_id"],
+            expected_attempt_id=authorization["attempt_id"],
+            expected_qualification_context=authorization["qualification_context"],
+        ))
 
         class TruncatedTerminal:
             def run(self, *args, **kwargs):

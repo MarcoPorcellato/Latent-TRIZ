@@ -1,9 +1,24 @@
-Current A0X lifecycle, hashes, and active boundary: see the sole ledger in
-`docs/A0X_SIX_MODEL_CAMPAIGN.md`. Architecture authority:
-`docs/A0X_ARCHITECTURE_CONVERGENCE.md`. Earlier A0X checkpoint blocks below are
-historical.
+Current A0X lifecycle authority: `docs/A0X_SIX_MODEL_CAMPAIGN.md`.
+Architecture authority: `docs/A0X_ARCHITECTURE_CONVERGENCE.md`.
+Restart record: `docs/A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md`.
 
-Current vertical Gate-Chain Convergence checkpoint (2026-09-05): target-free
+Resume target-free work in the isolated clone identified in the restart
+checkpoint, verifying live exact `HEAD`/tree and dirty diff first. Candidate:
+`4f801f03d85d36c6aabda36ffe7ed33dfe1db05e`,
+tree `d1fcef86cdaa56f1059f5b0b39ba911cd3ac6bda`. Next: add and test
+behavioral parent/child refusal for absent or mutated public-closure evidence
+before runner invocation or child dispatch; obtain review; stop for separate
+authorization before regeneration of inventories, freezes, dossiers, or receipts.
+
+Candidate is local and unpublished. No live public-main/PR/ruleset check,
+material access, model, tokenizer, target, private mapping, network, CCP,
+Docker, commit, push, merge, scoring, or scientific result is authorized by
+this pointer. Hashes prove integrity/consistency, not consent or runtime truth.
+README scientific claims remain unchanged.
+
+--- Historical checkpoint below; retained with original hashes and outcomes ---
+
+Historical vertical Gate-Chain Convergence checkpoint (2026-09-05): target-free
 implementation/inventory anchor `eb33d7ad22a97e15bdea3475d88942231ba094a0`.
 Canonical route: `Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2
 -> verification`. P0 v2 is the only future package route: an ignored, atomic

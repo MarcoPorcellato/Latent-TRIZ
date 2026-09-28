@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-public-authorization-extension-v1.schema.json",
+  "title": "A0X pre-execution public-input binding extension",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "profile", "schema_version", "qualified_source", "pair_binding", "authorization_id", "attempt_id", "p0_package_commitment_sha256", "bindings", "claims"],
+  "properties": {
+    "artifact_class": {"const": "a0x-public-authorization-extension"},
+    "profile": {"const": "a0x-public-authorization-extension-v1"},
+    "schema_version": {"const": 1, "type": "integer"},
+    "qualified_source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["head", "tree", "ref"],
+      "properties": {
+        "head": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "tree": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "ref": {"const": "refs/heads/main"}
+      }
+    },
+    "pair_binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["binding_profile", "leg", "leg_freeze_sha256", "model_key", "model_id", "revision", "run_id", "output_path", "dense_bound"],
+      "properties": {
+        "binding_profile": {"const": "a0x-pair-scope-v2"},
+        "leg": {"enum": ["a0", "r1"]},
+        "leg_freeze_sha256": {"$ref": "#/$defs/sha256"},
+        "model_key": {"enum": ["gpt2", "gpt_neo_125m", "qwen2_5_0_5b", "qwen3_0_6b_base", "smollm2_135m", "smollm2_360m"]},
+        "model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "output_path": {"type": "string", "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "dense_bound": {"type": "object", "additionalProperties": false, "required": ["leg", "cases", "view_site_count", "endpoint_count", "hidden_width", "scalar_bytes", "vector_count", "dense_bytes", "dense_copy_count", "atomic_dense_bytes", "index_copy_count", "index_reservation_bytes", "payload_allowance_bytes", "total_bytes", "cap_bytes"], "properties": {
+          "leg": {"enum": ["a0", "r1"]}, "cases": {"const": 48, "type": "integer"},
+          "view_site_count": {"type": "integer", "minimum": 1}, "endpoint_count": {"type": "integer", "minimum": 1},
+          "hidden_width": {"type": "integer", "minimum": 1}, "scalar_bytes": {"const": 4, "type": "integer"},
+          "vector_count": {"type": "integer", "minimum": 1}, "dense_bytes": {"type": "integer", "minimum": 1},
+          "dense_copy_count": {"const": 2, "type": "integer"}, "atomic_dense_bytes": {"type": "integer", "minimum": 1},
+          "index_copy_count": {"const": 2, "type": "integer"}, "index_reservation_bytes": {"enum": [6291456, 1048576]},
+          "payload_allowance_bytes": {"enum": [2097152, 524288]}, "total_bytes": {"type": "integer", "minimum": 1},
+          "cap_bytes": {"enum": [33554432, 4194304]}
+        }}
+      }
+    },
+    "authorization_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "attempt_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "p0_package_commitment_sha256": {"$ref": "#/$defs/sha256"},
+    "bindings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["public_role_sha256", "private_input_sha256"],
+      "properties": {
+        "public_role_sha256": {"type": "object", "additionalProperties": false, "required": ["p0_commitment", "p0_protocol", "p0_implementation", "p0_freeze", "p0_slice_manifest", "public_dossier", "execution_spec", "gate_a_evidence", "gate_a_attestation_bundle", "gate_a_trusted_root", "gate_a_transport", "gate_b_authorization_projection", "gate_b_readiness_projection"], "properties": {
+          "p0_commitment": {"$ref": "#/$defs/sha256"}, "p0_protocol": {"$ref": "#/$defs/sha256"},
+          "p0_implementation": {"$ref": "#/$defs/sha256"}, "p0_freeze": {"$ref": "#/$defs/sha256"},
+          "p0_slice_manifest": {"$ref": "#/$defs/sha256"}, "public_dossier": {"$ref": "#/$defs/sha256"},
+          "execution_spec": {"$ref": "#/$defs/sha256"}, "gate_a_evidence": {"$ref": "#/$defs/sha256"},
+          "gate_a_attestation_bundle": {"$ref": "#/$defs/sha256"}, "gate_a_trusted_root": {"$ref": "#/$defs/sha256"},
+          "gate_a_transport": {"$ref": "#/$defs/sha256"}, "gate_b_authorization_projection": {"$ref": "#/$defs/sha256"},
+          "gate_b_readiness_projection": {"$ref": "#/$defs/sha256"}
+        }},
+        "private_input_sha256": {"type": "object", "additionalProperties": false, "required": ["p0_dossier_raw", "gate_b_authorization_v4", "gate_b_readiness_v4"], "properties": {
+          "p0_dossier_raw": {"$ref": "#/$defs/sha256"},
+          "gate_b_authorization_v4": {"$ref": "#/$defs/sha256"},
+          "gate_b_readiness_v4": {"$ref": "#/$defs/sha256"}
+        }}
+      }
+    },
+    "claims": {
+      "type": "object", "additionalProperties": false,
+      "required": ["document_bindings_consistent", "derivation_authenticated", "operator_approval_authenticated", "authorization_verified", "publication_eligible"],
+      "properties": {
+        "document_bindings_consistent": {"const": true},
+        "derivation_authenticated": {"const": false},
+        "operator_approval_authenticated": {"const": false},
+        "authorization_verified": {"const": false},
+        "publication_eligible": {"const": false}
+      }
+    }
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+}

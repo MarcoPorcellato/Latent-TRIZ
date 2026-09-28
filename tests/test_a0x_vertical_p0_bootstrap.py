@@ -6,9 +6,11 @@ import hashlib
 import importlib.util
 import json
 import os
+import argparse
 import py_compile
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -20,6 +22,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_RELATIVE = Path("scripts/a0x_vertical_p0_bootstrap.py")
+V2_SCRIPT_RELATIVE = Path("scripts/a0x_vertical_p0_v2.py")
+V2_PREEXEC_RELATIVE = Path("scripts/a0x_vertical_p0_preexec_v2.py")
 REVIEW_RELATIVE = Path(
     "docs/qualification/"
     "a0x-vertical-slice-local-review-77dcae52542d21e9bf16e4f17102abf70e68ffc3.md"
@@ -90,6 +94,18 @@ def _load_bootstrap_module():
     return module
 
 
+def _load_v2_module():
+    spec = importlib.util.spec_from_file_location(
+        "a0x_vertical_p0_v2_under_test", ROOT / V2_SCRIPT_RELATIVE,
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError("v2 operator module cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -128,7 +144,7 @@ def _ledger_paths() -> list[str]:
 
 
 class SyntheticRepository:
-    def __init__(self, parent: Path, *, cleanup_failure: bool = False):
+    def __init__(self, parent: Path, *, cleanup_failure: bool = False, generator_failure: bool = False, reload_failure: bool = False, construction_failure: bool = False, publication_failure: bool = False):
         self.root = parent / "repository"
         self.root.mkdir()
         self.import_marker = parent / "repository-imported"
@@ -140,21 +156,23 @@ class SyntheticRepository:
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(f"fixture-{index:03d}\n".encode("ascii"))
-        self._write_repository_sources(cleanup_failure=cleanup_failure)
+        self._write_repository_sources(cleanup_failure=cleanup_failure, generator_failure=generator_failure, reload_failure=reload_failure, construction_failure=construction_failure, publication_failure=publication_failure)
         package = self.root / "src/latent_triz/__init__.py"
         package.write_text("\"\"\"Synthetic package.\"\"\"\n", encoding="utf-8")
         bootstrap = self.root / SCRIPT_RELATIVE
         bootstrap.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / SCRIPT_RELATIVE, bootstrap)
+        shutil.copyfile(ROOT / V2_SCRIPT_RELATIVE, self.root / V2_SCRIPT_RELATIVE)
+        shutil.copyfile(ROOT / V2_PREEXEC_RELATIVE, self.root / V2_PREEXEC_RELATIVE)
         (self.root / ".gitignore").write_text(
-            "__pycache__/\n*.py[cod]\n", encoding="utf-8",
+            ".a0x-runtime/\n__pycache__/\n*.py[cod]\n", encoding="utf-8",
         )
         self._write_ledger_document(self._current_lines())
         _git(self.root, "init", "-q")
         _git(self.root, "add", ".")
         _git(self.root, "commit", "-q", "-m", "synthetic bootstrap fixture")
 
-    def _write_repository_sources(self, *, cleanup_failure: bool) -> None:
+    def _write_repository_sources(self, *, cleanup_failure: bool, generator_failure: bool, reload_failure: bool, construction_failure: bool, publication_failure: bool) -> None:
         contract = self.root / "src/latent_triz/a0x_contract.py"
         contract.write_text(
             textwrap.dedent(
@@ -186,6 +204,7 @@ class SyntheticRepository:
                 ),
                 "    ",
             )
+        construction_block = "raise RuntimeError('synthetic construction failure')" if construction_failure else "pass"
         vertical.write_text(
             textwrap.dedent(
                 """\
@@ -196,8 +215,34 @@ class SyntheticRepository:
                     model_key: str
                     implementation_source_head: str
                     output_root: str
+                @dataclass(frozen=True)
+                class VerticalRuntimePackageRequest:
+                    qualified_source_head: str
+                    qualified_source_tree: str
+                    leg: object
+                    model_key: str
+                    output_root: str
+                    authorization_id: str
+                    attempt_id: str
+                    def __post_init__(self):
+                        %s
+                @dataclass(frozen=True)
+                class VerticalPackageBinding:
+                    envelope_path: str
+                    package_path: str
+                    commitment_path: str
+                    commitment_raw_sha256: str
+                    package_commitment_sha256: str
+                    dossier_path: str
+                    dossier_sha256: str
+                    qualified_source_head: str
+                    qualified_source_tree: str
+                    leg: object
+                    model_key: str
+                    model_revision: str
+                    pair_binding: object
                 def generate_vertical_slice(root, request):
-                """
+                """ % construction_block
             )
             + cleanup_block
             + textwrap.indent(
@@ -215,6 +260,44 @@ class SyntheticRepository:
             ),
             encoding="utf-8",
         )
+        runtime_failure = "raise RuntimeError('synthetic generator failure')" if generator_failure else ""
+        publication_failure_block = "raise RuntimeError('synthetic publication ownership lost')" if publication_failure else ""
+        reload_body = (
+            "raise RuntimeError('synthetic reload failure')" if reload_failure
+            else "return {'binding': binding, 'package_commitment_sha256': binding.package_commitment_sha256, 'dossier_sha256': binding.dossier_sha256}"
+        )
+        with vertical.open("a", encoding="utf-8") as stream:
+            stream.write(
+                "\n\ndef generate_vertical_runtime_package(root, request):\n"
+                + textwrap.indent(runtime_failure or "pass", "    ") + "\n"
+                + "    envelope = root / request.output_root\n"
+                + "    (envelope / 'package').mkdir(parents=True, exist_ok=False)\n"
+                + "    (envelope / 'package' / 'protocol.json').write_text('{}', encoding='utf-8')\n"
+                + "    (envelope / 'p0-commitment.json').write_text('{}', encoding='utf-8')\n"
+                + textwrap.indent(publication_failure_block or "pass", "    ") + "\n"
+                + textwrap.dedent(
+                    """\
+                        return VerticalPackageBinding(
+                            envelope_path=request.output_root,
+                            package_path=request.output_root + "/package",
+                            commitment_path=request.output_root + "/p0-commitment.json",
+                            commitment_raw_sha256="c" * 64,
+                            package_commitment_sha256="a" * 64,
+                            dossier_path=request.output_root + "/package/approval-dossier.json",
+                            dossier_sha256="b" * 64,
+                            qualified_source_head=request.qualified_source_head,
+                            qualified_source_tree=request.qualified_source_tree,
+                            leg=request.leg,
+                            model_key=request.model_key,
+                            model_revision="f8027fd0eaeea54caa13c31d31b9fdc459c38b49",
+                            pair_binding=None,
+                        )
+
+                    def load_vertical_runtime_package(root, binding):
+                    """
+                )
+                + textwrap.indent(reload_body, "    ") + "\n"
+            )
 
     def _current_lines(self) -> list[str]:
         lines = []
@@ -296,6 +379,102 @@ class SyntheticRepository:
             check=False,
         )
 
+    def v2_command(
+        self, *, head: str | None = None, tree: str | None = None,
+        authorization_sha256: str | None = None, document_authorization_id: str = "p0-v2-test-auth",
+        document_tree: str | None = None, expected_python_sha256: str | None = None,
+        expected_ledger_sha256: str | None = None,
+        expected_bootstrap_sha256: str | None = None,
+        document_revision: str = "f8027fd0eaeea54caa13c31d31b9fdc459c38b49",
+        target_sha256: str | None = None, direct_target: bool = False, omit_bytecode: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        actual_head, actual_tree = self.identity()
+        authorization = (
+            self.root / ".a0x-runtime/authorizations/p0/v2" / actual_head / actual_tree
+            / "a0/smollm2_360m/p0-v2-test-attempt.json"
+        )
+        authorization.parent.mkdir(parents=True, exist_ok=True)
+        bootstrap = self.root / V2_SCRIPT_RELATIVE
+        bootstrap_metadata = bootstrap.lstat()
+        python_sha256 = _sha256(PYTHON) if expected_python_sha256 is None else expected_python_sha256
+        ledger_sha256 = self.ledger_digest() if expected_ledger_sha256 is None else expected_ledger_sha256
+        bootstrap_sha256 = _sha256(bootstrap) if expected_bootstrap_sha256 is None else expected_bootstrap_sha256
+        preexec_sha256 = _sha256(self.root / V2_PREEXEC_RELATIVE)
+        authorization.write_text(
+            json.dumps(
+                {
+                    "artifact_class": "a0x-vertical-p0-authorization",
+                    "authorization_profile": "a0x-vertical-p0-authorization-v2",
+                    "source": {"head": actual_head, "tree": actual_tree if document_tree is None else document_tree},
+                    "pair": {
+                        "leg": "a0", "model_key": "smollm2_360m",
+                        "model_revision": document_revision,
+                    },
+                    "generator_profile": "a0x-vertical-slice-v2",
+                    "authorization_id": document_authorization_id,
+                    "attempt_id": "p0-v2-test-attempt",
+                    "operator": {
+                        "profile": "a0x-vertical-p0-bootstrap-v2",
+                        "python": {"path": str(PYTHON), "sha256": python_sha256},
+                        "ledger": {"sha256": ledger_sha256},
+                        "bootstrap": {
+                            "path": V2_SCRIPT_RELATIVE.as_posix(),
+                            "sha256": bootstrap_sha256,
+                            "device": bootstrap_metadata.st_dev,
+                            "inode": bootstrap_metadata.st_ino,
+                            "bytes": bootstrap_metadata.st_size,
+                        },
+                        "preexec": {"path": V2_PREEXEC_RELATIVE.as_posix(), "sha256": preexec_sha256},
+                    },
+                    "output": {
+                        "members": [
+                            "protocol.json", "implementation.json", "freeze.json",
+                            "approval-dossier.json", "slice-manifest.json",
+                        ],
+                        "commitment": "p0-commitment.json",
+                    },
+                },
+                sort_keys=True, separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        arguments = [
+            str(PYTHON), "-I", "-S", *( () if omit_bytecode else ("-B",) ), str(self.root / V2_PREEXEC_RELATIVE),
+            "--target", str(self.root / V2_SCRIPT_RELATIVE),
+            "--target-sha256", (
+                _sha256(self.root / V2_SCRIPT_RELATIVE) if target_sha256 is None else target_sha256
+            ),
+            "--self-sha256", preexec_sha256,
+            "--",
+            "--repository-root", str(self.root),
+            "--expected-head", actual_head if head is None else head,
+            "--expected-tree", actual_tree if tree is None else tree,
+            "--expected-python", str(PYTHON),
+            "--expected-python-sha256", python_sha256,
+            "--expected-ledger-sha256", ledger_sha256,
+            "--expected-bootstrap-sha256", bootstrap_sha256,
+            "--expected-preexec-sha256", preexec_sha256,
+            "--preexec-bootstrap-device", str(bootstrap_metadata.st_dev),
+            "--preexec-bootstrap-inode", str(bootstrap_metadata.st_ino),
+            "--preexec-bootstrap-bytes", str(bootstrap_metadata.st_size),
+            "--authorization-document", str(authorization),
+            "--authorization-document-sha256", (
+                _sha256(authorization) if authorization_sha256 is None else authorization_sha256
+            ),
+            "--authorization-id", "p0-v2-test-auth",
+            "--attempt-id", "p0-v2-test-attempt",
+        ]
+        if direct_target:
+            separator = arguments.index("--")
+            arguments = [
+                str(PYTHON), "-I", "-S", "-B", str(bootstrap),
+                *arguments[separator + 1:], "--preexec-launcher", str(self.root / V2_PREEXEC_RELATIVE),
+            ]
+        return subprocess.run(
+            arguments, cwd=self.root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, check=False,
+        )
+
     def add_conflicting_bytecode(self) -> None:
         malicious = self.root.parent / "malicious-a0x-vertical-slice.py"
         malicious.write_text(
@@ -326,9 +505,11 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def fixture(self, *, cleanup_failure: bool = False) -> SyntheticRepository:
+    def fixture(self, *, cleanup_failure: bool = False, generator_failure: bool = False, reload_failure: bool = False, construction_failure: bool = False, publication_failure: bool = False) -> SyntheticRepository:
         return SyntheticRepository(
-            Path(self.temporary.name), cleanup_failure=cleanup_failure,
+            Path(self.temporary.name), cleanup_failure=cleanup_failure, generator_failure=generator_failure,
+            reload_failure=reload_failure, construction_failure=construction_failure,
+            publication_failure=publication_failure,
         )
 
     def test_private_pycache_uses_platform_temp_root(self) -> None:
@@ -346,6 +527,340 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
             path = module._create_private_pycache()
         self.assertNotIn("dir", calls)
         self.assertEqual(str(path), sys.pycache_prefix)
+
+    def test_canonical_v2_operator_entrypoint_uses_only_the_v2_generator(self) -> None:
+        """RED: v2 must be a distinct operator, not an implicit v1 rewrite."""
+        operator = ROOT / "scripts/a0x_vertical_p0_v2.py"
+        self.assertTrue(operator.is_file())
+        source = operator.read_text(encoding="utf-8")
+        self.assertIn("generate_vertical_runtime_package", source)
+        self.assertNotIn("generate_vertical_slice", source)
+
+    def test_canonical_v2_operator_help_runs_in_isolated_python(self) -> None:
+        """The operator must expose its bound inlet before repository imports."""
+        completed = subprocess.run(
+            [str(PYTHON), "-I", "-S", "-B", str(ROOT / "scripts/a0x_vertical_p0_v2.py"), "--help"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("--authorization-document", completed.stdout)
+        self.assertIn("--attempt-id", completed.stdout)
+
+    def test_canonical_v2_operator_dispatches_real_subprocess_to_v2_generator(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        receipt = json.loads(completed.stdout)
+        self.assertEqual("a" * 64, receipt["package_commitment_sha256"])
+        self.assertEqual("b" * 64, receipt["dossier_sha256"])
+        self.assertEqual("f8027fd0eaeea54caa13c31d31b9fdc459c38b49", receipt["model_revision"])
+
+    def test_canonical_v2_operator_real_subprocess_uses_production_generator_and_loader(self) -> None:
+        """One disposable committed source proves launcher-to-production P0 interoperability."""
+        with tempfile.TemporaryDirectory(prefix="a0x-p0-production-") as temporary:
+            root = Path(temporary) / "repository"
+            environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1"}
+            subprocess.run(
+                ("/usr/bin/git", "clone", "--no-hardlinks", str(ROOT), str(root)),
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                check=True, env=environment,
+            )
+            subprocess.run(
+                ("/usr/bin/git", "-C", str(root), "checkout", "--detach", _git(ROOT, "rev-parse", "HEAD")),
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                check=True, env=environment,
+            )
+            for relative in (V2_SCRIPT_RELATIVE, V2_PREEXEC_RELATIVE):
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / relative, destination)
+            subprocess.run(("/usr/bin/git", "-C", str(root), "config", "user.name", "A0X Test"), check=True, env=environment)
+            subprocess.run(("/usr/bin/git", "-C", str(root), "config", "user.email", "a0x@example.invalid"), check=True, env=environment)
+            ledger_lines = []
+            ledger_document = (root / REVIEW_RELATIVE).read_text(encoding="utf-8")
+            declared = ledger_document.split("## Raw P0 package-input ledger", 1)[1].split("```text\n", 1)[1].split("\n```", 1)[0].splitlines()
+            for declared_line, relative in zip(declared, _ledger_paths(), strict=True):
+                raw = (root / relative).read_bytes()
+                actual_line = f"{hashlib.sha256(raw).hexdigest()} {len(raw)} {relative}"
+                ledger_lines.append(actual_line)
+            replacement = "\n".join(ledger_lines)
+            (root / REVIEW_RELATIVE).write_text(
+                ledger_document.replace("\n".join(declared), replacement), encoding="utf-8",
+            )
+            subprocess.run(("/usr/bin/git", "-C", str(root), "add", V2_SCRIPT_RELATIVE.as_posix(), V2_PREEXEC_RELATIVE.as_posix(), REVIEW_RELATIVE.as_posix()), check=True, env=environment)
+            subprocess.run(("/usr/bin/git", "-C", str(root), "commit", "-m", "target-free P0 v2 operator fixture"), check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
+            head = _git(root, "rev-parse", "HEAD")
+            tree = _git(root, "rev-parse", "HEAD^{tree}")
+            ledger_sha256 = hashlib.sha256(("\n".join(ledger_lines) + "\n").encode("utf-8")).hexdigest()
+            bootstrap = root / V2_SCRIPT_RELATIVE
+            preexec = root / V2_PREEXEC_RELATIVE
+            metadata = bootstrap.lstat()
+            authorization = root / ".a0x-runtime/authorizations/p0/v2" / head / tree / "a0/smollm2_360m/production-real-01.json"
+            authorization.parent.mkdir(parents=True)
+            authorization.write_text(json.dumps({
+                "artifact_class": "a0x-vertical-p0-authorization", "authorization_profile": "a0x-vertical-p0-authorization-v2",
+                "source": {"head": head, "tree": tree},
+                "pair": {"leg": "a0", "model_key": "smollm2_360m", "model_revision": "f8027fd0eaeea54caa13c31d31b9fdc459c38b49"},
+                "generator_profile": "a0x-vertical-slice-v2", "authorization_id": "production-real-auth-01", "attempt_id": "production-real-01",
+                "operator": {"profile": "a0x-vertical-p0-bootstrap-v2", "python": {"path": str(PYTHON), "sha256": _sha256(PYTHON)}, "ledger": {"sha256": ledger_sha256}, "bootstrap": {"path": V2_SCRIPT_RELATIVE.as_posix(), "sha256": _sha256(bootstrap), "device": metadata.st_dev, "inode": metadata.st_ino, "bytes": metadata.st_size}, "preexec": {"path": V2_PREEXEC_RELATIVE.as_posix(), "sha256": _sha256(preexec)}},
+                "output": {"members": ["protocol.json", "implementation.json", "freeze.json", "approval-dossier.json", "slice-manifest.json"], "commitment": "p0-commitment.json"},
+            }, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+            arguments = (
+                str(PYTHON), "-I", "-S", "-B", str(preexec), "--target", str(bootstrap),
+                "--target-sha256", _sha256(bootstrap), "--self-sha256", _sha256(preexec), "--",
+                "--repository-root", str(root), "--expected-head", head, "--expected-tree", tree,
+                "--expected-python", str(PYTHON), "--expected-python-sha256", _sha256(PYTHON),
+                "--expected-ledger-sha256", ledger_sha256, "--expected-bootstrap-sha256", _sha256(bootstrap),
+                "--expected-preexec-sha256", _sha256(preexec), "--preexec-bootstrap-device", str(metadata.st_dev),
+                "--preexec-bootstrap-inode", str(metadata.st_ino), "--preexec-bootstrap-bytes", str(metadata.st_size),
+                "--authorization-document", str(authorization), "--authorization-document-sha256", _sha256(authorization),
+                "--authorization-id", "production-real-auth-01", "--attempt-id", "production-real-01",
+            )
+            completed = subprocess.run(arguments, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            binding = json.loads(completed.stdout)
+            envelope = root / binding["envelope_path"]
+            self.assertEqual({"package", "p0-commitment.json"}, {entry.name for entry in envelope.iterdir()})
+            self.assertEqual({"protocol.json", "implementation.json", "freeze.json", "approval-dossier.json", "slice-manifest.json"}, {entry.name for entry in (envelope / "package").iterdir()})
+            self.assertEqual((head, tree, ""), (_git(root, "rev-parse", "HEAD"), _git(root, "rev-parse", "HEAD^{tree}"), _git(root, "status", "--porcelain=v1", "--untracked-files=all")))
+
+    def test_canonical_v2_operator_refuses_source_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(head="0" * 40)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_SOURCE_IDENTITY_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_authorization_hash_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(authorization_sha256="0" * 64)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_AUTHORIZATION_IDENTITY_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_authorization_id_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(document_authorization_id="other-auth")
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_AUTHORIZATION_BINDING_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_rehashed_authorization_tree_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(document_tree="f" * 40)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_AUTHORIZATION_BINDING_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_rehashed_authorization_model_revision_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(document_revision="0" * 40)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_AUTHORIZATION_BINDING_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_python_hash_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(expected_python_sha256="0" * 64)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_PYTHON_IDENTITY_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_ledger_hash_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(expected_ledger_sha256="0" * 64)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_LEDGER_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_bootstrap_hash_drift_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(expected_bootstrap_sha256="0" * 64)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_BOOTSTRAP_IDENTITY_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_consumes_one_atomic_attempt_claim_before_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        head, tree = fixture.identity()
+        claim = (
+            fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
+            / "a0/smollm2_360m/p0-v2-test-attempt/attempt-claim.json"
+        )
+        metadata = claim.lstat()
+        self.assertTrue(stat.S_ISREG(metadata.st_mode))
+        self.assertEqual(1, metadata.st_nlink)
+        payload = json.loads(claim.read_text(encoding="utf-8"))
+        self.assertEqual("a0x-vertical-p0-attempt-claim-v2", payload["artifact_class"])
+        self.assertFalse(payload["retry_permitted"])
+        self.assertEqual("p0-v2-test-auth", payload["authorization_id"])
+        receipt = claim.with_name("terminal-receipt.json")
+        terminal = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertEqual(hashlib.sha256(claim.read_bytes()).hexdigest(), terminal["claim_sha256"])
+        self.assertEqual({"head": head, "tree": tree}, terminal["source"])
+        self.assertEqual("target_free_p0_completed", terminal["frontier"])
+        self.assertEqual("p0-v2-test-auth", terminal["authorization"]["id"])
+
+    def test_canonical_v2_operator_refuses_reused_attempt_before_import(self) -> None:
+        fixture = self.fixture()
+        first = fixture.v2_command()
+        self.assertEqual(0, first.returncode, first.stderr)
+        head, tree = fixture.identity()
+        shutil.rmtree(fixture.root / f".a0x-runtime/p0/v2/{head}/{tree}/a0/smollm2_360m")
+        fixture.import_marker.unlink(missing_ok=True)
+        second = fixture.v2_command()
+        self.assertEqual(2, second.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_ATTEMPT_ALREADY_CONSUMED", second.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_occupied_output_before_consuming_attempt(self) -> None:
+        fixture = self.fixture()
+        head, tree = fixture.identity()
+        output = fixture.root / f".a0x-runtime/p0/v2/{head}/{tree}/a0/smollm2_360m"
+        output.mkdir(parents=True)
+        completed = fixture.v2_command()
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_OUTPUT_EXISTS", completed.stderr)
+        claim = (
+            fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
+            / "a0/smollm2_360m/p0-v2-test-attempt/attempt-claim.json"
+        )
+        self.assertFalse(claim.exists())
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_dirty_checkout_before_consuming_attempt(self) -> None:
+        fixture = self.fixture()
+        (fixture.root / fixture.paths[0]).write_text("uncommitted drift\n", encoding="utf-8")
+        completed = fixture.v2_command()
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_CHECKOUT_DIRTY", completed.stderr)
+        head, tree = fixture.identity()
+        claim = (
+            fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
+            / "a0/smollm2_360m/p0-v2-test-attempt/attempt-claim.json"
+        )
+        self.assertFalse(claim.exists())
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_operator_refuses_ignored_bytecode_before_consuming_attempt(self) -> None:
+        fixture = self.fixture()
+        fixture.add_conflicting_bytecode()
+        self.assertEqual("", _git(fixture.root, "status", "--porcelain"))
+        completed = fixture.v2_command()
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_BYTECODE_PRESENT", completed.stderr)
+        self.assertFalse(fixture.malicious_marker.exists())
+        self.assertFalse(fixture.import_marker.exists())
+
+    def test_canonical_v2_preexec_refuses_replaced_operator_before_replacement_executes(self) -> None:
+        fixture = self.fixture()
+        operator = fixture.root / V2_SCRIPT_RELATIVE
+        expected = _sha256(operator)
+        operator.write_text(
+            f"from pathlib import Path\nPath({str(fixture.bootstrap_replacement_marker)!r}).write_text('executed')\n",
+            encoding="utf-8",
+        )
+        completed = fixture.v2_command(target_sha256=expected)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_PREEXEC_IDENTITY_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.bootstrap_replacement_marker.exists())
+
+    def test_canonical_v2_operator_refuses_direct_target_bypass_before_claim_or_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(direct_target=True)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_PREEXEC_HANDOFF_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+        head, tree = fixture.identity()
+        claim = fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
+        self.assertFalse(claim.exists())
+
+    def test_canonical_v2_operator_refuses_missing_bytecode_flag_before_claim_or_import(self) -> None:
+        fixture = self.fixture()
+        completed = fixture.v2_command(omit_bytecode=True)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_PYTHON_IDENTITY_MISMATCH", completed.stderr)
+        self.assertFalse(fixture.import_marker.exists())
+        head, tree = fixture.identity()
+        self.assertFalse((fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree).exists())
+        self.assertFalse((fixture.root / "src/latent_triz/__pycache__").exists())
+
+    def test_canonical_v2_operator_preserves_terminal_receipt_after_claimed_construction_failure(self) -> None:
+        fixture = self.fixture(construction_failure=True)
+        completed = fixture.v2_command()
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_CLAIMED_TERMINAL_FAILURE", completed.stderr)
+        head, tree = fixture.identity()
+        receipt = fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree / "a0/smollm2_360m/p0-v2-test-attempt/terminal-receipt.json"
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertEqual("claimed_prepublication_failure", payload["terminal_class"])
+        self.assertEqual("prepublication", payload["frontier"])
+        self.assertEqual("synthetic construction failure", payload["error_code"])
+
+    def test_canonical_v2_claim_fsync_failure_is_consumed_and_retained(self) -> None:
+        fixture = self.fixture()
+        head, tree = fixture.identity()
+        module = _load_v2_module()
+        arguments = argparse.Namespace(
+            expected_head=head, expected_tree=tree, attempt_id="claim-fsync-failure",
+            authorization_id="p0-v2-test-auth", authorization_document_sha256="d" * 64,
+            expected_python_sha256="e" * 64, expected_ledger_sha256="f" * 64,
+            expected_preexec_sha256="a" * 64,
+        )
+        bootstrap = {"path": V2_SCRIPT_RELATIVE.as_posix(), "sha256": "b" * 64, "device": 1, "inode": 2, "bytes": 3}
+        with mock.patch.object(module.os, "fsync", side_effect=OSError("synthetic fsync failure")):
+            with self.assertRaises(module._ConsumedClaimFailure) as raised:
+                module._reserve_attempt_claim(fixture.root, arguments, bootstrap)
+        claim = fixture.root / raised.exception.claim_relative
+        self.assertTrue(claim.is_file())
+        self.assertEqual(1, claim.stat().st_nlink)
+
+    def test_canonical_v2_operator_preserves_postpublication_ownership_failure(self) -> None:
+        fixture = self.fixture(publication_failure=True)
+        completed = fixture.v2_command()
+        self.assertEqual(2, completed.returncode)
+        head, tree = fixture.identity()
+        receipt = fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree / "a0/smollm2_360m/p0-v2-test-attempt/terminal-receipt.json"
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertEqual("claimed_publication_failure", payload["terminal_class"])
+        self.assertEqual("post_publication", payload["frontier"])
+        self.assertEqual("synthetic publication ownership lost", payload["error_code"])
+
+    def test_canonical_v2_operator_preserves_terminal_receipt_after_claimed_generator_failure(self) -> None:
+        fixture = self.fixture(generator_failure=True)
+        completed = fixture.v2_command()
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_CLAIMED_TERMINAL_FAILURE", completed.stderr)
+        head, tree = fixture.identity()
+        receipt = (
+            fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
+            / "a0/smollm2_360m/p0-v2-test-attempt/terminal-receipt.json"
+        )
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertEqual("claimed_prepublication_failure", payload["terminal_class"])
+        self.assertEqual("prepublication", payload["frontier"])
+        self.assertFalse(payload["retry_permitted"])
+        self.assertTrue(payload["recovery_required"])
+        self.assertEqual("synthetic generator failure", payload["error_code"])
+
+    def test_canonical_v2_operator_preserves_terminal_receipt_after_postpublication_reload_failure(self) -> None:
+        fixture = self.fixture(reload_failure=True)
+        completed = fixture.v2_command()
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("A0X_VERTICAL_P0_V2_CLAIMED_TERMINAL_FAILURE", completed.stderr)
+        head, tree = fixture.identity()
+        receipt = (
+            fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
+            / "a0/smollm2_360m/p0-v2-test-attempt/terminal-receipt.json"
+        )
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertEqual("claimed_publication_failure", payload["terminal_class"])
 
     def test_replaced_bootstrap_is_rejected_before_any_replacement_byte_executes(self) -> None:
         fixture = self.fixture()

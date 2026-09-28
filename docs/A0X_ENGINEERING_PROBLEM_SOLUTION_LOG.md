@@ -1483,3 +1483,33 @@ negative hosted evidence and is not retried or reinterpreted. A source-bound
 commit requires regenerated implementation inventories, freezes, and dossiers
 before any new publication. No model, tokenizer, target, Gate B/C, scoring,
 CCP, Docker, or material execution is authorized by this record.
+
+## 55. Public-closure implementation needs behavioral pre-dispatch proof
+
+**Problem.** The target-free public-closure tranche now binds exact public
+dossier/specification hashes, separates pre-execution from terminal/postflight
+bindings, and routes the contract through parent, child, and production
+verification. Independent reviews accepted this preparatory work only with a
+remaining behavioral condition: tests must prove that absent or mutated
+closure evidence is refused before runner invocation and child dispatch. A
+static schema or hash test alone does not establish this execution boundary.
+
+**Current evidence.** At local candidate `4f801f03d85d36c6aabda36ffe7ed33dfe1db05e`,
+tree `d1fcef86cdaa56f1059f5b0b39ba911cd3ac6bda`, the focused suite passed
+186/186 and the broad target-free A0X suite passed 706 tests with 1 skipped.
+The synthetic contract check and `git diff --check` passed. Sol architecture
+and security reviews returned `PASS_WITH_NOTES`; Astra returned
+`GO_WITH_CONDITIONS` for the target-free tranche and `NO-GO` for
+production-bound regeneration/material work until the behavioral condition
+and a separate authorization are satisfied.
+
+**Boundary.** No inventory, freeze, dossier, or receipt was regenerated; no
+model, tokenizer, target, private mapping, network, CCP, Docker, scoring,
+commit, or remote mutation occurred. The local docs/checkpoint update is not
+public GitHub status. Hashes demonstrate integrity and cross-document
+consistency, not human consent, runtime truth, or independent verification.
+
+**Next action.** Add the narrowly scoped synthetic parent/child refusal tests;
+obtain the required review; then request separate exact-head authorization
+before production-bound regeneration. Preserve stale freezes as stale until
+that authorized regeneration completes.

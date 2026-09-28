@@ -43,14 +43,14 @@ It is normative for new WLT/SLT work and does not rewrite historical packages.
 | Item | Verified state | Authoritative anchor |
 |---|---|---|
 | Public repository | `MarcoPorcellato/Latent-TRIZ` | GitHub repository and tracked `LICENSE` / `NOTICE` |
-| Protected `main` | `d2a475f58db668a2ce0a4ec48082189422b19eab` | public exact head after the hosted schema-oracle bootstrap PR #110; verify again before the next mutation |
+| Protected `main` last recorded | `d2a475f58db668a2ce0a4ec48082189422b19eab` | Historical last-verified value from this plan; not live-checked in the 2026-09-25 local tranche |
 | Required merge context | strict `merge-policy/gate` | active GitHub ruleset and `.github/expected-main-ruleset.json` |
 | Completed automated milestone | A0-R Tier R1 same-model replication | PR 41, run `a0r1-v1.0.0-e93a9faa-r1` |
 | Current authentic-TRIZ milestone | H1 v1.2 collection packet | public packet is `ready_for_collection`; closure is blocked by three independent human TRIZ experts |
 | Claim state | all registered claims remain E0 | `data/claims.jsonl` |
 | First dataset attempt | rejected for scientific freeze | retained Wave 1 surface-audit artifacts |
 | Comparative reference tranche | seven terminal `null` packages | PRs #77, #96, and #97; public main `0123ce4`; exploratory and claim-free |
-| A0X Gate B hardening | in delivery, `sealed_gate_pending` | PR #109; implementation `74d6bc0`, bindings `50cf959`, fresh hosted gates required after integration with `d2a475f` |
+| A0X local public-closure tranche | target-free implementation present locally; unpublished; review condition pending | isolated candidate `4f801f03d85d36c6aabda36ffe7ed33dfe1db05e`, tree `d1fcef86cdaa56f1059f5b0b39ba911cd3ac6bda`; see canonical campaign ledger and restart checkpoint |
 
 The comparative scientific record remains anchored to its own exact historical
 packages and commits; the newer public `main` head above changes repository CI,
@@ -914,6 +914,26 @@ Cost reduction never weakens an evidence gate. `RUNNING`, partial tests, source
 inspection, or a receipt for another commit are not a pass.
 
 ## A0X six-model A0/A0-R1 replication tranche
+
+### Current local engineering checkpoint — 2026-09-25
+
+The latest A0X work is a local, unpublished target-free public-closure
+implementation at `4f801f03d85d36c6aabda36ffe7ed33dfe1db05e`, tree
+`d1fcef86cdaa56f1059f5b0b39ba911cd3ac6bda`. Public `main`, PRs, and ruleset
+were not live-verified in this tranche. The focused suite passed 186/186; the
+broad A0X target-free suite passed 706 with 1 skipped. Sol returned
+`PASS_WITH_NOTES`; Astra accepted the target-free slice with conditions but
+returned `NO-GO` for production-bound regeneration/material work until
+behavioral tests prove absent or mutated closure evidence is refused before
+runner invocation and child dispatch.
+
+No inventory/freeze/dossier/receipt regeneration, material access, model,
+tokenizer, target, private mapping, network, CCP, Docker, scoring, commit, or
+remote mutation occurred. Existing public scientific claims and the README
+remain unchanged. See
+[`A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md`](A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md)
+for restart steps. Details below are historical unless linked from the current
+campaign ledger.
 
 ### Pre-material readiness correction — 2026-08-30
 

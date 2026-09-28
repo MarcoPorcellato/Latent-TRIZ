@@ -120,6 +120,10 @@ class A0XFrozenPackageTests(unittest.TestCase):
         paths = a0x_freeze._IMPLEMENTATION_PATHS
         self.assertEqual(tuple(sorted(paths)), paths)
         self.assertEqual(len(paths), len(set(paths)))
+        self.assertIn("src/latent_triz/a0x_vertical_production_adapter.py", paths)
+        self.assertIn("src/latent_triz/a0x_vertical_terminal_package.py", paths)
+        self.assertIn("tests/test_a0x_vertical_terminal_package.py", paths)
+        self.assertIn("schemas/a0x-vertical-terminal-manifest-v1.schema.json", paths)
         for relative in paths:
             with self.subTest(path=relative):
                 path = ROOT / relative

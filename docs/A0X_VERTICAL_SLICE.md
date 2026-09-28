@@ -7,11 +7,11 @@ date: 2026-09-02
 
 # A0X pair-scoped vertical slice
 
-## Current route — 2026-09-05
+## Current route and closure gate — 2026-09-25
 
 This document's tracked `a0x-vertical-slice-v1` package is historical evidence
-only. It is not a selector for new Gate B or Gate C work. The current
-target-free operational route is:
+only. It is not a selector for new Gate B or Gate C work. The operational route
+is:
 
 ```text
 Hosted Gate A -> capture -> P0 v2 -> Gate B v2 -> Gate C v2 -> verification
@@ -25,6 +25,21 @@ design](superpowers/specs/2026-09-05-a0x-vertical-gate-chain-convergence-design.
 for the normative boundary. Every arrow remains a separate exact authorization;
 this documentation does not authorize Hosted capture, P0, Gate B, Gate C, or
 any material access.
+
+Before production-bound regeneration, the public-closure contract must also
+pass a behavioral parent/child test proving that absent or mutated closure
+evidence is rejected before runner invocation or child dispatch. This is the
+current target-free blocker identified by Sol and retained by Astra's
+`GO_WITH_CONDITIONS` / `NO-GO` split. After that test, a separate authorization
+is still required for inventory/freeze/dossier regeneration. Regeneration is
+not Gate B readiness and does not authorize model, tokenizer, target, network,
+CCP, Docker, or Gate C access.
+
+The public closure contract distinguishes pre-execution inputs from terminal
+and postflight outputs and assigns public versus private artifact roles. Its
+hashes establish integrity and cross-document consistency only; they cannot
+establish human consent, runtime truth, or independent verification. The
+synthetic experimental profile is not accepted by production entry points.
 
 ## Purpose
 

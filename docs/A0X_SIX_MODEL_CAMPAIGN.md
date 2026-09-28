@@ -18,7 +18,50 @@ Task 11 is preparatory only. The repository contains twelve
 model load, tokenizer construction, target read, CCP invocation, retry, or
 publication.
 
-## Current vertical Gate-Chain Convergence checkpoint — 2026-09-05
+## Current target-free public-closure checkpoint — 2026-09-25
+
+This is a **local, unpublished engineering checkpoint**, not a public-main or
+scientific-result update. Work is in the isolated clone identified in the
+[restart checkpoint](A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md), at exact `HEAD`
+`4f801f03d85d36c6aabda36ffe7ed33dfe1db05e`, tree
+`d1fcef86cdaa56f1059f5b0b39ba911cd3ac6bda`. The clone is detached and dirty;
+all existing changes are preserved. Public `origin/main`, PRs, and ruleset were
+not queried in this target-free tranche.
+
+The approved target-free public-closure slice adds a versioned public closure
+contract and explicit public/private artifact roles; binds exact public dossier
+and specification hashes before execution; separates pre-execution bindings
+from terminal/postflight bindings; and makes parent, child, and production
+verifier enforce those bindings. Production entry points reject the synthetic
+experimental profile. Closed schemas and mutation tests cover allowed fields,
+values, and limits of marker-based privacy screening. Existing P0 v2 semantics,
+private authorization v4, and historical artifacts remain unchanged.
+
+Validation recorded for this slice: focused tests **186/186 PASS**; broad
+target-free A0X suite **706 PASS, 1 skipped**; synthetic contract check PASS;
+`git diff --check` PASS. No frozen verification, inventory/freeze/dossier
+regeneration, model, tokenizer, target, private mapping, network, CCP, Docker,
+commit, or remote mutation occurred.
+
+Review record: Sol architecture and security reviews returned
+`PASS_WITH_NOTES`; Astra returned `GO_WITH_CONDITIONS` for this target-free
+slice and `NO-GO` for production-bound regeneration/material work. Before any
+production-bound regeneration, add and pass Sol-requested behavioral tests
+proving parent/child refusal for absent or mutated closure evidence before
+runner/dispatch. The frozen bindings therefore remain stale for this candidate;
+separate authorization is required before regenerating them.
+
+### Public GitHub communication decision
+
+Do not update the public README or imply a new scientific result. A later
+reviewed PR may describe this as target-free engineering progress only, with
+the exact tests and review caveats above, the stale-freeze status, and the next
+authorization boundary. It must state that hashes establish byte integrity and
+cross-document consistency—not operator consent, runtime truth, or independent
+verification. No push, PR, or public-main status was verified or authorized in
+this checkpoint.
+
+## Historical vertical Gate-Chain Convergence checkpoint — 2026-09-05
 
 The current target-free implementation anchor is
 `eb33d7ad22a97e15bdea3475d88942231ba094a0` (final branch HEAD may postdate
@@ -81,7 +124,7 @@ deterministic suite, independent review, and local closure. It does not permit
 real GitHub/CLI capture, network, publication, Gate B/C, CCP, Docker, model,
 tokenizer, target, or scientific execution.
 
-## Current offline Gate B builder checkpoint — 2026-09-01
+## Historical offline Gate B builder checkpoint — 2026-09-01
 
 This document is the sole canonical A0X status ledger. Architecture authority is
 [A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md); operator
