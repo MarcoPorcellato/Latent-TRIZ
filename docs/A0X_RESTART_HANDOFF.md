@@ -40,7 +40,7 @@ older current-gate wording below while preserving historical evidence.
   `f356c80aacc6dc07828896d1a2fd92d7bc6d42ab`; therefore no protected A0X
   implementation byte changed at that boundary.
 - The primary checkout remains dirty and preserved. Reconstruction occurs only
-  in `/private/tmp/latent-triz-pr109-reconstruction-20260830`.
+  in `$ISOLATED_TEMP_ROOT/latent-triz-pr109-reconstruction`.
 
 Next: update the target-free documentation checkpoint, prove the frozen package
 and repository checks locally, push PR #109 without force, and require all

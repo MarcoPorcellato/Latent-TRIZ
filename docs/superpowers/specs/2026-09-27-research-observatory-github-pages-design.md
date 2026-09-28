@@ -46,7 +46,7 @@ No scientific rerun, model or tokenizer load, sealed-target access, private mapp
 
 ## Baseline and official platform references
 
-At design time, public `main` is `b604a3d62a2da5e2bfd54a9b08c5179664ad7cc2`; the clean isolated clone is `/private/tmp/latent-triz-observatory-verify.9dSK84/repository`. The local Observatory is documented in `scripts/research_observatory/README.md` and is not yet a public Pages export.
+At design time, public `main` is `b604a3d62a2da5e2bfd54a9b08c5179664ad7cc2`; the clean isolated clone is `$ISOLATED_TEMP_ROOT/latent-triz-observatory-verify/repository`. The local Observatory is documented in `scripts/research_observatory/README.md` and is not yet a public Pages export.
 
 - [GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 - [Configure a Pages publishing source](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
