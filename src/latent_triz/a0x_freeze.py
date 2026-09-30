@@ -14,7 +14,7 @@ import json
 import re
 import subprocess
 from collections import defaultdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 from .a0x_contract import (
@@ -41,6 +41,12 @@ SELECTION_PATH = "experiments/a0x-six-model/a0-selection-manifest.json"
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
 _SAFE_RELATIVE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]+$")
+_N3_DEFERRED_PROTECTED_PATHS = (
+    "data/a0/procedural-targets/calibration-targets.jsonl",
+    "data/a0/sealed-targets/targets.jsonl",
+    "data/a0r1/targets/calibration.jsonl",
+    "data/a0r1/targets/sealed.jsonl",
+)
 _HISTORICAL_BATCH_PRE_REGENERATION_PROFILE = "a0x-batch-pre-regeneration-ledger-v1"
 _HISTORICAL_BATCH_PRE_REGENERATION_PARENT = "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d"
 _HISTORICAL_BATCH_PRE_REGENERATION_TREE = "54c59868802af381f57f830102a01be54410e718"
@@ -306,9 +312,10 @@ def build_protected_tree(
 ) -> dict[str, Any]:
     """Freeze non-target inputs and declaration-only sealed-target commitments.
 
-    ``roots`` may name files or directories relative to ``root``.  Directory
-    walks are deterministic, reject symlinks, and omit sealed target paths
-    before any file metadata or byte operation is attempted on them.
+    ``roots`` may name files or directories relative to ``root``. Directory
+    walks are deterministic and reject symlinks. Roots that overlap deferred
+    protected inputs are rejected before filesystem access; sealed targets are
+    represented only by their declared metadata.
     """
 
     repository = Path(root).resolve()
@@ -319,6 +326,7 @@ def build_protected_tree(
 
     for relative_root in roots:
         root_relative = _safe_relative(relative_root.as_posix(), "protected root")
+        _reject_deferred_protected_overlap(root_relative)
         source = _resolve_non_target(repository, root_relative, declared_targets)
         if not source.exists():
             raise A0XFreezeError(f"protected root is missing: {root_relative}")
@@ -388,8 +396,8 @@ def verify_protected_tree(
 def verify_protected_tree_metadata_only(root: str | Path, tree: Mapping[str, Any]) -> None:
     """Validate only tree declarations/provenance without opening protected inputs.
 
-    This is the synthetic verifier's boundary: sealed target and calibration
-    paths remain names plus committed metadata, never file handles.
+    Sealed target paths remain names plus committed metadata, never file
+    handles. Deferred calibration paths are absent from the tree entirely.
     """
     repository = Path(root).resolve()
     _verify_tree_shape(tree)
@@ -644,6 +652,16 @@ def _resolve_non_target(repository: Path, relative: str, declared_targets: Mappi
     return path
 
 
+def _reject_deferred_protected_overlap(relative_root: str) -> None:
+    root_parts = PurePosixPath(relative_root).parts
+    for protected in _N3_DEFERRED_PROTECTED_PATHS:
+        protected_parts = PurePosixPath(protected).parts
+        root_is_ancestor = root_parts == protected_parts[:len(root_parts)]
+        root_is_descendant = protected_parts == root_parts[:len(protected_parts)]
+        if root_is_ancestor or root_is_descendant:
+            raise A0XFreezeError("protected root overlaps a deferred protected input")
+
+
 def _reject_symlink_components(repository: Path, relative: str) -> None:
     candidate = repository
     for component in Path(relative).parts:
@@ -750,13 +768,11 @@ def _canonical_tree_inputs(
         target = "sealed-targets/targets.jsonl"
         roots = (
             Path("experiments/a0-automated-weak-proxy"), Path("data/a0/cases.jsonl"),
-            Path("data/a0/procedural-targets/calibration-targets.jsonl"), Path(manifest),
-            Path("results/a0/calibration"), Path("results/a0/a0-v1.0.3-e93a9faa"),
+            Path(manifest), Path("results/a0/calibration"), Path("results/a0/a0-v1.0.3-e93a9faa"),
         )
         provenance = {
             "experiments/a0-automated-weak-proxy": "experiments/a0-automated-weak-proxy/protocol.json",
             "data/a0/cases.jsonl": manifest,
-            "data/a0/procedural-targets/calibration-targets.jsonl": manifest,
             manifest: manifest,
             "results/a0/calibration": "results/a0/calibration/freeze-manifest.json",
             "results/a0/a0-v1.0.3-e93a9faa": "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json",
@@ -768,14 +784,12 @@ def _canonical_tree_inputs(
         target = "targets/sealed.jsonl"
         roots = (
             Path("experiments/a0r1-independent-proxy"), Path("data/a0r1/cases.jsonl"),
-            Path("data/a0r1/targets/calibration.jsonl"), Path(manifest), Path("results/a0r1/freeze"),
-            Path("results/a0r1/a0r1-v1.0.0-e93a9faa-r1"),
+            Path(manifest), Path("results/a0r1/freeze"), Path("results/a0r1/a0r1-v1.0.0-e93a9faa-r1"),
         )
         publication_manifest = "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json"
         provenance = {
             "experiments/a0r1-independent-proxy": "experiments/a0r1-independent-proxy/protocol.json",
             "data/a0r1/cases.jsonl": manifest,
-            "data/a0r1/targets/calibration.jsonl": manifest,
             manifest: manifest,
             "results/a0r1/freeze": "results/a0r1/freeze/freeze-manifest.json",
             "results/a0r1/a0r1-v1.0.0-e93a9faa-r1": publication_manifest,
