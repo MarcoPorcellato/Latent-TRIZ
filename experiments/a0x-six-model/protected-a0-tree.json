@@ -22,15 +22,6 @@
       "verification_phase": "preflight_postflight"
     },
     {
-      "bytes": 55008,
-      "entry_kind": "file",
-      "path": "data/a0/procedural-targets/calibration-targets.jsonl",
-      "provenance_manifest": "data/a0/manifest.json",
-      "provenance_manifest_sha256": "68eda0c1082b36b17836cb79684c5696280486ae93596109562853160f25d58f",
-      "sha256": "1607a329e83ee77d010a9e839c10a6c5f073b0550256d0305fb5d49af0c26acd",
-      "verification_phase": "preflight_postflight"
-    },
-    {
       "bytes": 54528,
       "entry_kind": "sealed_target",
       "path": "data/a0/sealed-targets/targets.jsonl",
@@ -153,7 +144,6 @@
   "protected_paths": [
     "data/a0/cases.jsonl",
     "data/a0/manifest.json",
-    "data/a0/procedural-targets/calibration-targets.jsonl",
     "data/a0/sealed-targets/targets.jsonl",
     "experiments/a0-automated-weak-proxy/README.md",
     "experiments/a0-automated-weak-proxy/implementation.json",
@@ -168,7 +158,7 @@
     "results/a0/calibration/shortcuts.json",
     "results/a0/calibration/summary.json"
   ],
-  "protected_tree_sha256": "334a24453b3f7449300df25174737ac92fdfd2914f72d7c83550685c8d7524bd",
+  "protected_tree_sha256": "8257ef795760bffe37ff343db2c48ab024039dae18a02b235de909346fa096c4",
   "scientific_status": "exploratory",
   "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
 }
