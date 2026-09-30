@@ -25,8 +25,13 @@ from jsonschema import Draft202012Validator
 
 
 PROFILE = "a0x-target-free-schema-profile-v1"
-EXPECTED_HEAD = "7dbb04d0eecd1ab7d40f4dd3a40f5253affa5367"
-EXPECTED_TREE = "14b75e50c23c22cd8b21a506b72fe2af3f0abd21"
+# Keep proposal provenance and the A0X implementation anchor distinct. The
+# eventual candidate HEAD/tree belongs in the external checkpoint, not in an
+# artifact committed by that candidate.
+PROPOSAL_PROVENANCE_HEAD = "7dbb04d0eecd1ab7d40f4dd3a40f5253affa5367"
+PROPOSAL_PROVENANCE_TREE = "14b75e50c23c22cd8b21a506b72fe2af3f0abd21"
+IMPLEMENTATION_ANCHOR_HEAD = "01bf0bbb2d4bd09fdf28f7863c364bf1c3c71fce"
+IMPLEMENTATION_ANCHOR_TREE = "d52408d84d7d061f9db31d37f5290be78396e617"
 PROPOSAL_PATH = "docs/qualification/A0X_N3_TARGET_FREE_SCHEMA_RECONCILIATION_PROPOSAL_2026-09-29.md"
 PROPOSAL_SHA256 = "687e716e7eac35c328553637bab034f67844689e7b99425813cab641710d7f2a"
 CANONICAL_PLAN_SHA256 = "cdbfa42c1bfed6c21ab002014cfc5c4d2568ad7504b489656af4aab1c1eda54c"
@@ -590,8 +595,16 @@ def _build_manifest_in_context(root: Path) -> dict[str, Any]:
     # Bind plan authority separately: its canonical bytes live in the preserved primary checkout.
     return {
         "profile": PROFILE,
-        "source": {"head": EXPECTED_HEAD, "tree": EXPECTED_TREE},
-        "proposal": {"path": PROPOSAL_PATH, "sha256": PROPOSAL_SHA256},
+        "proposal_provenance": {
+            "source_head": PROPOSAL_PROVENANCE_HEAD,
+            "source_tree": PROPOSAL_PROVENANCE_TREE,
+            "document_path": PROPOSAL_PATH,
+            "document_sha256": PROPOSAL_SHA256,
+        },
+        "implementation_anchor": {
+            "head": IMPLEMENTATION_ANCHOR_HEAD,
+            "tree": IMPLEMENTATION_ANCHOR_TREE,
+        },
         "canonical_plan_authority_sha256": CANONICAL_PLAN_SHA256,
         "isolated_plan_copy_sha256_observed": PLAN_COPY_OBSERVED_SHA256,
         "schema_counts": {"schema_related_json_files": 211, "draft_2020_12_schema_documents": 209,

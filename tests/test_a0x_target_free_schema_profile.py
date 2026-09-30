@@ -98,6 +98,30 @@ class A0XTargetFreeSchemaProfileTests(unittest.TestCase):
         report = run_profile(ROOT, MANIFEST)
         self.assertEqual(len(refs), report["local_schema_reference_count"])
 
+    def test_manifest_separates_proposal_provenance_from_implementation_anchor(self) -> None:
+        _, load_profile_manifest, _, _ = self.profile_api()
+        manifest = load_profile_manifest(ROOT, MANIFEST)
+
+        self.assertEqual(
+            {
+                "source_head": "7dbb04d0eecd1ab7d40f4dd3a40f5253affa5367",
+                "source_tree": "14b75e50c23c22cd8b21a506b72fe2af3f0abd21",
+                "document_path": "docs/qualification/A0X_N3_TARGET_FREE_SCHEMA_RECONCILIATION_PROPOSAL_2026-09-29.md",
+                "document_sha256": "687e716e7eac35c328553637bab034f67844689e7b99425813cab641710d7f2a",
+            },
+            manifest.get("proposal_provenance"),
+        )
+        self.assertEqual(
+            {
+                "head": "01bf0bbb2d4bd09fdf28f7863c364bf1c3c71fce",
+                "tree": "d52408d84d7d061f9db31d37f5290be78396e617",
+            },
+            manifest.get("implementation_anchor"),
+        )
+        self.assertNotIn("source", manifest)
+        for key in ("candidate", "candidate_head", "candidate_tree"):
+            self.assertNotIn(key, manifest)
+
     def test_tampered_manifest_cannot_expand_public_instance_allowlist(self) -> None:
         ProfileError, load_profile_manifest, read_instance, _ = self.profile_api()
         manifest = load_profile_manifest(ROOT, MANIFEST)
