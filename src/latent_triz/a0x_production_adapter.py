@@ -314,6 +314,39 @@ def _read_repository_file(root: Path, relative: str) -> bytes:
     return resolved.read_bytes()
 
 
+def _a0_activation_selection_manifest(
+    selection: object, *, freeze: object, pair: PairBinding,
+) -> dict[str, Any]:
+    """Project the declaration guaranteed by the canonical A0 public loader.
+
+    The zero describes that loader-checked selection source, not a measured
+    runtime access count. Capability attestations check consistency, not
+    authentication or independent provenance. R1 has no equivalent declaration.
+    """
+    from .a0x_execution import (
+        A0XExecutionError,
+        _require_freeze_source_hash,
+        _validate_leg_freeze,
+        _validate_selection_capability,
+    )
+
+    if not isinstance(pair, PairBinding) or pair.leg is not Leg.A0:
+        raise A0XProductionAdapterError("A0 selection bridge requires the bound A0 pair")
+    try:
+        _validate_leg_freeze(freeze, expected_leg=Leg.A0)
+        _validate_selection_capability(selection, pair_binding=pair)
+        if freeze.leg_freeze_sha256 != pair.leg_freeze_sha256:
+            raise A0XExecutionError("A0 selection freeze differs from the bound pair")
+        _require_freeze_source_hash(freeze, selection.source_sha256)
+    except A0XExecutionError as error:
+        raise A0XProductionAdapterError("A0 activation selection binding is invalid") from error
+    return {
+        "target_content_reads": 0,
+        "selected_case_count": len(selection.expected_case_ids),
+        "cases": [{"case_id": case_id} for case_id in selection.expected_case_ids],
+    }
+
+
 def _default_dependencies(context: ProductionContext) -> MaterialLifecycleDependencies:
     """Assemble lazy real callbacks without constructing material resources.
 
@@ -469,7 +502,11 @@ def _default_dependencies(context: ProductionContext) -> MaterialLifecycleDepend
             check("activation-before-extraction")
             extractor = extract_a0x_a0 if leg is Leg.A0 else extract_a0x_r1
             artifacts = extractor(
-                adapter=adapter, cases=cases, selection={"case_ids": list(selection.expected_case_ids)},
+                adapter=adapter, cases=cases,
+                selection=(
+                    _a0_activation_selection_manifest(selection, freeze=freeze, pair=context.pair)
+                    if leg is Leg.A0 else {"case_ids": list(selection.expected_case_ids)}
+                ),
                 pair_binding=context.pair.as_mapping(), authorization_chain=chain,
                 output_dir=workspace / "activation", created_at="2026-08-28T00:00:00Z",
             )

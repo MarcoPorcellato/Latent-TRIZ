@@ -311,5 +311,255 @@ class A0XProductionAdapterTests(unittest.TestCase):
         self.assertEqual(before, _model_module_state())
 
 
+
+class A0XDefaultA0SelectionBridgeTests(unittest.TestCase):
+    """Synthetic first-forward checks, not a material or completed extraction."""
+
+    def setUp(self):
+        supplied = os.environ.get("A0X_SYNTHETIC_ROOT")
+        parent_path = Path("/private/tmp") if supplied is not None else Path(tempfile.gettempdir())
+        parent = os.open(parent_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        descriptor = None
+        self._owns_root = supplied is None
+        name = (
+            "a0x-selection-contract-synthetic-" + os.urandom(16).hex()
+            if supplied is None else Path(supplied).name
+        )
+        if supplied is not None and (
+            Path(supplied).parent != Path("/private/tmp")
+            or not name.startswith("a0x-selection-contract-synthetic-")
+        ):
+            os.close(parent)
+            self.fail("focused synthetic root is outside the owned namespace")
+        try:
+            if self._owns_root:
+                os.mkdir(name, 0o700, dir_fd=parent)
+            descriptor = os.open(
+                name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent,
+            )
+            identity = os.fstat(descriptor)
+            self.assertEqual(os.getuid(), identity.st_uid)
+            self.assertEqual(0o700, identity.st_mode & 0o777)
+            self.synthetic_root = parent_path / name
+
+            def close_owned_root():
+                try:
+                    if self._owns_root:
+                        current = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                        self.assertEqual(
+                            (identity.st_dev, identity.st_ino),
+                            (current.st_dev, current.st_ino),
+                            "synthetic root ownership lost; replacement preserved",
+                        )
+                        os.rmdir(name, dir_fd=parent)
+                finally:
+                    os.close(descriptor)
+                    os.close(parent)
+
+            self.addCleanup(close_owned_root)
+        except BaseException:
+            if descriptor is not None:
+                os.close(descriptor)
+            os.close(parent)
+            raise
+
+    def _fixture(self):
+        from latent_triz.a0x_contract import (
+            APPROVAL_DOSSIER_PROFILE, EXECUTION_AUTHORIZATION_PROFILE,
+            LegFreezeBinding, compute_dense_bound, derive_pair_output_path,
+        )
+        from latent_triz.a0x_execution import _selection_capability
+        from latent_triz.a0x_production_adapter import ProductionContext
+
+        ids = tuple(f"synthetic-case-{index:02d}" for index in range(48))
+        freeze = LegFreezeBinding(
+            Leg.A0, "synthetic-a0", "1" * 64, "2" * 64, "3" * 64,
+            "4" * 64, "5" * 64, "6" * 40,
+        )
+        pair = PairBinding.from_mapping({
+            "binding_profile": "a0x-pair-scope-v2", "leg": "a0",
+            "leg_freeze_sha256": freeze.leg_freeze_sha256,
+            "model_key": "smollm2_360m", "model_id": "synthetic/fixture",
+            "revision": "7" * 40, "run_id": "synthetic-selection-bridge",
+            "output_path": derive_pair_output_path(
+                Leg.A0, "smollm2_360m", "synthetic-selection-bridge",
+            ),
+            "dense_bound": compute_dense_bound(Leg.A0, cases=48, hidden_width=2).as_mapping(),
+        })
+        selection = _selection_capability(
+            leg_freeze=freeze,
+            source_path=Path("experiments/a0x-six-model/a0-selection-manifest.json"),
+            source_sha256=freeze.selection_corpus_sha256,
+            case_ids=ids, require_file_exact=False,
+        )
+        cases = [{
+            "case_id": case_id, "problem_family_id": f"family-{index}",
+            "domain": "synthetic", "problem": f"Synthetic problem {index}",
+            "constraints": ["Synthetic constraint"], "initial_state": "Synthetic initial state",
+            "desired_improvement": "Synthetic improvement",
+            "worsening_consequence": "Synthetic worsening",
+            "transformation": "Synthetic transformation", "solution": "Synthetic solution",
+        } for index, case_id in enumerate(ids)]
+        chain = {
+            "dossier_commitment": {
+                "profile": APPROVAL_DOSSIER_PROFILE, "commitment_sha256": "8" * 64,
+            },
+            "authorization_commitment": {
+                "profile": EXECUTION_AUTHORIZATION_PROFILE, "commitment_sha256": "9" * 64,
+            },
+        }
+        # The focused operator owns this empty private directory. No production
+        # preflight, loader, schema, model, tokenizer or target is invoked.
+        context = ProductionContext(
+            self.synthetic_root, {}, "a" * 64, "b" * 40,
+            pair, {}, "c" * 64, {}, "d" * 64,
+        )
+        return context, freeze, selection, cases, chain
+
+    def _exercise(self, *, selection_change=None, cases_change=None, freeze_change=None):
+        from unittest.mock import patch
+        from latent_triz.a0x_a0_activations import extract_a0x_a0
+        from latent_triz.a0x_production_adapter import _default_dependencies
+
+        context, freeze, selection, cases, chain = self._fixture()
+        if selection_change is not None:
+            selection = selection_change(selection)
+        if cases_change is not None:
+            cases = cases_change(cases)
+        if freeze_change is not None:
+            freeze = freeze_change(freeze)
+        forwarded = []
+        payloads = []
+
+        class FirstForwardBoundary(BaseException):
+            pass
+
+        class Adapter:
+            hidden_width = 2
+
+            def forward_hidden(self, text):
+                forwarded.append(text)
+                raise FirstForwardBoundary()
+
+        def actual_extractor(**kwargs):
+            payloads.append(kwargs["selection"])
+            return extract_a0x_a0(**kwargs)
+
+        with patch("latent_triz.a0x_execution.load_a0_public_selection", return_value=selection), \
+             patch("latent_triz.a0x_production_adapter._public_cases", return_value=cases), \
+             patch("latent_triz.a0x_production_adapter._authorization_chain", return_value=chain), \
+             patch("latent_triz.a0x_a0_activations.extract_a0x_a0", side_effect=actual_extractor):
+            dependencies = _default_dependencies(context)
+            callback = dependencies.activation_by_leg[Leg.A0]
+            inspect.getclosurevars(callback).nonlocals["state"]["freeze"] = freeze
+            try:
+                callback(Adapter(), lambda _stage: None)
+            except FirstForwardBoundary:
+                return "first_forward", forwarded, payloads
+            except Exception as error:
+                self.assertEqual([], forwarded, "invalid selection reached fake forward")
+                return error, forwarded, payloads
+        self.fail("synthetic callback returned a completed extraction")
+
+    def test_real_default_a0_reaches_first_forward_with_ordered_manifest(self):
+        outcome, forwarded, payloads = self._exercise(
+            cases_change=lambda cases: list(reversed(cases)),
+        )
+        self.assertEqual("first_forward", outcome)
+        self.assertEqual(1, len(forwarded))
+        self.assertEqual(1, len(payloads))
+        self.assertEqual([], list(self.synthetic_root.iterdir()))
+        self.assertIn("Synthetic problem 0", forwarded[0])
+        self.assertEqual({
+            "target_content_reads": 0, "selected_case_count": 48,
+            "cases": [{"case_id": f"synthetic-case-{index:02d}"} for index in range(48)],
+        }, payloads[0])
+
+    def test_invalid_capabilities_rejected_before_first_forward(self):
+        from dataclasses import replace
+        from latent_triz.a0x_production_adapter import A0XProductionAdapterError
+        mutations = {
+            "missing": lambda selection: None,
+            "wrong_type": lambda selection: SimpleNamespace(**selection.__dict__),
+            "wrong_leg": lambda selection: replace(selection, leg=Leg.R1),
+            "freeze": lambda selection: replace(selection, leg_freeze_sha256="e" * 64),
+            "source": lambda selection: replace(selection, source_sha256="e" * 64),
+            "path": lambda selection: replace(selection, source_path="synthetic/alias.json"),
+            "identity": lambda selection: replace(selection, ordered_case_ids_sha256="e" * 64),
+            "attestation": lambda selection: replace(selection, _attestation_sha256="e" * 64),
+            "reordered": lambda selection: replace(
+                selection, expected_case_ids=tuple(reversed(selection.expected_case_ids)),
+            ),
+            "missing_id": lambda selection: replace(
+                selection, expected_case_ids=selection.expected_case_ids[:-1],
+            ),
+            "duplicate_id": lambda selection: replace(
+                selection, expected_case_ids=(selection.expected_case_ids[0],) * 48,
+            ),
+            "extra_id": lambda selection: replace(
+                selection, expected_case_ids=selection.expected_case_ids + ("extra",),
+            ),
+            "exact_mode": lambda selection: replace(selection, require_file_exact=True),
+        }
+        for label, mutation in mutations.items():
+            with self.subTest(label=label):
+                outcome, forwarded, payloads = self._exercise(selection_change=mutation)
+                self.assertIsInstance(outcome, A0XProductionAdapterError)
+                self.assertEqual([], forwarded)
+                self.assertEqual([], payloads)
+
+    def test_freeze_source_binding_rejected_even_with_valid_capability_integrity(self):
+        from dataclasses import replace
+        from latent_triz.a0x_execution import _selection_capability
+        from latent_triz.a0x_production_adapter import A0XProductionAdapterError
+
+        def mismatched_source(selection):
+            _context, freeze, _selection, _cases, _chain = self._fixture()
+            return _selection_capability(
+                leg_freeze=freeze, source_path=Path(selection.source_path),
+                source_sha256="e" * 64, case_ids=selection.expected_case_ids,
+                require_file_exact=False,
+            )
+
+        for change in (
+            {"selection_change": mismatched_source},
+            {"freeze_change": lambda freeze: replace(freeze, leg=Leg.R1)},
+            {"freeze_change": lambda freeze: replace(freeze, leg_freeze_sha256="e" * 64)},
+            {"freeze_change": lambda freeze: replace(freeze, selection_corpus_sha256="e" * 64)},
+            {"freeze_change": lambda freeze: None},
+        ):
+            with self.subTest(change=tuple(change)):
+                outcome, forwarded, payloads = self._exercise(**change)
+                self.assertIsInstance(outcome, A0XProductionAdapterError)
+                self.assertEqual([], forwarded)
+                self.assertEqual([], payloads)
+
+    def test_bad_case_membership_or_fields_rejected_by_unchanged_extractor(self):
+        from latent_triz.a0x_a0_activations import A0XActivationError
+        mutations = {
+            "missing": lambda cases: cases[:-1],
+            "extra": lambda cases: cases + [dict(cases[0], case_id="extra")],
+            "duplicate": lambda cases: cases[:-1] + [cases[0]],
+            "unselected": lambda cases: cases[:-1] + [dict(cases[-1], case_id="other")],
+        }
+        required = (
+            "case_id", "problem_family_id", "domain", "problem", "constraints",
+            "initial_state", "desired_improvement", "worsening_consequence",
+            "transformation", "solution",
+        )
+        for field in required:
+            mutations[f"missing_field_{field}"] = (
+                lambda cases, field=field: [
+                    {key: value for key, value in cases[0].items() if key != field},
+                    *cases[1:],
+                ]
+            )
+        for label, mutation in mutations.items():
+            with self.subTest(label=label):
+                outcome, forwarded, payloads = self._exercise(cases_change=mutation)
+                self.assertIsInstance(outcome, A0XActivationError)
+                self.assertEqual([], forwarded)
+                self.assertEqual(1, len(payloads))
+
 if __name__ == "__main__":
     unittest.main()
