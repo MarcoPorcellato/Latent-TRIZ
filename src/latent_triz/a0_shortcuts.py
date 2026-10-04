@@ -6,10 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import random
 import re
+import sys
+import unicodedata
 from collections import Counter, defaultdict
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -47,6 +51,9 @@ def audit_a0_shortcuts(
     cases_path: str | Path,
     targets_path: str | Path,
     protocol_path: str | Path,
+    *,
+    method_selection: Mapping[str, Any] | None = None,
+    mechanical_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run deterministic shortcut controls on calibration-only A0 split.
 
@@ -60,6 +67,12 @@ def audit_a0_shortcuts(
     protocol_path:
         Path to the protocol JSON containing shortcut thresholds and control list.
     """
+
+    _validate_prospective_selection(method_selection, mechanical_evidence)
+    if method_selection is not None:
+        return _audit_prospective_shortcuts(
+            cases_path, targets_path, protocol_path, mechanical_evidence
+        )
 
     protocol = _load_protocol(protocol_path)
     controls_required = tuple(protocol.get("shortcut_evaluation", {}).get("a0_controls", _DEFAULT_A0_CONTROLS))
@@ -983,3 +996,605 @@ def _normalize_metric_floats(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {key: _normalize_metric_floats(item) for key, item in value.items()}
     return value
+
+
+# Prospective engineering route. No production schema, schedule or freeze is
+# supplied by these helpers. The caller must explicitly bind every supported
+# mechanical choice; the historical route above remains opt-out and unchanged.
+_V2_SELECTION = {
+    "method_id": "a0x-shortcut-calibration-method-v2.0.0",
+    "leg": "A0", "model": "HuggingFaceTB/SmolLM2-360M",
+    "revision": "f8027fd0eaeea54caa13c31d31b9fdc459c38b49",
+}
+_V2_PROPOSAL_SHA256 = "be3494238904b64a756425eec464a941ef453bf9745fcc4392bc9666f69ce13c"
+_V2_TEXT_FIELDS = {
+    "problem", "initial_state", "desired_improvement", "worsening_consequence",
+    "transformation", "resulting_state", "solution",
+}
+_V2_METRIC_CONTROLS = tuple(name for name in _DEFAULT_A0_CONTROLS
+    if name not in {"duplicate_and_near_duplicate_detection", "family_leakage_detection"})
+_V2_REQUIRED_FIELDS = {
+    "schema", "classes", "views", "control_views", "units", "replicas", "randomizer",
+    "python_version", "partition_train_families", "partition_assignments", "algorithm",
+    "numerics", "tie_break", "payload_stages", "payload_encoding", "normalization",
+    "unicode_version", "boundaries",
+}
+
+
+def _validate_prospective_selection(selection, evidence):
+    """Reject a conflicting opt-in before any path operation; no fallback."""
+    if selection is None:
+        if evidence is not None:
+            raise ValueError("mechanical evidence requires explicit method selection")
+        return
+    if not isinstance(selection, Mapping) or dict(selection) != _V2_SELECTION:
+        raise ValueError("unknown or conflicting prospective method/model/leg/revision")
+
+
+def _v2_canonical(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                      allow_nan=False).encode("utf-8")
+
+
+def _v2_id(value):
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError("malformed canonical identity")
+    value.encode("utf-8")
+    return value
+
+
+def _v2_names(value):
+    if not isinstance(value, list):
+        raise ValueError("identity registry must be a list")
+    names = [_v2_id(item) for item in value]
+    if len(names) != len(set(names)):
+        raise ValueError("duplicate canonical identity")
+    return names
+
+
+def _v2_contract(evidence):
+    if evidence is None:
+        raise LookupError("mechanical evidence absent")
+    if not isinstance(evidence, Mapping) or set(evidence) - {"contract", "sha256"}:
+        raise ValueError("unknown mechanical envelope")
+    if set(evidence) != {"contract", "sha256"}:
+        raise LookupError("mechanical envelope incomplete")
+    if not isinstance(evidence["contract"], Mapping):
+        raise ValueError("contract must be an object")
+    raw = _v2_canonical(evidence["contract"])
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != evidence["sha256"]:
+        raise ValueError("mechanical evidence hash mismatch")
+    # Work on the supplied byte-bound snapshot, not a mutable caller alias.
+    contract = json.loads(raw)
+    if set(contract) - _V2_REQUIRED_FIELDS:
+        raise ValueError("unknown mechanical contract fields")
+    if _V2_REQUIRED_FIELDS - set(contract):
+        raise LookupError("required mechanical contract fields absent")
+    modes = {
+        "schema": "a0x-shortcut-mechanics-engineering-v1",
+        "randomizer": "python-mt19937-shuffle-v1", "python_version": sys.version.split()[0],
+        "algorithm": "nearest-centroid-squared-euclidean-v1",
+        "numerics": "binary64-features-fraction-metrics-v1", "tie_break": "utf8-lexicographic",
+        "payload_encoding": "length-prefixed-utf8-v1", "normalization": "utf8-nfc-lf-v1",
+        "unicode_version": unicodedata.unidata_version,
+    }
+    if any(contract[key] != value for key, value in modes.items()):
+        raise ValueError("unsupported or mismatched explicit mechanical mode")
+    classes = _v2_names(contract["classes"])
+    if not classes:
+        raise LookupError("canonical classes absent")
+    views = contract["views"]
+    if not isinstance(views, dict):
+        raise ValueError("feature views must be an object")
+    if not views:
+        raise LookupError("feature views absent")
+    for name, view in views.items():
+        _v2_id(name)
+        if not isinstance(view, dict) or set(view) - {"kind", "fields", "lexicon"}:
+            raise ValueError("malformed feature view")
+        if not {"kind", "fields"} <= set(view):
+            raise LookupError("feature view incomplete")
+        kind, fields = view["kind"], _v2_names(view["fields"])
+        allowed = {"domain", "template_id", "generator_id"} if kind == "categorical" else _V2_TEXT_FIELDS
+        if not fields or not set(fields) <= allowed:
+            raise ValueError("unsupported feature field role")
+        if kind not in {"word_unigrams", "char_3_5_grams", "length_and_punctuation",
+                        "categorical", "keyword_counts"}:
+            raise ValueError("unsupported feature representation")
+        if kind == "keyword_counts":
+            lexicon = view.get("lexicon")
+            if not isinstance(lexicon, dict) or set(lexicon) != set(classes):
+                raise ValueError("keyword representation does not bind canonical classes")
+            for tokens in lexicon.values():
+                for token in _v2_names(tokens):
+                    if _tokenize(token) != [token]:
+                        raise ValueError("keyword must be a canonical single token")
+        elif "lexicon" in view:
+            raise ValueError("unused lexicon evidence")
+    crosswalk = contract["control_views"]
+    if not isinstance(crosswalk, dict) or set(crosswalk) - set(_V2_METRIC_CONTROLS):
+        raise ValueError("unknown control or applicability exemption")
+    if set(_V2_METRIC_CONTROLS) - set(crosswalk):
+        raise LookupError("required control views absent")
+    kinds = {
+        "bag_of_words_baselines": "word_unigrams", "character_ngram_baselines": "char_3_5_grams",
+        "length_and_punctuation_baselines": "length_and_punctuation",
+        "style_and_template_baselines": "categorical", "provenance_classifiers": "categorical",
+        "problem_only_label_prediction": "word_unigrams",
+        "generic_action_taxonomy_controls": "keyword_counts",
+        "generic_transformation_taxonomy_controls": "keyword_counts",
+        "adjacent_principle_proxy_controls": "keyword_counts",
+    }
+    for control, names in crosswalk.items():
+        names = _v2_names(names)
+        if not names:
+            raise LookupError("empty planned control view registry")
+        if not set(names) <= set(views):
+            raise ValueError("unknown planned feature view")
+        if control in kinds and any(views[name]["kind"] != kinds[control] for name in names):
+            raise ValueError("control feature representation conflicts with its declared role")
+        if control == "problem_only_label_prediction" and any(views[name]["fields"] != ["problem"] for name in names):
+            raise ValueError("problem-only view includes other fields")
+    applicable = {name for control, names in crosswalk.items()
+                  if not control.startswith("random_") for name in names}
+    if set(views) != applicable:
+        raise ValueError("unbound or unused feature view")
+    for control in ("random_label_controls", "random_partition_controls"):
+        if set(crosswalk[control]) != applicable:
+            raise ValueError("random control must cover every applicable nonactivation view")
+    units = contract["units"]
+    if not isinstance(units, list):
+        raise ValueError("planned evaluation schedule must be a list")
+    if not units:
+        raise LookupError("planned evaluation schedule absent")
+    unit_ids = []
+    domain_folds = []
+    for unit in units:
+        if not isinstance(unit, dict) or set(unit) != {"id", "fold", "domain", "train_ids", "test_ids"}:
+            raise ValueError("invalid planned unit")
+        unit_ids.append(_v2_id(unit["id"]))
+        domain_folds.append((_v2_id(unit["domain"]), _v2_id(unit["fold"])))
+        for side in ("train_ids", "test_ids"):
+            if not _v2_names(unit[side]):
+                raise LookupError("empty planned training or held-out support")
+        if set(unit["train_ids"]) & set(unit["test_ids"]):
+            raise ValueError("same case crosses a forbidden evaluation boundary")
+    if len(unit_ids) != len(set(unit_ids)) or len(domain_folds) != len(set(domain_folds)):
+        raise ValueError("duplicate planned unit/domain-fold")
+    replicas = contract["replicas"]
+    if not isinstance(replicas, list):
+        raise ValueError("random replica schedule must be a list")
+    if not replicas:
+        raise LookupError("random replica schedule absent")
+    replica_ids = []
+    for replica in replicas:
+        if not isinstance(replica, dict) or set(replica) != {"id", "seed"}:
+            raise ValueError("malformed random replica")
+        replica_ids.append(_v2_id(replica["id"]))
+        if isinstance(replica["seed"], bool) or not isinstance(replica["seed"], int):
+            raise ValueError("random seed must be explicitly integral")
+    if len(replica_ids) != len(set(replica_ids)):
+        raise ValueError("duplicate replica")
+    domains = {unit["domain"] for unit in units}
+    counts = contract["partition_train_families"]
+    assignments = contract["partition_assignments"]
+    if not isinstance(counts, dict):
+        raise ValueError("partition counts must be an object")
+    if set(counts) - domains:
+        raise ValueError("unknown partition count domain")
+    if set(counts) != domains:
+        raise LookupError("partition domain/count schedule incomplete")
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in counts.values()):
+        raise ValueError("invalid partition family count")
+    if not isinstance(assignments, dict):
+        raise ValueError("partition assignments must be an object")
+    if set(assignments) - set(replica_ids):
+        raise ValueError("unknown partition assignment replica")
+    if set(assignments) != set(replica_ids):
+        raise LookupError("partition assignments incomplete")
+    for domain_assignments in assignments.values():
+        if not isinstance(domain_assignments, dict):
+            raise ValueError("partition domain assignments must be an object")
+        if set(domain_assignments) - domains:
+            raise ValueError("unknown partition assignment domain")
+        if set(domain_assignments) != domains:
+            raise LookupError("partition assignment domains incomplete")
+        for assignment in domain_assignments.values():
+            if not isinstance(assignment, dict) or set(assignment) != {"train_families", "test_families"}:
+                raise ValueError("malformed partition assignment")
+            for side in assignment:
+                if not _v2_names(assignment[side]):
+                    raise LookupError("empty partition assignment support")
+            if set(assignment["train_families"]) & set(assignment["test_families"]):
+                raise ValueError("declared partition crosses family boundary")
+    if contract["boundaries"] != [["train", "test"]]:
+        raise ValueError("unsupported or incomplete forbidden boundary map")
+    stages = contract["payload_stages"]
+    if not isinstance(stages, list):
+        raise ValueError("payload stages must be a list")
+    if not stages:
+        raise LookupError("relevant payload stage scope absent")
+    stage_ids = []
+    for stage in stages:
+        if not isinstance(stage, dict) or set(stage) != {"id", "fields"}:
+            raise ValueError("malformed payload stage")
+        stage_ids.append(_v2_id(stage["id"]))
+        fields = _v2_names(stage["fields"])
+        if not fields or not set(fields) <= _V2_TEXT_FIELDS:
+            raise ValueError("payload field roles must be declared input text, not labels/metadata")
+    if len(stage_ids) != len(set(stage_ids)):
+        raise ValueError("duplicate relevant payload stage")
+    return contract, digest
+
+
+def _v2_sentinel(f1, margin):
+    return f1 >= Fraction(13, 20) and margin >= Fraction(1, 10)
+
+
+def _v2_metric(y_true, y_pred, classes):
+    if not y_true or len(y_true) != len(y_pred) or not classes:
+        raise LookupError("missing paired prediction support")
+    if any(value not in classes for value in [*y_true, *y_pred]):
+        raise ValueError("class outside fixed registry")
+    values = []
+    for label in classes:
+        tp = sum(a == label and b == label for a, b in zip(y_true, y_pred))
+        fp = sum(a != label and b == label for a, b in zip(y_true, y_pred))
+        fn = sum(a == label and b != label for a, b in zip(y_true, y_pred))
+        denominator = 2 * tp + fp + fn
+        values.append(Fraction(2 * tp, denominator) if denominator else Fraction(0))
+    return sum(values, Fraction(0)) / len(classes)
+
+
+def _v2_majority(labels, classes):
+    if not labels:
+        raise LookupError("empty training support")
+    if any(label not in classes for label in labels):
+        raise ValueError("invalid training label")
+    counts = Counter(labels)
+    return min(counts, key=lambda label: (-counts[label], label.encode("utf-8")))
+
+
+def _v2_aggregate(units):
+    if not units:
+        raise LookupError("no planned unit evidence")
+    grouped = defaultdict(list)
+    for unit in units:
+        grouped[unit["domain"]].append(unit)
+    domains = {domain: (sum((row["f1"] for row in rows), Fraction(0)) / len(rows),
+                        sum((row["f1"] - row["baseline"] for row in rows), Fraction(0)) / len(rows))
+               for domain, rows in grouped.items()}
+    f1 = sum((pair[0] for pair in domains.values()), Fraction(0)) / len(domains)
+    margin = sum((pair[1] for pair in domains.values()), Fraction(0)) / len(domains)
+    return f1, margin, domains
+
+
+def _v2_gate(statuses):
+    allowed = {"PASS", "FAIL", "NON_INTERPRETABLE", "UNEVALUABLE"}
+    if set(statuses) - set(_DEFAULT_A0_CONTROLS) or any(value not in allowed for value in statuses.values()):
+        return "FAIL"
+    values = list(statuses.values())
+    if set(_DEFAULT_A0_CONTROLS) - set(statuses):
+        values.append("UNEVALUABLE")
+    return next(status for status in ("FAIL", "NON_INTERPRETABLE", "UNEVALUABLE", "PASS") if status in values)
+
+
+def _v2_normalize(text):
+    if not isinstance(text, str):
+        raise ValueError("payload is not UTF-8 text")
+    try:
+        text.encode("utf-8")
+        return unicodedata.normalize("NFC", text).replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+    except UnicodeError as exc:
+        raise ValueError("invalid UTF-8 payload") from exc
+
+
+def _v2_payload(row, fields):
+    components = [_v2_normalize(row[field]) for field in fields]
+    return len(components).to_bytes(8, "big") + b"".join(
+        len(component).to_bytes(8, "big") + component for component in components)
+
+
+def _v2_features(row, view):
+    if view["kind"] == "categorical":
+        return {json.dumps([field, row[field]], ensure_ascii=False): 1.0 for field in view["fields"]}
+    text = " ".join(row[field] for field in view["fields"])
+    kind = view["kind"]
+    if kind == "word_unigrams":
+        return dict(Counter(_tokenize(text)))
+    if kind == "char_3_5_grams":
+        return dict(Counter(_char_ngrams(text)))
+    if kind == "length_and_punctuation":
+        return dict(zip(("characters", "mean_word_length", "punctuation", "digits"), _length_features(text)))
+    tokens = Counter(_tokenize(text))
+    return {label: sum(tokens[token] for token in words) for label, words in view["lexicon"].items()}
+
+
+def _v2_predict(train, test, train_labels, classes, view):
+    if not train or not test or len(train_labels) != len(train):
+        raise LookupError("empty or unpaired classifier support")
+    if any(label not in classes for label in train_labels):
+        raise ValueError("invalid classifier class")
+    features = [_v2_features(row, view) for row in train]
+    centroids = {}
+    for label in classes:
+        selected = [feature for feature, actual in zip(features, train_labels) if actual == label]
+        if selected:
+            keys = {key for feature in selected for key in feature}
+            centroids[label] = {key: math.fsum(feature.get(key, 0.0) for feature in selected) / len(selected) for key in keys}
+    predictions = []
+    for row in test:
+        feature = _v2_features(row, view)
+        distances = {}
+        for label, centroid in centroids.items():
+            distance = math.fsum((feature.get(key, 0.0) - centroid.get(key, 0.0)) ** 2
+                                 for key in sorted(set(feature) | set(centroid)))
+            if not math.isfinite(distance):
+                raise ValueError("nonfinite classifier evidence")
+            distances[label] = distance
+        predictions.append(min(distances, key=lambda label: (distances[label], label.encode("utf-8"))))
+    return predictions
+
+
+def _v2_rows(cases, targets, contract):
+    if not isinstance(cases, list) or not isinstance(targets, list):
+        raise ValueError("case/target records must be lists")
+    if not cases or not targets:
+        raise LookupError("calibration support absent")
+    by_case = {}
+    for case in cases:
+        if not isinstance(case, dict):
+            raise ValueError("invalid case record")
+        if "case_id" not in case:
+            raise LookupError("case identity absent")
+        identity = _v2_id(case["case_id"])
+        if identity in by_case:
+            raise ValueError("duplicate case identity")
+        if case.get("split") != "calibration":
+            raise ValueError("prospective consumer accepts calibration records only")
+        by_case[identity] = case
+    by_target = {}
+    for target in targets:
+        if not isinstance(target, dict):
+            raise ValueError("invalid target identity")
+        if "case_id" not in target:
+            raise LookupError("target identity absent")
+        identity = _v2_id(target["case_id"])
+        if identity in by_target or identity not in by_case or target.get("split") != "calibration":
+            raise ValueError("duplicate, unmatched or non-calibration target")
+        if "operator_proxy_family" not in target:
+            raise LookupError("required target label absent")
+        if target["operator_proxy_family"] not in contract["classes"]:
+            raise ValueError("target label outside fixed class registry")
+        by_target[identity] = target
+    if set(by_case) != set(by_target):
+        raise LookupError("required paired targets missing")
+    fields = {field for view in contract["views"].values() for field in view["fields"]}
+    fields.update(field for stage in contract["payload_stages"] for field in stage["fields"])
+    rows = {}
+    for identity, case in by_case.items():
+        target = by_target[identity]
+        if not {"domain", "problem_family_id"} <= set(case):
+            raise LookupError("domain/family identity absent")
+        row = dict(case)
+        row["domain"] = _v2_id(case["domain"])
+        row["problem_family_id"] = _v2_id(case["problem_family_id"])
+        row["label"] = target["operator_proxy_family"]
+        provenance = target.get("provenance", {})
+        if not isinstance(provenance, dict):
+            raise ValueError("invalid categorical provenance object")
+        for field in ("template_id", "generator_id"):
+            if field in fields:
+                if field not in provenance:
+                    raise LookupError("mapped categorical field absent")
+                row[field] = provenance[field]
+        for field in fields:
+            if field not in row:
+                raise LookupError("mapped input field absent")
+            if not isinstance(row[field], str):
+                raise ValueError("mapped input field must be text")
+            row[field].encode("utf-8")
+        rows[identity] = row
+    if {row["domain"] for row in rows.values()} != {unit["domain"] for unit in contract["units"]}:
+        raise LookupError("planned domain schedule does not cover supplied support")
+    for unit in contract["units"]:
+        if not set(unit["train_ids"] + unit["test_ids"]) <= set(rows):
+            raise LookupError("planned case support absent")
+        if any(rows[identity]["domain"] != unit["domain"] for identity in unit["test_ids"]):
+            raise ValueError("held-out unit/domain identity mismatch")
+        if any(rows[identity]["domain"] == unit["domain"] for identity in unit["train_ids"]):
+            raise ValueError("LODO training contains held-out domain")
+    return rows
+
+
+def _v2_integrity(rows, contract, scope_kind="original_lodo", replica=None):
+    duplicate_issues, family_issues = [], []
+    for unit in contract["units"]:
+        train = [rows[identity] for identity in unit["train_ids"]]
+        test = [rows[identity] for identity in unit["test_ids"]]
+        crossed = {row["problem_family_id"] for row in train} & {row["problem_family_id"] for row in test}
+        for family in sorted(crossed):
+            family_issues.append({"unit": unit["id"], "family": family,
+                                  "scope_kind": scope_kind, "replica": replica})
+        for first in train:
+            for second in test:
+                for first_stage in contract["payload_stages"]:
+                    for second_stage in contract["payload_stages"]:
+                        # Hashes may index candidates later; actual byte equality is decisive.
+                        a = _v2_payload(first, first_stage["fields"])
+                        b = _v2_payload(second, second_stage["fields"])
+                        if a == b:
+                            duplicate_issues.append({"unit": unit["id"], "train_case": first["case_id"],
+                                "test_case": second["case_id"], "train_stage": first_stage["id"],
+                                "train_family": first["problem_family_id"], "test_family": second["problem_family_id"],
+                                "scope_kind": scope_kind, "replica": replica,
+                                "test_stage": second_stage["id"], "normalized_sha256": hashlib.sha256(a).hexdigest()})
+    return {
+        "duplicate_and_near_duplicate_detection": {"status": "FAIL" if duplicate_issues else "PASS",
+            "reason": "prohibited exact normalized match" if duplicate_issues else "complete scoped exact comparison",
+            "coverage": "exact-normalized-only; no near-duplicate, paraphrase or semantic screening", "issues": duplicate_issues},
+        "family_leakage_detection": {"status": "FAIL" if family_issues else "PASS",
+            "reason": "family crosses evaluation boundary" if family_issues else "complete scoped family comparison", "issues": family_issues},
+    }
+
+
+def _v2_fraction(value):
+    return {"numerator": value.numerator, "denominator": value.denominator, "display": float(value)}
+
+
+def _v2_evaluate(rows, units, contract, view_name, replica=None, random_labels=False, lodo=False):
+    measured, details = [], []
+    for unit in units:
+        train = [rows[identity] for identity in unit["train_ids"]]
+        test = [rows[identity] for identity in unit["test_ids"]]
+        original = [row["label"] for row in train]
+        labels = list(original)
+        if random_labels:
+            random.Random(replica["seed"]).shuffle(labels)
+        truth = [row["label"] for row in test]
+        predicted = _v2_predict(train, test, labels, contract["classes"], contract["views"][view_name])
+        majority = _v2_majority(labels, contract["classes"])
+        f1 = _v2_metric(truth, predicted, contract["classes"])
+        baseline = _v2_metric(truth, [majority] * len(truth), contract["classes"])
+        measured.append({"domain": unit["domain"], "f1": f1, "baseline": baseline})
+        assignment = {"train_ids": unit["train_ids"], "test_ids": unit["test_ids"], "training_labels": labels}
+        details.append({"id": unit["id"], "domain": unit["domain"], "fold": unit["fold"], **assignment,
+            "original_training_labels": original, "heldout_labels": truth, "predictions": predicted,
+            "majority_label": majority, "f1": _v2_fraction(f1), "baseline": _v2_fraction(baseline),
+            "paired_margin": _v2_fraction(f1-baseline),
+            "class_support": {label: {"train": labels.count(label), "heldout": truth.count(label)} for label in contract["classes"]},
+            "assignment_sha256": hashlib.sha256(_v2_canonical(assignment)).hexdigest(),
+            "train_families": sorted({row["problem_family_id"] for row in train}),
+            "test_families": sorted({row["problem_family_id"] for row in test})})
+        if random_labels:
+            details[-1]["training_labels"] = original
+            details[-1]["permuted_training_labels"] = labels
+    f1, margin, domains = _v2_aggregate(measured)
+    adverse = any(_v2_sentinel(*pair) for pair in domains.values()) if lodo else _v2_sentinel(f1, margin)
+    return {"view": view_name, "replica": replica["id"] if replica else None,
+        "status": "NON_INTERPRETABLE" if adverse else "PASS",
+        "reason": "conjunctive sentinel triggered" if adverse else "specified sentinel not triggered",
+        "f1": _v2_fraction(f1), "paired_margin": _v2_fraction(margin),
+        "domains": {name: {"f1": _v2_fraction(pair[0]), "paired_margin": _v2_fraction(pair[1])} for name, pair in domains.items()},
+        "units": details}
+
+
+def _v2_partition_units(rows, contract, replica):
+    units = []
+    for domain in sorted(contract["partition_train_families"]):
+        families = sorted({row["problem_family_id"] for row in rows.values() if row["domain"] == domain})
+        count = contract["partition_train_families"][domain]
+        if count >= len(families):
+            raise LookupError("random partition cannot provide nonempty held-out family support")
+        shuffled = list(families)
+        random.Random(replica["seed"]).shuffle(shuffled)
+        train_families, test_families = sorted(shuffled[:count]), sorted(shuffled[count:])
+        observed = {"train_families": train_families, "test_families": test_families}
+        if observed != contract["partition_assignments"][replica["id"]][domain]:
+            raise ValueError("derived partition differs from supplied declared assignment")
+        train_ids = sorted(identity for identity, row in rows.items() if row["domain"] == domain and row["problem_family_id"] in train_families)
+        test_ids = sorted(identity for identity, row in rows.items() if row["domain"] == domain and row["problem_family_id"] in test_families)
+        units.append({"id": replica["id"]+":"+domain, "fold": replica["id"], "domain": domain,
+                      "train_ids": train_ids, "test_ids": test_ids})
+    return units
+
+
+def _v2_integrity_scopes(rows, contract, scope_kind, replica=None):
+    """Record actual checked boundaries, not planned or failed derivations."""
+    return [{"scope_kind": scope_kind, "replica": replica, "unit": unit["id"],
+             "domain": unit["domain"], "fold": unit["fold"],
+             "train_ids": list(unit["train_ids"]), "test_ids": list(unit["test_ids"]),
+             "train_families": sorted({rows[i]["problem_family_id"] for i in unit["train_ids"]}),
+             "test_families": sorted({rows[i]["problem_family_id"] for i in unit["test_ids"]}),
+             "boundaries": [list(boundary) for boundary in contract["boundaries"]],
+             "payload_stage_ids": [stage["id"] for stage in contract["payload_stages"]]}
+            for unit in contract["units"]]
+
+
+def _v2_report(controls, digest=None, contract=None, scopes=None):
+    # Retain a canonical snapshot only after complete mechanical validation.
+    # This is reconstructible integrity evidence, not consent or qualification.
+    retained = json.loads(_v2_canonical(contract)) if contract is not None else None
+    return {"artifact_class": "a0-shortcut-audit-prospective", "method_selection": dict(_V2_SELECTION),
+        "method_proposal_sha256": _V2_PROPOSAL_SHA256,
+        "status": _v2_gate({name: item["status"] for name, item in controls.items()}),
+        "controls": controls, "mechanical_evidence_sha256": digest,
+        "mechanical_evidence_contract": retained,
+        "mechanical_evidence_validation": "validated" if retained is not None else "UNVERIFIED",
+        "evaluated_integrity_scopes": json.loads(_v2_canonical(scopes or [])),
+        "mechanical_freeze_independently_verified": False,
+        "duplicate_coverage": "exact-normalized-only; no near-duplicate, paraphrase or semantic screening",
+        "empirical": False, "scientific_status": "exploratory", "evidence_eligible": False,
+        "expert_validated": False, "claim_ids": [], "primary_scientific_success": False}
+
+
+def _audit_prospective_shortcuts(cases_path, targets_path, protocol_path, evidence):
+    contract, digest, scopes = None, None, []
+    try:
+        contract, digest = _v2_contract(evidence)
+        protocol = _load_protocol(protocol_path)
+        configuration = protocol.get("shortcut_evaluation")
+        if configuration is None:
+            raise LookupError("shortcut control configuration absent")
+        if not isinstance(configuration, dict):
+            raise ValueError("shortcut control configuration must be an object")
+        if "a0_controls" not in configuration:
+            raise LookupError("required shortcut controls absent")
+        requested = configuration["a0_controls"]
+        if not isinstance(requested, list) or len(requested) != len(_DEFAULT_A0_CONTROLS) or set(requested) != set(_DEFAULT_A0_CONTROLS):
+            raise ValueError("all fourteen controls must remain required and applicable")
+        def load_rows(path):
+            return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+        rows = _v2_rows(load_rows(cases_path), load_rows(targets_path), contract)
+        controls = _v2_integrity(rows, contract)
+        scopes.extend(_v2_integrity_scopes(rows, contract, "original_lodo"))
+        partition_units, partition_errors = {}, {}
+        # Integrity is scoped to each actual evaluation, including every
+        # supplied random replica. Never merge fold memberships into a split.
+        for replica in contract["replicas"]:
+            try:
+                units = _v2_partition_units(rows, contract, replica)
+                partition_units[replica["id"]] = units
+                derived_contract = {**contract, "units": units}
+                checked = _v2_integrity(rows, derived_contract, "derived_random_partition", replica["id"])
+                scopes.extend(_v2_integrity_scopes(rows, derived_contract, "derived_random_partition", replica["id"]))
+                for name, result in checked.items():
+                    controls[name]["issues"].extend(result["issues"])
+                    if result["status"] == "FAIL":
+                        controls[name]["status"] = "FAIL"
+                        controls[name]["reason"] = result["reason"]
+            except (LookupError, ValueError) as exc:
+                partition_errors[replica["id"]] = exc
+                status = "UNEVALUABLE" if isinstance(exc, LookupError) else "FAIL"
+                for result in controls.values():
+                    if result["status"] != "FAIL":
+                        result["status"] = status
+                        result["reason"] = str(exc)
+        for control in _V2_METRIC_CONTROLS:
+            evaluations = []
+            try:
+                replicas = contract["replicas"] if control.startswith("random_") else [None]
+                for replica in replicas:
+                    if control == "random_partition_controls":
+                        if replica["id"] in partition_errors:
+                            raise partition_errors[replica["id"]]
+                        units = partition_units[replica["id"]]
+                    else:
+                        units = contract["units"]
+                    for view in contract["control_views"][control]:
+                        evaluations.append(_v2_evaluate(rows, units, contract, view, replica,
+                            random_labels=control == "random_label_controls",
+                            lodo=control == "leave_one_domain_out_surface_evaluation"))
+                adverse = any(item["status"] == "NON_INTERPRETABLE" for item in evaluations)
+                controls[control] = {"status": "NON_INTERPRETABLE" if adverse else "PASS",
+                    "reason": "at least one view/replica triggered" if adverse else "all required view/replica sentinels complete",
+                    "evaluations": evaluations}
+            except (LookupError, ValueError) as exc:
+                controls[control] = {"status": "UNEVALUABLE" if isinstance(exc, LookupError) else "FAIL",
+                    "reason": str(exc), "evaluations": evaluations}
+        return _v2_report(controls, digest, contract, scopes)
+    except LookupError as exc:
+        return _v2_report({name: {"status": "UNEVALUABLE", "reason": str(exc)} for name in _DEFAULT_A0_CONTROLS}, digest, contract, scopes)
+    except (ValueError, TypeError, UnicodeError, OSError) as exc:
+        return _v2_report({name: {"status": "FAIL", "reason": str(exc)} for name in _DEFAULT_A0_CONTROLS}, digest, contract, scopes)

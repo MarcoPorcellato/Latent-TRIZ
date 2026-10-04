@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .a0_power import calibrate_a0_power
-from .a0_shortcuts import audit_a0_shortcuts
+from .a0_shortcuts import audit_a0_shortcuts, _validate_prospective_selection
 
 
 class A0CalibrationError(RuntimeError):
@@ -54,7 +54,11 @@ def run_a0_calibration(
     protocol_path: str | Path,
     corpus_dir: str | Path,
     output_dir: str | Path,
+    *,
+    method_selection: Mapping[str, Any] | None = None,
+    mechanical_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _validate_prospective_selection(method_selection, mechanical_evidence)
     protocol_file = Path(protocol_path).resolve()
     corpus_root = Path(corpus_dir).resolve()
     output_root = Path(output_dir).resolve()
@@ -92,7 +96,13 @@ def run_a0_calibration(
     # Deliberately do not open the sealed target file during calibration.
 
     power = calibrate_a0_power(protocol_file)
-    shortcuts = audit_a0_shortcuts(cases_path, calibration_targets_path, protocol_file)
+    if method_selection is None:
+        shortcuts = audit_a0_shortcuts(cases_path, calibration_targets_path, protocol_file)
+    else:
+        shortcuts = audit_a0_shortcuts(
+            cases_path, calibration_targets_path, protocol_file,
+            method_selection=method_selection, mechanical_evidence=mechanical_evidence,
+        )
     if protocol.get("protocol_status") == "frozen":
         frozen = protocol.get("frozen_analysis")
         selected = power.get("selected")
@@ -107,6 +117,8 @@ def run_a0_calibration(
         if any(selected.get(key) != value for key, value in expected_selection.items()):
             raise A0CalibrationError("frozen selection does not match exact recalibration")
     status = "pass" if power["status"] == "pass" and shortcuts["status"] == "pass" else "failed"
+    if method_selection is not None:
+        status = shortcuts["status"] if power["status"] == "pass" else "FAIL"
     summary = {
         "artifact_class": "a0-calibration-summary",
         "protocol_id": protocol["protocol_id"],
@@ -126,6 +138,15 @@ def run_a0_calibration(
             "No model activation or sealed outcome is inspected in this phase.",
         ],
     }
+    if method_selection is not None:
+        summary.update({
+            "method_selection": dict(method_selection),
+            "production_qualified": False,
+            "shortcut_reasons": shortcuts["controls"],
+        })
+        summary["limitations"].append(
+            "Prospective engineering evidence is not an independently qualified production freeze."
+        )
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=str(output_root.parent)) as temporary:
@@ -153,6 +174,12 @@ def run_a0_calibration(
             "claim_ids": [],
             "status": "frozen" if status == "pass" and protocol.get("protocol_status") == "frozen" else "failed",
         }
+        if method_selection is not None:
+            freeze_manifest.update({
+                "status": status,
+                "production_qualified": False,
+                "method_selection": dict(method_selection),
+            })
         (staging / "freeze-manifest.json").write_text(
             _stable(freeze_manifest) + "\n", encoding="utf-8", newline="\n"
         )
