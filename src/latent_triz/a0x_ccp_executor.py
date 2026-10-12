@@ -918,7 +918,7 @@ def _verify_vertical_parent_package(root: Path, binding: VerticalPackageBinding,
     """Recreate expectations independently; never trust adjacent package self-hashes."""
     from dataclasses import replace
     from .a0x_vertical_production_adapter import load_vertical_production_capability
-    from .a0x_vertical_terminal_package import VerticalTerminalExpectation, verify_vertical_terminal_package, _read_independent
+    from .a0x_vertical_terminal_package import VerticalTerminalExpectation, verify_vertical_terminal_package, _read_independent, capture_material_evidence
     capability = load_vertical_production_capability(root, descriptor_path, _terminal_outputs=True)
     context = capability.context
     if parent_capability is None or context != parent_capability.context or capability.package_documents != parent_capability.package_documents:
@@ -939,11 +939,7 @@ def _verify_vertical_parent_package(root: Path, binding: VerticalPackageBinding,
     assets = None
     if child_terminal.get("reached_frontier") == "sealed":
         pair = binding.pair_binding
-        statistic = f".a0x-runtime/gate-c/v2/{context.source_head}/{context.source_tree}/a0/{pair.model_key}/{pair.run_id}/material/statistical-result.json"
-        raw, info = _read_independent(root, statistic)
-        trust = {key: dict(value) for key, value in context.trust_file_identities.items()}
-        trust[statistic] = {"device": info.st_dev, "inode": info.st_ino, "size": len(raw), "sha256": _sha256_bytes(raw)}
-        context = replace(context, trust_file_identities=trust)
+        context = capture_material_evidence(root, context)
         base = root / "results/a0x-external-assets" / context.source_head / context.source_tree / "a0" / pair.model_key / pair.run_id
         assets = {"dense": base / "dense-output.bin", "index": base / "representation-index.json"}
     expectation = VerticalTerminalExpectation.from_production_capability(capability, material_context=context, external_assets=assets)

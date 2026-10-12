@@ -60,6 +60,14 @@ and its fresh status probes share a minimal private coordination environment;
 `HOME` is required for the persistent admission namespace, while credentials
 are not forwarded.
 
+The outer coordinator environment is not the model-process environment. The
+vertical guard launches the child through an explicit `env -i` boundary with
+the five frozen offline assignments and Python `-I -B`. The child rejects
+unexpected variables before dispatch. It admits only validated CPython locale
+coercion and macOS CoreFoundation startup metadata, then normalizes these away;
+coordination paths and credentials cannot become model-process inputs. The
+historical batch launcher is unchanged.
+
 New P0 preparation can use `current-source-inventory-v1`. Prepare its ignored,
 source-bound input ledger using the existing operator's
 `--prepare-current-ledger` mode, then pin its raw hash and derived path in the
@@ -75,6 +83,17 @@ them afterward. Exact generated public pre-execution files and terminal pair
 outputs are accounted for explicitly; this is not an arbitrary dirty-source
 exemption. Hashes prove integrity and consistency, not human consent or the
 truth of an unobserved runtime assertion.
+
+The private terminal verifier retains and independently cross-checks the
+calibration result, activation receipt, one-shot target-read receipt,
+statistical result and analysis seal. It checks their schemas, pair and
+authorization bindings, actual dense/index hashes, measured calibration
+sentinels and the unchanged frozen statistical predicate. A syntactically valid
+or self-consistently rehashed contradiction is not sufficient evidence. These
+receipts remain private and do not require reopening the sealed targets.
+Completion also requires an observed successful postflight and release: a
+sealed outcome remains preserved if cleanup fails, but is not reported as a
+completed material attempt.
 
 The real-model rehearsal calls the same internal calibration, loader,
 activation, one-shot reader, analysis, sealing, packager and verifier stages.

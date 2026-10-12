@@ -704,7 +704,7 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
                 "--resource-workload-family", "latent-triz-a0x-v1", "--resource-executor", "native",
                 "--resource-cache-state", "warm", "--resource-execution-mode", "native",
                 "--resource-target-platform", "macos-arm64", "--resource-memory-limit-bytes", "8589934592",
-                "--", "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}",
+                "--", "/usr/bin/env", "-i", "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1", "{PYTHON}", "-I", "-B", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}",
             ],
         }
         return {
@@ -1915,13 +1915,18 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
                 child = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(child)
                 delimiter = argv.index("--")
-                descriptor_argv = argv[delimiter + 3:]
+                child_envelope = list(argv[delimiter + 1:])
+                self.assertEqual(["/usr/bin/env", "-i"], child_envelope[:2])
+                self.assertEqual(list(child._ENVIRONMENT), child_envelope[2:7])
+                self.assertEqual(["-I", "-B", str(child_path.resolve(strict=True))], child_envelope[8:11])
+                descriptor_argv = child_envelope[11:]
+                child_environment = dict(item.split("=", 1) for item in child_envelope[2:7])
                 terminal_stream = io.StringIO()
                 error_stream = io.StringIO()
                 with contextlib.redirect_stderr(error_stream):
                     child_exit = child._run_child_core(
                         descriptor_argv, root=cwd, source_head_probe=self._source_state,
-                        environment=env, cwd=cwd, child_script_path=child_path,
+                        environment=child_environment, cwd=cwd, child_script_path=child_path,
                         qualification_context="synthetic-target-free",
                         inert_factory=lambda graph: capabilities.update(child_graph=graph),
                         stdout=terminal_stream,

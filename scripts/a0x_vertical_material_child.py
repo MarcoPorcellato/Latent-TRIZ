@@ -135,10 +135,16 @@ def _run_child_core(
         return 0
     try:
         descriptor_path = _parse_descriptor_argument(raw_argv)
+        if environment is None:
+            admitted_environment = _admit_vertical_process_environment(dict(os.environ))
+            os.environ.clear()
+            os.environ.update(admitted_environment)
+        else:
+            admitted_environment = environment
         graph = _validate_graph(
             Path(root), descriptor_path,
             source_state_probe=source_head_probe or (lambda: _operational_source_state(Path(root), descriptor_path)),
-            environment=os.environ if environment is None else environment,
+            environment=admitted_environment,
             cwd=Path.cwd() if cwd is None else Path(cwd),
             child_script_path=Path(__file__) if child_script_path is None else Path(child_script_path),
             expected_context=qualification_context,
@@ -156,7 +162,7 @@ def _run_child_core(
             _emit_terminal(stream, "executor_failed", graph=graph, qualification_context=qualification_context, reached_frontier="validated_graph")
             return 4
         package_path = result.get("package_path")
-        if not result["package_verified"] or not isinstance(package_path, str):
+        if not _lifecycle_can_complete(result) or not isinstance(package_path, str):
             _emit_terminal(stream, "executor_failed", graph=graph, qualification_context=qualification_context, reached_frontier="validated_graph")
             return 4
         package = Path(package_path)
@@ -166,7 +172,7 @@ def _run_child_core(
             "root_receipt_raw_sha256": hashlib.sha256((package / "root-receipt.json").read_bytes()).hexdigest()}
         _emit_terminal(stream, "completed", graph=graph, qualification_context=qualification_context,
             reached_frontier=terminal["reached_frontier"], scientific_outcome=terminal["scientific_outcome"], terminal_package=reference)
-        return 0 if result["lifecycle_status"] in {"completed", "sealed_failure"} else 4
+        return 0
     if qualification_context != "synthetic-target-free" or inert_factory is None:
         _emit_terminal(stream, "runtime_unavailable", graph=graph, qualification_context=qualification_context, reached_frontier="validated_graph")
         return 3
@@ -549,6 +555,34 @@ def _validate_child(descriptor: Mapping[str, Any], root: Path, current: Path) ->
 def _validate_environment(value: Any, environment: Mapping[str, str]) -> None:
     if not isinstance(value, list) or tuple(value) != _ENVIRONMENT or dict(environment) != dict(item.split("=", 1) for item in _ENVIRONMENT):
         raise A0XVerticalMaterialChildError("environment template is invalid")
+
+
+def _admit_vertical_process_environment(environment: Mapping[str, str]) -> dict[str, str]:
+    """Reject outer variables; admit only deterministic native startup metadata.
+
+    The emitted env -i boundary removes coordination and credentials. CPython
+    locale coercion and macOS CoreFoundation may then create these two keys;
+    validate them before removing them, never silently strip unknown fields.
+    """
+    expected = dict(item.split("=", 1) for item in _ENVIRONMENT)
+    if set(environment) - set(expected) - {"LC_CTYPE", "__CF_USER_TEXT_ENCODING"}:
+        raise A0XVerticalMaterialChildError("unexpected child environment field")
+    if any(environment.get(key) != value for key, value in expected.items()):
+        raise A0XVerticalMaterialChildError("offline child environment differs")
+    if "LC_CTYPE" in environment and environment["LC_CTYPE"] not in {"C.UTF-8", "UTF-8"}:
+        raise A0XVerticalMaterialChildError("unexpected native locale coercion")
+    if "__CF_USER_TEXT_ENCODING" in environment:
+        value = environment["__CF_USER_TEXT_ENCODING"]
+        if sys.platform != "darwin" or not re.fullmatch(r"0x[0-9A-Fa-f]{1,16}:0x[0-9A-Fa-f]{1,16}:0x[0-9A-Fa-f]{1,16}", value):
+            raise A0XVerticalMaterialChildError("unexpected native CoreFoundation metadata")
+        if int(value.split(":")[0], 16) != os.getuid():
+            raise A0XVerticalMaterialChildError("native CoreFoundation owner differs")
+    return expected
+
+
+def _lifecycle_can_complete(result: Mapping[str, Any]) -> bool:
+    return (result.get("package_verified") is True and result.get("lifecycle_status") in {"completed", "sealed_failure"}
+        and "post_terminal_failure" in result and result["post_terminal_failure"] is None)
 
 
 def _read_referenced_output(

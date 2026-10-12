@@ -105,6 +105,9 @@ def run_production_shortcut_calibration(
         "production_binding_status": "validated_against_source_recipe",
         "human_consent_verified": False,
         "primary_analysis_recalibrated": False,
+        "input_hashes": {"protocol": hashlib.sha256(Path(protocol_path).read_bytes()).hexdigest(),
+            "cases": hashlib.sha256(Path(cases_path).read_bytes()).hexdigest(),
+            "targets": hashlib.sha256(Path(targets_path).read_bytes()).hexdigest()},
     })
     return result
 

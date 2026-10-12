@@ -159,8 +159,8 @@
             "minLength": 1,
             "type": "string"
           },
-          "maxItems": 26,
-          "minItems": 26,
+          "maxItems": 35,
+          "minItems": 35,
           "type": "array"
         },
         "ccp": {

@@ -54,6 +54,13 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
         private.write_bytes(private_raw)
         private_info = private.stat()
         graph = _graph(qualification_context=qualification_context)
+        if qualification_context == "engineering_rehearsal":
+            from tests.a0x_test_support import pair_binding
+            from latent_triz.a0x_contract import Leg
+            binding = pair_binding(Leg.A0, "smollm2_360m", hidden_width=960)
+            binding.update(model_id="HuggingFaceTB/SmolLM2-360M",revision="f8027fd0eaeea54caa13c31d31b9fdc459c38b49")
+            for role in ("descriptor", "readiness", "execution_inlet", "gate_c_authorization", "gate_a_evidence"):
+                graph[role]["pair_binding"] = binding
         graph["trust_file_identities"] = {
             source.relative_to(self.root).as_posix(): {
                 "device": info.st_dev,
@@ -83,6 +90,7 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
                 asset_path.parent.mkdir(parents=True, exist_ok=True)
                 asset_path.write_bytes((role + " synthetic asset\n").encode())
         context = bind_validated_vertical_graph(graph, qualification_context=qualification_context)
+        self._last_fixture_context = context
         expected = VerticalTerminalExpectation.from_context(
             context,
             repository_root=self.root if asset_paths else None,
@@ -135,9 +143,102 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
         self.root = self.root / ".a0x-runtime/rehearsal/1/synthetic-repository"
         self.root.mkdir(parents=True)
         expected, result = self._fixture(qualification_context="engineering_rehearsal", with_assets=True)
+        from tests.a0x_test_support import artifact, rich_statistical_result
+        from scripts.a0x_rehearsal import _calibration_inputs
+        from latent_triz.a0_calibration import run_production_shortcut_calibration
+        from latent_triz.a0_shortcuts import production_mechanics_recipe
+        from latent_triz.a0x_execution import seal_terminal_attempt, AttemptState
+        context = self._last_fixture_context
+        pair = context.public_identity()["pair_binding"]
+        chain={"dossier_commitment":{"profile":"a0x-approval-dossier-json-v2","commitment_sha256":"c"*64},
+            "authorization_commitment":{"profile":"a0x-execution-authorization-json-v4","commitment_sha256":"d"*64}}
+        base=self.root/".a0x-runtime/engineering/material"
+        base.mkdir(parents=True)
+        def write(name,value):
+            path=base/name; path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_bytes(terminal_package._canonical_json(value)+b"\n")
+            return path
+        def rebind(value):
+            if isinstance(value,dict):
+                for key in list(value):
+                    if key=="pair_binding": value[key]=pair
+                    elif key=="authorization_chain": value[key]=chain
+                    else: rebind(value[key])
+            elif isinstance(value,list):
+                for item in value: rebind(item)
+        activation=artifact("a0x-activation-receipt.schema.json"); rebind(activation)
+        occupancy=artifact("a0x-activation-stage-occupancy-receipt.schema.json"); rebind(occupancy)
+        occupancy.update(actual_total_bytes=sum(item.size for item in expected.external_assets),
+            included_paths=["activations.safetensors","representations-index.jsonl"])
+        activation.update(activation_status="completed",leg="a0",created_at="2026-10-12T00:00:00Z",activation_target_content_reads=0,
+            literal_tuple_indices=[0,2,4,6],planned_dense_bound=pair["dense_bound"],
+            dense={"format":"safetensors","path":"activations.safetensors"},index={"path":"representations-index.jsonl"},
+            activation_stage_occupancy=occupancy,activation_stage_occupancy_sha256=hashlib.sha256(terminal_package._canonical_json(occupancy)).hexdigest(),
+            occupancy_checkpoints=[{"phase":phase,"planned_dense_bound":pair["dense_bound"],"current_occupancy":occupancy,
+                "projected_included_paths":occupancy["included_paths"],"projected_total_bytes":occupancy["actual_total_bytes"],
+                "cap_bytes":pair["dense_bound"]["cap_bytes"]} for phase in ("pre_dense_write","pre_index_write","pre_final_rename")])
+        for asset in expected.external_assets:
+            activation[asset.role].update(bytes=asset.size,sha256=asset.sha256)
+        activation["record_count"]=pair["dense_bound"]["vector_count"]
+        activation["final_block_tuple_index"]=32
+        activation_path=write("activation/activation-receipt.json",activation)
+        target=artifact("a0x-target-read-receipt.schema.json"); rebind(target)
+        target.update(status="pass",content_reads=1,observed_sha256="a"*64)
+        target["activation_receipt_sha256"]=hashlib.sha256(activation_path.read_bytes()).hexdigest()
+        for asset in expected.external_assets: target[asset.role+"_sha256"]=asset.sha256
+        target_path=write("target-read-receipt.json",target)
+        statistic=rich_statistical_result(pair,status="null",authorization_chain=chain)
+        statistic["descriptive_final_block"]["tuple_index"]=32
+        statistic_path=write("statistical-result.json",statistic)
+        seal_terminal_attempt(state=AttemptState.ANALYSIS,status="null",target_receipt_path=target_path,
+            statistical_result=statistic,pair_binding=pair,authorization_chain=chain,terminal_path=base/"analysis-terminal-result.json")
+        protocol,cases,targets=_calibration_inputs(self.root,Path(__file__).resolve().parents[1])
+        write("calibration-result.json",run_production_shortcut_calibration(protocol,cases,targets,production_mechanics_recipe()))
+        context=terminal_package.capture_material_evidence(self.root,context)
+        self._last_fixture_context=context
+        expected=VerticalTerminalExpectation.from_context(context,repository_root=self.root,
+            external_assets={item.role:self.root/item.path for item in expected.external_assets})
         result.update(reached_frontier="sealed", scientific_outcome="null",
-                      result_payload={"statistical_result_sha256": hashlib.sha256(b"synthetic statistics").hexdigest()})
+                      result_payload={"statistical_result_sha256": hashlib.sha256(statistic_path.read_bytes()).hexdigest()})
         return expected, result
+
+    def test_scientific_terminal_rejects_missing_observed_statistics(self):
+        expected,result=self._engineering_fixture()
+        expected=replace(expected,trust_files=tuple(item for item in expected.trust_files if not item.path.endswith("statistical-result.json")))
+        with self.assertRaises(A0XVerticalTerminalPackageError):
+            terminal_package._validate_terminal_result(result,expected)
+
+    def test_private_execution_evidence_rejects_self_consistently_rehashed_wrong_count(self):
+        expected,result=self._engineering_fixture()
+        terminal_package._verify_material_evidence(self.root,expected,result)
+        paths=terminal_package._material_evidence_paths(expected)
+        target=json.loads((self.root/paths["target"]).read_bytes()); target["content_reads"]=2
+        raw=terminal_package._canonical_json(target)+b"\n"; (self.root/paths["target"]).write_bytes(raw)
+        seal=json.loads((self.root/paths["analysis_seal"]).read_bytes()); seal["analysis_target_content_reads"]=2
+        seal["target_read_receipt_sha256"]=hashlib.sha256(raw).hexdigest()
+        (self.root/paths["analysis_seal"]).write_bytes(terminal_package._canonical_json(seal)+b"\n")
+        context=terminal_package.capture_material_evidence(self.root,self._last_fixture_context)
+        changed=VerticalTerminalExpectation.from_context(context,repository_root=self.root,
+            external_assets={item.role:self.root/item.path for item in expected.external_assets})
+        with self.assertRaises(A0XVerticalTerminalPackageError):
+            terminal_package._verify_material_evidence(self.root,changed,result)
+
+    def test_private_execution_evidence_rejects_rehashed_contradictory_outcome_and_missing_receipt(self):
+        expected,result=self._engineering_fixture()
+        paths=terminal_package._material_evidence_paths(expected)
+        statistic=json.loads((self.root/paths["statistic"]).read_bytes()); statistic["status"]="positive"
+        raw=terminal_package._canonical_json(statistic)+b"\n"; (self.root/paths["statistic"]).write_bytes(raw)
+        seal=json.loads((self.root/paths["analysis_seal"]).read_bytes()); seal.update(status="positive",statistical_result=statistic)
+        (self.root/paths["analysis_seal"]).write_bytes(terminal_package._canonical_json(seal)+b"\n")
+        context=terminal_package.capture_material_evidence(self.root,self._last_fixture_context)
+        changed=VerticalTerminalExpectation.from_context(context,repository_root=self.root,
+            external_assets={item.role:self.root/item.path for item in expected.external_assets})
+        false_positive={**result,"scientific_outcome":"positive","result_payload":{"statistical_result_sha256":hashlib.sha256(raw).hexdigest()}}
+        with self.assertRaises(A0XVerticalTerminalPackageError):
+            terminal_package._verify_material_evidence(self.root,changed,false_positive)
+        without_calibration=replace(expected,trust_files=tuple(item for item in expected.trust_files if item.path!=paths["calibration"]))
+        with self.assertRaisesRegex(A0XVerticalTerminalPackageError,"missing"):
+            terminal_package._verify_material_evidence(self.root,without_calibration,result)
 
     def test_engineering_rehearsal_sealed_package_stays_permanently_ineligible(self):
         expected, result = self._engineering_fixture()
@@ -150,6 +251,27 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
         self.assertFalse(verified.publication_eligible)
         self.assertEqual("engineering_rehearsal", verified.qualification_context)
         self.assertEqual("null", verified.scientific_outcome)
+
+    def test_private_execution_evidence_rejects_rehashed_calibration_sentinel_and_asset_drift(self):
+        expected, result = self._engineering_fixture()
+        paths = terminal_package._material_evidence_paths(expected)
+        calibration_raw = (self.root / paths["calibration"]).read_bytes()
+        calibration = json.loads(calibration_raw)
+        control = next(item for name, item in calibration["controls"].items()
+                       if not name.startswith("random_") and "evaluations" in item)
+        metric = next(iter(control["evaluations"][0]["domains"].values()))
+        metric["f1"] = {"numerator": 1, "denominator": 1, "display": 1.0}
+        metric["paired_margin"] = {"numerator": 1, "denominator": 1, "display": 1.0}
+        (self.root / paths["calibration"]).write_bytes(terminal_package._canonical_json(calibration) + b"\n")
+        context = terminal_package.capture_material_evidence(self.root, self._last_fixture_context)
+        changed = VerticalTerminalExpectation.from_context(context, repository_root=self.root,
+            external_assets={item.role: self.root / item.path for item in expected.external_assets})
+        with self.assertRaisesRegex(A0XVerticalTerminalPackageError, "sentinel"):
+            terminal_package._verify_material_evidence(self.root, changed, result)
+        (self.root / paths["calibration"]).write_bytes(calibration_raw)
+        changed = replace(expected, external_assets=tuple(replace(item, sha256="0" * 64) for item in expected.external_assets))
+        with self.assertRaisesRegex(A0XVerticalTerminalPackageError, "actual assets"):
+            terminal_package._verify_material_evidence(self.root, changed, result)
 
     def test_engineering_rehearsal_cannot_publish_under_a_real_results_root(self):
         expected, result = self._engineering_fixture()

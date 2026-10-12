@@ -385,7 +385,7 @@ def _run_a0_material_stages(context: VerticalProductionContext, inputs: _Materia
     from .a0x_a0_activations import extract_a0x_a0
     from .a0x_a0_analysis import analyze_a0x_a0
     from .a0x_production_adapter import _a0_activation_selection_manifest
-    from .a0x_vertical_terminal_package import VerticalTerminalExpectation, build_vertical_terminal_package, verify_vertical_terminal_package
+    from .a0x_vertical_terminal_package import VerticalTerminalExpectation, build_vertical_terminal_package, verify_vertical_terminal_package, capture_material_evidence
 
     if context.qualification_context == "production":
         _require_production_capability(production_capability)
@@ -493,12 +493,7 @@ def _run_a0_material_stages(context: VerticalProductionContext, inputs: _Materia
             assets = {"dense": base / "dense-output.bin", "index": base / "representation-index.json"}
             for role, source in (("dense", artifacts.dense_path), ("index", artifacts.index_path)):
                 _write_material_file(assets[role], source.read_bytes())
-            from dataclasses import replace
-            statistic_path = output / "statistical-result.json"
-            info = statistic_path.stat()
-            trust = _thaw(context.trust_file_identities)
-            trust[statistic_path.relative_to(inputs.repository_root).as_posix()] = {"device": info.st_dev, "inode": info.st_ino, "size": info.st_size, "sha256": digest(statistic_path)}
-            material_context = replace(context, trust_file_identities=_freeze(trust))
+            material_context = capture_material_evidence(inputs.repository_root, context)
         expectation = (VerticalTerminalExpectation.from_production_capability(production_capability, material_context=material_context, external_assets=assets)
             if context.qualification_context == "production" else VerticalTerminalExpectation.from_context(material_context, repository_root=inputs.repository_root, external_assets=assets))
         destination = inputs.repository_root / pair.output_path

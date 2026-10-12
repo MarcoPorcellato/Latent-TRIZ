@@ -59,6 +59,16 @@ def _load_cli_module():
 
 
 class A0XVerticalMaterialTests(unittest.TestCase):
+    def test_child_never_reports_completion_after_cleanup_failure(self) -> None:
+        from scripts.a0x_vertical_material_child import _lifecycle_can_complete
+        for status in ("completed", "sealed_failure"):
+            result = {"package_verified": True, "lifecycle_status": status, "post_terminal_failure": None}
+            self.assertTrue(_lifecycle_can_complete(result))
+            with self.subTest(status=status):
+                self.assertFalse(_lifecycle_can_complete({**result, "post_terminal_failure": {"stage": "release"}}))
+                self.assertFalse(_lifecycle_can_complete({key: value for key, value in result.items() if key != "post_terminal_failure"}))
+        self.assertFalse(_lifecycle_can_complete({"package_verified": True, "lifecycle_status": "post_terminal_failure", "post_terminal_failure": None}))
+
     def test_v2_launcher_is_a_distinct_typed_entrypoint(self) -> None:
         """Future Gate C must not select the historical v1/batch launcher."""
         from latent_triz.a0x_ccp_executor import launch_vertical_runtime_package
@@ -102,7 +112,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             "environment_template": descriptor["environment_template"],
             "resource": {"profile": "a0x-material", "workload_family": "latent-triz-a0x-v1", "executor": "native", "cache_state": "warm", "execution_mode": "native", "target_platform": "macos-arm64", "memory_limit_bytes": 8589934592},
             "timeouts": {"outer_timeout_seconds": 3600, "internal_budget_seconds": 3300, "cleanup_margin_seconds": 300, "admission_timeout_seconds": 300},
-            "argv_template": ["{CCP}", "guard", "exec", "--admission-timeout-seconds", "300", "--timeout-seconds", "3600", "--resource-profile", "a0x-material", "--resource-workload-family", "latent-triz-a0x-v1", "--resource-executor", "native", "--resource-cache-state", "warm", "--resource-execution-mode", "native", "--resource-target-platform", "macos-arm64", "--resource-memory-limit-bytes", "8589934592", "--", "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}"],
+            "argv_template": ["{CCP}", "guard", "exec", "--admission-timeout-seconds", "300", "--timeout-seconds", "3600", "--resource-profile", "a0x-material", "--resource-workload-family", "latent-triz-a0x-v1", "--resource-executor", "native", "--resource-cache-state", "warm", "--resource-execution-mode", "native", "--resource-target-platform", "macos-arm64", "--resource-memory-limit-bytes", "8589934592", "--", "/usr/bin/env", "-i", "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1", "{PYTHON}", "-I", "-B", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}"],
         }
         return {
             "artifact_class": "a0x-vertical-execution-authorization",

@@ -400,6 +400,7 @@ def verify_vertical_terminal_package(
             if any(value.get(key) != bound for key, bound in identity.items()):
                 raise A0XVerticalTerminalPackageError(f"{label} identity differs from independent expectation")
         validated_result = _validate_terminal_result(result, expected)
+        _verify_material_evidence(repo, expected, validated_result)
         if manifest.get("terminal_status") != validated_result["scientific_outcome"]:
             raise A0XVerticalTerminalPackageError("manifest terminal status differs")
         if manifest.get("publication_eligible") is not False or root.get("publication_eligible") is not False:
@@ -734,6 +735,9 @@ def _validate_terminal_result(value: Mapping[str, Any], expected: VerticalTermin
         if set(payload) != {"statistical_result_sha256"}:
             raise A0XVerticalTerminalPackageError("scientific outcome requires an exact statistical result digest")
         _digest(payload["statistical_result_sha256"], "statistical result digest")
+        observed = [item for item in expected.trust_files if item.path == _material_evidence_paths(expected)["statistic"]]
+        if len(observed) != 1 or payload["statistical_result_sha256"] != observed[0].sha256:
+            raise A0XVerticalTerminalPackageError("terminal statistical digest differs from independently observed bytes")
     else:
         if set(payload) != {"diagnostic_code"} or payload["diagnostic_code"] not in {
             "SYNTHETIC_FIXTURE", "MODEL_INCOMPATIBLE", "PREFLIGHT_FAILED", "TARGET_READ_FAILED",
@@ -767,7 +771,7 @@ def _validate_expectation_context(expected: VerticalTerminalExpectation) -> None
 
 
 def _validate_production_context_membership(context: VerticalProductionContext, capability: Any) -> None:
-    """Only the complete admitted pre-execution set plus one observed statistic."""
+    """Only the complete pre-execution set plus the exact five measured receipts."""
     from .a0x_vertical_production_adapter import _require_production_capability
     from dataclasses import replace
     validated = _require_production_capability(capability)
@@ -778,14 +782,218 @@ def _validate_production_context_membership(context: VerticalProductionContext, 
     if any(observed.get(path) != identity for path, identity in original.items()):
         raise A0XVerticalTerminalPackageError("production trust membership was removed or replaced")
     pair = PairBinding.from_mapping(context.public_identity()["pair_binding"])
-    statistic = f".a0x-runtime/gate-c/v2/{context.source_head}/{context.source_tree}/a0/{pair.model_key}/{pair.run_id}/material/statistical-result.json"
+    base = f".a0x-runtime/gate-c/v2/{context.source_head}/{context.source_tree}/a0/{pair.model_key}/{pair.run_id}/material/"
+    admitted = {base + name for name in _MATERIAL_EVIDENCE_MEMBERS.values()}
     extra = set(observed) - set(original)
-    if extra not in (set(), {statistic}):
+    if extra not in (set(), admitted):
         raise A0XVerticalTerminalPackageError("unadmitted production terminal trust input")
-    if extra:
-        raw, info = _read_independent(validated.repository_root, statistic)
-        if observed[statistic] != {"device": info.st_dev, "inode": info.st_ino, "size": len(raw), "sha256": _sha(raw)}:
-            raise A0XVerticalTerminalPackageError("statistical result identity differs from observed bytes")
+    for path in extra:
+        raw, info = _read_independent(validated.repository_root, path)
+        if observed[path] != {"device": info.st_dev, "inode": info.st_ino, "size": len(raw), "sha256": _sha(raw)}:
+            raise A0XVerticalTerminalPackageError("material evidence identity differs from observed bytes")
+
+
+_MATERIAL_EVIDENCE_MEMBERS = {"calibration":"calibration-result.json", "activation":"activation/activation-receipt.json",
+    "target":"target-read-receipt.json", "statistic":"statistical-result.json", "analysis_seal":"analysis-terminal-result.json"}
+
+
+def _material_evidence_paths(expected: Any) -> dict[str, str]:
+    pair = PairBinding.from_mapping(expected.pair_binding)
+    base = (f".a0x-runtime/gate-c/v2/{expected.source_head}/{expected.source_tree}/a0/{pair.model_key}/{pair.run_id}/material/"
+        if expected.qualification_context == "production" else ".a0x-runtime/engineering/material/")
+    return {role: base + name for role, name in _MATERIAL_EVIDENCE_MEMBERS.items()}
+
+
+def capture_material_evidence(repository_root: Path, context: VerticalProductionContext) -> VerticalProductionContext:
+    """Capture only produced receipts, never model inputs or original targets."""
+    from dataclasses import replace
+    trust = {key: dict(value) for key, value in context.trust_file_identities.items()}
+    for path in _material_evidence_paths(context).values():
+        raw, info = _read_independent(repository_root, path)
+        trust[path] = {"device":info.st_dev,"inode":info.st_ino,"size":len(raw),"sha256":_sha(raw)}
+    return replace(context, trust_file_identities=_freeze_json(trust))
+
+
+def _verify_material_evidence(repository_root: Path, expected: VerticalTerminalExpectation, result: Mapping[str, Any]) -> None:
+    """Verify retained schemas, calibration, one-shot links and the frozen predicate.
+
+    These checks prove consistency of source-qualified observations, not human
+    consent or independent truth of a compromised runtime. No targets reopen.
+    """
+    if result["scientific_outcome"] not in _ASSET_STATUSES:
+        return
+    paths = _material_evidence_paths(expected)
+    by_path = {item.path:item for item in expected.trust_files}
+    raw_values, values = {}, {}
+    for role, path in paths.items():
+        item = by_path.get(path)
+        if item is None:
+            raise A0XVerticalTerminalPackageError("required retained material evidence is missing")
+        raw, info = _read_independent(repository_root,path)
+        if (len(raw),_sha(raw),info.st_dev,info.st_ino)!=(item.size,item.sha256,item.device,item.inode):
+            raise A0XVerticalTerminalPackageError("retained material evidence drifted")
+        try:
+            value=json.loads(raw.decode("utf-8"),object_pairs_hook=_no_duplicates,parse_constant=_reject_nonfinite)
+            if not isinstance(value,dict) or raw not in (_canonical_json(value),_canonical_json(value)+b"\n"):
+                raise ValueError("noncanonical material evidence")
+        except (UnicodeDecodeError,ValueError,TypeError) as error:
+            raise A0XVerticalTerminalPackageError("retained evidence JSON is invalid") from error
+        raw_values[role],values[role]=raw,value
+    activation,target,statistic,seal=(values[name] for name in ("activation","target","statistic","analysis_seal"))
+    for name,document in (("a0x-activation-receipt.schema.json",activation),("a0x-target-read-receipt.schema.json",target),
+                          ("a0x-statistical-result.schema.json",statistic),("a0x-terminal-result.schema.json",seal)):
+        _validate_schema(document,name,"private material evidence")
+        if document.get("pair_binding")!=_json_mapping(expected.pair_binding):
+            raise A0XVerticalTerminalPackageError("material evidence pair differs")
+    chain=target["authorization_chain"]
+    if any(document.get("authorization_chain")!=chain for document in (activation,statistic,seal)):
+        raise A0XVerticalTerminalPackageError("material authorization chains differ")
+    if expected.qualification_context=="production":
+        from .a0x_contract import APPROVAL_DOSSIER_PROFILE, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE, canonical_commitment
+        capability=expected._production_capability
+        approved_chain={"dossier_commitment":{"profile":APPROVAL_DOSSIER_PROFILE,"commitment_sha256":canonical_commitment(
+            _plain_json(capability.package_documents["approval-dossier.json"]),APPROVAL_DOSSIER_PROFILE).commitment_sha256},
+            "authorization_commitment":{"profile":VERTICAL_EXECUTION_AUTHORIZATION_PROFILE,"commitment_sha256":canonical_commitment(
+                _plain_json(capability.context.gate_c_authorization),VERTICAL_EXECUTION_AUTHORIZATION_PROFILE).commitment_sha256}}
+        if chain!=approved_chain:
+            raise A0XVerticalTerminalPackageError("observed material chain differs from independent authority")
+        selected_raw,_info=_read_independent(repository_root,"experiments/a0x-six-model/a0-selection-manifest.json")
+        selected=json.loads(selected_raw)
+        tree_raw,_info=_read_independent(repository_root,"experiments/a0x-six-model/protected-a0-tree.json")
+        entries=json.loads(tree_raw)["entries"]
+        sealed=[item for item in entries if item.get("entry_kind")=="sealed_target"]
+        if len(sealed)!=1 or target.get("observed_sha256")!=sealed[0]["sha256"] or target.get("selection_corpus_sha256")!=selected["source_corpus_manifest_sha256"]:
+            raise A0XVerticalTerminalPackageError("one-shot receipt differs from independent target or corpus declarations")
+    outcome=result["scientific_outcome"]
+    if statistic.get("status")!=outcome or seal.get("status")!=outcome:
+        raise A0XVerticalTerminalPackageError("observed statistic or seal outcome differs")
+    if activation.get("activation_status")!="completed" or activation.get("activation_target_content_reads")!=0:
+        raise A0XVerticalTerminalPackageError("activation was not sealed before target access")
+    if target.get("status")!="pass" or type(target.get("content_reads")) is not int or target["content_reads"]!=1:
+        raise A0XVerticalTerminalPackageError("target read was not exactly one successful observation")
+    if seal.get("analysis_target_content_reads")!=1 or seal.get("target_read_receipt_sha256")!=_sha(raw_values["target"]):
+        raise A0XVerticalTerminalPackageError("analysis seal does not bind the one-shot receipt")
+    if target.get("activation_receipt_sha256")!=_sha(raw_values["activation"]):
+        raise A0XVerticalTerminalPackageError("target receipt does not bind activation")
+    assets={item.role:item for item in expected.external_assets}
+    if set(assets)!={"dense","index"}:
+        raise A0XVerticalTerminalPackageError("sealed evidence lacks both observed assets")
+    for role in assets:
+        if target.get(role+"_sha256")!=assets[role].sha256 or activation[role]["sha256"]!=assets[role].sha256 or activation[role]["bytes"]!=assets[role].size:
+            raise A0XVerticalTerminalPackageError("material receipts do not bind actual assets")
+    cal=values["calibration"]
+    _validate_calibration_evidence(cal,expected,outcome)
+    if outcome in {"positive","null"}:
+        if seal.get("statistical_result")!=statistic or result["result_payload"]["statistical_result_sha256"]!=_sha(raw_values["statistic"]):
+            raise A0XVerticalTerminalPackageError("sealed statistic bytes or embedded result differ")
+        from .a0x_execution import _validate_statistical_result, A0XExecutionError
+        try:
+            _validate_statistical_result(statistic,status=outcome,pair_binding=_json_mapping(expected.pair_binding),authorization_chain=chain)
+        except (ValueError,A0XExecutionError) as error:
+            raise A0XVerticalTerminalPackageError("frozen statistical predicate rejected evidence") from error
+
+
+def _validate_calibration_evidence(cal: Mapping[str,Any],expected: VerticalTerminalExpectation,outcome: str) -> None:
+    from .a0_shortcuts import production_mechanics_recipe, _DEFAULT_A0_CONTROLS, _V2_REQUIRED_FIELDS, _v2_sentinel
+    from fractions import Fraction
+    recipe=production_mechanics_recipe()
+    pair=PairBinding.from_mapping(expected.pair_binding)
+    if pair.model_id!=recipe["method_selection"]["model"] or pair.revision!=recipe["method_selection"]["revision"] or pair.leg.value!="a0":
+        raise A0XVerticalTerminalPackageError("calibration method scope differs from the observed pair")
+    fields={"artifact_class","claim_ids","controls","duplicate_coverage","empirical","evaluated_integrity_scopes",
+        "evidence_eligible","expert_validated","human_consent_verified","mechanical_evidence_contract","mechanical_evidence_sha256",
+        "mechanical_evidence_validation","mechanical_freeze_independently_verified","method_proposal_sha256","method_selection",
+        "primary_analysis_recalibrated","primary_scientific_success","production_binding_status","production_mechanics_profile",
+        "production_recipe_sha256","scientific_status","status","input_hashes"}
+    constants={"artifact_class":"a0-shortcut-audit-prospective","claim_ids":[],"empirical":False,"evidence_eligible":False,
+        "expert_validated":False,"human_consent_verified":False,"mechanical_freeze_independently_verified":False,
+        "primary_analysis_recalibrated":False,"primary_scientific_success":False,"scientific_status":"exploratory",
+        "production_binding_status":"validated_against_source_recipe","production_mechanics_profile":recipe["schema"],
+        "production_recipe_sha256":_sha(_canonical_json(recipe)),"method_proposal_sha256":recipe["method_proposal_sha256"],
+        "method_selection":recipe["method_selection"],"mechanical_evidence_validation":"validated",
+        "duplicate_coverage":"exact-normalized-only; no near-duplicate, paraphrase or semantic screening"}
+    properties={key:{"const":value,**({"type":"boolean"} if type(value) is bool else {})} for key,value in constants.items()}
+    properties.update({key:{"type":"object"} for key in ("controls","mechanical_evidence_contract","input_hashes")})
+    properties.update({"evaluated_integrity_scopes":{"type":"array"},"mechanical_evidence_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+        "status":{"enum":["PASS","NON_INTERPRETABLE"]}})
+    schema={"type":"object","additionalProperties":False,"required":sorted(fields),"properties":properties}
+    if validate_a0x(dict(cal),schema):
+        raise A0XVerticalTerminalPackageError("production calibration evidence schema or recipe differs")
+    controls=cal.get("controls")
+    if not isinstance(controls,dict) or set(controls)!=set(_DEFAULT_A0_CONTROLS):
+        raise A0XVerticalTerminalPackageError("production calibration control registry differs")
+    def fraction(value):
+        if not isinstance(value,dict) or set(value)!={"numerator","denominator","display"} or type(value["numerator"]) is not int or type(value["denominator"]) is not int or value["denominator"]<=0:
+            raise A0XVerticalTerminalPackageError("calibration rational metric schema differs")
+        measured=Fraction(value["numerator"],value["denominator"])
+        if float(measured)!=value["display"]:
+            raise A0XVerticalTerminalPackageError("calibration rational and display differ")
+        return measured
+    for name,control in controls.items():
+        expected_fields=({"status","reason","issues","coverage"} if name=="duplicate_and_near_duplicate_detection" else
+            {"status","reason","issues"} if name=="family_leakage_detection" else {"status","reason","evaluations"})
+        if not isinstance(control,dict) or set(control)!=expected_fields or control.get("status") not in {"PASS","NON_INTERPRETABLE"}:
+            raise A0XVerticalTerminalPackageError("required calibration control is failed, absent or unevaluable")
+        if "issues" in control:
+            if not isinstance(control["issues"],list) or control["status"]!=("NON_INTERPRETABLE" if control["issues"] else "PASS"):
+                raise A0XVerticalTerminalPackageError("integrity control contradicts observed issues")
+            if "coverage" in control and control["coverage"]!=constants["duplicate_coverage"]:
+                raise A0XVerticalTerminalPackageError("duplicate coverage differs from the approved exact-only scope")
+        if "evaluations" in control:
+            evaluations=control["evaluations"]
+            views=recipe["control_views"][name]
+            replicas=[f"replica-{index:02d}" for index in range(len(recipe["replica_seeds"]))] if name.startswith("random_") else [None]
+            planned={(view,replica) for view in views for replica in replicas}
+            if not isinstance(evaluations,list) or len(evaluations)!=len(planned):
+                raise A0XVerticalTerminalPackageError("required calibration evaluation coverage differs")
+            observed=set()
+            for item in evaluations:
+                if not isinstance(item,dict) or set(item)!={"domains","f1","paired_margin","reason","replica","status","units","view"}:
+                    raise A0XVerticalTerminalPackageError("calibration evaluation schema differs")
+                if item["status"] not in {"PASS","NON_INTERPRETABLE"}:
+                    raise A0XVerticalTerminalPackageError("calibration evaluation is unevaluable")
+                if not isinstance(item["domains"],dict) or set(item["domains"])!=set(recipe["domains"]):
+                    raise A0XVerticalTerminalPackageError("calibration evaluation domain support differs")
+                metrics=[(fraction(item["f1"]),fraction(item["paired_margin"]))] if name=="random_partition_controls" else [
+                    (fraction(value["f1"]),fraction(value["paired_margin"])) for value in item["domains"].values()]
+                measured_status="NON_INTERPRETABLE" if any(_v2_sentinel(*metric) for metric in metrics) else "PASS"
+                if item["status"]!=measured_status:
+                    raise A0XVerticalTerminalPackageError("calibration sentinel contradicts observed rational metrics")
+                observed.add((item["view"],item["replica"]))
+            if observed!=planned or control["status"]!=("PASS" if all(item["status"]=="PASS" for item in evaluations) else "NON_INTERPRETABLE"):
+                raise A0XVerticalTerminalPackageError("calibration control contradicts its complete evaluations")
+    measured="PASS" if all(item["status"]=="PASS" for item in controls.values()) else "NON_INTERPRETABLE"
+    if cal["status"]!=measured or (outcome in {"positive","null"} and measured!="PASS"):
+        raise A0XVerticalTerminalPackageError("scientific outcome contradicts measured calibration gate")
+    mechanical=cal["mechanical_evidence_contract"]
+    if not isinstance(mechanical,dict) or set(mechanical)!=_V2_REQUIRED_FIELDS|{"production_recipe_sha256"} or _sha(_canonical_json(mechanical))!=cal["mechanical_evidence_sha256"]:
+        raise A0XVerticalTerminalPackageError("mechanical evidence digest differs")
+    for key in ("production_recipe_sha256","classes","views","control_views","payload_stages","boundaries"):
+        expected_value=cal["production_recipe_sha256"] if key=="production_recipe_sha256" else recipe[key]
+        if mechanical.get(key)!=expected_value:
+            raise A0XVerticalTerminalPackageError("mechanical declaration differs from frozen source recipe")
+    if any(mechanical.get(key)!=recipe[key] for key in ("randomizer","algorithm","numerics","tie_break","payload_encoding","normalization")):
+        raise A0XVerticalTerminalPackageError("mechanical algorithm or normalization differs")
+    if mechanical.get("schema")!="a0x-shortcut-mechanics-production-evaluation-v1" or mechanical.get("replicas")!=[
+        {"id":f"replica-{index:02d}","seed":seed} for index,seed in enumerate(recipe["replica_seeds"])]:
+        raise A0XVerticalTerminalPackageError("mechanical schema or predetermined replicas differ")
+    hashes=cal["input_hashes"]
+    if not isinstance(hashes,dict) or set(hashes)!={"protocol","cases","targets"}:
+        raise A0XVerticalTerminalPackageError("calibration input hash roles differ")
+    for digest in hashes.values(): _digest(digest,"calibration input digest")
+    if expected.qualification_context=="production":
+        capability=expected._production_capability
+        root=capability.repository_root
+        selected_raw,_info=_read_independent(root,"experiments/a0x-six-model/a0-selection-manifest.json")
+        selected=json.loads(selected_raw)
+        manifest_raw,_info=_read_independent(root,selected["source_corpus_manifest_path"])
+        if _sha(manifest_raw)!=selected["source_corpus_manifest_sha256"]:
+            raise A0XVerticalTerminalPackageError("independent public corpus declaration differs")
+        corpus=json.loads(manifest_raw)
+        expected_hashes={"protocol":capability.package_documents["protocol.json"]["source_protocol_raw_sha256"],
+            "cases":selected["source_cases_sha256"],"targets":corpus["files"]["calibration_targets_jsonl"]["sha256"]}
+        if hashes!=expected_hashes or mechanical.get("python_version")!=capability.context.readiness["python"]["version"] or mechanical.get("unicode_version")!="14.0.0":
+            raise A0XVerticalTerminalPackageError("calibration inputs or runtime differ from independent declarations")
 
 
 def _require_rehearsal_namespace(repo: Path, expected: VerticalTerminalExpectation) -> None:

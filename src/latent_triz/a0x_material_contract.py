@@ -307,7 +307,7 @@ class VerticalA0XGuardLaunch(A0XGuardLaunch):
         resource = _resource(value.get("resource"))
         timeouts = TimeoutEnvelope.from_mapping(_mapping(value, "timeouts", "vertical guard launch"))
         argv = _argv_template(value.get("argv_template"))
-        if argv != _build_guard_argv_template(resource=dict(resource), timeouts=timeouts):
+        if argv != _build_guard_argv_template(resource=dict(resource), timeouts=timeouts, isolate_child=True):
             raise A0XContractError("vertical guard launch argv template does not match the canonical shell-free command")
         return cls(
             launch_profile=GUARD_LAUNCH_PROFILE, ccp_role=ccp_role, ccp_sha256=ccp_sha256,
@@ -479,8 +479,11 @@ def validate_vertical_gate_a_evidence(value: Mapping[str, Any]) -> dict[str, Any
 
 
 def _build_guard_argv_template(
-    *, resource: Mapping[str, str | int], timeouts: TimeoutEnvelope,
+    *, resource: Mapping[str, str | int], timeouts: TimeoutEnvelope, isolate_child: bool = False,
 ) -> tuple[str, ...]:
+    child = ("/usr/bin/env", "-i", *_ENVIRONMENT_TEMPLATE, "{PYTHON}", "-I", "-B", "{CHILD}",
+        "--launch-descriptor", "{DESCRIPTOR}") if isolate_child else (
+        "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}")
     return (
         "{CCP}", "guard", "exec",
         "--admission-timeout-seconds", str(timeouts.admission_timeout_seconds),
@@ -492,7 +495,7 @@ def _build_guard_argv_template(
         "--resource-execution-mode", str(resource["execution_mode"]),
         "--resource-target-platform", str(resource["target_platform"]),
         "--resource-memory-limit-bytes", str(resource["memory_limit_bytes"]),
-        "--", "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}",
+        "--", *child,
     )
 
 
