@@ -19,8 +19,8 @@ last_verified: 2026-08-29
   authorized.
 - This is a local candidate, not a public-main update or scientific result.
   No freezes/dossiers were regenerated and no material or remote action ran.
-  See the [A0X restart checkpoint](A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md)
-  for exact local anchor and continuation boundary.
+  The restart checkpoint with the exact local anchor and continuation
+  boundary is retained privately; it is not part of the public documentation.
 
 ## 2026-08-29 — A0X Matrix V2 policy bootstrap
 
