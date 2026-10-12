@@ -1,7 +1,7 @@
 {
   "schema": "research-observatory-source-inventory-v1",
-  "source_base_head": "4f801f03d85d36c6aabda36ffe7ed33dfe1db05e",
-  "source_base_tree": "d1fcef86cdaa56f1059f5b0b39ba911cd3ac6bda",
+  "source_base_head": "85447989272b11a95203b2dfab6e0bf4d3246443",
+  "source_base_tree": "4f96d0d7f8529b2650a0f8d4a0d16ede3feffbea",
   "entries": [
     {
       "path": "docs/ARTICLE.md",
@@ -21,7 +21,7 @@
     {
       "path": "docs/LABORATORY_MASTER_PLAN.md",
       "family": "selected_docs",
-      "sha256": "fd2e67b7360cc6fd90639b306b56f07c7d242c053bc60473589bfc1b63f9f432"
+      "sha256": "5862b68a9e6b472b1b1edc0f9cd62eadcc33781085167b188d1ff73bf6482f8f"
     },
     {
       "path": "docs/ROADMAP.md",
@@ -121,7 +121,7 @@
     {
       "path": "docs/CURRENT_STATUS.md",
       "family": "navigation_snapshot",
-      "sha256": "eb2e497d3929aa9abf88f274a2152cac9e674bbd0a1ad3fa983d436baae33832"
+      "sha256": "ae8805e868ae646b39c0ea9024308a5a92932a10fdf97be57463b8afc019b36f"
     },
     {
       "path": "results/README.md",

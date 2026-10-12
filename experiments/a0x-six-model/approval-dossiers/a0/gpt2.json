@@ -6,7 +6,7 @@
   "empirical": true,
   "evidence_eligible": false,
   "expert_validated": false,
-  "implementation_source_head": "44b8045ff1f0cd152a6e17f946864ce0e1f4ae82",
+  "implementation_source_head": "85447989272b11a95203b2dfab6e0bf4d3246443",
   "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
   "material_contract_raw_sha256": "6063c3e351609a0f4d787e2d50eb7d0c0a4f28226597cc14003c5d4802de6143",
   "pair_binding": {
