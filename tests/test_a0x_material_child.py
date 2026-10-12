@@ -159,7 +159,7 @@ class A0XMaterialChildTests(unittest.TestCase):
         plan = schema["$defs"]["plan_binding"]["properties"]
         return {
             "artifact_class": "a0x-material-execution-contract",
-            "contract_version": schema["properties"]["contract_version"]["const"],
+            "contract_version": "a0x-material-execution-contract-v2",
             "repository": "MarcoPorcellato/Latent-TRIZ",
             "ccp": {
                 "producer_role": ccp["producer_role"]["const"],
