@@ -40,7 +40,7 @@ PROTECTED_TARGET_PATHS = frozenset({
     "data/a0r1/targets/sealed.jsonl",
 })
 N3_PROFILE_MANIFEST = Path("docs/qualification/a0x-target-free-schema-profile-v1-manifest.json")
-N3_PROFILE_MANIFEST_SHA256 = "b88ca0db8f2c05d1e00021b2915e9c75d654b5ec7d0d3b5894ed05343f96b9cf"
+N3_PROFILE_MANIFEST_SHA256 = "990f441806eb5d315128cc848e3c9de3e7895db14904bea257a24b15c56e030d"
 MAX_FIXTURE_SOURCE_BYTES = 64 * 1024 * 1024
 
 
@@ -749,6 +749,7 @@ class SyntheticRepository:
         expected_bootstrap_sha256: str | None = None,
         document_revision: str = "f8027fd0eaeea54caa13c31d31b9fdc459c38b49",
         target_sha256: str | None = None, direct_target: bool = False, omit_bytecode: bool = False,
+        current_ledger: dict[str, object] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         actual_head, actual_tree = self.identity()
         authorization = (
@@ -759,7 +760,9 @@ class SyntheticRepository:
         bootstrap = self.root / V2_SCRIPT_RELATIVE
         bootstrap_metadata = bootstrap.lstat()
         python_sha256 = _sha256(PYTHON) if expected_python_sha256 is None else expected_python_sha256
-        ledger_sha256 = self.ledger_digest() if expected_ledger_sha256 is None else expected_ledger_sha256
+        ledger_sha256 = (
+            str(current_ledger["sha256"]) if current_ledger is not None else self.ledger_digest()
+        ) if expected_ledger_sha256 is None else expected_ledger_sha256
         bootstrap_sha256 = _sha256(bootstrap) if expected_bootstrap_sha256 is None else expected_bootstrap_sha256
         preexec_sha256 = _sha256(self.root / V2_PREEXEC_RELATIVE)
         authorization.write_text(
@@ -778,7 +781,10 @@ class SyntheticRepository:
                     "operator": {
                         "profile": "a0x-vertical-p0-bootstrap-v2",
                         "python": {"path": str(PYTHON), "sha256": python_sha256},
-                        "ledger": {"sha256": ledger_sha256},
+                        "ledger": ({"sha256": ledger_sha256} if current_ledger is None else {
+                            "profile": current_ledger["profile"], "path": current_ledger["path"],
+                            "sha256": ledger_sha256,
+                        }),
                         "bootstrap": {
                             "path": V2_SCRIPT_RELATIVE.as_posix(),
                             "sha256": bootstrap_sha256,
@@ -826,6 +832,8 @@ class SyntheticRepository:
             "--authorization-id", "p0-v2-test-auth",
             "--attempt-id", "p0-v2-test-attempt",
         ]
+        if current_ledger is not None:
+            arguments.extend(("--ledger-profile", "current-source-inventory-v1"))
         if direct_target:
             separator = arguments.index("--")
             arguments = [
@@ -1170,6 +1178,13 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "darwin", "actual P0 publication requires Darwin renameatx_np")
     def test_canonical_v2_operator_real_subprocess_uses_production_generator_and_loader(self) -> None:
+        self._assert_real_operator_generator_and_loader(current_source=False)
+
+    @unittest.skipUnless(sys.platform == "darwin", "actual P0 publication requires Darwin renameatx_np")
+    def test_current_ledger_real_subprocess_uses_production_generator_and_loader(self) -> None:
+        self._assert_real_operator_generator_and_loader(current_source=True)
+
+    def _assert_real_operator_generator_and_loader(self, *, current_source: bool) -> None:
         """Run the real preexec/operator/generator/loader against owned public-code fixtures."""
         from latent_triz.a0x_freeze import _IMPLEMENTATION_PATHS, _LEG_SOURCES
 
@@ -1186,6 +1201,8 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
             "schemas/a0x-vertical-slice-manifest-v2.schema.json",
             "schemas/a0x-vertical-package-commitment-v2.schema.json",
         }
+        if current_source:
+            paths.add("experiments/a0x-six-model/a0/implementation.json")
         for spec in _LEG_SOURCES.values():
             paths.update(str(spec[name]) for name in ("protocol", "implementation", "protected_tree", "selection"))
         registry = json.loads((ROOT / "experiments/a0x-six-model/model-registry.json").read_bytes())
@@ -1197,10 +1214,29 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
             destination = fixture.root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, destination)
+        if current_source:
+            inventory_path = fixture.root / "experiments/a0x-six-model/a0/implementation.json"
+            inventory = json.loads(inventory_path.read_bytes())
+            for member in inventory["implementation_files"]:
+                raw = (fixture.root / member["path"]).read_bytes()
+                member.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+            inventory_path.write_text(json.dumps(inventory, sort_keys=True, separators=(",", ":")), encoding="utf-8")
         fixture._write_ledger_document(fixture._current_lines())
         fixture.commit_all("owned public-code production P0 integration fixture")
-        completed = fixture.v2_command()
         head, tree = fixture.identity()
+        current_ledger = None
+        if current_source:
+            prepared = subprocess.run(
+                [str(PYTHON), "-I", "-S", "-B", str(fixture.root / V2_SCRIPT_RELATIVE),
+                 "--prepare-current-ledger", "--repository-root", str(fixture.root),
+                 "--expected-head", head, "--expected-tree", tree],
+                cwd=fixture.root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, check=False,
+            )
+            self.assertEqual(0, prepared.returncode, prepared.stderr)
+            current_ledger = json.loads(prepared.stdout)
+            self.assertEqual("current-source-inventory-v1", current_ledger["profile"])
+        completed = fixture.v2_command(current_ledger=current_ledger)
         terminal_path = (
             fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
             / "a0/smollm2_360m/p0-v2-test-attempt/terminal-receipt.json"
