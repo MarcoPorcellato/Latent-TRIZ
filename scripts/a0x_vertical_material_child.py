@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Fail-closed v2-only child for a selector-derived vertical Gate-B graph.
 
-This entrypoint is deliberately static.  The public route validates one
-derived v2 graph and reports that a production runtime is unavailable; it
-does not import or select a model adapter.  The private core exists solely for
-target-free tests that supply an inert factory after the complete graph is
-rebound from independent no-follow file descriptors.
+The public route validates and pins the complete v4 graph before fixed
+production dispatch. The private synthetic seam remains target-free and
+cannot select a production adapter or authorize material access.
 """
 from __future__ import annotations
 
@@ -44,10 +42,15 @@ from latent_triz.a0x_vertical_production_adapter import (  # noqa: E402
     VerticalProductionContext,
     _dispatch_synthetic_target_free,
     bind_validated_vertical_graph,
+    load_vertical_production_capability,
+    run_vertical_production,
 )
 from latent_triz.a0x_public_closure import (  # noqa: E402
     A0XPublicClosureError,
     load_pre_execution_public_closure,
+    PRE_EXECUTION_PUBLIC_ROLE_PATHS,
+    PRE_EXECUTION_EXTENSION_PATH,
+    pre_execution_closure_relative_path,
 )
 
 
@@ -98,7 +101,7 @@ def run_child(
     child_script_path: Path | None = None,
     stdout: TextIO | None = None,
 ) -> int:
-    """Public production wrapper: validate only, then fail closed as unavailable."""
+    """Public production wrapper: admit the complete graph before fixed dispatch."""
     return _run_child_core(
         argv,
         root=root,
@@ -134,22 +137,36 @@ def _run_child_core(
         descriptor_path = _parse_descriptor_argument(raw_argv)
         graph = _validate_graph(
             Path(root), descriptor_path,
-            source_state_probe=source_head_probe or (lambda: _default_source_state(Path(root))),
+            source_state_probe=source_head_probe or (lambda: _operational_source_state(Path(root), descriptor_path)),
             environment=os.environ if environment is None else environment,
             cwd=Path.cwd() if cwd is None else Path(cwd),
             child_script_path=Path(__file__) if child_script_path is None else Path(child_script_path),
             expected_context=qualification_context,
         )
-        # The adapter is a separate, pure v4 boundary.  Production stops after
-        # this bind until the parent can independently verify the terminal
-        # package and complete postflight; only private synthetic tests dispatch.
+        # A pure projection is not material authority. Production subsequently
+        # reloads the complete capability; synthetic tests retain an inert seam.
         bind_validated_vertical_graph(graph, qualification_context=qualification_context)
     except (A0XVerticalMaterialChildError, A0XVerticalProductionAdapterError, A0XContractError, OSError, TypeError, ValueError):
         _emit_terminal(stream, "refused")
         return 2
     if qualification_context == "production":
-        _emit_terminal(stream, "runtime_unavailable", graph=graph, qualification_context=qualification_context, reached_frontier="validated_graph")
-        return 3
+        try:
+            result = run_vertical_production(load_vertical_production_capability(Path(root), descriptor_path))
+        except Exception:
+            _emit_terminal(stream, "executor_failed", graph=graph, qualification_context=qualification_context, reached_frontier="validated_graph")
+            return 4
+        package_path = result.get("package_path")
+        if not result["package_verified"] or not isinstance(package_path, str):
+            _emit_terminal(stream, "executor_failed", graph=graph, qualification_context=qualification_context, reached_frontier="validated_graph")
+            return 4
+        package = Path(package_path)
+        terminal = result["terminal_outcome"]
+        reference = {"package_relative_path": package.relative_to(Path(root)).as_posix(),
+            "manifest_raw_sha256": hashlib.sha256((package / "publication-manifest.json").read_bytes()).hexdigest(),
+            "root_receipt_raw_sha256": hashlib.sha256((package / "root-receipt.json").read_bytes()).hexdigest()}
+        _emit_terminal(stream, "completed", graph=graph, qualification_context=qualification_context,
+            reached_frontier=terminal["reached_frontier"], scientific_outcome=terminal["scientific_outcome"], terminal_package=reference)
+        return 0 if result["lifecycle_status"] in {"completed", "sealed_failure"} else 4
     if qualification_context != "synthetic-target-free" or inert_factory is None:
         _emit_terminal(stream, "runtime_unavailable", graph=graph, qualification_context=qualification_context, reached_frontier="validated_graph")
         return 3
@@ -266,6 +283,12 @@ def _validate_graph(
         raise A0XVerticalMaterialChildError("Gate A evidence reconstruction failed") from error
     if reconstructed_evidence != evidence_payload:
         raise A0XVerticalMaterialChildError("Gate A evidence reconstruction drifted")
+    hosted_identities = []
+    for reference in evidence_payload["hosted_inputs"].values():
+        raw, identity = _read_independent(repository, reference["path"])
+        if hashlib.sha256(raw).hexdigest() != reference["sha256"]:
+            raise A0XVerticalMaterialChildError("Hosted Gate A input bytes drifted")
+        hosted_identities.append(identity)
 
     commitment_raw, commitment_identity = _read_independent(repository, package["commitment_path"])
     if hashlib.sha256(commitment_raw).hexdigest() != package["commitment_raw_sha256"]:
@@ -300,23 +323,31 @@ def _validate_graph(
         evidence_payload, gate_b_authorization_raw, gate_b_receipt_raw,
     )
 
+    public_identities = []
     if expected_context == "production":
         try:
-            load_pre_execution_public_closure(
-                repository,
-                expected_identity={
+            public_identity = {
                     "qualified_source": qualified,
                     "pair_binding": pair.as_mapping(),
                     "authorization_id": gate_c_authorization["authorization_id"],
                     "attempt_id": gate_c_authorization["attempt_id"],
                     "p0_package_commitment_sha256": package["package_commitment_sha256"],
-                },
-                private_input_sha256={
+                }
+            private_inputs = {
                     "p0_dossier_raw": hashlib.sha256(dossier_raw).hexdigest(),
                     "gate_b_authorization_v4": hashlib.sha256(authorization_raw).hexdigest(),
                     "gate_b_readiness_v4": hashlib.sha256(readiness_raw).hexdigest(),
-                },
-            )
+                }
+            observed = load_pre_execution_public_closure(repository, expected_identity=public_identity, private_input_sha256=private_inputs)
+            public_base = pre_execution_closure_relative_path(public_identity)
+            for name in (*PRE_EXECUTION_PUBLIC_ROLE_PATHS.values(), PRE_EXECUTION_EXTENSION_PATH):
+                raw, identity = _read_independent(repository, f"{public_base}/{name}")
+                public_identities.append(identity)
+                if name == PRE_EXECUTION_EXTENSION_PATH and hashlib.sha256(raw).hexdigest() != observed.extension_sha256:
+                    raise A0XVerticalMaterialChildError("public pre-execution extension changed during admission")
+            repeated = load_pre_execution_public_closure(repository, expected_identity=public_identity, private_input_sha256=private_inputs)
+            if repeated != observed:
+                raise A0XVerticalMaterialChildError("public pre-execution closure changed during admission")
         except (A0XPublicClosureError, KeyError, OSError, TypeError, ValueError) as error:
             raise A0XVerticalMaterialChildError("public pre-execution closure is invalid") from error
 
@@ -326,6 +357,8 @@ def _validate_graph(
         gate_b_authorization_identity, gate_b_receipt_identity,
         commitment_identity, dossier_identity, authorization_identity, gate_c_identity,
         *gate_c_output_identities,
+        *hosted_identities,
+        *public_identities,
     )
     for identity in trust_identities:
         _revalidate(identity)
@@ -666,7 +699,7 @@ def _default_source_state(root: Path) -> tuple[str, str, bool]:
     try:
         def git(*argv: str) -> str | None:
             completed = subprocess.run(
-                ("/usr/bin/git", *argv), cwd=str(root), shell=False, check=False,
+                ("/usr/bin/git", "-c", "core.fsmonitor=false", "-c", "core.trustctime=false", *argv), cwd=str(root), shell=False, check=False,
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                 env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"}, timeout=30,
             )
@@ -682,6 +715,15 @@ def _default_source_state(root: Path) -> tuple[str, str, bool]:
     except (OSError, UnicodeDecodeError, subprocess.TimeoutExpired):
         return "", "", False
     return head, tree, clean
+
+
+def _operational_source_state(root: Path, descriptor_path: str) -> tuple[str, str, bool]:
+    from latent_triz.a0x_vertical_slice import _checkout_state, vertical_public_pre_execution_paths
+    raw, _identity = _read_independent(root, descriptor_path)
+    descriptor = _canonical_output(raw, "descriptor")["payload"]
+    pair = PairBinding.from_mapping(descriptor["pair_binding"])
+    source = descriptor["qualified_source"]
+    return _checkout_state(root, vertical_public_pre_execution_paths(pair, source["head"], source["tree"]))
 
 
 def _freeze(value: Any) -> Any:
@@ -723,6 +765,8 @@ def _emit_terminal(
     graph: Mapping[str, Any] | None = None,
     qualification_context: str | None = None,
     reached_frontier: str = "before_graph",
+    scientific_outcome: str | None = None,
+    terminal_package: Mapping[str, Any] | None = None,
 ) -> None:
     """Emit the versioned child wire; only a rebound graph carries identity."""
     value: dict[str, Any] = {
@@ -740,8 +784,8 @@ def _emit_terminal(
             "attempt_id": gate_c_authorization["attempt_id"],
             "qualification_context": qualification_context,
             "reached_frontier": reached_frontier,
-            "scientific_outcome": None,
-            "terminal_package": None,
+            "scientific_outcome": scientific_outcome,
+            "terminal_package": terminal_package,
         })
     print(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False), file=stream)
 

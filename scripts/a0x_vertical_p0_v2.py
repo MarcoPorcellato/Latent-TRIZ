@@ -13,6 +13,7 @@ import re
 import stat
 import subprocess
 import sys
+import secrets
 from pathlib import Path
 
 
@@ -80,6 +81,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-python", required=True)
     parser.add_argument("--expected-python-sha256", required=True)
     parser.add_argument("--expected-ledger-sha256", required=True)
+    parser.add_argument("--ledger-profile", choices=("historical-v1", "current-source-inventory-v1"), default="historical-v1")
     parser.add_argument("--expected-bootstrap-sha256", required=True)
     parser.add_argument("--expected-preexec-sha256", required=True)
     parser.add_argument("--preexec-launcher", required=True)
@@ -391,6 +393,120 @@ def _require_python_identity(path_text: str, expected_sha256: str) -> None:
 def _require_ledger(root: Path, expected_sha256: str) -> None:
     if _DIGEST.fullmatch(expected_sha256) is None:
         raise ValueError("A0X_VERTICAL_P0_V2_LEDGER_MISMATCH")
+    _require_historical_ledger(root, expected_sha256)
+
+
+def _current_ledger_path(head: str, tree: str) -> str:
+    if not _REVISION.fullmatch(head) or not _REVISION.fullmatch(tree):
+        raise ValueError("A0X_VERTICAL_P0_V2_LEDGER_MISMATCH")
+    return f".a0x-runtime/p0-input-ledger/v1/{head}/{tree}/input-ledger.json"
+
+
+def _current_ledger_bytes(root: Path, head: str, tree: str) -> bytes:
+    """Declare today's source closure without rewriting the historical ledger."""
+    code = "A0X_VERTICAL_P0_V2_LEDGER_MISMATCH"
+    document = _read_regular_relative(root, LEDGER_DOCUMENT_RELATIVE, _MAX_BOUND_FILE_BYTES, code).decode("utf-8")
+    block = document.split("## Raw P0 package-input ledger", 1)[1].split("```text\n", 1)[1].split("\n```", 1)[0]
+    paths = set()
+    for line in block.splitlines():
+        match = _LEDGER_LINE.fullmatch(line)
+        if match is None:
+            raise ValueError(code)
+        paths.add(match[3])
+    if len(paths) != LEDGER_COUNT:
+        raise ValueError(code)
+    inventory_path = "experiments/a0x-six-model/a0/implementation.json"
+    inventory_raw = _read_regular_relative(root, inventory_path, _MAX_BOUND_FILE_BYTES, code)
+    inventory = json.loads(inventory_raw)
+    paths.update(item["path"] for item in inventory["implementation_files"])
+    paths.update({inventory_path, LEDGER_DOCUMENT_RELATIVE, "src/latent_triz/__init__.py",
+        "experiments/a0x-six-model/model-registry.json", "experiments/a0x-six-model/material-execution-contract.json",
+        "experiments/a0x-six-model/protected-a0-tree.json", "experiments/a0x-six-model/a0-selection-manifest.json",
+        "experiments/a0-automated-weak-proxy/protocol.json", "experiments/a0-automated-weak-proxy/implementation.json"})
+    registry = json.loads(_read_regular_relative(root, "experiments/a0x-six-model/model-registry.json", _MAX_BOUND_FILE_BYTES, code))
+    paths.update("experiments/a0x-six-model/" + item for item in registry["cards"])
+    if len(paths) > 512:
+        raise ValueError(code)
+    # Admit the complete set lexically before probing any member. No corpus,
+    # target, private mapping, runtime, weights or historical result is a member.
+    for relative in paths:
+        _safe_relative(relative, code)
+        first = Path(relative).parts[0]
+        if first not in {"src", "tests", "schemas", "scripts", "docs", ".github", "experiments", "Makefile", "requirements-schema.in", "requirements-schema.lock", "requirements-lab01.lock"}:
+            raise ValueError(code)
+        if first == "experiments" and not (relative.startswith("experiments/a0x-six-model/") or relative in {
+            "experiments/a0-automated-weak-proxy/protocol.json", "experiments/a0-automated-weak-proxy/implementation.json"}):
+            raise ValueError(code)
+        if relative.startswith("experiments/a0x-six-model/") and ("authorization" in relative or "approval-dossiers" in relative):
+            raise ValueError(code)
+    entries = []
+    for relative in sorted(paths):
+        raw = _read_regular_relative(root, relative, _MAX_BOUND_FILE_BYTES, code)
+        entries.append({"path": relative, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
+    # A stale implementation inventory may not be papered over by a new ledger.
+    observed = {entry["path"]: entry for entry in entries}
+    if any(observed.get(item["path"]) != item for item in inventory["implementation_files"]):
+        raise ValueError(code)
+    payload = {"artifact_class": "a0x-current-p0-input-ledger", "profile": "current-source-inventory-v1",
+        "source": {"head": head, "tree": tree}, "inventory_raw_sha256": hashlib.sha256(inventory_raw).hexdigest(), "entries": entries}
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _require_current_ledger(root: Path, expected_sha256: str, head: str, tree: str) -> None:
+    raw = _read_regular_relative(root, _current_ledger_path(head, tree), _MAX_BOUND_FILE_BYTES, "A0X_VERTICAL_P0_V2_LEDGER_MISMATCH")
+    if not _DIGEST.fullmatch(expected_sha256) or hashlib.sha256(raw).hexdigest() != expected_sha256 or raw != _current_ledger_bytes(root, head, tree):
+        raise ValueError("A0X_VERTICAL_P0_V2_LEDGER_MISMATCH")
+
+
+def prepare_current_ledger(root: Path, head: str, tree: str) -> dict[str, object]:
+    """One bounded source-inventory declaration, published without replacement."""
+    _require_source_identity(root, head, tree)
+    _require_clean_checkout(root)
+    raw = _current_ledger_bytes(root, head, tree)
+    relative = _current_ledger_path(head, tree)
+    parts = Path(relative).parts
+    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    stage = ".input-ledger-" + secrets.token_hex(12)
+    created = False
+    identity = None
+    try:
+        for part in parts[:-1]:
+            try:
+                os.mkdir(part, 0o700, dir_fd=directory)
+            except FileExistsError:
+                pass
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=directory)
+        created = True
+        with os.fdopen(fd, "wb") as stream:
+            info = os.fstat(stream.fileno())
+            identity = (info.st_dev, info.st_ino)
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        _require_source_identity(root, head, tree)
+        _require_clean_checkout(root)
+        source = root / "src"
+        sys.path.insert(0, str(source))
+        from latent_triz.a0x_vertical_slice import _darwin_publish_exclusive_at
+        _darwin_publish_exclusive_at(directory, stage, parts[-1])
+        created = False
+        os.fsync(directory)
+    finally:
+        if created:
+            try:
+                info = os.stat(stage, dir_fd=directory, follow_symlinks=False)
+                if (info.st_dev, info.st_ino) == identity:
+                    os.unlink(stage, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+        os.close(directory)
+    return {"path": relative, "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw), "profile": "current-source-inventory-v1"}
+
+
+def _require_historical_ledger(root: Path, expected_sha256: str) -> None:
     try:
         document = _read_regular_relative(root, LEDGER_DOCUMENT_RELATIVE, _MAX_BOUND_FILE_BYTES, "A0X_VERTICAL_P0_V2_LEDGER_MISMATCH")
         text = document.decode("utf-8", "strict")
@@ -590,7 +706,8 @@ def _require_authorization_identity(
                 "path": arguments.expected_python,
                 "sha256": arguments.expected_python_sha256,
             },
-            "ledger": {"sha256": arguments.expected_ledger_sha256},
+            "ledger": ({"sha256": arguments.expected_ledger_sha256} if arguments.ledger_profile == "historical-v1" else {
+                "profile": "current-source-inventory-v1", "path": _current_ledger_path(head, tree), "sha256": arguments.expected_ledger_sha256}),
             "bootstrap": bootstrap,
             "preexec": preexec,
         },
@@ -614,7 +731,10 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
     _require_source_identity(root, arguments.expected_head, arguments.expected_tree)
     _require_clean_checkout(root)
     _require_python_identity(arguments.expected_python, arguments.expected_python_sha256)
-    _require_ledger(root, arguments.expected_ledger_sha256)
+    if arguments.ledger_profile == "historical-v1":
+        _require_ledger(root, arguments.expected_ledger_sha256)
+    else:
+        _require_current_ledger(root, arguments.expected_ledger_sha256, arguments.expected_head, arguments.expected_tree)
     bootstrap = _require_bootstrap_identity(root, arguments)
     preexec = _require_preexec_launcher(root, arguments)
     _require_preexec_handoff(root, arguments, bootstrap)
@@ -708,6 +828,20 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    selected = list(sys.argv[1:] if argv is None else argv)
+    if selected[:1] == ["--prepare-current-ledger"]:
+        parser = argparse.ArgumentParser(description="Prepare one target-free current P0 input ledger")
+        parser.add_argument("--repository-root", required=True)
+        parser.add_argument("--expected-head", required=True)
+        parser.add_argument("--expected-tree", required=True)
+        arguments = parser.parse_args(selected[1:])
+        try:
+            result = prepare_current_ledger(Path(arguments.repository_root).resolve(strict=True), arguments.expected_head, arguments.expected_tree)
+        except (OSError, ValueError, RuntimeError) as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+        return 0
     arguments = _parser().parse_args(argv)
     try:
         receipt = _run(arguments)

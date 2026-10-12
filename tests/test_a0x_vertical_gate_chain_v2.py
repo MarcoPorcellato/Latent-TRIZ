@@ -882,8 +882,13 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
                 "schemas/a0x-execution-authorization-v4.schema.json",
                 _execution_path.relative_to(self.root).as_posix(),
             },
-            set(trust_files),
+            set(trust_files) - {f".a0x-runtime/gate-a/evidence/{self.head}/{name}" for name in (
+                "hosted-gate-a-evidence.json", "hosted-gate-a-attestation.bundle.jsonl",
+                "github-trusted-root.jsonl", "hosted-gate-a-transport.json")},
         )
+        self.assertTrue({f".a0x-runtime/gate-a/evidence/{self.head}/{name}" for name in (
+            "hosted-gate-a-evidence.json", "hosted-gate-a-attestation.bundle.jsonl",
+            "github-trusted-root.jsonl", "hosted-gate-a-transport.json")} <= set(trust_files))
         with self.assertRaises(TypeError):
             trust_files["injected"] = {}
         with self.assertRaises(TypeError):
@@ -1734,7 +1739,8 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
             else:
                 self.fail(f"valid closure did not reach post-bind sentinel: {output.getvalue()}")
 
-        self.assertEqual(1, len(closure_results))
+        self.assertEqual(2, len(closure_results))
+        self.assertEqual(closure_results[0], closure_results[1])
         self.assertTrue(closure_results[0].document_bindings_consistent)
         self.assertEqual(13, closure_results[0].public_role_count)
         self.assertEqual(1, len(bound_graphs))

@@ -1019,6 +1019,11 @@ _V2_REQUIRED_FIELDS = {
     "numerics", "tie_break", "payload_stages", "payload_encoding", "normalization",
     "unicode_version", "boundaries",
 }
+_PRODUCTION_PAYLOAD_FIELDS = {
+    "__model_problem_only", "__model_transformation_only",
+    "__model_problem_plus_transformation", "__model_problem_plus_solution",
+}
+_PRODUCTION_EVALUATION_PROFILE = "a0x-shortcut-mechanics-production-evaluation-v1"
 
 
 def _validate_prospective_selection(selection, evidence):
@@ -1067,12 +1072,14 @@ def _v2_contract(evidence):
         raise ValueError("mechanical evidence hash mismatch")
     # Work on the supplied byte-bound snapshot, not a mutable caller alias.
     contract = json.loads(raw)
-    if set(contract) - _V2_REQUIRED_FIELDS:
+    production = contract.get("schema") == _PRODUCTION_EVALUATION_PROFILE
+    required = _V2_REQUIRED_FIELDS | ({"production_recipe_sha256"} if production else set())
+    if set(contract) - required:
         raise ValueError("unknown mechanical contract fields")
-    if _V2_REQUIRED_FIELDS - set(contract):
+    if required - set(contract):
         raise LookupError("required mechanical contract fields absent")
     modes = {
-        "schema": "a0x-shortcut-mechanics-engineering-v1",
+        "schema": _PRODUCTION_EVALUATION_PROFILE if production else "a0x-shortcut-mechanics-engineering-v1",
         "randomizer": "python-mt19937-shuffle-v1", "python_version": sys.version.split()[0],
         "algorithm": "nearest-centroid-squared-euclidean-v1",
         "numerics": "binary64-features-fraction-metrics-v1", "tie_break": "utf8-lexicographic",
@@ -1081,6 +1088,16 @@ def _v2_contract(evidence):
     }
     if any(contract[key] != value for key, value in modes.items()):
         raise ValueError("unsupported or mismatched explicit mechanical mode")
+    if production:
+        recipe = production_mechanics_recipe()
+        if contract["production_recipe_sha256"] != hashlib.sha256(_v2_canonical(recipe)).hexdigest():
+            raise ValueError("production recipe digest differs")
+        for key in ("classes", "views", "control_views", "payload_stages", "boundaries"):
+            if contract[key] != recipe[key]:
+                raise ValueError("production evaluation differs from its frozen recipe")
+        if contract["replicas"] != [{"id": f"replica-{index:02d}", "seed": seed}
+                                    for index, seed in enumerate(recipe["replica_seeds"])]:
+            raise ValueError("production random replica schedule differs")
     classes = _v2_names(contract["classes"])
     if not classes:
         raise LookupError("canonical classes absent")
@@ -1221,7 +1238,8 @@ def _v2_contract(evidence):
             raise ValueError("malformed payload stage")
         stage_ids.append(_v2_id(stage["id"]))
         fields = _v2_names(stage["fields"])
-        if not fields or not set(fields) <= _V2_TEXT_FIELDS:
+        allowed_payload = _PRODUCTION_PAYLOAD_FIELDS if production else _V2_TEXT_FIELDS
+        if not fields or not set(fields) <= allowed_payload:
             raise ValueError("payload field roles must be declared input text, not labels/metadata")
     if len(stage_ids) != len(set(stage_ids)):
         raise ValueError("duplicate relevant payload stage")
@@ -1530,23 +1548,42 @@ def _v2_report(controls, digest=None, contract=None, scopes=None):
 
 
 def _audit_prospective_shortcuts(cases_path, targets_path, protocol_path, evidence):
-    contract, digest, scopes = None, None, []
+    """Admit mechanical evidence before file access, then use the shared real consumer."""
+    contract, digest = None, None
     try:
         contract, digest = _v2_contract(evidence)
         protocol = _load_protocol(protocol_path)
-        configuration = protocol.get("shortcut_evaluation")
-        if configuration is None:
-            raise LookupError("shortcut control configuration absent")
-        if not isinstance(configuration, dict):
-            raise ValueError("shortcut control configuration must be an object")
-        if "a0_controls" not in configuration:
-            raise LookupError("required shortcut controls absent")
-        requested = configuration["a0_controls"]
-        if not isinstance(requested, list) or len(requested) != len(_DEFAULT_A0_CONTROLS) or set(requested) != set(_DEFAULT_A0_CONTROLS):
-            raise ValueError("all fourteen controls must remain required and applicable")
+        _validate_prospective_controls(protocol)
         def load_rows(path):
             return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
-        rows = _v2_rows(load_rows(cases_path), load_rows(targets_path), contract)
+        return _audit_prospective_records(load_rows(cases_path), load_rows(targets_path), protocol, evidence)
+    except LookupError as exc:
+        return _v2_report({name: {"status": "UNEVALUABLE", "reason": str(exc)} for name in _DEFAULT_A0_CONTROLS}, digest, contract)
+    except (ValueError, TypeError, UnicodeError, OSError) as exc:
+        return _v2_report({name: {"status": "FAIL", "reason": str(exc)} for name in _DEFAULT_A0_CONTROLS}, digest, contract)
+
+
+def _validate_prospective_controls(protocol):
+    """Require the complete frozen control registry before reading any data."""
+    configuration = protocol.get("shortcut_evaluation")
+    if configuration is None:
+        raise LookupError("shortcut control configuration absent")
+    if not isinstance(configuration, dict):
+        raise ValueError("shortcut control configuration must be an object")
+    if "a0_controls" not in configuration:
+        raise LookupError("required shortcut controls absent")
+    requested = configuration["a0_controls"]
+    if not isinstance(requested, list) or len(requested) != len(_DEFAULT_A0_CONTROLS) or set(requested) != set(_DEFAULT_A0_CONTROLS):
+        raise ValueError("all fourteen controls must remain required and applicable")
+
+
+def _audit_prospective_records(cases, targets, protocol, evidence):
+    """Execute the same fourteen D1–D7 controls on already captured records."""
+    contract, digest, scopes = None, None, []
+    try:
+        contract, digest = _v2_contract(evidence)
+        _validate_prospective_controls(protocol)
+        rows = _v2_rows(cases, targets, contract)
         controls = _v2_integrity(rows, contract)
         scopes.extend(_v2_integrity_scopes(rows, contract, "original_lodo"))
         partition_units, partition_errors = {}, {}
@@ -1598,3 +1635,152 @@ def _audit_prospective_shortcuts(cases_path, targets_path, protocol_path, eviden
         return _v2_report({name: {"status": "UNEVALUABLE", "reason": str(exc)} for name in _DEFAULT_A0_CONTROLS}, digest, contract, scopes)
     except (ValueError, TypeError, UnicodeError, OSError) as exc:
         return _v2_report({name: {"status": "FAIL", "reason": str(exc)} for name in _DEFAULT_A0_CONTROLS}, digest, contract, scopes)
+
+
+PRODUCTION_MECHANICS_PROFILE = "a0x-shortcut-mechanics-production-v1"
+_PRODUCTION_DOMAINS = (
+    "agriculture", "energy", "manufacturing", "medicine", "software", "transport",
+)
+
+
+def production_mechanics_recipe() -> dict[str, Any]:
+    """Return the prospective declaration, chosen before any corpus or labels.
+
+    Twenty fixed replicas exercise both negative controls independently; they
+    are not a permutation p-value or the primary analysis budget of 199.
+    The existing configured seed is retained without outcome-driven selection.
+    Case/family assignments are derived later from metadata by a frozen rule.
+    This declaration establishes no human consent or observed scientific gate.
+    """
+    fields = ["problem", "initial_state", "desired_improvement", "worsening_consequence",
+              "transformation", "resulting_state", "solution"]
+    views = {
+        "surface_words": {"kind": "word_unigrams", "fields": fields},
+        "surface_chars": {"kind": "char_3_5_grams", "fields": fields},
+        "surface_length": {"kind": "length_and_punctuation", "fields": fields},
+        "template_style": {"kind": "categorical", "fields": ["template_id"]},
+        "provenance": {"kind": "categorical", "fields": ["generator_id", "domain"]},
+        "problem_words": {"kind": "word_unigrams", "fields": ["problem"]},
+        "action_taxonomy": {"kind": "keyword_counts", "fields": ["transformation"], "lexicon": _ACTION_LEXICON},
+        "transformation_taxonomy": {"kind": "keyword_counts", "fields": ["solution"], "lexicon": _TRANSFORMATION_LEXICON},
+        "adjacent_proxy": {"kind": "keyword_counts", "fields": fields, "lexicon": _ADJACENT_LEXICON},
+    }
+    controls = {
+        "bag_of_words_baselines": ["surface_words"],
+        "character_ngram_baselines": ["surface_chars"],
+        "length_and_punctuation_baselines": ["surface_length"],
+        "style_and_template_baselines": ["template_style"],
+        "provenance_classifiers": ["provenance"],
+        "problem_only_label_prediction": ["problem_words"],
+        "leave_one_domain_out_surface_evaluation": [
+            "surface_words", "surface_chars", "surface_length", "template_style", "provenance", "problem_words",
+        ],
+        "generic_action_taxonomy_controls": ["action_taxonomy"],
+        "generic_transformation_taxonomy_controls": ["transformation_taxonomy"],
+        "adjacent_principle_proxy_controls": ["adjacent_proxy"],
+        "random_label_controls": sorted(views),
+        "random_partition_controls": sorted(views),
+    }
+    recipe = {
+        "schema": PRODUCTION_MECHANICS_PROFILE,
+        "method_selection": _V2_SELECTION,
+        "method_proposal_sha256": _V2_PROPOSAL_SHA256,
+        "protocol_id": "a0-automated-weak-proxy-v1.0.3",
+        "classes": ["inversion_like", "segmentation_like"],
+        "domains": list(_PRODUCTION_DOMAINS),
+        "calibration_families_per_domain": 8,
+        "cases_per_family": 2,
+        "evaluation_rule": "leave-one-declared-domain-out-lexical-id-v1",
+        "partition_rule": "sorted-family-mt19937-shuffle-first-four-v1",
+        "partition_train_families": 4,
+        "replica_seeds": list(range(20260814, 20260834)),
+        "views": views,
+        "control_views": controls,
+        "algorithm": "nearest-centroid-squared-euclidean-v1",
+        "numerics": "binary64-features-fraction-metrics-v1",
+        "tie_break": "utf8-lexicographic",
+        "randomizer": "python-mt19937-shuffle-v1",
+        "runtime_version_binding": "exact-native-version-in-gate-b-readiness-v1",
+        "payload_stages": [
+            {"id": f"rendered:{view}", "fields": [f"__model_{view}"]}
+            for view in ("problem_only", "transformation_only", "problem_plus_transformation", "problem_plus_solution")
+        ],
+        "payload_rendering": "a0-activation-sites-build-view-texts-v1",
+        "sentinel_text": "Analysis anchor:",
+        "payload_encoding": "length-prefixed-utf8-v1",
+        "normalization": "utf8-nfc-lf-v1",
+        "unicode_version_binding": "native-unidata-version-in-effective-contract-v1",
+        "boundaries": [["train", "test"]],
+    }
+    return json.loads(_v2_canonical(recipe))
+
+
+def bind_production_mechanics(
+    cases: list[Mapping[str, Any]], recipe: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind the complete calibration schedule from label-free metadata only.
+
+    Recipe admission precedes examining records. This pure constructor performs
+    no filesystem access and never chooses mechanics from measured outcomes.
+    A hash proves consistency, not owner consent or scientific qualification.
+    """
+    expected = production_mechanics_recipe()
+    if not isinstance(recipe, Mapping) or _v2_canonical(recipe) != _v2_canonical(expected):
+        raise ValueError("production mechanical recipe does not match the frozen declaration")
+    if not isinstance(cases, list) or len(cases) != 96:
+        raise ValueError("production calibration must provide all 96 planned cases")
+    rows: dict[str, dict[str, Any]] = {}
+    families: dict[str, dict[str, list[str]]] = {domain: {} for domain in _PRODUCTION_DOMAINS}
+    forbidden = {"label", "operator_proxy_family", "target", "gold", "y_true"}
+    for row in cases:
+        if not isinstance(row, Mapping) or forbidden & set(row):
+            raise ValueError("production public calibration metadata contains a target role")
+        identity = _v2_id(row.get("case_id"))
+        family = _v2_id(row.get("problem_family_id"))
+        domain = _v2_id(row.get("domain"))
+        if row.get("split") != "calibration" or domain not in families or identity in rows:
+            raise ValueError("production calibration identity or split differs")
+        rows[identity] = dict(row)
+        families[domain].setdefault(family, []).append(identity)
+    if any(len(groups) != 8 or any(len(ids) != 2 for ids in groups.values()) for groups in families.values()):
+        raise ValueError("production calibration family support differs from the frozen schedule")
+    family_domains: dict[str, str] = {}
+    for domain, groups in families.items():
+        for family in groups:
+            if family in family_domains:
+                raise ValueError("production family identity crosses a domain")
+            family_domains[family] = domain
+    units = [
+        {"id": f"lodo:{domain}", "fold": "fold-0", "domain": domain,
+         "train_ids": sorted(identity for identity, row in rows.items() if row["domain"] != domain),
+         "test_ids": sorted(identity for identity, row in rows.items() if row["domain"] == domain)}
+        for domain in _PRODUCTION_DOMAINS
+    ]
+    replicas = [{"id": f"replica-{index:02d}", "seed": seed} for index, seed in enumerate(expected["replica_seeds"])]
+    assignments: dict[str, dict[str, Any]] = {}
+    for replica in replicas:
+        assignments[replica["id"]] = {}
+        for domain in _PRODUCTION_DOMAINS:
+            shuffled = sorted(families[domain])
+            random.Random(replica["seed"]).shuffle(shuffled)
+            assignments[replica["id"]][domain] = {
+                "train_families": sorted(shuffled[:4]), "test_families": sorted(shuffled[4:]),
+            }
+    effective = {
+        "schema": _PRODUCTION_EVALUATION_PROFILE,
+        "production_recipe_sha256": hashlib.sha256(_v2_canonical(expected)).hexdigest(),
+        "classes": expected["classes"], "views": expected["views"], "control_views": expected["control_views"],
+        "units": units, "replicas": replicas, "partition_assignments": assignments,
+        "partition_train_families": {domain: 4 for domain in _PRODUCTION_DOMAINS},
+        "python_version": sys.version.split()[0], "unicode_version": unicodedata.unidata_version,
+        **{key: expected[key] for key in ("randomizer", "algorithm", "numerics", "tie_break",
+                                       "payload_stages", "payload_encoding", "normalization", "boundaries")},
+    }
+    digest = hashlib.sha256(_v2_canonical(effective)).hexdigest()
+    _v2_contract({"contract": effective, "sha256": digest})
+    return {
+        "artifact_class": "a0x-production-mechanics-binding-v1",
+        "recipe": expected, "recipe_sha256": hashlib.sha256(_v2_canonical(expected)).hexdigest(),
+        "evaluation": {"contract": effective, "sha256": digest},
+        "human_consent_verified": False, "scientific_gate_pass": False,
+    }

@@ -846,7 +846,7 @@ def _git_output(repository: Path, arguments: tuple[str, ...]) -> bytes:
     }
     try:
         completed = subprocess.run(
-            ["/usr/bin/git", "-C", os.fspath(repository), *arguments],
+            ["/usr/bin/git", "-c", "core.fsmonitor=false", "-c", "core.trustctime=false", "-C", os.fspath(repository), *arguments],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1341,13 +1341,16 @@ def generate_vertical_runtime_package(
 
 
 def load_vertical_runtime_package(
-    root: str | Path, binding: VerticalPackageBinding,
+    root: str | Path, binding: VerticalPackageBinding, *, allow_terminal_outputs: bool = False, allow_public_pre_execution: bool = False,
 ) -> dict[str, Any]:
     """Descriptor-relatively reload and fully validate one v2 P0 envelope."""
     repository = _repository_root(root)
     _validate_v2_binding(binding)
     envelope_relative = PurePosixPath(binding.envelope_path)
-    _require_v2_checkout(repository, binding.qualified_source_head, binding.qualified_source_tree)
+    allowed_outputs = vertical_terminal_output_paths(binding.pair_binding, binding.qualified_source_head, binding.qualified_source_tree) if allow_terminal_outputs else frozenset()
+    if allow_public_pre_execution:
+        allowed_outputs |= vertical_public_pre_execution_paths(binding.pair_binding, binding.qualified_source_head, binding.qualified_source_tree)
+    _require_checkout_state(repository, binding.qualified_source_head, binding.qualified_source_tree, allowed_outputs)
     parent = _open_package_parent(repository, envelope_relative, create=False, package_is_parent=True)
     package_fd: int | None = None
     try:
@@ -1400,7 +1403,7 @@ def load_vertical_runtime_package(
         if isinstance(error, A0XVerticalSliceError) and error.code == V2_VALIDATION_FAILED:
             raise
         raise A0XVerticalSliceError(V2_VALIDATION_FAILED) from error
-    _require_v2_checkout(repository, binding.qualified_source_head, binding.qualified_source_tree)
+    _require_checkout_state(repository, binding.qualified_source_head, binding.qualified_source_tree, allowed_outputs)
     return {
         "binding": binding,
         "package_commitment_sha256": binding.package_commitment_sha256,
@@ -1408,6 +1411,26 @@ def load_vertical_runtime_package(
         "commitment": commitment,
         "documents": documents,
     }
+
+
+def vertical_terminal_output_paths(pair: PairBinding, source_head: str, source_tree: str) -> frozenset[str]:
+    """Exact generated members only; never a prefix-based source cleanliness exemption."""
+    if not isinstance(pair, PairBinding) or not _REVISION.fullmatch(source_head) or not _REVISION.fullmatch(source_tree):
+        raise A0XVerticalSliceError(V2_INVALID_REQUEST)
+    members = ("publication-manifest.json", "root-receipt.json", "terminal-result.json", "trust-manifest.json",
+               "report.md", "execution-authorization-v4.schema.json", "external-assets-locator.json")
+    assets = f"results/a0x-external-assets/{source_head}/{source_tree}/{pair.leg.value}/{pair.model_key}/{pair.run_id}"
+    return frozenset({*(f"{pair.output_path}/{name}" for name in members),
+                      f"{assets}/dense-output.bin", f"{assets}/representation-index.json"})
+
+
+def vertical_public_pre_execution_paths(pair: PairBinding, source_head: str, source_tree: str) -> frozenset[str]:
+    """Finite pre-execution documents, never a broad source exemption."""
+    if not isinstance(pair, PairBinding) or not _REVISION.fullmatch(source_head) or not _REVISION.fullmatch(source_tree):
+        raise A0XVerticalSliceError(V2_INVALID_REQUEST)
+    from .a0x_public_closure import PRE_EXECUTION_PUBLIC_ROLE_PATHS, PRE_EXECUTION_EXTENSION_PATH
+    base = f"experiments/a0x-six-model/vertical-slices/{source_head}/{pair.leg.value}/{pair.model_key}/public-closure/v1"
+    return frozenset(f"{base}/{name}" for name in (*PRE_EXECUTION_PUBLIC_ROLE_PATHS.values(), PRE_EXECUTION_EXTENSION_PATH))
 
 
 def _validate_v2_request(request: VerticalRuntimePackageRequest) -> PurePosixPath:

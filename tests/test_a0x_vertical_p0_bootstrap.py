@@ -860,6 +860,63 @@ class SyntheticRepository:
         )
 
 
+class CurrentP0InputLedgerTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "native exclusive publication requires Darwin")
+    def test_current_ledger_publication_is_atomic_and_overwrite_refusing(self):
+        from scripts import a0x_vertical_p0_v2 as operator
+        prepare = getattr(operator, "prepare_current_ledger", None)
+        self.assertTrue(callable(prepare), "current ledger preparer is absent")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            with mock.patch.object(operator, "_require_source_identity"), mock.patch.object(operator, "_require_clean_checkout"), mock.patch.object(operator, "_current_ledger_bytes", return_value=b"independent synthetic declaration"):
+                result = prepare(root, "a" * 40, "b" * 40)
+                path = root / result["path"]
+                self.assertEqual(b"independent synthetic declaration", path.read_bytes())
+                self.assertEqual(1, path.stat().st_nlink)
+                self.assertEqual({"input-ledger.json"}, {item.name for item in path.parent.iterdir()})
+                with self.assertRaises((FileExistsError, ValueError)):
+                    prepare(root, "a" * 40, "b" * 40)
+                self.assertEqual(b"independent synthetic declaration", path.read_bytes())
+
+    def test_current_ledger_binds_new_source_without_rewriting_historical_record(self):
+        from scripts import a0x_vertical_p0_v2 as operator
+        source = b"independent synthetic source"
+        names = [f"src/latent_triz/synthetic_{index:03d}.py" for index in range(137)]
+        historical = "## Raw P0 package-input ledger\n```text\n" + "\n".join(f"{'0' * 64} 1 {name}" for name in names) + "\n```\n"
+        inventory = {"implementation_files": [{"path": names[0], "bytes": len(source), "sha256": hashlib.sha256(source).hexdigest()}]}
+        values = {operator.LEDGER_DOCUMENT_RELATIVE: historical.encode(),
+            "experiments/a0x-six-model/a0/implementation.json": json.dumps(inventory).encode(),
+            "experiments/a0x-six-model/model-registry.json": b'{"cards":["model-cards/smollm2_360m.json"]}'}
+        calls = []
+        def read(_root, relative, _maximum, _code):
+            calls.append(relative)
+            return values.get(relative, source)
+        with mock.patch.object(operator, "_read_regular_relative", side_effect=read):
+            raw = operator._current_ledger_bytes(Path("/synthetic"), "a" * 40, "b" * 40)
+        result = json.loads(raw)
+        self.assertEqual("current-source-inventory-v1", result["profile"])
+        self.assertEqual({"head": "a" * 40, "tree": "b" * 40}, result["source"])
+        entry = next(item for item in result["entries"] if item["path"] == names[0])
+        self.assertEqual(hashlib.sha256(source).hexdigest(), entry["sha256"])
+        self.assertEqual(historical.encode(), values[operator.LEDGER_DOCUMENT_RELATIVE])
+        self.assertTrue(all(not path.startswith(("data/", "artifacts/", "results/")) for path in calls))
+
+    def test_entire_current_ledger_path_set_is_admitted_before_member_reads(self):
+        from scripts import a0x_vertical_p0_v2 as operator
+        historical = "## Raw P0 package-input ledger\n```text\n" + "\n".join(
+            f"{'0' * 64} 1 src/latent_triz/synthetic_{index:03d}.py" for index in range(137)) + "\n```\n"
+        protected = "data/a0/sealed-targets/targets.jsonl"
+        values = {operator.LEDGER_DOCUMENT_RELATIVE: historical.encode(),
+            "experiments/a0x-six-model/a0/implementation.json": json.dumps({"implementation_files": [{"path": protected, "bytes": 1, "sha256": "0" * 64}]}).encode(),
+            "experiments/a0x-six-model/model-registry.json": b'{"cards":[]}'}
+        def read(_root, relative, _maximum, _code):
+            if relative not in values:
+                raise AssertionError("member probed before complete path admission")
+            return values[relative]
+        with mock.patch.object(operator, "_read_regular_relative", side_effect=read), self.assertRaisesRegex(ValueError, "LEDGER_MISMATCH"):
+            operator._current_ledger_bytes(Path("/synthetic"), "a" * 40, "b" * 40)
+
+
 class A0XVerticalP0BootstrapTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="a0x-p0-bootstrap-")

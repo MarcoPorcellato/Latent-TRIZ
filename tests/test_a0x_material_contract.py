@@ -17,6 +17,31 @@ from tests.a0x_test_support import authorization_documents, pair_binding, sha
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class ActiveVerticalGuardTests(unittest.TestCase):
+    def test_current_contract_selects_only_the_installed_guard_producer(self) -> None:
+        import latent_triz.a0x_material_contract as contract_module
+        selector = getattr(contract_module, "active_vertical_guard_identity", None)
+        self.assertTrue(callable(selector), "current vertical guard selector is absent")
+        root = Path(__file__).resolve().parents[1]
+        current = json.loads((root / "experiments/a0x-six-model/material-execution-contract.json").read_bytes())
+        identity = selector(current)
+        self.assertEqual("1015a0b42962dbf18334fd6dfc0d9148551d4984", identity["source_commit"])
+        self.assertEqual("2ebad04d6dc718c7aaa2534d304cde7797460a97", identity["qualified_source_tree"])
+        self.assertEqual("45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2", identity["sha256"])
+        for mutation in ("historical", "producer", "receipt", "config"):
+            changed = copy.deepcopy(current)
+            if mutation == "historical":
+                changed.pop("vertical_guard")
+            elif mutation == "producer":
+                changed["vertical_guard"]["sha256"] = changed["ccp"]["sha256"]
+            elif mutation == "receipt":
+                changed["vertical_guard"]["emits_receipt"] = True
+            else:
+                changed["vertical_guard"]["uses_repository_configuration"] = True
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(A0XContractError, "vertical guard"):
+                selector(changed)
+
+
 class A0XMaterialContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.pair = PairBinding.from_mapping(pair_binding(Leg.A0, "gpt2"))

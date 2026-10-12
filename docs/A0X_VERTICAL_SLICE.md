@@ -1,7 +1,7 @@
 ---
 type: laboratory-specification
 title: A0X pair-scoped vertical-slice execution
-status: current-v2-route-p0-pending
+status: current-v2-route-engineering-qualification
 date: 2026-09-02
 ---
 
@@ -26,14 +26,13 @@ for the normative boundary. Every arrow remains a separate exact authorization;
 this documentation does not authorize Hosted capture, P0, Gate B, Gate C, or
 any material access.
 
-Before production-bound regeneration, the public-closure contract must also
-pass a behavioral parent/child test proving that absent or mutated closure
-evidence is rejected before runner invocation or child dispatch. This is the
-current target-free blocker identified by Sol and retained by Astra's
-`GO_WITH_CONDITIONS` / `NO-GO` split. After that test, a separate authorization
-is still required for inventory/freeze/dossier regeneration. Regeneration is
-not Gate B readiness and does not authorize model, tokenizer, target, network,
-CCP, Docker, or Gate C access.
+Production-bound regeneration requires behavioral parent/child coverage:
+absent or mutated public closure evidence must be rejected before runner
+invocation or child dispatch. The September 25 review recorded this as a
+target-free blocker. Current coverage and phase authority must be checked
+against the active operator handoff, not inferred from that historical review.
+Regeneration is not Gate B readiness and does not itself authorize model,
+tokenizer, target, network, CCP, Docker, or scientific Gate C access.
 
 The public closure contract distinguishes pre-execution inputs from terminal
 and postflight outputs and assigns public versus private artifact roles. Its
@@ -42,6 +41,62 @@ establish human consent, runtime truth, or independent verification. The
 synthetic experimental profile is not accepted by production entry points.
 
 ## Purpose
+
+### Prospective first-result engineering route — 2026-10-12
+
+The current A0-only dispatcher uses the versioned production D1–D7 mechanical
+recipe in `a0_shortcuts.production_mechanics_recipe`. It derives the complete
+96-case calibration schedule from public identities, not labels or historical
+outcomes. All fourteen controls remain required. The primary scientific
+protocol, 24-family selection, 199 permutations, endpoint indices and stopping
+rules remain unchanged. Historical v1.0.3 outputs and R1 are not reinterpreted.
+
+The material contract v3 separates its historical Matrix producer from the
+active vertical guard. The latter uses the installed, operator-qualified
+macos-v5 producer, not a historical Matrix receipt. Native resource telemetry
+accepts finite decimal percentages; cryptographic commitment parsing remains
+integer-only. Static swap occupancy alone is not a resource veto. The guard
+and its fresh status probes share a minimal private coordination environment;
+`HOME` is required for the persistent admission namespace, while credentials
+are not forwarded.
+
+New P0 preparation can use `current-source-inventory-v1`. Prepare its ignored,
+source-bound input ledger using the existing operator's
+`--prepare-current-ledger` mode, then pin its raw hash and derived path in the
+P0 authorization. The historical 137-entry ledger and replay inlet remain
+unchanged. An updated ledger refuses a stale implementation inventory rather
+than concealing it. Source/inventory regeneration precedes preparation.
+
+Production dispatch requires the full reloaded P0 package, Gate B outputs,
+private v4 authorization, Hosted Gate A input bytes and public pre-execution
+closure. A pure context projection cannot authorize model or target access.
+Parent and child pin the same input identities before execution and revalidate
+them afterward. Exact generated public pre-execution files and terminal pair
+outputs are accounted for explicitly; this is not an arbitrary dirty-source
+exemption. Hashes prove integrity and consistency, not human consent or the
+truth of an unobserved runtime assertion.
+
+The real-model rehearsal calls the same internal calibration, loader,
+activation, one-shot reader, analysis, sealing, packager and verifier stages.
+Its independent synthetic inputs and ignored output namespace remain
+permanently evidence- and publication-ineligible. The internal deadline is
+3,300 seconds with a 300-second cleanup margin; the material RSS limit is
+8 GiB. A failed or unevaluable calibration blocks further material stages.
+A measured adverse shortcut remains non-interpretable and is never replaced
+by a literal PASS.
+
+The authorized Gate C parent temporarily restores only the two needed A0
+target permissions, then reapplies mode 000 on every exit. This requires an
+activity-owned source with no concurrent mutator: metadata identity checks
+detect drift but are not hostile same-user isolation. Mode-000 files cannot
+be pinned with macOS O_EVTONLY before restoring permissions. The parent uses
+directory-relative checks and pins the admitted inode immediately afterward;
+it does not chmod an identified replacement during cleanup.
+
+Production qualification and scientific execution remain separate gates.
+Independent review must accept the frozen engineering candidate before remote
+publication. A separate exact authorization is still required for the single
+scientific Gate C attempt and another for any scientific-result publication.
 
 Execute the A0X replication campaign one exact model at a time without
 rewriting or implying freshness for every other model. The first model slice is

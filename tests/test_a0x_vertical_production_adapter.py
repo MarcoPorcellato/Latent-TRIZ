@@ -67,6 +67,14 @@ def _graph(*, qualification_context="synthetic-target-free"):
 
 
 class A0XVerticalProductionAdapterTests(unittest.TestCase):
+    def test_context_projection_cannot_authorize_material_execution(self):
+        from latent_triz import a0x_vertical_production_adapter as adapter
+        execute = getattr(adapter, "run_vertical_production", None)
+        self.assertTrue(callable(execute), "production dispatcher is absent")
+        context = bind_validated_vertical_graph(_graph(qualification_context="production"), qualification_context="production")
+        with self.assertRaisesRegex(A0XVerticalProductionAdapterError, "validated production capability"):
+            execute(context)
+
     def test_v4_graph_binds_a_detached_immutable_context(self):
         graph = _graph()
         context = bind_validated_vertical_graph(graph, qualification_context="synthetic-target-free")
@@ -119,6 +127,21 @@ class A0XVerticalProductionAdapterTests(unittest.TestCase):
 
 
 class RehearsalBoundaryTests(unittest.TestCase):
+    def test_rehearsal_calibration_uses_the_production_recipe_and_real_consumer(self):
+        import tempfile
+        from pathlib import Path
+        from scripts import a0x_rehearsal as rehearsal
+        from latent_triz.a0_calibration import run_production_shortcut_calibration
+        from latent_triz.a0_shortcuts import production_mechanics_recipe
+        prepare = getattr(rehearsal, "_calibration_inputs", None)
+        self.assertTrue(callable(prepare), "shared production calibration preparation is absent")
+        with tempfile.TemporaryDirectory() as temporary:
+            protocol, cases, targets = prepare(Path(temporary), rehearsal.ROOT)
+            result = run_production_shortcut_calibration(protocol, cases, targets, production_mechanics_recipe())
+            self.assertEqual("PASS", result["status"])
+            self.assertEqual(14, len(result["controls"]))
+            self.assertFalse(result["mechanical_freeze_independently_verified"])
+
     def test_rehearsal_cannot_write_into_scientific_results_namespace(self):
         import tempfile
         from pathlib import Path

@@ -49,6 +49,39 @@ _GATE_A_VERIFIER = {
 }
 DESCRIPTOR_PROFILE = "a0x-material-child-descriptor-v2"
 MATERIAL_CONTRACT_PATH = "experiments/a0x-six-model/material-execution-contract.json"
+_ACTIVE_VERTICAL_GUARD = {
+    "producer_role": "ccp_executable",
+    "source_commit": "1015a0b42962dbf18334fd6dfc0d9148551d4984",
+    "source_tree": "2ebad04d6dc718c7aaa2534d304cde7797460a97",
+    "sha256": "45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2",
+    "version": "commit-ci-preflight 0.1.0",
+    "resource_policy": "macos-v5",
+    "qualification_basis": "operator-recorded-isolated-guard",
+    "uses_repository_configuration": False,
+    "emits_receipt": False,
+    "hash_before_command": True,
+    "max_guard_exec_count": 1,
+}
+
+
+def active_vertical_guard_identity(contract: Mapping[str, Any]) -> dict[str, str]:
+    """Select the installed producer, never the retained historical Matrix producer.
+
+    This is a public role/hash contract, not a binary verification, current
+    admission observation, replacement procedure or execution authorization.
+    """
+    if (
+        not isinstance(contract, Mapping)
+        or contract.get("contract_version") != "a0x-material-execution-contract-v3"
+        or contract.get("ccp_binding_role") != "historical_matrix_only"
+        or contract.get("vertical_guard") != _ACTIVE_VERTICAL_GUARD
+    ):
+        raise A0XContractError("active vertical guard binding is absent or differs")
+    return {
+        "role": "ccp", "source_commit": _ACTIVE_VERTICAL_GUARD["source_commit"],
+        "qualified_source_tree": _ACTIVE_VERTICAL_GUARD["source_tree"],
+        "sha256": _ACTIVE_VERTICAL_GUARD["sha256"], "version": _ACTIVE_VERTICAL_GUARD["version"],
+    }
 
 
 @dataclass(frozen=True)

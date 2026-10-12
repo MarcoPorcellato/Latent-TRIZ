@@ -1146,7 +1146,18 @@ def _validate_preparation_inputs(
     except A0XContractError as error:
         raise A0XRuntimeBundleError("material contract bytes are not strict JSON") from error
     _validate_material_contract_schema(contract)
-    ccp_identity = _ccp_identity(contract)
+    if derive_legacy_paths:
+        ccp_identity = _ccp_identity(contract)
+    else:
+        from .a0x_material_contract import active_vertical_guard_identity
+
+        try:
+            selected = active_vertical_guard_identity(contract)
+        except (A0XContractError, TypeError, ValueError) as error:
+            raise A0XRuntimeBundleError("active vertical guard contract is invalid") from error
+        ccp_identity = {"executable_name": "commit-ci-preflight", **{
+            key: selected[key] for key in ("source_commit", "qualified_source_tree", "sha256", "version")
+        }}
     ccp_path = _external_executable(request.ccp_executable, "CCP executable")
     if ccp_identity_verifier is not None:
         try:

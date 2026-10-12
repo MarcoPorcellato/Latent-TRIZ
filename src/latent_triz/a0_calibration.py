@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .a0_power import calibrate_a0_power
-from .a0_shortcuts import audit_a0_shortcuts, _validate_prospective_selection
+from .a0_shortcuts import (
+    audit_a0_shortcuts, _validate_prospective_selection, bind_production_mechanics,
+    production_mechanics_recipe, _audit_prospective_records, _validate_prospective_controls,
+)
 
 
 class A0CalibrationError(RuntimeError):
@@ -48,6 +51,62 @@ def _verify_file(corpus_root: Path, entry: Mapping[str, Any], label: str) -> Pat
     if _sha256(path) != entry.get("sha256") or path.stat().st_size != entry.get("size"):
         raise A0CalibrationError(f"{label} receipt mismatch")
     return path
+
+
+def run_production_shortcut_calibration(
+    protocol_path: str | Path, cases_path: str | Path, targets_path: str | Path,
+    recipe: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Execute the approved prospective controls without recalibrating primary analysis.
+
+    The production caller owns material authorization and input hash checks.
+    Recipe and public metadata are admitted before calibration targets are read.
+    Derived hashes prove integrity only, never human consent or independent review.
+    The frozen primary power, sample size, permutations and stopping rules remain
+    unchanged; an adverse shortcut remains adverse rather than a literal PASS.
+    """
+    if not isinstance(recipe, Mapping) or _stable(recipe) != _stable(production_mechanics_recipe()):
+        raise A0CalibrationError("production mechanical recipe differs")
+    protocol = _load_object(Path(protocol_path), "frozen production protocol")
+    if (
+        protocol.get("protocol_id") != recipe["protocol_id"]
+        or protocol.get("protocol_status") != "frozen"
+        or set(protocol.get("target_families", ())) != set(recipe["classes"])
+        or set(protocol.get("neutral_domains", ())) != set(recipe["domains"])
+        or protocol.get("calibration_families_per_domain") != 8
+    ):
+        raise A0CalibrationError("frozen production protocol does not bind the mechanical recipe")
+    frozen = protocol.get("frozen_analysis", {})
+    for key, expected in (("selected_families_per_domain", 4), ("selected_family_count", 24),
+                          ("selected_permutation_budget", 199), ("critical_successes", 19),
+                          ("max_statistic_multiplicity", 12)):
+        if frozen.get(key) != expected:
+            raise A0CalibrationError("frozen primary analysis changed")
+    configuration = protocol.get("shortcut_evaluation", {})
+    _validate_prospective_controls(protocol)
+    if configuration.get("macro_f1_threshold") != 0.65 or configuration.get("margin_over_majority") != 0.10:
+        raise A0CalibrationError("approved prospective sentinel thresholds changed")
+    def rows(path: str | Path) -> list[dict[str, Any]]:
+        return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+    cases = [row for row in rows(cases_path) if row.get("split") == "calibration"]
+    binding = bind_production_mechanics(cases, recipe)
+    from .a0_activation_sites import build_view_texts
+    rendered = []
+    for case in cases:
+        if any(key.startswith("__model_") for key in case):
+            raise A0CalibrationError("public inputs contain reserved rendered-payload fields")
+        views = build_view_texts(case, sentinel_text=recipe["sentinel_text"])
+        rendered.append({**case, **{f"__model_{name}": value for name, value in views.items()}})
+    targets = rows(targets_path)
+    result = _audit_prospective_records(rendered, targets, protocol, binding["evaluation"])
+    result.update({
+        "production_mechanics_profile": recipe["schema"],
+        "production_recipe_sha256": binding["recipe_sha256"],
+        "production_binding_status": "validated_against_source_recipe",
+        "human_consent_verified": False,
+        "primary_analysis_recalibrated": False,
+    })
+    return result
 
 
 def run_a0_calibration(

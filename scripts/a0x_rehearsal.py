@@ -94,29 +94,29 @@ def synthetic_inputs() -> tuple[list[dict], list[dict]]:
     return cases, targets
 
 
-def _calibration(output: Path) -> dict:
-    # This already-independent fixture exercises the actual prospective consumer;
-    # its mechanical contract is engineering input, not production adoption.
-    from tests.test_a0_prospective_d1_d7_synthetic import fixture, mechanics, SELECTION
-    from latent_triz.a0_calibration import run_a0_calibration
-
-    cases, targets, protocol = fixture()
-    corpus = output / "calibration/corpus"
-    protocol_path = output / "calibration/protocol.json"
-    protocol_raw = canonical(protocol)
-    write_new(protocol_path, protocol_raw)
-    files = {}
-    for name, rows, role in (("cases.jsonl", cases, "cases_jsonl"),
-                             ("calibration-targets.jsonl", targets, "calibration_targets_jsonl")):
-        raw = b"".join(canonical(row) + b"\n" for row in rows)
-        write_new(corpus / name, raw)
-        files[role] = {"path": name, "sha256": sha(raw), "size": len(raw)}
-    files["sealed_targets_jsonl"] = {"path": "absent-synthetic-sealed.jsonl", "sha256": "0" * 64, "size": 0}
-    write_new(corpus / "manifest.json", canonical({
-        **COMMON, "protocol_id": protocol["protocol_id"], "protocol_hash": sha(protocol_raw), "files": files,
-    }))
-    return run_a0_calibration(protocol_path, corpus, output / "calibration/result",
-                              method_selection=SELECTION, mechanical_evidence=mechanics(cases))
+def _calibration_inputs(output: Path, source_root: Path) -> tuple[Path, Path, Path]:
+    """Independent synthetic data with the real frozen production protocol."""
+    cases, targets = [], []
+    for domain in DOMAINS:
+        for family in range(8):
+            for variant in range(2):
+                identity = f"engineering-calibration-{domain}-{family:02d}-{variant}"
+                family_id = f"engineering-calibration-{domain}-{family:02d}"
+                text = f"Independent synthetic fixture {family_id}"
+                case = {"case_id": identity, "problem_family_id": family_id, "domain": domain, "split": "calibration",
+                        **{field: text for field in ("problem", "initial_state", "desired_improvement", "worsening_consequence", "resulting_state")},
+                        "transformation": text + " controlled change", "solution": text + " bounded delivery",
+                        "constraints": ["Synthetic constraint"]}
+                cases.append(case)
+                targets.append({"case_id": identity, "split": "calibration",
+                    "operator_proxy_family": ("inversion_like", "segmentation_like")[variant],
+                    "provenance": {"template_id": "neutral", "generator_id": "synthetic"}})
+    protocol = output / "calibration/protocol.json"
+    write_new(protocol, (source_root / "experiments/a0-automated-weak-proxy/protocol.json").read_bytes())
+    case_path, target_path = output / "calibration/cases.jsonl", output / "calibration/targets.jsonl"
+    for path, rows in ((case_path, cases), (target_path, targets)):
+        write_new(path, b"".join(canonical(row) + b"\n" for row in rows))
+    return protocol, case_path, target_path
 
 
 def _memory_available_bytes() -> int:
@@ -132,15 +132,12 @@ def _memory_available_bytes() -> int:
 
 
 def _synthetic_context(root: Path, pair, source_head: str, source_tree: str,
-                       package_hash: str, attempt: str, statistic_raw: bytes):
+                       package_hash: str, attempt: str, statistic_raw: bytes | None = None):
     from latent_triz.a0x_vertical_production_adapter import bind_validated_vertical_graph
 
     public_schema = "schemas/a0x-execution-authorization-v4.schema.json"
     path = root / public_schema
     info = path.stat()
-    statistic_path = root / ".a0x-runtime/engineering/statistical-result.json"
-    write_new(statistic_path, statistic_raw)
-    statistic_info = statistic_path.stat()
     source = {"head": source_head, "tree": source_tree, "ref": "refs/heads/main"}
     package = {
         "envelope_path": ".a0x-runtime/synthetic/p0", "package_path": ".a0x-runtime/synthetic/p0/package",
@@ -161,9 +158,6 @@ def _synthetic_context(root: Path, pair, source_head: str, source_tree: str,
             "max_guard_exec_count": 1, "stop_boundary": "after_one_sealed_target_read"},
         "trust_file_identities": {public_schema: {
             "device": info.st_dev, "inode": info.st_ino, "size": info.st_size, "sha256": sha(path.read_bytes()),
-        }, statistic_path.relative_to(root).as_posix(): {
-            "device": statistic_info.st_dev, "inode": statistic_info.st_ino,
-            "size": len(statistic_raw), "sha256": sha(statistic_raw),
         }},
     }
     return bind_validated_vertical_graph(graph, qualification_context="engineering_rehearsal")
@@ -174,14 +168,8 @@ def run_rehearsal(*, repository_root: Path, snapshot_root: Path, output_root: Pa
     from latent_triz.a0x_contract import (APPROVAL_DOSSIER_PROFILE, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE,
         Leg, LegFreezeBinding, PairBinding, compute_dense_bound, derive_pair_output_path)
     from latent_triz.a0x_preflight import load_model_card, verify_snapshot_files, verify_card_sources
-    from latent_triz.a0x_production_adapter import _a0_activation_selection_manifest
-    from latent_triz.a0x_execution import (load_a0_public_selection, OneShotTargetReader,
-                                           seal_terminal_attempt, AttemptState)
-    from latent_triz.a0x_model_adapter import A0XHiddenStateAdapter
-    from latent_triz.a0x_a0_activations import extract_a0x_a0
-    from latent_triz.a0x_a0_analysis import analyze_a0x_a0
-    from latent_triz.a0x_vertical_terminal_package import (VerticalTerminalExpectation,
-        build_vertical_terminal_package, verify_vertical_terminal_package)
+    from latent_triz.a0x_execution import load_a0_public_selection
+    from latent_triz.a0x_vertical_production_adapter import _MaterialInputs, _run_a0_material_stages
 
     root = Path(repository_root).resolve(strict=True)
     card = load_model_card(root / "experiments/a0x-six-model/model-cards/smollm2_360m.json")
@@ -194,11 +182,8 @@ def run_rehearsal(*, repository_root: Path, snapshot_root: Path, output_root: Pa
         raise RehearsalError("less than 4 GiB native reported memory is available")
     output.mkdir(parents=True, mode=0o700)
     started = time.monotonic()
-    calibration = _calibration(output)
-    shortcut_status = {"PASS": "pass"}.get(calibration["status"])
-    if shortcut_status is None:
-        raise RehearsalError("independent synthetic calibration did not pass")
     synthetic_root = output / "synthetic-repository"
+    calibration_protocol, calibration_cases, calibration_targets = _calibration_inputs(synthetic_root, root)
     cases, targets = synthetic_inputs()
     cases_raw = b"".join(canonical(row) + b"\n" for row in cases)
     manifest_raw = canonical({"artifact_class": "engineering-source", "evidence_eligible": False})
@@ -234,64 +219,24 @@ def run_rehearsal(*, repository_root: Path, snapshot_root: Path, output_root: Pa
         "authorization_commitment": {"profile": VERTICAL_EXECUTION_AUTHORIZATION_PROFILE, "commitment_sha256": fixture_sha},
     }
     capability = load_a0_public_selection(repository_root=synthetic_root, leg_freeze=freeze)
-    activation_selection = _a0_activation_selection_manifest(capability, freeze=freeze, pair=pair)
-    available = _memory_available_bytes()
-    if available < 4 * 1024**3:
-        raise RehearsalError("memory gate failed immediately before model load")
-    adapter = None
-    try:
-        import torch
-        torch.set_num_threads(1)
-        adapter = A0XHiddenStateAdapter.load(model_root=snapshot_root, card=card)
-        artifacts = extract_a0x_a0(adapter=adapter, cases=cases, selection=activation_selection,
-            pair_binding=pair.as_mapping(), authorization_chain=chain,
-            output_dir=output / "activation", created_at="2026-10-12T00:00:00Z")
-        target_path = output / "synthetic-targets.jsonl"
-        target_raw = b"".join(canonical(row) + b"\n" for row in targets)
-        write_new(target_path, target_raw)
-        reader = OneShotTargetReader(path=target_path, expected_sha256=sha(target_raw),
-            receipt_path=output / "target-read-receipt.json", pair_binding=pair.as_mapping(), selection=capability,
-            activation_receipt_sha256=sha(artifacts.receipt_path.read_bytes()),
-            dense_sha256=sha(artifacts.dense_path.read_bytes()), index_sha256=sha(artifacts.index_path.read_bytes()),
-            authorization_chain=chain)
-        rows, _receipt = reader.read_jsonl_once()
-        result = analyze_a0x_a0(pair_binding=pair.as_mapping(), target_rows=rows,
-            target_read_receipt_bytes=(output / "target-read-receipt.json").read_bytes(),
-            activation_receipt_bytes=artifacts.receipt_path.read_bytes(), dense_asset_bytes=artifacts.dense_path.read_bytes(),
-            index_bytes=artifacts.index_path.read_bytes(), shortcut_result={"status": shortcut_status},
-            authorization_chain=chain)
-        write_new(output / "statistical-result.json", canonical(result) + b"\n")
-        seal_terminal_attempt(state=AttemptState.ANALYSIS, status=result["status"],
-            target_receipt_path=output / "target-read-receipt.json", statistical_result=result,
-            pair_binding=pair.as_mapping(), authorization_chain=chain,
-            terminal_path=output / "analysis-terminal-result.json")
-        schema_relative = "schemas/a0x-execution-authorization-v4.schema.json"
-        write_new(synthetic_root / schema_relative, (root / schema_relative).read_bytes())
-        context = _synthetic_context(synthetic_root, pair, head, tree, fixture_sha, attempt,
-                                     (output / "statistical-result.json").read_bytes())
-        asset_base = synthetic_root / "results/a0x-external-assets" / head / tree / "a0" / MODEL_KEY / run_id
-        asset_base.mkdir(parents=True)
-        assets = {"dense": asset_base / "dense-output.bin", "index": asset_base / "representation-index.json"}
-        shutil.copyfile(artifacts.dense_path, assets["dense"])
-        shutil.copyfile(artifacts.index_path, assets["index"])
-        expectation = VerticalTerminalExpectation.from_context(context, repository_root=synthetic_root, external_assets=assets)
-        terminal = {"artifact_class": "a0x-vertical-terminal-result", "terminal_profile": "a0x-vertical-terminal-result-v1",
-            **context.public_identity(), "reached_frontier": "sealed", "scientific_outcome": result["status"],
-            "evidence_eligible": False, "expert_validated": False, "claim_ids": [],
-            "result_payload": {"statistical_result_sha256": sha((output / "statistical-result.json").read_bytes())}}
-        package = synthetic_root / pair.output_path
-        reference = build_vertical_terminal_package(repository_root=synthetic_root, destination=package,
-            expected=expectation, terminal_result=terminal)
-        verified = verify_vertical_terminal_package(package_root=package, repository_root=synthetic_root,
-            expected=expectation, expected_manifest_sha256=reference.manifest_sha256,
-            expected_root_receipt_sha256=reference.root_receipt_sha256)
-        if verified.publication_eligible:
-            raise RehearsalError("engineering rehearsal cannot become publication eligible")
-    finally:
-        if adapter is not None:
-            adapter.model = None
-            adapter.tokenizer = None
-        gc.collect()
+    target_path = synthetic_root / "fixture/synthetic-targets.jsonl"
+    target_raw = b"".join(canonical(row) + b"\n" for row in targets)
+    write_new(target_path, target_raw)
+    schema_relative = "schemas/a0x-execution-authorization-v4.schema.json"
+    write_new(synthetic_root / schema_relative, (root / schema_relative).read_bytes())
+    context = _synthetic_context(synthetic_root, pair, head, tree, fixture_sha, attempt)
+    material_output = synthetic_root / ".a0x-runtime/engineering/material"
+    material_output.mkdir(parents=True)
+    def revalidate():
+        verify_snapshot_files(snapshot_root, card)
+        if _memory_available_bytes() < 4 * 1024**3:
+            raise RehearsalError("memory gate failed immediately before model load")
+    inputs = _MaterialInputs(synthetic_root, material_output, snapshot_root, card, freeze, tuple(cases), capability,
+        calibration_protocol, calibration_cases, calibration_targets, target_path, sha(target_raw), chain,
+        revalidate, lambda: None)
+    result = _run_a0_material_stages(context, inputs)
+    if result["lifecycle_status"] != "completed" or not result["package_verified"] or result["publication_eligible"]:
+        raise RehearsalError(f"shared production stages ended {result['lifecycle_status']}: {result.get('post_terminal_failure')}")
     elapsed = time.monotonic() - started
     peak_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     if sys.platform != "darwin":
@@ -302,11 +247,14 @@ def run_rehearsal(*, repository_root: Path, snapshot_root: Path, output_root: Pa
         "downstream_chain_profile": VERTICAL_EXECUTION_AUTHORIZATION_PROFILE,
         "source_worktree_dirty": subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "src", "scripts", "tests", "schemas", "Makefile"], cwd=root).returncode != 0,
         "model_id": MODEL_ID, "revision": REVISION, "synthetic_cases": 48, "synthetic_families": 24,
-        "calibration_status": calibration["status"], "analysis_status": result["status"],
-        "package_verified": True, "wall_seconds": elapsed, "peak_rss_bytes": peak_rss,
+        "calibration_status": result["calibration_status"], "analysis_status": result["terminal_outcome"]["scientific_outcome"],
+        "package_verified": result["package_verified"], "shared_material_stages": True,
+        "target_content_reads": result["target_content_reads"], "stage_timings": result["stage_timings"],
+        "wall_seconds": elapsed, "peak_rss_bytes": peak_rss,
         "budget_pass": elapsed <= 1650 and peak_rss <= 8 * 1024**3,
         "limitations": ["All inputs are synthetic; never scientific evidence.",
-                        "Production v4 dispatcher and mechanical freeze remain unqualified."],
+                        "Real Hosted Gate A/P0/Gate B authority is deliberately replaced with engineering bindings.",
+                        "Production qualification requires independent review; engineering success is not scientific evidence."],
     }
     write_new(output / "rehearsal-result.json", canonical(report) + b"\n")
     if not report["budget_pass"]:

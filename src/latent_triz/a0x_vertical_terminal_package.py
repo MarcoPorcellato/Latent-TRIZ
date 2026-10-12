@@ -1,9 +1,8 @@
 """Fail-closed v4 terminal packages, separate from historical A0X formats.
 
-The public child currently stops at ``runtime_unavailable``. This module is
-target-free package infrastructure; synthetic fixtures are never eligible for
-publication. Any future production caller must supply a context made from the
-child's completely validated graph and must preserve the same exact trust set.
+Synthetic fixtures are never eligible for publication. Production packaging
+requires a complete independently reloaded capability, not a context projection,
+and preserves its exact pre-execution trust set plus the observed statistic.
 """
 from __future__ import annotations
 
@@ -88,6 +87,7 @@ class VerticalTerminalExpectation:
     attempt_id: str
     trust_files: tuple[_ExpectedFile, ...]
     external_assets: tuple[_ExpectedAsset, ...] = ()
+    _production_capability: Any = None
 
     @classmethod
     def from_context(
@@ -96,10 +96,13 @@ class VerticalTerminalExpectation:
         *,
         repository_root: str | Path | None = None,
         external_assets: Mapping[str, str | Path] | None = None,
+        _production_capability: Any = None,
     ) -> "VerticalTerminalExpectation":
         if not isinstance(context, VerticalProductionContext):
             raise A0XVerticalTerminalPackageError("validated vertical context is required")
-        if context.qualification_context not in {"synthetic-target-free", "engineering_rehearsal"}:
+        if context.qualification_context == "production" and _production_capability is not None:
+            _validate_production_context_membership(context, _production_capability)
+        elif context.qualification_context not in {"synthetic-target-free", "engineering_rehearsal"}:
             raise A0XVerticalTerminalPackageError(
                 "production expectations require the complete parent-validated trust capability"
             )
@@ -146,7 +149,21 @@ class VerticalTerminalExpectation:
             attempt_id=context.attempt_id,
             trust_files=tuple(identities),
             external_assets=tuple(assets),
+            _production_capability=_production_capability,
         )
+
+    @classmethod
+    def from_production_capability(cls, capability: Any, *, material_context: VerticalProductionContext | None = None,
+                                   external_assets: Mapping[str, str | Path] | None = None) -> "VerticalTerminalExpectation":
+        from .a0x_vertical_production_adapter import _ValidatedProductionCapability, _PRODUCTION_CAPABILITY, load_vertical_production_capability
+        if not isinstance(capability, _ValidatedProductionCapability) or capability._marker is not _PRODUCTION_CAPABILITY:
+            raise A0XVerticalTerminalPackageError("complete production capability is required")
+        validated = load_vertical_production_capability(capability.repository_root, capability.descriptor_path, _terminal_outputs=True)
+        if validated.context != capability.context or validated.package_documents != capability.package_documents:
+            raise A0XVerticalTerminalPackageError("production capability differs after material stages")
+        context = validated.context if material_context is None else material_context
+        return cls.from_context(context, repository_root=validated.repository_root,
+            external_assets=external_assets, _production_capability=validated)
 
     def identity(self) -> dict[str, Any]:
         return {
@@ -729,10 +746,46 @@ def _validate_terminal_result(value: Mapping[str, Any], expected: VerticalTermin
 def _validate_expectation_context(expected: VerticalTerminalExpectation) -> None:
     if not isinstance(expected, VerticalTerminalExpectation):
         raise A0XVerticalTerminalPackageError("terminal expectation is not a supported value")
-    if expected.qualification_context not in {"synthetic-target-free", "engineering_rehearsal"}:
+    if expected.qualification_context == "production":
+        from .a0x_vertical_production_adapter import _require_production_capability
+        try:
+            capability = _require_production_capability(expected._production_capability)
+            from dataclasses import replace
+            context = replace(capability.context, trust_file_identities=MappingProxyType({
+                item.path: MappingProxyType({"device": item.device, "inode": item.inode, "size": item.size, "sha256": item.sha256})
+                for item in expected.trust_files
+            }))
+            _validate_production_context_membership(context, capability)
+            if expected.identity() != context.public_identity():
+                raise A0XVerticalTerminalPackageError("production terminal identity differs from parent capability")
+        except (ValueError, TypeError) as error:
+            raise A0XVerticalTerminalPackageError("complete production trust capability is invalid") from error
+    elif expected.qualification_context not in {"synthetic-target-free", "engineering_rehearsal"}:
         raise A0XVerticalTerminalPackageError(
             "production packaging requires the complete parent-validated trust capability"
         )
+
+
+def _validate_production_context_membership(context: VerticalProductionContext, capability: Any) -> None:
+    """Only the complete admitted pre-execution set plus one observed statistic."""
+    from .a0x_vertical_production_adapter import _require_production_capability
+    from dataclasses import replace
+    validated = _require_production_capability(capability)
+    if replace(context, trust_file_identities=validated.context.trust_file_identities) != validated.context:
+        raise A0XVerticalTerminalPackageError("production context differs from independent capability")
+    original = validated.context.trust_file_identities
+    observed = context.trust_file_identities
+    if any(observed.get(path) != identity for path, identity in original.items()):
+        raise A0XVerticalTerminalPackageError("production trust membership was removed or replaced")
+    pair = PairBinding.from_mapping(context.public_identity()["pair_binding"])
+    statistic = f".a0x-runtime/gate-c/v2/{context.source_head}/{context.source_tree}/a0/{pair.model_key}/{pair.run_id}/material/statistical-result.json"
+    extra = set(observed) - set(original)
+    if extra not in (set(), {statistic}):
+        raise A0XVerticalTerminalPackageError("unadmitted production terminal trust input")
+    if extra:
+        raw, info = _read_independent(validated.repository_root, statistic)
+        if observed[statistic] != {"device": info.st_dev, "inode": info.st_ino, "size": len(raw), "sha256": _sha(raw)}:
+            raise A0XVerticalTerminalPackageError("statistical result identity differs from observed bytes")
 
 
 def _require_rehearsal_namespace(repo: Path, expected: VerticalTerminalExpectation) -> None:

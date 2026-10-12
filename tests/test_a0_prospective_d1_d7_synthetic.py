@@ -224,6 +224,111 @@ def baseline():
     print("BASELINE_ORACLE=" + json.dumps(metadata, sort_keys=True))
     print("SYNTHETIC_SESSION_PRESERVED=" + str(SESSION))
 
+class ProductionMechanicsTests(unittest.TestCase):
+    """Exercise prospective mechanics without source corpora or target access."""
+
+    DOMAINS = ["agriculture", "energy", "manufacturing", "medicine", "software", "transport"]
+
+    def rows(self):
+        return [
+            {"case_id": f"{domain}-family-{family:02d}-{variant}",
+             "problem_family_id": f"{domain}-family-{family:02d}",
+             "domain": domain, "split": "calibration"}
+            for domain in self.DOMAINS for family in range(8) for variant in range(2)
+        ]
+
+    def api(self):
+        recipe = getattr(shortcuts, "production_mechanics_recipe", None)
+        binder = getattr(shortcuts, "bind_production_mechanics", None)
+        self.assertTrue(callable(recipe) and callable(binder), "production mechanical binding is absent")
+        return recipe, binder
+
+    def test_frozen_recipe_derives_complete_label_free_schedule(self):
+        recipe, binder = self.api()
+        declaration = recipe()
+        bound = binder(self.rows(), declaration)
+        contract = bound["evaluation"]["contract"]
+        self.assertEqual(["inversion_like", "segmentation_like"], contract["classes"])
+        self.assertEqual(6, len(contract["units"]))
+        self.assertTrue(all(len(unit["train_ids"]) == 80 and len(unit["test_ids"]) == 16 for unit in contract["units"]))
+        self.assertEqual(20, len(contract["replicas"]))
+        self.assertEqual(20260814, contract["replicas"][0]["seed"])
+        self.assertEqual(set(CONTROLS) - {"duplicate_and_near_duplicate_detection", "family_leakage_detection"}, set(contract["control_views"]))
+        self.assertTrue(all(value == 4 for value in contract["partition_train_families"].values()))
+        self.assertEqual(bound, binder(list(reversed(self.rows())), declaration))
+        self.assertFalse(bound["human_consent_verified"])
+        self.assertFalse(bound["scientific_gate_pass"])
+
+    def test_recipe_drift_is_refused_before_considering_cases(self):
+        recipe, binder = self.api()
+        declaration = recipe()
+        declaration["replica_seeds"][0] += 1
+        class UnreadableCases:
+            def __iter__(self):
+                raise AssertionError("cases examined before recipe admission")
+        with self.assertRaisesRegex(ValueError, "production mechanical recipe"):
+            binder(UnreadableCases(), declaration)
+
+    def test_missing_family_or_label_in_public_rows_is_refused(self):
+        recipe, binder = self.api()
+        for rows in (self.rows()[:-1], [dict(row, operator_proxy_family="inversion_like") for row in self.rows()]):
+            with self.subTest(rows=len(rows)), self.assertRaises(ValueError):
+                binder(rows, recipe())
+
+    def test_effective_recipe_covers_all_four_actual_rendered_model_inputs(self):
+        recipe, binder = self.api()
+        bound = binder(self.rows(), recipe())
+        fields = {stage["fields"][0] for stage in bound["evaluation"]["contract"]["payload_stages"]}
+        self.assertEqual({"__model_problem_only", "__model_transformation_only",
+                          "__model_problem_plus_transformation", "__model_problem_plus_solution"}, fields)
+
+    def test_missing_required_control_refuses_before_any_calibration_input(self):
+        consumer = calibration.run_production_shortcut_calibration
+        protocol = json.loads((ROOT / "experiments/a0-automated-weak-proxy/protocol.json").read_bytes())
+        protocol["shortcut_evaluation"]["a0_controls"].pop()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "protocol.json").write_bytes(stable(protocol))
+            with self.assertRaisesRegex(ValueError, "fourteen controls"):
+                consumer(root / "protocol.json", root / "unread-cases", root / "unread-targets", shortcuts.production_mechanics_recipe())
+
+    def test_real_consumer_preserves_a_measured_adverse_gate_without_qualification_claims(self):
+        consumer = getattr(calibration, "run_production_shortcut_calibration", None)
+        self.assertTrue(callable(consumer), "production calibration consumer is absent")
+        recipe, _binder = self.api()
+        cases, targets = [], []
+        for metadata in self.rows():
+            case = dict(metadata)
+            text = f"Independent synthetic fixture {case['problem_family_id']}"
+            case.update({field: text for field in ("problem", "initial_state", "desired_improvement",
+                        "worsening_consequence", "transformation", "resulting_state", "solution")})
+            case["transformation"] = text + " controlled change"
+            case["solution"] = text + " bounded delivery"
+            case["constraints"] = ["Synthetic constraint"]
+            cases.append(case)
+            targets.append({"case_id": case["case_id"], "split": "calibration",
+                            "operator_proxy_family": LABELS[int(case["case_id"][-1])],
+                            "provenance": {"template_id": "neutral", "generator_id": "synthetic"}})
+        protocol = json.loads((ROOT / "experiments/a0-automated-weak-proxy/protocol.json").read_bytes())
+        with tempfile.TemporaryDirectory(prefix="a0x-production-calibration-") as temporary:
+            root = Path(temporary)
+            for name, rows in (("cases.jsonl", cases), ("targets.jsonl", targets)):
+                (root / name).write_bytes(b"".join(stable(row) + b"\n" for row in rows))
+            (root / "protocol.json").write_bytes(stable(protocol))
+            result = consumer(root / "protocol.json", root / "cases.jsonl", root / "targets.jsonl", recipe())
+            self.assertEqual("PASS", result["status"])
+            self.assertEqual(set(CONTROLS), set(result["controls"]))
+            self.assertFalse(result["mechanical_freeze_independently_verified"])
+            self.assertFalse(result["human_consent_verified"])
+            # A true shortcut must remain adverse, never be replaced by literal PASS.
+            for case, target in zip(cases, targets):
+                case["problem"] = target["operator_proxy_family"]
+            (root / "cases.jsonl").write_bytes(b"".join(stable(row) + b"\n" for row in cases))
+            adverse = consumer(root / "protocol.json", root / "cases.jsonl", root / "targets.jsonl", recipe())
+            self.assertEqual("NON_INTERPRETABLE", adverse["status"])
+            self.assertEqual("NON_INTERPRETABLE", adverse["controls"]["problem_only_label_prediction"]["status"])
+
+
 class ProspectiveTests(unittest.TestCase):
     def function(self, name):
         self.assertTrue(hasattr(shortcuts, name), f"missing prospective behavior: {name}")

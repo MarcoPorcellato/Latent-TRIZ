@@ -260,7 +260,7 @@ def run_material_lifecycle(
                     "failure sealer did not return a terminal mapping after model cleanup"
                 )
             terminal_outcome = dict(sealed)
-            if isinstance(error, InternalDeadlineExceeded):
+            if isinstance(error, InternalDeadlineExceeded) and terminal_outcome.get("artifact_class") != "a0x-vertical-terminal-result":
                 # A full analysis budget is an inconclusive measurement, not a
                 # generic software failure. This classification remains fixed
                 # whether the one permitted target read has happened or not.
