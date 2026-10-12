@@ -28,6 +28,18 @@ class MergePolicyTests(unittest.TestCase):
         self.assertTrue(decision.require_python_311)
         self.assertFalse(decision.require_ccp)
 
+    def test_research_observatory_uses_existing_code_lane(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        paths = [
+            "scripts/research_observatory/app.py",
+            "scripts/research_observatory/source-inventory.json",
+            "scripts/research_observatory/uv.lock",
+        ]
+        self.assertTrue(all((root / path).is_file() for path in paths))
+        decision = classify_paths(paths)
+        self.assertEqual(decision.categories, ("code",))
+        self.assertFalse(decision.require_scientific_audit)
+
     def test_scientific_artifact_uses_hosted_check_and_audit(self) -> None:
         decision = classify_paths(["experiments/exp-001/config.json"])
         self.assertFalse(decision.require_ccp)
