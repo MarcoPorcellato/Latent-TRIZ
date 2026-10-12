@@ -118,5 +118,46 @@ class A0XVerticalProductionAdapterTests(unittest.TestCase):
                 bind_validated_vertical_graph(graph, qualification_context="synthetic-target-free")
 
 
+class RehearsalBoundaryTests(unittest.TestCase):
+    def test_rehearsal_cannot_write_into_scientific_results_namespace(self):
+        import tempfile
+        from pathlib import Path
+        from scripts.a0x_rehearsal import RehearsalError, validate_output_root
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            with self.assertRaisesRegex(RehearsalError, "rehearsal namespace"):
+                validate_output_root(root, root / "results/a0x/rehearsal")
+            self.assertFalse((root / "results").exists())
+
+    def test_rehearsal_refuses_occupied_attempt_without_overwriting(self):
+        import tempfile
+        from pathlib import Path
+        from scripts.a0x_rehearsal import RehearsalError, validate_output_root
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            output = root / ".a0x-runtime/rehearsal/1"
+            output.mkdir(parents=True)
+            marker = output / "preserved"
+            marker.write_bytes(b"keep")
+            with self.assertRaisesRegex(RehearsalError, "occupied"):
+                validate_output_root(root, output)
+            self.assertEqual(b"keep", marker.read_bytes())
+
+    def test_rehearsal_inputs_are_independently_balanced_and_public_rows_have_no_labels(self):
+        from scripts.a0x_rehearsal import synthetic_inputs
+
+        cases, targets = synthetic_inputs()
+        self.assertEqual(48, len(cases))
+        self.assertEqual(48, len(targets))
+        self.assertEqual(24, len({row["problem_family_id"] for row in cases}))
+        self.assertEqual(6, len({row["domain"] for row in cases}))
+        self.assertTrue(all("operator_proxy_family" not in row for row in cases))
+        for family in {row["problem_family_id"] for row in cases}:
+            labels = [row["operator_proxy_family"] for row in targets if row["problem_family_id"] == family]
+            self.assertEqual({"inversion_like", "segmentation_like"}, set(labels))
+
+
 if __name__ == "__main__":
     unittest.main()

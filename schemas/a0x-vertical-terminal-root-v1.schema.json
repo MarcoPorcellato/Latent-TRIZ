@@ -239,7 +239,8 @@
     "qualification_context": {
       "enum": [
         "production",
-        "synthetic-target-free"
+        "synthetic-target-free",
+        "engineering_rehearsal"
       ]
     },
     "qualified_source": {

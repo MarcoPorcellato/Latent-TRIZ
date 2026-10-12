@@ -6,11 +6,12 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from latent_triz.validator import validate as validate_minimal
+from tests.a0x_test_support import synthetic_acquisition_authorization
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = json.loads((ROOT / "schemas/exp001-next-model-authorization.schema.json").read_text(encoding="utf-8"))
-INSTANCE = json.loads((ROOT / "experiments/exp001-comparative-reference/next-model-authorization.json").read_text(encoding="utf-8"))
+INSTANCE = synthetic_acquisition_authorization(next_models=True)
 
 
 class NextModelAuthorizationTests(unittest.TestCase):

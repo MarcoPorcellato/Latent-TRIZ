@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+from tests.a0x_test_support import synthetic_r3_root
 
 from latent_triz.exp001_r3_implementation import build_implementation_binding
 from latent_triz.exp001_r3_material_runner import run_material
@@ -48,13 +49,7 @@ class MaterialEndToEndTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "repo"
-        shutil.copytree(
-            ROOT,
-            self.root,
-            ignore=shutil.ignore_patterns(
-                ".git", ".venv", "__pycache__", ".pytest_cache", "artifacts", ".gitnexus", ".serena", ".ccp"
-            ),
-        )
+        synthetic_r3_root(self.root)
 
         protocol_path = self.root / "experiments/exp001-reference-integrated/protocol.json"
         protocol = json.loads(protocol_path.read_text(encoding="utf-8"))

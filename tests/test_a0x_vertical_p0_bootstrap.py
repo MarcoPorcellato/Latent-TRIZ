@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import builtins
+import io
 import importlib.util
 import json
 import os
@@ -15,12 +17,15 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import unicodedata
 import unittest
+from dataclasses import dataclass
+from contextlib import ExitStack, contextmanager
 from unittest import mock
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.path.abspath(__file__)).parents[1]
 SCRIPT_RELATIVE = Path("scripts/a0x_vertical_p0_bootstrap.py")
 V2_SCRIPT_RELATIVE = Path("scripts/a0x_vertical_p0_v2.py")
 V2_PREEXEC_RELATIVE = Path("scripts/a0x_vertical_p0_preexec_v2.py")
@@ -28,6 +33,247 @@ REVIEW_RELATIVE = Path(
     "docs/qualification/"
     "a0x-vertical-slice-local-review-77dcae52542d21e9bf16e4f17102abf70e68ffc3.md"
 )
+PROTECTED_TARGET_PATHS = frozenset({
+    "data/a0/sealed-targets/targets.jsonl",
+    "data/a0/procedural-targets/calibration-targets.jsonl",
+    "data/a0r1/targets/calibration.jsonl",
+    "data/a0r1/targets/sealed.jsonl",
+})
+N3_PROFILE_MANIFEST = Path("docs/qualification/a0x-target-free-schema-profile-v1-manifest.json")
+N3_PROFILE_MANIFEST_SHA256 = "b88ca0db8f2c05d1e00021b2915e9c75d654b5ec7d0d3b5894ed05343f96b9cf"
+MAX_FIXTURE_SOURCE_BYTES = 64 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class AdmittedFixtureSource:
+    relative_path: str
+    raw_bytes: bytes
+
+
+def _canonical_fixture_source_paths(
+    relative_paths: object,
+    *,
+    forbidden_paths: frozenset[str] | set[str],
+) -> tuple[str, ...]:
+    try:
+        values = tuple(relative_paths)  # type: ignore[arg-type]
+    except TypeError as exc:
+        raise AssertionError("fixture source paths must be an iterable of literals") from exc
+    if not values:
+        raise AssertionError("fixture source set must not be empty")
+
+    canonical: list[str] = []
+    for value in values:
+        try:
+            raw = os.fspath(value)
+        except TypeError as exc:
+            raise AssertionError("fixture source path is not path-like") from exc
+        if not isinstance(raw, str):
+            raise AssertionError("fixture source path must be text")
+        if (
+            not raw
+            or "\\" in raw
+            or "\x00" in raw
+            or ":" in raw
+            or any(ord(character) < 32 or ord(character) == 127 for character in raw)
+            or unicodedata.normalize("NFC", raw) != raw
+            or PurePosixPath(raw).is_absolute()
+            or PureWindowsPath(raw).is_absolute()
+        ):
+            raise AssertionError(f"noncanonical fixture source path: {raw!r}")
+        components = raw.split("/")
+        if (
+            "//" in raw
+            or raw.endswith("/")
+            or any(component in {"", ".", ".."} for component in components)
+            or any(component.endswith((".", " ")) for component in components)
+            or PurePosixPath(raw).as_posix() != raw
+        ):
+            raise AssertionError(f"noncanonical fixture source path: {raw!r}")
+        canonical.append(raw)
+
+    if len(set(canonical)) != len(canonical):
+        raise AssertionError("fixture source set contains duplicate paths")
+    forbidden_folded = {item.casefold() for item in forbidden_paths}
+    forbidden = [path for path in canonical if path.casefold() in forbidden_folded]
+    if forbidden:
+        raise AssertionError(f"protected or excluded fixture path rejected: {forbidden[0]}")
+    return tuple(sorted(canonical))
+
+
+def _directory_open_flags() -> int:
+    try:
+        return os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    except AttributeError as exc:
+        raise AssertionError("platform lacks required no-follow directory flags") from exc
+
+
+def _file_open_flags() -> int:
+    try:
+        return os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    except AttributeError as exc:
+        raise AssertionError("platform lacks required no-follow file flags") from exc
+
+
+def _open_directory_chain_without_symlinks(directory: Path) -> int:
+    raw = os.fspath(directory)
+    if not isinstance(raw, str) or not os.path.isabs(raw) or os.path.normpath(raw) != raw:
+        raise AssertionError("fixture root must be a canonical absolute path")
+    flags = _directory_open_flags()
+    try:
+        descriptor = os.open(os.path.sep, flags)
+    except OSError as exc:
+        raise AssertionError("filesystem root cannot be opened without following links") from exc
+    try:
+        for component in raw.split(os.path.sep)[1:]:
+            if not component:
+                continue
+            try:
+                child = os.open(component, flags, dir_fd=descriptor)
+            except OSError as exc:
+                raise AssertionError("fixture root contains an unavailable or symlinked component") from exc
+            try:
+                if not stat.S_ISDIR(os.fstat(child).st_mode):
+                    raise AssertionError("fixture root component is not a directory")
+            except BaseException:
+                os.close(child)
+                raise
+            os.close(descriptor)
+            descriptor = child
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _read_regular_independent_file_from_root(root_descriptor: int, relative: str) -> bytes:
+    components = relative.split("/")
+    directory_flags = _directory_open_flags()
+    current_directory = os.dup(root_descriptor)
+    file_descriptor: int | None = None
+    try:
+        for component in components[:-1]:
+            try:
+                child = os.open(component, directory_flags, dir_fd=current_directory)
+            except OSError as exc:
+                raise AssertionError(f"symlinked fixture source component or unavailable ancestor: {relative}") from exc
+            if not stat.S_ISDIR(os.fstat(child).st_mode):
+                os.close(child)
+                raise AssertionError(f"fixture source ancestor is not a directory: {relative}")
+            os.close(current_directory)
+            current_directory = child
+
+        try:
+            file_descriptor = os.open(components[-1], _file_open_flags(), dir_fd=current_directory)
+        except OSError as exc:
+            raise AssertionError(f"fixture source cannot be opened without following links: {relative}") from exc
+        before = os.fstat(file_descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise AssertionError(f"fixture source is not an independent regular file: {relative}")
+        if before.st_size < 0 or before.st_size > MAX_FIXTURE_SOURCE_BYTES:
+            raise AssertionError(f"fixture source exceeds the bounded size: {relative}")
+
+        raw = bytearray()
+        while True:
+            chunk = os.read(file_descriptor, min(1024 * 1024, MAX_FIXTURE_SOURCE_BYTES + 1 - len(raw)))
+            if not chunk:
+                break
+            raw.extend(chunk)
+            if len(raw) > MAX_FIXTURE_SOURCE_BYTES:
+                raise AssertionError(f"fixture source exceeds the bounded size: {relative}")
+        after = os.fstat(file_descriptor)
+        identity_before = (
+            before.st_dev, before.st_ino, before.st_mode, before.st_nlink,
+            before.st_size, before.st_mtime_ns, before.st_ctime_ns,
+        )
+        identity_after = (
+            after.st_dev, after.st_ino, after.st_mode, after.st_nlink,
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns,
+        )
+        if identity_before != identity_after or len(raw) != before.st_size:
+            raise AssertionError(f"fixture source changed while being admitted: {relative}")
+        return bytes(raw)
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+        os.close(current_directory)
+
+
+def _read_regular_independent_file(root: Path, relative: str) -> bytes:
+    forbidden_paths = globals().get("FORBIDDEN_FIXTURE_PATHS", PROTECTED_TARGET_PATHS)
+    canonical = _canonical_fixture_source_paths((relative,), forbidden_paths=forbidden_paths)[0]
+    root_descriptor = _open_directory_chain_without_symlinks(root)
+    try:
+        return _read_regular_independent_file_from_root(root_descriptor, canonical)
+    finally:
+        os.close(root_descriptor)
+
+
+def _parse_review_ledger(review_document: bytes | str) -> tuple[list[str], list[str]]:
+    if isinstance(review_document, bytes):
+        try:
+            text = review_document.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise AssertionError("review ledger is not UTF-8") from exc
+    elif isinstance(review_document, str):
+        text = review_document
+    else:
+        raise AssertionError("review ledger must be admitted bytes or text")
+    try:
+        block = text.split("## Raw P0 package-input ledger", 1)[1]
+        lines = block.split("```text\n", 1)[1].split("\n```", 1)[0].splitlines()
+        paths = [line.split(" ", 2)[2] for line in lines]
+    except (IndexError, ValueError) as exc:
+        raise AssertionError("review ledger structure is invalid") from exc
+    if len(paths) != 137:
+        raise AssertionError(f"unexpected canonical test ledger cardinality: {len(paths)}")
+    return paths, lines
+
+
+def _parse_n3_excluded_sensitive_paths(raw: bytes) -> frozenset[str]:
+    if hashlib.sha256(raw).hexdigest() != N3_PROFILE_MANIFEST_SHA256:
+        raise AssertionError("N3 profile manifest identity mismatch")
+    try:
+        manifest = json.loads(raw)
+        paths = manifest["instance_dispositions"]["excluded_sensitive_role_unverified"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise AssertionError("N3 profile manifest structure is invalid") from exc
+    if not isinstance(paths, list) or len(paths) != 14 or any(not isinstance(path, str) for path in paths):
+        raise AssertionError("N3 sensitive-path inventory is not the expected closed list")
+    if len(set(paths)) != 14:
+        raise AssertionError("N3 sensitive-path inventory contains duplicates")
+    return frozenset(paths)
+
+
+N3_PROFILE_MANIFEST_BYTES = _read_regular_independent_file(ROOT, N3_PROFILE_MANIFEST.as_posix())
+N3_EXCLUDED_SENSITIVE_PATHS = _parse_n3_excluded_sensitive_paths(N3_PROFILE_MANIFEST_BYTES)
+
+
+def _parse_n3_excluded_role_paths(raw: bytes) -> frozenset[str]:
+    if hashlib.sha256(raw).hexdigest() != N3_PROFILE_MANIFEST_SHA256:
+        raise AssertionError("N3 profile manifest identity mismatch")
+    try:
+        manifest = json.loads(raw)
+        paths = manifest["instance_dispositions"]["excluded_role_unverified"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise AssertionError("N3 role-exclusion inventory is invalid") from exc
+    if not isinstance(paths, list) or len(paths) != 137 or any(not isinstance(path, str) for path in paths):
+        raise AssertionError("N3 role-exclusion inventory is not the expected closed list")
+    if len(set(paths)) != 137:
+        raise AssertionError("N3 role-exclusion inventory contains duplicates")
+    return frozenset(paths)
+
+
+N3_EXCLUDED_ROLE_PATHS = _parse_n3_excluded_role_paths(N3_PROFILE_MANIFEST_BYTES)
+FORBIDDEN_FIXTURE_PATHS = PROTECTED_TARGET_PATHS | N3_EXCLUDED_SENSITIVE_PATHS | N3_EXCLUDED_ROLE_PATHS
+
+
+def _load_n3_excluded_sensitive_paths(root: Path | None = None) -> frozenset[str]:
+    selected_root = ROOT if root is None else root
+    raw = _read_regular_independent_file(selected_root, N3_PROFILE_MANIFEST.as_posix())
+    return _parse_n3_excluded_sensitive_paths(raw)
+
+
 PYTHON = Path(sys.executable).resolve()
 PREEXEC_SOURCE = """\
 import hashlib
@@ -133,14 +379,130 @@ def _git(root: Path, *arguments: str) -> str:
     return completed.stdout.strip()
 
 
-def _ledger_paths() -> list[str]:
-    review = (ROOT / REVIEW_RELATIVE).read_text(encoding="utf-8")
-    block = review.split("## Raw P0 package-input ledger", 1)[1]
-    lines = block.split("```text\n", 1)[1].split("\n```", 1)[0].splitlines()
-    paths = [line.split(" ", 2)[2] for line in lines]
-    if len(paths) != 137:
-        raise AssertionError(f"unexpected canonical test ledger cardinality: {len(paths)}")
-    return paths
+def _ledger_paths(review_document: bytes | str | None = None) -> list[str]:
+    if review_document is None:
+        review_document = _read_regular_independent_file(ROOT, REVIEW_RELATIVE.as_posix())
+    return _parse_review_ledger(review_document)[0]
+
+
+def _repository_relative_literal(path: object) -> str | None:
+    try:
+        raw = os.fspath(path)
+    except TypeError:
+        return None
+    if not isinstance(raw, str):
+        return None
+    candidate = raw if os.path.isabs(raw) else os.path.join(ROOT, raw)
+    candidate = os.path.abspath(candidate)
+    try:
+        relative = os.path.relpath(candidate, os.path.abspath(ROOT))
+    except ValueError:
+        return None
+    if relative == os.curdir or relative == os.pardir or relative.startswith(os.pardir + os.sep):
+        return None
+    return relative.replace(os.sep, "/")
+
+
+def _refuse_forbidden_fixture_io(path: object) -> None:
+    relative = _repository_relative_literal(path)
+    if relative is not None and relative.casefold() in {
+        item.casefold() for item in FORBIDDEN_FIXTURE_PATHS
+    }:
+        raise AssertionError(f"protected or excluded fixture I/O is forbidden in this test: {relative}")
+
+
+def _validate_fixture_source_set(
+    root: Path,
+    relative_paths: object,
+    *,
+    already_admitted: dict[str, bytes] | None = None,
+) -> tuple[AdmittedFixtureSource, ...]:
+    """Admit the complete literal set, then snapshot each safe inode through no-follow descriptors."""
+    canonical = _canonical_fixture_source_paths(
+        relative_paths,
+        forbidden_paths=FORBIDDEN_FIXTURE_PATHS,
+    )
+    prior = {} if already_admitted is None else dict(already_admitted)
+    if any(path not in canonical for path in prior):
+        raise AssertionError("pre-admitted fixture bytes are outside the complete source set")
+    if any(not isinstance(raw, bytes) for raw in prior.values()):
+        raise AssertionError("pre-admitted fixture content must be immutable bytes")
+
+    root_descriptor: int | None = None
+    admitted: list[AdmittedFixtureSource] = []
+    try:
+        for relative in canonical:
+            if relative in prior:
+                raw = prior[relative]
+            else:
+                if root_descriptor is None:
+                    root_descriptor = _open_directory_chain_without_symlinks(Path(root))
+                raw = _read_regular_independent_file_from_root(root_descriptor, relative)
+            admitted.append(AdmittedFixtureSource(relative_path=relative, raw_bytes=raw))
+    finally:
+        if root_descriptor is not None:
+            os.close(root_descriptor)
+    return tuple(admitted)
+
+
+def _write_admitted_fixture_source(source: AdmittedFixtureSource, destination_root: Path) -> Path:
+    if not isinstance(source, AdmittedFixtureSource):
+        raise AssertionError("fixture copy requires an admitted byte snapshot")
+    destination = Path(destination_root).joinpath(*source.relative_path.split("/"))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(
+            destination,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+            0o600,
+        )
+    except OSError as exc:
+        raise AssertionError(f"fixture destination is occupied or unsafe: {source.relative_path}") from exc
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size != 0:
+            raise AssertionError(f"fixture destination is not a new independent regular file: {source.relative_path}")
+        remaining = memoryview(source.raw_bytes)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise AssertionError(f"fixture snapshot write made no progress: {source.relative_path}")
+            remaining = remaining[written:]
+        after = os.fstat(descriptor)
+        if not stat.S_ISREG(after.st_mode) or after.st_nlink != 1 or after.st_size != len(source.raw_bytes):
+            raise AssertionError(f"fixture destination changed during snapshot write: {source.relative_path}")
+    finally:
+        os.close(descriptor)
+    return destination
+
+
+@contextmanager
+def _target_io_guard():
+    """Trap pathname reads of protected inputs while constructing test fixtures."""
+    real_os_open = os.open
+
+    def guard_first_path(function):
+        def guarded(path, *args, **kwargs):
+            _refuse_forbidden_fixture_io(path)
+            return function(path, *args, **kwargs)
+        return guarded
+
+    def guarded_copytree(src, dst, *args, **kwargs):
+        raise AssertionError("recursive directory copies are forbidden in this test")
+
+    def guarded_os_open(path, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None:
+            raise AssertionError("descriptor-relative source access must happen before fixture construction")
+        _refuse_forbidden_fixture_io(path)
+        return real_os_open(path, *args, **kwargs)
+
+    with ExitStack() as stack:
+        for target, function in (("builtins.open", builtins.open), ("io.open", io.open),
+                                 ("os.open", real_os_open)):
+            guarded = guarded_os_open if target == "os.open" else guard_first_path(function)
+            stack.enter_context(mock.patch(target, side_effect=guarded))
+        stack.enter_context(mock.patch("shutil.copytree", side_effect=guarded_copytree))
+        yield
 
 
 class SyntheticRepository:
@@ -512,6 +874,196 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
             publication_failure=publication_failure,
         )
 
+    def test_n3_manifest_symlink_and_hardlink_are_rejected_before_byte_reads(self) -> None:
+        module = sys.modules[__name__]
+        for kind in ("symlink", "hardlink"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(prefix="a0x-manifest-admission-") as temporary:
+                root = Path(temporary).resolve()
+                manifest = root / N3_PROFILE_MANIFEST
+                manifest.parent.mkdir(parents=True)
+                sentinel = root / "sentinel.json"
+                sentinel.write_bytes(b"synthetic sentinel, never a valid N3 manifest")
+                if kind == "symlink":
+                    manifest.symlink_to(sentinel)
+                else:
+                    os.link(sentinel, manifest)
+
+                path_open_calls: list[object] = []
+                real_io_open = io.open
+
+                def record_path_open(path: object, *args: object, **kwargs: object):
+                    path_open_calls.append(path)
+                    return real_io_open(path, *args, **kwargs)
+
+                with mock.patch.object(module, "ROOT", root), \
+                     mock.patch.object(io, "open", side_effect=record_path_open), \
+                     mock.patch.object(os, "read", wraps=os.read) as descriptor_read:
+                    with self.assertRaises(AssertionError):
+                        _load_n3_excluded_sensitive_paths()
+
+                self.assertEqual([], path_open_calls, "manifest must not be read through a following pathname")
+                descriptor_read.assert_not_called()
+
+    def test_admitted_fixture_snapshot_survives_source_path_replacement(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="a0x-fixture-snapshot-") as temporary:
+            root = (Path(temporary) / "root").resolve()
+            outside = Path(temporary) / "outside.txt"
+            root.mkdir()
+            source = root / "source.txt"
+            approved = b"approved synthetic bytes"
+            replacement = b"replacement sentinel bytes"
+            source.write_bytes(approved)
+            outside.write_bytes(replacement)
+
+            admitted = _validate_fixture_source_set(root, {"source.txt"})
+            self.assertEqual(1, len(admitted))
+            admitted_bytes = getattr(admitted[0], "raw_bytes", None)
+            self.assertEqual(approved, admitted_bytes, "admission must retain bytes from the opened inode")
+
+            source.unlink()
+            source.symlink_to(outside)
+            destination_root = Path(temporary) / "copy"
+            _write_admitted_fixture_source(admitted[0], destination_root)
+            self.assertEqual(approved, (destination_root / "source.txt").read_bytes())
+            self.assertNotEqual(replacement, (destination_root / "source.txt").read_bytes())
+
+    def test_ledger_parser_uses_admitted_snapshot_after_source_path_changes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="a0x-ledger-snapshot-") as temporary:
+            root = Path(temporary).resolve()
+            review = root / REVIEW_RELATIVE
+            review.parent.mkdir(parents=True)
+            expected_paths = [f"fixtures/item-{index:03d}.txt" for index in range(137)]
+
+            def document(paths: list[str]) -> bytes:
+                rows = [f"{'0' * 64} 1 {path}" for path in paths]
+                return (
+                    "## Raw P0 package-input ledger\n\n```text\n"
+                    + "\n".join(rows)
+                    + "\n```\n"
+                ).encode("utf-8")
+
+            admitted_document = document(expected_paths)
+            review.write_bytes(admitted_document)
+            admitted = _validate_fixture_source_set(root, {REVIEW_RELATIVE.as_posix()})
+            raw_bytes = getattr(admitted[0], "raw_bytes", None)
+            self.assertEqual(admitted_document, raw_bytes, "ledger source must be captured during admission")
+
+            review.write_bytes(document([f"changed/item-{index:03d}.txt" for index in range(137)]))
+            with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("ledger path was reopened")), \
+                 mock.patch.object(Path, "read_text", side_effect=AssertionError("ledger path was reopened")):
+                try:
+                    parsed_paths = _ledger_paths(raw_bytes)
+                except TypeError as exc:
+                    self.fail(f"ledger parser must consume admitted bytes, not reopen a path: {exc}")
+
+            self.assertEqual(expected_paths, parsed_paths)
+
+    def test_fixture_source_set_rejects_all_eighteen_forbidden_literals_before_candidate_io(self) -> None:
+        excluded = sorted(N3_EXCLUDED_SENSITIVE_PATHS)
+        self.assertEqual(14, len(excluded))
+        forbidden = set(PROTECTED_TARGET_PATHS) | set(excluded)
+        self.assertEqual(18, len(forbidden))
+        with tempfile.TemporaryDirectory(prefix="a0x-fixture-deny-") as temporary:
+            root = Path(temporary).resolve()
+            safe = root / "safe.txt"
+            safe.write_text("synthetic", encoding="utf-8")
+            self.assertEqual(
+                (AdmittedFixtureSource("safe.txt", b"synthetic"),),
+                _validate_fixture_source_set(root, {"safe.txt"}),
+            )
+            for relative in forbidden:
+                with self.subTest(relative=relative):
+                    with mock.patch.object(os, "open", side_effect=AssertionError("candidate I/O before admission")) as opened:
+                        with self.assertRaisesRegex(AssertionError, "protected or excluded fixture path rejected"):
+                            _validate_fixture_source_set(root, {"safe.txt", relative})
+                    opened.assert_not_called()
+
+    def test_fixture_source_set_rejects_every_n3_role_unverified_path_before_candidate_io(self) -> None:
+        try:
+            manifest = json.loads(N3_PROFILE_MANIFEST_BYTES)
+            excluded_paths = manifest["instance_dispositions"]["excluded_role_unverified"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            self.fail(f"N3 role-exclusion inventory must be readable from the admitted manifest: {exc}")
+        self.assertIsInstance(excluded_paths, list)
+        self.assertEqual(137, len(excluded_paths))
+        self.assertTrue(all(isinstance(path, str) for path in excluded_paths))
+        self.assertEqual(len(excluded_paths), len(set(excluded_paths)))
+
+        with tempfile.TemporaryDirectory(prefix="a0x-fixture-role-deny-") as temporary:
+            root = Path(temporary).resolve()
+            (root / "safe.txt").write_text("synthetic", encoding="utf-8")
+            for relative in excluded_paths:
+                with self.subTest(relative=relative):
+                    with ExitStack() as stack:
+                        guards = []
+
+                        def refuse_io(*_args: object, **_kwargs: object) -> None:
+                            raise AssertionError("candidate filesystem I/O before deny decision")
+
+                        for owner, names in (
+                            (os, ("open", "read", "fstat", "stat", "lstat", "scandir", "listdir")),
+                            (Path, ("open", "read_bytes", "read_text", "stat", "lstat", "resolve", "exists", "is_file", "is_dir")),
+                            (builtins, ("open",)),
+                            (io, ("open",)),
+                            (shutil, ("copyfile", "copy2", "copytree")),
+                        ):
+                            for name in names:
+                                guards.append(
+                                    stack.enter_context(
+                                        mock.patch.object(owner, name, side_effect=refuse_io),
+                                    ),
+                                )
+                        with self.assertRaisesRegex(
+                            AssertionError,
+                            "protected or excluded fixture path rejected",
+                        ):
+                            _validate_fixture_source_set(root, {"safe.txt", relative})
+                        for guard in guards:
+                            guard.assert_not_called()
+
+    def test_fixture_source_set_rejects_absolute_traversal_and_noncanonical_aliases(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="a0x-fixture-alias-") as temporary:
+            root = Path(temporary).resolve()
+            aliases = {
+                "../outside.txt", f"{root}/absolute.txt", r"nested\\file.txt",
+                "nested//file.txt", "nested/./file.txt", "./safe.txt",
+                "nested/", "C:/absolute.txt",
+            }
+            for relative in aliases:
+                with self.subTest(relative=relative):
+                    with mock.patch.object(os, "open", side_effect=AssertionError("candidate I/O before admission")) as opened:
+                        with self.assertRaisesRegex(AssertionError, "noncanonical fixture source path"):
+                            _validate_fixture_source_set(root, {"safe.txt", relative})
+                    opened.assert_not_called()
+
+    def test_fixture_source_set_rejects_symlinked_ancestor_without_opening_destination(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="a0x-fixture-symlink-") as temporary:
+            root = Path(temporary) / "root"
+            outside = Path(temporary) / "outside"
+            root.mkdir()
+            outside.mkdir()
+            (outside / "source.txt").write_text("synthetic", encoding="utf-8")
+            (root / "alias").symlink_to(outside, target_is_directory=True)
+            with mock.patch.object(os, "read", wraps=os.read) as source_read:
+                with self.assertRaisesRegex(AssertionError, "symlinked fixture source component"):
+                    _validate_fixture_source_set(root.resolve(), {"alias/source.txt"})
+            source_read.assert_not_called()
+
+    def test_fixture_source_set_rejects_hardlinked_source(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="a0x-fixture-hardlink-") as temporary:
+            root = Path(temporary)
+            directory = root / "directory"
+            directory.mkdir()
+            with self.assertRaisesRegex(AssertionError, "independent regular file"):
+                _validate_fixture_source_set(root.resolve(), {"directory"})
+            source = root / "source.txt"
+            source.write_text("synthetic", encoding="utf-8")
+            os.link(source, root / "alias.txt")
+            with mock.patch.object(os, "read", wraps=os.read) as source_read:
+                with self.assertRaisesRegex(AssertionError, "independent regular file"):
+                    _validate_fixture_source_set(root.resolve(), {"source.txt"})
+            source_read.assert_not_called()
+
     def test_private_pycache_uses_platform_temp_root(self) -> None:
         """The bootstrap must not assume macOS's /private/tmp on hosted Linux."""
         module = _load_bootstrap_module()
@@ -559,74 +1111,265 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
         self.assertEqual("b" * 64, receipt["dossier_sha256"])
         self.assertEqual("f8027fd0eaeea54caa13c31d31b9fdc459c38b49", receipt["model_revision"])
 
-    def test_canonical_v2_operator_real_subprocess_uses_production_generator_and_loader(self) -> None:
-        """One disposable committed source proves launcher-to-production P0 interoperability."""
-        with tempfile.TemporaryDirectory(prefix="a0x-p0-production-") as temporary:
-            root = Path(temporary) / "repository"
-            environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1"}
-            subprocess.run(
-                ("/usr/bin/git", "clone", "--no-hardlinks", str(ROOT), str(root)),
-                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                check=True, env=environment,
+    def test_contract_checker_cli_uses_temporary_synthetic_root_and_fails_closed(self) -> None:
+        """The production checker must receive a disposable synthetic root, never ROOT."""
+        with tempfile.TemporaryDirectory(prefix="a0x-contract-synthetic-") as temporary:
+            synthetic_root = Path(temporary) / "repository"
+            scripts = synthetic_root / "scripts"
+            scripts.mkdir(parents=True)
+            (synthetic_root / "schemas").mkdir()
+            checker_source = _read_regular_independent_file(
+                ROOT, "scripts/a0x_contract_check.py",
             )
-            subprocess.run(
-                ("/usr/bin/git", "-C", str(root), "checkout", "--detach", _git(ROOT, "rev-parse", "HEAD")),
-                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                check=True, env=environment,
+            checker = scripts / "a0x_contract_check.py"
+            checker.write_bytes(checker_source)
+            environment = {
+                "PATH": "/usr/bin:/bin",
+                "LC_ALL": "C",
+                "PYTHONPATH": str(ROOT / "src"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+            }
+            completed = subprocess.run(
+                (str(PYTHON), "-B", str(checker), "--phase", "synthetic"),
+                cwd=synthetic_root,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
             )
-            for relative in (V2_SCRIPT_RELATIVE, V2_PREEXEC_RELATIVE):
-                destination = root / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(ROOT / relative, destination)
-            subprocess.run(("/usr/bin/git", "-C", str(root), "config", "user.name", "A0X Test"), check=True, env=environment)
-            subprocess.run(("/usr/bin/git", "-C", str(root), "config", "user.email", "a0x@example.invalid"), check=True, env=environment)
-            ledger_lines = []
-            ledger_document = (root / REVIEW_RELATIVE).read_text(encoding="utf-8")
-            declared = ledger_document.split("## Raw P0 package-input ledger", 1)[1].split("```text\n", 1)[1].split("\n```", 1)[0].splitlines()
-            for declared_line, relative in zip(declared, _ledger_paths(), strict=True):
-                raw = (root / relative).read_bytes()
-                actual_line = f"{hashlib.sha256(raw).hexdigest()} {len(raw)} {relative}"
-                ledger_lines.append(actual_line)
-            replacement = "\n".join(ledger_lines)
-            (root / REVIEW_RELATIVE).write_text(
-                ledger_document.replace("\n".join(declared), replacement), encoding="utf-8",
+            self.assertEqual(1, completed.returncode)
+            self.assertEqual("", completed.stdout)
+            self.assertIn("a0x-contract-check: A0X schemas are unavailable", completed.stderr)
+
+    def test_contract_checker_cli_accepts_a_disposable_target_free_synthetic_root(self) -> None:
+        """The production checker accepts synthetic engineering inputs without material access."""
+        with tempfile.TemporaryDirectory(prefix="a0x-contract-accepted-synthetic-") as temporary:
+            synthetic_root = Path(temporary) / "repository"
+            scripts = synthetic_root / "scripts"
+            scripts.mkdir(parents=True)
+            schemas = synthetic_root / "schemas"
+            schemas.mkdir()
+            checker = scripts / "a0x_contract_check.py"
+            checker.write_bytes(_read_regular_independent_file(ROOT, "scripts/a0x_contract_check.py"))
+            for source_schema in (ROOT / "schemas").glob("a0x-*.schema.json"):
+                target = schemas / source_schema.name
+                target.write_bytes(_read_regular_independent_file(ROOT, source_schema.relative_to(ROOT).as_posix()))
+
+            def write_json(relative: str, value: object) -> Path:
+                path = synthetic_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+                return path
+
+            def schema_example(schema: dict[str, object], root_schema: dict[str, object]) -> object:
+                if "const" in schema:
+                    return schema["const"]
+                if "enum" in schema:
+                    return schema["enum"][0]
+                reference = schema.get("$ref")
+                if isinstance(reference, str):
+                    target: object = root_schema
+                    for segment in reference.removeprefix("#/").split("/"):
+                        target = target[segment.replace("~1", "/").replace("~0", "~")]
+                    return schema_example(target, root_schema)
+                kind = schema.get("type")
+                if kind == "object":
+                    return {
+                        name: schema_example(schema["properties"][name], root_schema)
+                        for name in schema.get("required", [])
+                    }
+                if kind == "array":
+                    return [schema_example(schema["items"], root_schema)] * schema.get("minItems", 0)
+                if kind == "boolean":
+                    return False
+                if kind == "integer":
+                    return schema.get("minimum", 0)
+                if kind == "string":
+                    pattern = schema.get("pattern", "")
+                    if "{64}" in pattern:
+                        return "a" * 64
+                    if "{40}" in pattern:
+                        return "a" * 40
+                    return "synthetic/engineering.json"
+                raise AssertionError(f"unsupported public schema fixture node: {schema!r}")
+
+            material_schema = json.loads((schemas / "a0x-material-execution-contract.schema.json").read_text())
+            material_contract = schema_example(material_schema, material_schema)
+            write_json("experiments/a0x-six-model/material-execution-contract.json", material_contract)
+
+            models = (
+                ("smollm2_360m", "HuggingFaceTB/SmolLM2-360M", "f8027fd0eaeea54caa13c31d31b9fdc459c38b49", "artifacts/models/smollm2-360m-f8027fd0", "llama", "LlamaForCausalLM"),
+                ("qwen3_0_6b_base", "Qwen/Qwen3-0.6B-Base", "da87bfb608c14b7cf20ba1ce41287e8de496c0cd", "artifacts/models/qwen3-0.6b-base-da87bfb", "qwen3", "Qwen3ForCausalLM"),
+                ("gpt2", "openai-community/gpt2", "607a30d783dfa663caf39e06633721c8d4cfcd7e", "artifacts/models/gpt2-607a30d7", "gpt2", "GPT2LMHeadModel"),
+                ("smollm2_135m", "HuggingFaceTB/SmolLM2-135M", "93efa2f097d58c2a74874c7e644dbc9b0cee75a2", "artifacts/models/smollm2-135m-93efa2f0", "llama", "LlamaForCausalLM"),
+                ("gpt_neo_125m", "EleutherAI/gpt-neo-125m", "21def0189f5705e2521767faed922f1f15e7d7db", "artifacts/models/gpt-neo-125m-21def018", "gpt_neo", "GPTNeoForCausalLM"),
+                ("qwen2_5_0_5b", "Qwen/Qwen2.5-0.5B", "060db6499f32faf8b98477b0a26969ef7d8b9987", "artifacts/models/qwen2.5-0.5b-060db649", "qwen2", "Qwen2ForCausalLM"),
             )
-            subprocess.run(("/usr/bin/git", "-C", str(root), "add", V2_SCRIPT_RELATIVE.as_posix(), V2_PREEXEC_RELATIVE.as_posix(), REVIEW_RELATIVE.as_posix()), check=True, env=environment)
-            subprocess.run(("/usr/bin/git", "-C", str(root), "commit", "-m", "target-free P0 v2 operator fixture"), check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
-            head = _git(root, "rev-parse", "HEAD")
-            tree = _git(root, "rev-parse", "HEAD^{tree}")
-            ledger_sha256 = hashlib.sha256(("\n".join(ledger_lines) + "\n").encode("utf-8")).hexdigest()
-            bootstrap = root / V2_SCRIPT_RELATIVE
-            preexec = root / V2_PREEXEC_RELATIVE
-            metadata = bootstrap.lstat()
-            authorization = root / ".a0x-runtime/authorizations/p0/v2" / head / tree / "a0/smollm2_360m/production-real-01.json"
-            authorization.parent.mkdir(parents=True)
-            authorization.write_text(json.dumps({
-                "artifact_class": "a0x-vertical-p0-authorization", "authorization_profile": "a0x-vertical-p0-authorization-v2",
-                "source": {"head": head, "tree": tree},
-                "pair": {"leg": "a0", "model_key": "smollm2_360m", "model_revision": "f8027fd0eaeea54caa13c31d31b9fdc459c38b49"},
-                "generator_profile": "a0x-vertical-slice-v2", "authorization_id": "production-real-auth-01", "attempt_id": "production-real-01",
-                "operator": {"profile": "a0x-vertical-p0-bootstrap-v2", "python": {"path": str(PYTHON), "sha256": _sha256(PYTHON)}, "ledger": {"sha256": ledger_sha256}, "bootstrap": {"path": V2_SCRIPT_RELATIVE.as_posix(), "sha256": _sha256(bootstrap), "device": metadata.st_dev, "inode": metadata.st_ino, "bytes": metadata.st_size}, "preexec": {"path": V2_PREEXEC_RELATIVE.as_posix(), "sha256": _sha256(preexec)}},
-                "output": {"members": ["protocol.json", "implementation.json", "freeze.json", "approval-dossier.json", "slice-manifest.json"], "commitment": "p0-commitment.json"},
-            }, sort_keys=True, separators=(",", ":")), encoding="utf-8")
-            arguments = (
-                str(PYTHON), "-I", "-S", "-B", str(preexec), "--target", str(bootstrap),
-                "--target-sha256", _sha256(bootstrap), "--self-sha256", _sha256(preexec), "--",
-                "--repository-root", str(root), "--expected-head", head, "--expected-tree", tree,
-                "--expected-python", str(PYTHON), "--expected-python-sha256", _sha256(PYTHON),
-                "--expected-ledger-sha256", ledger_sha256, "--expected-bootstrap-sha256", _sha256(bootstrap),
-                "--expected-preexec-sha256", _sha256(preexec), "--preexec-bootstrap-device", str(metadata.st_dev),
-                "--preexec-bootstrap-inode", str(metadata.st_ino), "--preexec-bootstrap-bytes", str(metadata.st_size),
-                "--authorization-document", str(authorization), "--authorization-document-sha256", _sha256(authorization),
-                "--authorization-id", "production-real-auth-01", "--attempt-id", "production-real-01",
-            )
-            completed = subprocess.run(arguments, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+            registry_cards: list[str] = []
+            registry_models: list[dict[str, str]] = []
+            for key, model_id, revision, runtime_root, model_type, architecture in models:
+                receipt_path = f"experiments/a0x-six-model/synthetic-source/{key}-receipt.json"
+                audit_path = f"experiments/a0x-six-model/synthetic-source/{key}-audit.json"
+                card_path = f"experiments/a0x-six-model/synthetic-cards/{key}.json"
+                fact_fields = {
+                    name: name for name in (
+                        "model_type", "architecture", "num_hidden_layers", "hidden_size", "vocab_size",
+                        "effective_context", "final_transformer_block_tuple_index",
+                    )
+                }
+                tokenizer_fields = {
+                    name: name for name in (
+                        "tokenizer_metadata_class", "expected_runtime_tokenizer_class", "fast_offsets_required",
+                    )
+                }
+                receipt = {
+                    "model_id": model_id, "revision": revision, "license_id": "synthetic-license",
+                    "runtime_root": runtime_root, "runtime_files": [{"path": "config.json", "size_bytes": 1, "sha256": "b" * 64}],
+                    **{name: name for name in (*fact_fields, *tokenizer_fields)},
+                }
+                receipt_raw = json.dumps(receipt, sort_keys=True).encode("utf-8")
+                write_json(receipt_path, receipt)
+                write_json(audit_path, {"synthetic_audit": True, "model_key": key})
+                card = {
+                    "artifact_class": "a0x-model-card", "empirical": True, "scientific_status": "exploratory",
+                    "evidence_eligible": False, "expert_validated": False, "claim_ids": [], "model_key": key,
+                    "model_id": model_id, "revision": revision, "license_id": "synthetic-license",
+                    "architecture": architecture, "model_type": model_type, "runtime_root": runtime_root,
+                    "runtime_files": [{"path": "config.json", "size_bytes": 1, "sha256": "b" * 64}],
+                    "num_hidden_layers": 1, "hidden_size": 1, "vocab_size": 2, "effective_context": 2,
+                    "final_transformer_block_tuple_index": 1, "tokenizer_metadata_class": "SyntheticTokenizer",
+                    "expected_runtime_tokenizer_class": "SyntheticTokenizer", "fast_offsets_required": False,
+                    "pad_side": None, "trust_remote_code": False, "source_receipt_path": receipt_path,
+                    "source_receipt_sha256": hashlib.sha256(receipt_raw).hexdigest(), "official_audit_path": audit_path,
+                    "official_audit_sha256": hashlib.sha256(json.dumps({"synthetic_audit": True, "model_key": key}, sort_keys=True).encode()).hexdigest(),
+                    "config_fact_provenance": {"source_path": receipt_path, "source_sha256": hashlib.sha256(receipt_raw).hexdigest(), "field_pointers": fact_fields},
+                    "tokenizer_fact_provenance": {"source_path": receipt_path, "source_sha256": hashlib.sha256(receipt_raw).hexdigest(), "field_pointers": tokenizer_fields},
+                    "card_path": card_path,
+                }
+                write_json(card_path, card)
+                registry_cards.append(f"synthetic-cards/{key}.json")
+                registry_models.append({"model_id": model_id, "revision": revision, "runtime_root": runtime_root})
+            source_path = "experiments/a0x-six-model/synthetic-registry-source.json"
+            source_payload = {"models": registry_models}
+            source_raw = json.dumps(source_payload, sort_keys=True).encode("utf-8")
+            write_json(source_path, source_payload)
+            write_json("experiments/a0x-six-model/model-registry.json", {
+                "artifact_class": "a0x-model-registry", "registry_source_path": source_path,
+                "registry_source_sha256": hashlib.sha256(source_raw).hexdigest(), "cards": registry_cards,
+            })
+
+            data_cases = []
+            domains = ("agriculture", "energy", "manufacturing", "medicine", "software", "transport")
+            for domain in domains:
+                for family_index in range(4):
+                    family = f"{domain}-synthetic-{family_index}"
+                    for case_index in range(2):
+                        data_cases.append({
+                            "case_id": f"{family}-{case_index}", "case_content_sha256": hashlib.sha256(f"{family}-{case_index}".encode()).hexdigest(),
+                            "domain": domain, "problem_family_id": family, "split": f"synthetic-{case_index}",
+                        })
+            cases_relative = "data/a0/cases.jsonl"
+            cases_raw = "\n".join(json.dumps(case, sort_keys=True) for case in data_cases) + "\n"
+            (synthetic_root / cases_relative).parent.mkdir(parents=True, exist_ok=True)
+            (synthetic_root / cases_relative).write_text(cases_raw, encoding="utf-8")
+            manifest_relative = "data/a0/manifest.json"
+            manifest = {"neutral_domains": list(domains)}
+            manifest_raw = json.dumps(manifest, sort_keys=True).encode("utf-8")
+            write_json(manifest_relative, manifest)
+            cases_sha = hashlib.sha256(cases_raw.encode("utf-8")).hexdigest()
+            manifest_sha = hashlib.sha256(manifest_raw).hexdigest()
+            selection_binding = {"source_cases_sha256": cases_sha, "source_corpus_manifest_sha256": manifest_sha}
+            selection = {
+                "artifact_class": "a0x-selection-manifest", "empirical": True, "scientific_status": "exploratory",
+                "evidence_eligible": False, "expert_validated": False, "claim_ids": [],
+                "selection_corpus_sha256": hashlib.sha256(json.dumps(selection_binding, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                "selection_path": "experiments/a0x-six-model/a0-selection-manifest.json", "selected_case_count": 48,
+                "source_cases_path": cases_relative, "source_corpus_manifest_path": manifest_relative,
+                **selection_binding,
+                "selection_rule": {"cases_per_family": 2, "families_per_domain": 4, "family_order": "lexicographic", "domain_order": "frozen"},
+                "cases": data_cases, "target_content_reads": 0,
+            }
+            write_json("experiments/a0x-six-model/a0-selection-manifest.json", selection)
+
+            for name in ("protected-a0-tree.json", "protected-a0r1-tree.json"):
+                tree = {
+                    "artifact_class": "a0x-protected-tree", "empirical": True, "scientific_status": "exploratory",
+                    "evidence_eligible": False, "expert_validated": False, "claim_ids": [],
+                    "source_base_commit": "c" * 40, "protected_paths": ["synthetic/non-target.txt"],
+                    "entries": [{"entry_kind": "file", "path": "synthetic/non-target.txt", "bytes": 0,
+                                 "sha256": "d" * 64, "provenance_manifest": "synthetic/non-target.txt",
+                                 "provenance_manifest_sha256": "e" * 64, "verification_phase": "preflight_postflight"}],
+                }
+                tree["protected_tree_sha256"] = hashlib.sha256(
+                    json.dumps(tree, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+                ).hexdigest()
+                write_json(f"experiments/a0x-six-model/{name}", tree)
+
+            (synthetic_root / "src/latent_triz").mkdir(parents=True)
+            (synthetic_root / "src/latent_triz/a0x_runner.py").write_text("# synthetic interface marker\n", encoding="utf-8")
+            (synthetic_root / "src/latent_triz/cli.py").write_text("a0x-synthetic-verify\n", encoding="utf-8")
+            (synthetic_root / "scripts/repository_check.py").write_text("# synthetic\n", encoding="utf-8")
+            (synthetic_root / "scripts/a0x_material.py").write_text("# synthetic interface marker\n", encoding="utf-8")
+            (synthetic_root / "tests").mkdir()
+            test_modules = ("test_a0x_contract_check.py", "test_a0x_runner.py", "test_a0x_material.py")
+            for module in test_modules:
+                (synthetic_root / "tests" / module).write_text("# synthetic module\n", encoding="utf-8")
+            material_targets = []
+            target_slugs = {
+                "smollm2_360m": "smollm2-360m", "qwen3_0_6b_base": "qwen3-0-6b-base", "gpt2": "gpt2",
+                "smollm2_135m": "smollm2-135m", "gpt_neo_125m": "gpt-neo-125m", "qwen2_5_0_5b": "qwen2-5-0-5b",
+            }
+            for leg, models_for_leg in (("a0", models), ("r1", models)):
+                for key, *_rest in models_for_leg:
+                    material_targets.extend((
+                        f"a0x-material-{leg}-{target_slugs[key]}:",
+                        f"\tPYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_material.py --fixed-dossier experiments/a0x-six-model/approval-dossiers/{leg}/{key}.json",
+                    ))
+            makefile = [*material_targets, "a0x-synthetic-verify:"]
+            makefile.extend((
+                "\tpython -m unittest tests.test_a0x_contract_check tests.test_a0x_runner tests.test_a0x_material",
+                "\tpython -m unittest tests.test_a0x_contract_check tests.test_a0x_runner tests.test_a0x_material",
+                "\tpython -m unittest tests.test_a0x_contract_check tests.test_a0x_runner tests.test_a0x_material",
+            ))
+            (synthetic_root / "Makefile").write_text("\n".join(makefile) + "\n", encoding="utf-8")
+
+            command = (str(PYTHON), "-B", str(checker), "--phase", "synthetic")
+            environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C", "PYTHONPATH": str(ROOT / "src"), "PYTHONDONTWRITEBYTECODE": "1"}
+            completed = subprocess.run(command, cwd=synthetic_root, env=environment, stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
             self.assertEqual(0, completed.returncode, completed.stderr)
-            binding = json.loads(completed.stdout)
-            envelope = root / binding["envelope_path"]
-            self.assertEqual({"package", "p0-commitment.json"}, {entry.name for entry in envelope.iterdir()})
-            self.assertEqual({"protocol.json", "implementation.json", "freeze.json", "approval-dossier.json", "slice-manifest.json"}, {entry.name for entry in (envelope / "package").iterdir()})
-            self.assertEqual((head, tree, ""), (_git(root, "rev-parse", "HEAD"), _git(root, "rev-parse", "HEAD^{tree}"), _git(root, "status", "--porcelain=v1", "--untracked-files=all")))
+            receipt = json.loads(completed.stdout)
+            self.assertEqual("synthetic_implementation", receipt["phase"])
+            self.assertGreater(receipt["schema_count"], 0)
+            self.assertEqual(6, receipt["model_card_count"])
+            self.assertEqual(12, receipt["fixed_material_target_count"])
+            self.assertFalse(receipt["model_loaded"])
+            self.assertFalse(receipt["tokenizer_constructed"])
+            self.assertEqual(0, receipt["sealed_target_content_reads"])
+            self.assertFalse(receipt["ccp_invoked"])
+
+            material_path = synthetic_root / "experiments/a0x-six-model/material-execution-contract.json"
+            changed_contract = json.loads(material_path.read_text(encoding="utf-8"))
+            changed_contract["offline"]["network"] = True
+            material_path.write_text(json.dumps(changed_contract), encoding="utf-8")
+            rejected_contract = subprocess.run(command, cwd=synthetic_root, env=environment, stdin=subprocess.DEVNULL,
+                                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+            self.assertEqual(1, rejected_contract.returncode)
+            self.assertEqual("", rejected_contract.stdout)
+            self.assertIn("A0X material contract fails its schema", rejected_contract.stderr)
+
+            material_path.write_text(json.dumps(material_contract, sort_keys=True), encoding="utf-8")
+            selection_path = synthetic_root / "experiments/a0x-six-model/a0-selection-manifest.json"
+            changed_selection = json.loads(selection_path.read_text(encoding="utf-8"))
+            changed_selection["target_content_reads"] = 1
+            selection_path.write_text(json.dumps(changed_selection), encoding="utf-8")
+            rejected_selection = subprocess.run(command, cwd=synthetic_root, env=environment, stdin=subprocess.DEVNULL,
+                                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+            self.assertEqual(1, rejected_selection.returncode)
+            self.assertEqual("", rejected_selection.stdout)
+            self.assertIn("A0X selection manifest fails its schema", rejected_selection.stderr)
 
     def test_canonical_v2_operator_refuses_source_drift_before_import(self) -> None:
         fixture = self.fixture()

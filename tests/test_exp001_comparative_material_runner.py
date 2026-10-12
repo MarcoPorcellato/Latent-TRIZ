@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from tests.a0x_test_support import synthetic_comparative_root, copy_public_contract_inputs
 
 from latent_triz.exp001_comparative_material_runner import (
     ComparativeMaterialError,
@@ -70,11 +71,12 @@ class ComparativeMaterialRunnerTests(unittest.TestCase):
             # CCP mounts the checkout read-only. Copy only public protocol and
             # fixtures into a writable synthetic root; no model or target
             # bytes are copied or opened.
-            for relative in (
-                "experiments/exp001-comparative-reference",
-                "experiments/exp001-reference-integrated/fixtures",
-            ):
-                shutil.copytree(ROOT / relative, root / relative)
+            synthetic_comparative_root(root)
+            copy_public_contract_inputs(root, tuple(
+                path.relative_to(ROOT).as_posix()
+                for path in (ROOT / "experiments/exp001-reference-integrated/fixtures").iterdir()
+                if path.is_file()
+            ))
             (root / "results/lab01/model-anatomy").mkdir(parents=True)
             shutil.copy2(ROOT / "results/lab01/model-anatomy/model_receipt.json", root / "results/lab01/model-anatomy/model_receipt.json")
             run_id = "synthetic-run-fixed"

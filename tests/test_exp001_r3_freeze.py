@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from shutil import copytree
+from tests.a0x_test_support import synthetic_r3_root
 
 from latent_triz.exp001_r3_freeze import Exp001FreezeError, build_freeze_manifest, verify_freeze_manifest
 
@@ -14,8 +14,7 @@ class Exp001FreezeTests(unittest.TestCase):
     def _copy(self) -> Path:
         temporary = Path(tempfile.mkdtemp(prefix="exp001-r3-freeze-"))
         destination = temporary / "repo"
-        copytree(ROOT, destination, ignore=lambda _path, names: {".git", ".venv", "__pycache__", "artifacts", ".gitnexus", ".serena", ".ccp"}.intersection(names))
-        return destination
+        return synthetic_r3_root(destination)
 
     def test_review_protocol_cannot_build(self):
         repository = self._copy()

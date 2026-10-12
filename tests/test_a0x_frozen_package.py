@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import copy
+import builtins
+from contextlib import ExitStack, contextmanager
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,6 +27,7 @@ from latent_triz.a0x_freeze import (  # noqa: E402
     A0XFreezeError,
     freeze_a0x_campaign,
     verify_batch_pre_regeneration_ledger,
+    verify_frozen_legs,
 )
 from latent_triz.a0x_runner import (  # noqa: E402
     A0XRunnerError,
@@ -36,43 +41,175 @@ from latent_triz.validator import validate  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN = ROOT / "experiments/a0x-six-model"
 CANONICAL_PUBLIC_REPOSITORY = "MarcoPorcellato/Latent-TRIZ"
-CANONICAL_PUBLIC_REMOTE = "https://github.com/MarcoPorcellato/Latent-TRIZ.git"
+_PROTECTED_TARGET_PATHS = frozenset({
+    "data/a0/sealed-targets/targets.jsonl",
+    "data/a0/procedural-targets/calibration-targets.jsonl",
+    "data/a0r1/targets/calibration.jsonl",
+    "data/a0r1/targets/sealed.jsonl",
+})
+
+
+def _refuse_protected_target_io(path: object) -> None:
+    try:
+        candidate = Path(os.fspath(path))
+    except TypeError:
+        return
+    if not candidate.is_absolute():
+        candidate = ROOT / candidate
+    if candidate.absolute() in {ROOT / relative for relative in _PROTECTED_TARGET_PATHS}:
+        raise AssertionError(f"protected target I/O is forbidden in this test: {candidate}")
+
+
+@contextmanager
+def _target_io_guard():
+    """Trap direct file opens and copy sources for the real protected inputs."""
+    real_copytree = shutil.copytree
+
+    def guard_first_path(function):
+        def guarded(path, *args, **kwargs):
+            _refuse_protected_target_io(path)
+            return function(path, *args, **kwargs)
+        return guarded
+
+    def guarded_copytree(src, dst, *args, **kwargs):
+        source = Path(src)
+        if source.absolute() == ROOT:
+            raise AssertionError("whole-repository copy is forbidden in this test")
+        for relative in _PROTECTED_TARGET_PATHS:
+            if (source / relative).exists():
+                raise AssertionError(f"copytree source contains protected target: {source / relative}")
+        return real_copytree(src, dst, *args, **kwargs)
+
+    with ExitStack() as stack:
+        for target, function in (("builtins.open", builtins.open), ("io.open", io.open),
+                                 ("os.open", os.open), ("shutil.copyfile", shutil.copyfile)):
+            stack.enter_context(patch(target, side_effect=guard_first_path(function)))
+        stack.enter_context(patch("shutil.copytree", side_effect=guarded_copytree))
+        yield
+
+
+def _copy_frozen_verification_fixture(source_root: Path, destination: Path) -> None:
+    """Copy only frozen verification inputs; never clone unrelated repository data."""
+    campaign = source_root / "experiments/a0x-six-model"
+    implementation = json.loads((campaign / "a0/implementation.json").read_text(encoding="utf-8"))
+    paths = set(implementation["implementation_paths"])
+    paths.update({
+        "experiments/a0-automated-weak-proxy/protocol.json",
+        "experiments/a0-automated-weak-proxy/implementation.json",
+        "experiments/a0r1-independent-proxy/protocol.json",
+        "experiments/a0r1-independent-proxy/implementation.json",
+        "experiments/a0x-six-model/protected-a0-tree.json",
+        "experiments/a0x-six-model/protected-a0r1-tree.json",
+        "experiments/a0x-six-model/a0-selection-manifest.json",
+        "data/a0r1/manifest.json",
+        "experiments/a0x-six-model/a0/protocol.json",
+        "experiments/a0x-six-model/a0/implementation.json",
+        "experiments/a0x-six-model/r1/protocol.json",
+        "experiments/a0x-six-model/r1/implementation.json",
+        "experiments/a0x-six-model/freeze/a0-freeze.json",
+        "experiments/a0x-six-model/freeze/r1-freeze.json",
+        "schemas/a0x-protocol.schema.json",
+        "schemas/a0x-implementation.schema.json",
+        "schemas/a0x-freeze-manifest.schema.json",
+    })
+    assert paths.isdisjoint(_PROTECTED_TARGET_PATHS), "fixture input set must exclude all protected targets"
+    for relative in sorted(paths):
+        _refuse_protected_target_io(source_root / relative)
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_root / relative, target)
+    _refresh_frozen_fixture_inventory(destination)
+
+
+def _refresh_frozen_fixture_inventory(repository: Path) -> None:
+    """Make a scoped fixture internally consistent with its copied current inputs."""
+    for leg in ("a0", "r1"):
+        implementation_path = repository / f"experiments/a0x-six-model/{leg}/implementation.json"
+        implementation = json.loads(implementation_path.read_text(encoding="utf-8"))
+        for row in implementation["implementation_files"]:
+            path = repository / row["path"]
+            row["bytes"] = path.stat().st_size
+            row["sha256"] = sha256_file(path)
+        implementation_path.write_text(
+            json.dumps(implementation, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+        )
+        freeze_path = repository / f"experiments/a0x-six-model/freeze/{leg}-freeze.json"
+        freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
+        freeze["implementation_sha256"] = sha256_file(implementation_path)
+        freeze_path.write_text(json.dumps(freeze, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _prepare_historical_parent_for_hosted_replay(
     parent_head: str,
     parent_tree: str,
 ) -> None:
-    """Fetch one immutable audit object only in the canonical hosted runner."""
+    """Require the exact historical parent in the local object database; never fetch."""
+    environment = _isolated_local_git_environment()
     available = subprocess.run(
         ["git", "-C", str(ROOT), "cat-file", "-e", f"{parent_head}^{{commit}}"],
         check=False,
         capture_output=True,
+        env=environment,
     )
     if available.returncode != 0:
-        if (
-            os.environ.get("GITHUB_ACTIONS") != "true"
-            or os.environ.get("GITHUB_REPOSITORY") != CANONICAL_PUBLIC_REPOSITORY
-        ):
-            raise AssertionError("historical parent fetch is restricted to canonical hosted CI")
-        fetched = subprocess.run(
-            [
-                "git", "-C", str(ROOT), "fetch", "--no-tags", "--depth=1",
-                CANONICAL_PUBLIC_REMOTE, parent_head,
-            ],
-            check=False,
-            capture_output=True,
-        )
-        if fetched.returncode != 0:
-            raise AssertionError("historical parent fetch failed")
+        raise AssertionError("historical parent is unavailable locally; network access is forbidden")
     observed = subprocess.run(
         ["git", "-C", str(ROOT), "rev-parse", f"{parent_head}^{{tree}}"],
         check=False,
         capture_output=True,
         text=True,
+        env=environment,
     )
     if observed.returncode != 0 or observed.stdout.strip() != parent_tree:
-        raise AssertionError("historical parent tree differs after hosted preparation")
+        raise AssertionError("local historical parent tree differs")
+
+
+def _isolated_local_git_environment() -> dict[str, str]:
+    """Prevent ambient Git routing/object variables and prohibit remote protocols."""
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment.update({
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_NO_LAZY_FETCH": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_ALLOW_PROTOCOL": "file:local",
+    })
+    return environment
+
+
+@contextmanager
+def _offline_local_git_commands():
+    """Run real local Git plumbing with lazy fetch disabled and record commands."""
+    environment = _isolated_local_git_environment()
+    commands: list[list[str]] = []
+    real_run = subprocess.run
+
+    def run_local_only(argv, *args, **kwargs):
+        command = list(argv) if not isinstance(argv, str) else argv.split()
+        if command and command[0] == "git":
+            if "fetch" in command or "clone" in command or "pull" in command:
+                raise AssertionError(f"network-capable Git command is forbidden: {command}")
+            commands.append(command)
+            kwargs["env"] = environment
+        return real_run(argv, *args, **kwargs)
+
+    with patch.dict(os.environ, environment, clear=True), patch(
+        "subprocess.run", side_effect=run_local_only,
+    ):
+        yield commands
+
+
+def _copy_public_ledger_fixture(destination: Path, ledger_source: Path) -> tuple[Path, Path]:
+    """Copy only the public ledger to a disposable repository outside ROOT."""
+    repository = destination.absolute()
+    if repository.resolve(strict=False).is_relative_to(ROOT.resolve()):
+        raise AssertionError("fixture directory must be outside repository root")
+    if repository.exists() or repository.is_symlink():
+        raise AssertionError("fixture directory must not already exist")
+    ledger_path = repository / "docs/qualification" / ledger_source.name
+    ledger_path.parent.mkdir(parents=True)
+    ledger_path.write_bytes(ledger_source.read_bytes())
+    return repository, ledger_path
 
 A0_PROTOCOL_FIELDS = (
     "corpus_generation",
@@ -199,38 +336,53 @@ class A0XFrozenPackageTests(unittest.TestCase):
                         self.assertEqual(sha256_file(path), row["sha256"])
 
     def test_implementation_inventory_rejects_a_nonfinal_binding_mutation(self) -> None:
-        """Catch an assertion loop that checks only the last implementation row."""
+        """Catch an assertion loop that checks only the last row using a scoped snapshot."""
         for leg in ("a0", "r1"):
-            with self.subTest(leg=leg), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(leg=leg), tempfile.TemporaryDirectory() as directory, _target_io_guard():
+                for relative in _PROTECTED_TARGET_PATHS:
+                    with self.subTest(leg=leg, protected_path=relative):
+                        with self.assertRaisesRegex(AssertionError, "protected target I/O is forbidden"):
+                            _refuse_protected_target_io(ROOT / relative)
                 clone = Path(directory) / "repository"
-                completed = subprocess.run(
-                    ["git", "clone", "--no-hardlinks", str(ROOT), str(clone)],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertEqual(0, completed.returncode, completed.stderr)
+                clone.mkdir()
+                _copy_frozen_verification_fixture(ROOT, clone)
                 implementation_path = clone / f"experiments/a0x-six-model/{leg}/implementation.json"
                 implementation = json.loads(implementation_path.read_text(encoding="utf-8"))
+                from latent_triz import a0x_freeze
+                with patch.object(a0x_freeze, "_IMPLEMENTATION_PATHS", tuple(implementation["implementation_paths"])):
+                    verify_frozen_legs(clone)
                 rows = implementation["implementation_files"]
                 self.assertGreater(len(rows), 1)
                 nonfinal = rows[0]
-                source = clone / nonfinal["path"]
-                original = source.read_bytes()
-                source.write_bytes(original + b"# nonfinal inventory mutation\\n")
-                with self.assertRaisesRegex(A0XFreezeError, "source/test hash binding drifted"):
-                    from latent_triz import a0x_freeze
+                nonfinal["sha256"] = "0" * 64
+                implementation_path.write_text(json.dumps(implementation, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                with self.assertRaises(A0XFreezeError) as raised:
                     with patch.object(a0x_freeze, "_IMPLEMENTATION_PATHS", tuple(implementation["implementation_paths"])):
                         a0x_freeze.verify_frozen_legs(clone)
+                self.assertEqual(f"{leg} source/test hash binding drifted", str(raised.exception))
+
+    def test_target_io_guard_intercepts_protected_open_and_copy_before_access(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, _target_io_guard():
+            for index, relative in enumerate(sorted(_PROTECTED_TARGET_PATHS)):
+                source = ROOT / relative
+                destination = Path(directory) / f"copy-{index}.bin"
+                with self.subTest(path=relative):
+                    with self.assertRaisesRegex(AssertionError, "protected target I/O is forbidden"):
+                        open(source, "rb")
+                    with self.assertRaisesRegex(AssertionError, "protected target I/O is forbidden"):
+                        shutil.copyfile(source, destination)
+                    self.assertFalse(destination.exists())
+            with self.assertRaisesRegex(AssertionError, "whole-repository copy is forbidden"):
+                shutil.copytree(ROOT, Path(directory) / "whole-repository")
 
     def test_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
         """Keep the one historical batch snapshot auditable without making it active input."""
-        _prepare_historical_parent_for_hosted_replay(
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        verified = self._replay_historical_ledger_if_local(
             "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
             "54c59868802af381f57f830102a01be54410e718",
+            ledger,
         )
-        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
-        verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
         self.assertEqual("d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d", verified["parent_head"])
         self.assertEqual("54c59868802af381f57f830102a01be54410e718", verified["parent_tree"])
         self.assertEqual(17, verified["entry_count"])
@@ -241,99 +393,174 @@ class A0XFrozenPackageTests(unittest.TestCase):
 
     def test_current_batch_pre_regeneration_ledger_replays_exact_parent_blobs(self) -> None:
         """Keep Task 5 generated artifacts auditable before Task 6 replaces them."""
-        _prepare_historical_parent_for_hosted_replay(
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json"
+        verified = self._replay_historical_ledger_if_local(
             "ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9",
             "ff90ef65cd1ca1c58be620c5241621db5091fa77",
+            ledger,
         )
-        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-ab047833.json"
-        verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
         self.assertEqual("ab0478331c5bfa9d6b3cb983d5e4550e68f53aa9", verified["parent_head"])
         self.assertEqual("ff90ef65cd1ca1c58be620c5241621db5091fa77", verified["parent_tree"])
         self.assertEqual(17, verified["entry_count"])
         self.assertEqual("a0x-batch-pre-regeneration-ledger-v2", verified["profile"])
 
+    def _replay_historical_ledger_if_local(
+        self, parent_head: str, parent_tree: str, ledger: Path,
+    ) -> dict[str, object]:
+        """Verify exact parent blobs offline; missing history fails, never fetches."""
+        with _offline_local_git_commands() as commands:
+            _prepare_historical_parent_for_hosted_replay(parent_head, parent_tree)
+            verified = verify_batch_pre_regeneration_ledger(ROOT, ledger)
+        self.assertTrue(commands)
+        self.assertTrue(all("fetch" not in command and "clone" not in command and "pull" not in command for command in commands))
+        return verified
+
+    def test_historical_ledger_replay_does_not_skip_unavailable_history(self) -> None:
+        """Unavailable required history must remain a test failure, not a skip."""
+        unavailable_errors = (
+            AssertionError("historical parent is unavailable locally; network access is forbidden"),
+            A0XFreezeError("historical parent is unavailable"),
+            A0XFreezeError("historical Git object is unavailable"),
+        )
+        for error in unavailable_errors:
+            with self.subTest(error=str(error)):
+                with (
+                    patch(
+                        "tests.test_a0x_frozen_package._prepare_historical_parent_for_hosted_replay",
+                        side_effect=error,
+                    ),
+                    patch.object(self, "skipTest", side_effect=AssertionError("skipTest was called")),
+                    self.assertRaisesRegex(type(error), str(error)),
+                ):
+                    self._replay_historical_ledger_if_local(
+                        "synthetic-parent", "synthetic-tree", Path("synthetic-ledger.json"),
+                    )
+
     def test_batch_pre_regeneration_ledger_refuses_missing_parent(self) -> None:
-        """Historical verification must fail closed when Git lacks its exact parent."""
+        """Historical verification fails when an isolated local repo lacks the parent."""
         ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, _target_io_guard():
+            environment = _isolated_local_git_environment()
             shallow = Path(directory) / "shallow"
+            shallow.mkdir()
             completed = subprocess.run(
-                ["git", "clone", "--depth", "1", f"file://{ROOT}", str(shallow)],
+                ["git", "-C", str(shallow), "init", "--quiet"],
                 check=False,
                 capture_output=True,
                 text=True,
+                env=environment,
             )
             self.assertEqual(0, completed.returncode, completed.stderr)
             copied = shallow / ledger.relative_to(ROOT)
             copied.parent.mkdir(parents=True, exist_ok=True)
+            _refuse_protected_target_io(ledger)
             copied.write_bytes(ledger.read_bytes())
-            with self.assertRaisesRegex(A0XFreezeError, "historical parent is unavailable"):
-                verify_batch_pre_regeneration_ledger(shallow, copied)
+            parent = "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d"
+            absent = subprocess.run(
+                ["git", "-C", str(shallow), "cat-file", "-e", f"{parent}^{{commit}}"],
+                check=False, capture_output=True, env=environment,
+            )
+            self.assertNotEqual(0, absent.returncode, "test fixture unexpectedly has historical parent")
+            with patch.dict(os.environ, environment, clear=True):
+                with self.assertRaisesRegex(A0XFreezeError, "historical parent is unavailable"):
+                    verify_batch_pre_regeneration_ledger(shallow, copied)
 
-    def test_historical_parent_preparation_refuses_network_outside_canonical_ci(self) -> None:
+    def test_historical_parent_preparation_never_fetches_in_hosted_ci_environment(self) -> None:
+        """Even canonical-CI environment variables never enable a Git fetch."""
         unavailable = subprocess.CompletedProcess(args=[], returncode=1, stdout=b"", stderr=b"")
+        calls = []
+
+        def offline_git_only(argv, **kwargs):
+            calls.append(argv)
+            self.assertNotIn("fetch", argv)
+            return unavailable
+
         with (
             patch.dict(
                 os.environ,
-                {"GITHUB_ACTIONS": "false", "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+                {**_isolated_local_git_environment(), "GITHUB_ACTIONS": "true",
+                 "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+                clear=True,
             ),
-            patch("tests.test_a0x_frozen_package.subprocess.run", return_value=unavailable),
-            self.assertRaisesRegex(AssertionError, "restricted to canonical hosted CI"),
+            patch("tests.test_a0x_frozen_package.subprocess.run", side_effect=offline_git_only),
+            self.assertRaisesRegex(AssertionError, "historical parent is unavailable locally"),
         ):
             _prepare_historical_parent_for_hosted_replay(
                 "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
                 "54c59868802af381f57f830102a01be54410e718",
             )
+        self.assertEqual(1, len(calls))
+        self.assertIn("cat-file", calls[0])
 
-    def test_historical_parent_preparation_verifies_fetched_tree(self) -> None:
+    def test_historical_parent_preparation_verifies_local_tree_without_network(self) -> None:
         unavailable = subprocess.CompletedProcess(args=[], returncode=1, stdout=b"", stderr=b"")
-        fetched = subprocess.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b"")
+        correct_commit = subprocess.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b"")
         wrong_tree = subprocess.CompletedProcess(args=[], returncode=0, stdout="0" * 40 + "\n", stderr="")
+        calls = []
+
+        def local_git_only(argv, **kwargs):
+            calls.append(argv)
+            self.assertNotIn("fetch", argv)
+            if "cat-file" in argv and "-e" in argv:
+                return correct_commit
+            if "rev-parse" in argv:
+                return wrong_tree
+            return unavailable
+
         with (
             patch.dict(
                 os.environ,
-                {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+                {**_isolated_local_git_environment(), "GITHUB_ACTIONS": "true",
+                 "GITHUB_REPOSITORY": CANONICAL_PUBLIC_REPOSITORY},
+                clear=True,
             ),
             patch(
                 "tests.test_a0x_frozen_package.subprocess.run",
-                side_effect=[unavailable, fetched, wrong_tree],
-            ) as run,
-            self.assertRaisesRegex(AssertionError, "tree differs after hosted preparation"),
+                side_effect=local_git_only,
+            ),
+            self.assertRaisesRegex(AssertionError, "local historical parent tree differs"),
         ):
             _prepare_historical_parent_for_hosted_replay(
                 "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
                 "54c59868802af381f57f830102a01be54410e718",
             )
-        self.assertEqual(
-            [
-                "git", "-C", str(ROOT), "fetch", "--no-tags", "--depth=1",
-                CANONICAL_PUBLIC_REMOTE, "d7a8b5f475480dd0a1f9adcf67df12fd2ae81c1d",
-            ],
-            run.call_args_list[1].args[0],
-        )
+        self.assertEqual(2, len(calls))
+        self.assertTrue(any("cat-file" in argv for argv in calls))
+        self.assertTrue(any("rev-parse" in argv for argv in calls))
+
+    def test_public_symlink_fixture_writer_refuses_repository_root(self) -> None:
+        ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
+        destination = ROOT / ".a0x-test-fixture-must-not-be-created"
+        with self.assertRaisesRegex(AssertionError, "fixture directory must be outside repository root"):
+            _copy_public_ledger_fixture(destination, ledger)
+        self.assertFalse(destination.exists())
 
     def test_batch_pre_regeneration_ledger_refuses_symlink_before_resolution(self) -> None:
         """A symlink must not be resolved into an accepted historical ledger."""
         ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            alias = Path(directory) / "ledger.json"
-            alias.symlink_to(ledger)
+        with tempfile.TemporaryDirectory() as directory:
+            fixture_root, fixture_ledger = _copy_public_ledger_fixture(Path(directory) / "repo", ledger)
+            self.assertFalse(fixture_root.is_relative_to(ROOT))
+            alias = fixture_root / "ledger-alias.json"
+            alias.symlink_to(fixture_ledger)
             with self.assertRaisesRegex(A0XFreezeError, "symlink|independent regular file"):
-                verify_batch_pre_regeneration_ledger(ROOT, alias)
+                verify_batch_pre_regeneration_ledger(fixture_root, alias)
 
     def test_batch_pre_regeneration_ledger_refuses_parent_symlink_before_resolution(self) -> None:
         """A symlinked parent must not normalize into an accepted ledger path."""
         ledger = ROOT / "docs/qualification/a0x-batch-pre-regeneration-ledger-d7a8b5f.json"
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            parent = Path(directory)
+        with tempfile.TemporaryDirectory() as directory:
+            fixture_root, fixture_ledger = _copy_public_ledger_fixture(Path(directory) / "repo", ledger)
+            self.assertFalse(fixture_root.is_relative_to(ROOT))
+            parent = fixture_ledger.parent
             real = parent / "real"
             real.mkdir()
             copied = real / "ledger.json"
-            copied.write_bytes(ledger.read_bytes())
+            copied.write_bytes(fixture_ledger.read_bytes())
             alias = parent / "alias"
             alias.symlink_to(real, target_is_directory=True)
             with self.assertRaisesRegex(A0XFreezeError, "symlink"):
-                verify_batch_pre_regeneration_ledger(ROOT, alias / "ledger.json")
+                verify_batch_pre_regeneration_ledger(fixture_root, alias / "ledger.json")
 
     def test_historical_vertical_evidence_manifest_remains_byte_identical(self) -> None:
         manifest = load("docs/qualification/a0x-vertical-chain-historical-protection.json")

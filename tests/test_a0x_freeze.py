@@ -38,6 +38,18 @@ class A0XFreezeTests(unittest.TestCase):
         self.root = Path(self._temporary_directory.name)
         self.addCleanup(self._temporary_directory.cleanup)
 
+    def test_inventory_binds_real_rehearsal_and_its_calibration_consumer(self) -> None:
+        required = {
+            "scripts/a0x_rehearsal.py",
+            "src/latent_triz/a0_calibration.py",
+            "src/latent_triz/a0_power.py",
+            "src/latent_triz/a0_shortcuts.py",
+            "tests/test_a0_prospective_d1_d7_synthetic.py",
+        }
+        self.assertTrue(required.issubset(a0x_freeze._IMPLEMENTATION_PATHS))
+        self.assertEqual(tuple(sorted(set(a0x_freeze._IMPLEMENTATION_PATHS))),
+                         a0x_freeze._IMPLEMENTATION_PATHS)
+
     def test_implementation_inventory_is_stable_and_binds_task_one_to_six_surface(self) -> None:
         required = {
             "schemas/a0x-activation-receipt.schema.json",

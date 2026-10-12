@@ -131,6 +131,57 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
         self.assertEqual("failed", verified.scientific_outcome)
         self.assertEqual(6, len(list(destination.iterdir())))
 
+    def _engineering_fixture(self):
+        self.root = self.root / ".a0x-runtime/rehearsal/1/synthetic-repository"
+        self.root.mkdir(parents=True)
+        expected, result = self._fixture(qualification_context="engineering_rehearsal", with_assets=True)
+        result.update(reached_frontier="sealed", scientific_outcome="null",
+                      result_payload={"statistical_result_sha256": hashlib.sha256(b"synthetic statistics").hexdigest()})
+        return expected, result
+
+    def test_engineering_rehearsal_sealed_package_stays_permanently_ineligible(self):
+        expected, result = self._engineering_fixture()
+        destination = self.root / expected.pair_binding["output_path"]
+        reference = build_vertical_terminal_package(repository_root=self.root, destination=destination,
+            expected=expected, terminal_result=result)
+        verified = verify_vertical_terminal_package(package_root=destination, repository_root=self.root,
+            expected=expected, expected_manifest_sha256=reference.manifest_sha256,
+            expected_root_receipt_sha256=reference.root_receipt_sha256)
+        self.assertFalse(verified.publication_eligible)
+        self.assertEqual("engineering_rehearsal", verified.qualification_context)
+        self.assertEqual("null", verified.scientific_outcome)
+
+    def test_engineering_rehearsal_cannot_publish_under_a_real_results_root(self):
+        expected, result = self._engineering_fixture()
+        outer_root = Path(self.temp.name).resolve()
+        with self.assertRaisesRegex(A0XVerticalTerminalPackageError, "rehearsal namespace"):
+            build_vertical_terminal_package(repository_root=outer_root,
+                destination=outer_root / expected.pair_binding["output_path"], expected=expected, terminal_result=result)
+        self.assertFalse((outer_root / "results").exists())
+
+    def test_public_verifier_rejects_engineering_rehearsal_even_with_correct_digest_anchors(self):
+        expected, result = self._engineering_fixture()
+        destination = self.root / expected.pair_binding["output_path"]
+        reference = build_vertical_terminal_package(repository_root=self.root, destination=destination,
+            expected=expected, terminal_result=result)
+        with self.assertRaisesRegex(A0XVerticalTerminalPackageError, "qualification context"):
+            verify_public_vertical_terminal_package(evidence_root=self.root, package_root=destination,
+                expected_manifest_sha256=reference.manifest_sha256,
+                expected_root_receipt_sha256=reference.root_receipt_sha256)
+
+    def test_private_verifier_refuses_rehearsal_package_relocated_outside_its_namespace(self):
+        expected, result = self._engineering_fixture()
+        reference = build_vertical_terminal_package(repository_root=self.root,
+            destination=self.root / expected.pair_binding["output_path"],
+            expected=expected, terminal_result=result)
+        relocated = Path(self.temp.name).resolve() / "relocated-repository"
+        self.root.rename(relocated)
+        with self.assertRaisesRegex(A0XVerticalTerminalPackageError, "rehearsal namespace"):
+            verify_vertical_terminal_package(repository_root=relocated,
+                package_root=relocated / expected.pair_binding["output_path"], expected=expected,
+                expected_manifest_sha256=reference.manifest_sha256,
+                expected_root_receipt_sha256=reference.root_receipt_sha256)
+
     def test_public_trust_manifest_contains_only_allowlisted_public_schema(self):
         destination = self.root / self.expected.pair_binding["output_path"]
         build_vertical_terminal_package(

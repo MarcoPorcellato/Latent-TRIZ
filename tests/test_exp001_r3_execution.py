@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from shutil import copytree
+from tests.a0x_test_support import synthetic_r3_root
 
 from latent_triz.exp001_r3_execution import (
     Exp001ExecutionPreflightError,
@@ -24,8 +24,7 @@ AUTHORIZATION = {
 def _copy_repo() -> Path:
     temp = Path(tempfile.mkdtemp(prefix="exp001-r3-preflight-"))
     destination = temp / "repo"
-    copytree(ROOT, destination, ignore=lambda _path, names: {".git", ".venv", "__pycache__", "artifacts", ".gitnexus", ".serena", ".ccp"}.intersection(names))
-    return destination
+    return synthetic_r3_root(destination)
 
 
 def _edit_protocol(repo: Path, status: str) -> None:

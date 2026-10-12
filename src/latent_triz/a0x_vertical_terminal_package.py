@@ -99,7 +99,7 @@ class VerticalTerminalExpectation:
     ) -> "VerticalTerminalExpectation":
         if not isinstance(context, VerticalProductionContext):
             raise A0XVerticalTerminalPackageError("validated vertical context is required")
-        if context.qualification_context != "synthetic-target-free":
+        if context.qualification_context not in {"synthetic-target-free", "engineering_rehearsal"}:
             raise A0XVerticalTerminalPackageError(
                 "production expectations require the complete parent-validated trust capability"
             )
@@ -201,6 +201,7 @@ def build_vertical_terminal_package(
     """Build a canonical v4 package via atomic no-replace publication."""
     _validate_expectation_context(expected)
     repo = _directory(Path(repository_root), "repository root")
+    _require_rehearsal_namespace(repo, expected)
     target = _destination(repo, Path(destination), expected)
     if os.path.lexists(target):
         raise A0XVerticalTerminalPackageError("terminal destination already exists")
@@ -343,6 +344,7 @@ def verify_vertical_terminal_package(
     """Independently verify exact membership, expected inputs, and raw hashes."""
     _validate_expectation_context(expected)
     repo = _directory(Path(repository_root), "repository root")
+    _require_rehearsal_namespace(repo, expected)
     package = _directory(Path(package_root), "package root")
     expected_manifest_sha256 = _digest(expected_manifest_sha256, "expected manifest digest")
     expected_root_receipt_sha256 = _digest(expected_root_receipt_sha256, "expected root digest")
@@ -700,13 +702,13 @@ def _validate_terminal_result(value: Mapping[str, Any], expected: VerticalTermin
         raise A0XVerticalTerminalPackageError("terminal frontier is unsupported")
     if expected.qualification_context == "synthetic-target-free" and result["reached_frontier"] != "validated_graph":
         raise A0XVerticalTerminalPackageError("synthetic terminal cannot claim material frontier")
-    if result["reached_frontier"] == "sealed" and expected.qualification_context != "production":
+    if result["reached_frontier"] == "sealed" and expected.qualification_context not in {"production", "engineering_rehearsal"}:
         raise A0XVerticalTerminalPackageError("only production context can claim sealed frontier")
     outcome = result["scientific_outcome"]
     if outcome in {"positive", "null", "non_interpretable"}:
         if result["reached_frontier"] != "sealed":
             raise A0XVerticalTerminalPackageError("scientific outcomes require the sealed analysis frontier")
-        if expected.qualification_context != "production":
+        if expected.qualification_context not in {"production", "engineering_rehearsal"}:
             raise A0XVerticalTerminalPackageError("synthetic packages cannot claim a scientific outcome")
     payload = result.get("result_payload")
     if not isinstance(payload, Mapping):
@@ -727,10 +729,21 @@ def _validate_terminal_result(value: Mapping[str, Any], expected: VerticalTermin
 def _validate_expectation_context(expected: VerticalTerminalExpectation) -> None:
     if not isinstance(expected, VerticalTerminalExpectation):
         raise A0XVerticalTerminalPackageError("terminal expectation is not a supported value")
-    if expected.qualification_context != "synthetic-target-free":
+    if expected.qualification_context not in {"synthetic-target-free", "engineering_rehearsal"}:
         raise A0XVerticalTerminalPackageError(
             "production packaging requires the complete parent-validated trust capability"
         )
+
+
+def _require_rehearsal_namespace(repo: Path, expected: VerticalTerminalExpectation) -> None:
+    if expected.qualification_context != "engineering_rehearsal":
+        return
+    parts = repo.parts
+    if (
+        len(parts) < 4 or parts[-4:-2] != (".a0x-runtime", "rehearsal")
+        or not parts[-2].isdigit() or parts[-1] != "synthetic-repository"
+    ):
+        raise A0XVerticalTerminalPackageError("engineering package requires the owned rehearsal namespace")
 
 
 def _trust_manifest(repository_root: Path, expected: VerticalTerminalExpectation) -> dict[str, Any]:
@@ -777,7 +790,7 @@ def _require_asset_policy(expected: VerticalTerminalExpectation, result: Mapping
     roles = [item["role"] for item in assets]
     if assets and roles != ["dense", "index"]:
         raise A0XVerticalTerminalPackageError("external assets must be the ordered dense/index pair")
-    if expected.qualification_context == "production" and result["scientific_outcome"] in _ASSET_STATUSES and roles != ["dense", "index"]:
+    if expected.qualification_context in {"production", "engineering_rehearsal"} and result["scientific_outcome"] in _ASSET_STATUSES and roles != ["dense", "index"]:
         raise A0XVerticalTerminalPackageError("production scientific terminal requires dense and index assets")
 
 

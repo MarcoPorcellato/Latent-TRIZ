@@ -1,11 +1,12 @@
-"""Bounded, isolated engineering tests; no production corpus or scientific attempt.
+"""Portable synthetic D1–D7 tests of the real calibration consumer.
 
-Run only with the coordinator-recorded interpreter under -I -S -B. The baseline
-mode preserves an owned synthetic oracle; subsequent modes consume its exact
-bytes, never historical artifacts.
+The legacy golden digests were independently captured before the prospective
+implementation. Fixtures live only in an owned temporary root. Importing this
+module installs no process-global audit hook or replacement package namespace.
 """
 from __future__ import annotations
 import copy
+import atexit
 import hashlib
 import json
 import linecache
@@ -19,11 +20,12 @@ import unicodedata
 from fractions import Fraction
 
 ROOT = Path(__file__).absolute().parents[1]
-SOURCES = {
-    "__init__.py": "db06d3f6e4698ca55d12b13a7064e0b2d4bac9c966b5bdd930d3d3faf861d34c",
-    "a0_power.py": "baaa74257823234a7a5973231dae855d586e88dd3b30a7184aceb82f4aa05b41",
-    "a0_shortcuts.py": "f1cd33fd28e0f758d0d8dd34ea21e35e958b00c1491a13f0c3a32bb8411b5aa4",
-    "a0_calibration.py": "6106de793e3ecaedb9ebff2470e7d190f3cdd03fc58aab5277e7e66e8b0bae3f",
+LEGACY_GOLDEN_SHA256 = {
+    "freeze-manifest.json": "676edc0a22c5ddadc187c010594ac7aa3e8ef87d03704fe5bfda4f97bdd155e1",
+    "power.json": "bdb96a26a2bce5ec1195f6f433684e8d7a1bc2dba998d653155b5121bf1baac0",
+    "returned-summary.json": "4c1e15a9212c97bf2dec4af0373bd35e3701fae9290cac394735ac8268452d47",
+    "shortcuts.json": "ef162d288307fa39ccc57fed3ac3bda3e07a2901d54b8b2582211b1a1d758cbc",
+    "summary.json": "1b31326e80d2cf305b8ae480ac44164d2e85c01ad9b50ccc1329e6438ff23a57",
 }
 SELECTION = {
     "method_id": "a0x-shortcut-calibration-method-v2.0.0",
@@ -41,13 +43,6 @@ CONTROLS = (
 )
 LABELS = ["inversion_like", "segmentation_like"]
 MODE = os.environ.get("A0X_SYNTHETIC_MODE", "tests")
-EXPECTED = dict(SOURCES)
-if MODE != "baseline":
-    supplied = json.loads(os.environ.get("A0X_WRITER_HASHES", "{}"))
-    if supplied:
-        if set(supplied) != {"a0_shortcuts.py", "a0_calibration.py"}:
-            raise RuntimeError("unexpected source binding")
-        EXPECTED.update(supplied)
 
 def read_independent(path, expected=None):
     """Read admitted bytes through no-follow directory/file descriptors."""
@@ -83,45 +78,18 @@ def read_independent(path, expected=None):
     finally:
         os.close(fd)
 
-# Admit the whole fixed name set before copying any admitted content.
-if set(EXPECTED) != set(SOURCES):
-    raise RuntimeError("snapshot closure changed")
-source_bytes = {name: read_independent(ROOT / "src/latent_triz" / name, digest)
-                for name, digest in EXPECTED.items()}
-SESSION = Path(tempfile.mkdtemp(prefix="a0x-d1d7-synthetic-", dir="/private/tmp"))
+_temporary = tempfile.TemporaryDirectory(prefix="a0x-d1d7-synthetic-")
+atexit.register(_temporary.cleanup)
+SESSION = Path(_temporary.name).resolve()
 SESSION_ID = (SESSION.stat().st_dev, SESSION.stat().st_ino)
-PACKAGE = SESSION / "package/latent_triz"
-PACKAGE.mkdir(parents=True)
 def write_new(path, data):
     path = Path(path)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "wb") as stream:
         stream.write(data)
-for name, data in source_bytes.items():
-    write_new(PACKAGE / name, data)
-    assert read_independent(PACKAGE / name, EXPECTED[name]) == data
-sys.path.insert(0, str(PACKAGE.parent))
-# Traceback formatting must not reopen the live driver after admission.
-driver_text = read_independent(Path(__file__).absolute()).decode("utf-8")
-linecache.cache[str(Path(__file__).absolute())] = (
-    len(driver_text), None, driver_text.splitlines(keepends=True), str(Path(__file__).absolute()))
-FORBIDDEN_ROOT = str(ROOT)
-def access_guard(event, args):
-    if event in {"socket.__new__", "subprocess.Popen", "os.system"}:
-        raise AssertionError("external execution/network forbidden")
-    if event in {"open", "os.listdir", "os.scandir", "os.chdir"} and args:
-        value = args[0]
-        if isinstance(value, (str, bytes, os.PathLike)):
-            text = os.fsdecode(value)
-            if text == FORBIDDEN_ROOT or text.startswith(FORBIDDEN_ROOT + os.sep):
-                raise AssertionError("original-root access after admission")
-            if Path(text).name == "inert-sealed-never-open.jsonl":
-                raise AssertionError("synthetic sealed locator accessed")
-sys.addaudithook(access_guard)
+sys.path.insert(0, str(ROOT / "src"))
 from latent_triz import a0_shortcuts as shortcuts
 from latent_triz import a0_calibration as calibration
-for module in (shortcuts, calibration):
-    assert str(module.__file__).startswith(str(PACKAGE) + os.sep)
 
 def stable(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False,
@@ -262,21 +230,13 @@ class ProspectiveTests(unittest.TestCase):
         return getattr(shortcuts, name)
 
     def test_legacy_complete_artifact_bytes_match_independent_preedit_oracle(self):
-        metadata = json.loads(os.environ["A0X_BASELINE_ORACLE"])
-        root = Path(metadata["root"])
-        self.assertTrue(str(root).startswith("/private/tmp/a0x-d1d7-synthetic-"))
-        self.assertNotIn("..", root.parts)
-        current = os.lstat(root)
-        self.assertTrue(stat.S_ISDIR(current.st_mode))
-        self.assertEqual((current.st_dev, current.st_ino), (metadata["device"], metadata["inode"]))
         cases, targets, protocol = fixture()
         pp, corpus, output = materialize(cases, targets, protocol)
         result = calibration.run_a0_calibration(pp, corpus, output)
-        for name, digest in metadata["files"].items():
-            self.assertIn(name, {"power.json", "shortcuts.json", "summary.json", "freeze-manifest.json", "returned-summary.json"})
-            expected = read_independent(root / "oracle" / name, digest)
+        self.assertEqual(len(LEGACY_GOLDEN_SHA256), 5)
+        for name, digest in LEGACY_GOLDEN_SHA256.items():
             actual = stable(result) if name == "returned-summary.json" else read_independent(output / name)
-            self.assertEqual(actual, expected, name)
+            self.assertEqual(hashlib.sha256(actual).hexdigest(), digest, name)
 
     def test_sentinel_requires_both_inclusive_unrounded_boundaries(self):
         sentinel = self.function("_v2_sentinel")

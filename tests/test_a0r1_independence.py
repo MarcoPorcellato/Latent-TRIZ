@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -145,16 +146,71 @@ class A0R1IndependenceTests(unittest.TestCase):
             [self._base_target("r1_b", "sealed", "candidate sealed target")],
         )
 
-        report = run_a0r1_independence_audit(
-            candidate_manifest_path=self.candidate_manifest_path,
-            candidate_cases_path=self.case_candidate_path,
-            candidate_calibration_targets_path=self.targets_candidate_calibration_path,
-            candidate_sealed_targets_path=self.targets_candidate_sealed_path,
-            source_manifest_path=self.ROOT / "data/a0/manifest.json",
-            source_cases_path=self.ROOT / "data/a0/cases.jsonl",
-            source_calibration_targets_path=self.ROOT / "data/a0/procedural-targets/calibration-targets.jsonl",
-            source_sealed_targets_path=self.ROOT / "data/a0/sealed-targets/targets.jsonl",
-        )
+        source_manifest_path = self.ROOT / "data/a0/manifest.json"
+        source_cases_path = self.ROOT / "data/a0/cases.jsonl"
+        source_calibration_targets_path = self.targets_source_calibration_path
+        repository_sealed_path = (
+            self.ROOT / "data/a0/sealed-targets/targets.jsonl"
+        ).resolve()
+
+        # Manifest/template compatibility uses public cases. Both sets of target
+        # rows are synthetic, never read from either protected target file.
+        source_cases = [
+            json.loads(line)
+            for line in source_cases_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        synthetic_source_sealed_targets = [
+            self._base_target(case["case_id"], "sealed", f"synthetic sealed target {index}")
+            for index, case in enumerate(source_cases, start=1)
+            if case.get("split") == "sealed"
+        ]
+        self._write_cases(source_calibration_targets_path, [
+            self._base_target(case["case_id"], "calibration", f"synthetic calibration target {index}")
+            for index, case in enumerate(source_cases, start=1)
+            if case.get("split") == "calibration"
+        ])
+        self._write_cases(self.targets_source_sealed_path, synthetic_source_sealed_targets)
+        self.assertTrue(self.targets_source_sealed_path.is_relative_to(self.workdir))
+
+        original_open = Path.open
+        original_read_text = Path.read_text
+        original_read_bytes = Path.read_bytes
+
+        def reject_repository_sealed_open(path: Path, *args, **kwargs):
+            if path.resolve() == repository_sealed_path:
+                raise AssertionError("repository sealed-target path must not be opened")
+            return original_open(path, *args, **kwargs)
+
+        def reject_repository_sealed_read_text(path: Path, *args, **kwargs):
+            if path.resolve() == repository_sealed_path:
+                raise AssertionError("repository sealed-target path must not be read")
+            return original_read_text(path, *args, **kwargs)
+
+        def reject_repository_sealed_read_bytes(path: Path, *args, **kwargs):
+            if path.resolve() == repository_sealed_path:
+                raise AssertionError("repository sealed-target path must not be read")
+            return original_read_bytes(path, *args, **kwargs)
+
+        with (
+            patch.object(Path, "open", new=reject_repository_sealed_open),
+            patch.object(Path, "read_text", new=reject_repository_sealed_read_text),
+            patch.object(Path, "read_bytes", new=reject_repository_sealed_read_bytes),
+        ):
+            # Prove the guard rejects the prohibited path before any OS open.
+            with self.assertRaisesRegex(AssertionError, "must not be opened"):
+                repository_sealed_path.open("r", encoding="utf-8")
+
+            report = run_a0r1_independence_audit(
+                candidate_manifest_path=self.candidate_manifest_path,
+                candidate_cases_path=self.case_candidate_path,
+                candidate_calibration_targets_path=self.targets_candidate_calibration_path,
+                candidate_sealed_targets_path=self.targets_candidate_sealed_path,
+                source_manifest_path=source_manifest_path,
+                source_cases_path=source_cases_path,
+                source_calibration_targets_path=source_calibration_targets_path,
+                source_sealed_targets_path=self.targets_source_sealed_path,
+            )
 
         self.assertEqual("pass", report["status"])
         self.assertEqual([], report["violations"])

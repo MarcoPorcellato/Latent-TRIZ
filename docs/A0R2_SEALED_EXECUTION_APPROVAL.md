@@ -8,10 +8,13 @@ last_verified: 2026-08-16
 
 # A0-R2.3 sealed-execution approval dossier
 
-This document is the human-readable R2.3 gate. The strict machine-readable
-request is
-[`experiments/a0r2-independent-model/sealed-execution-approval-dossier.json`](../experiments/a0r2-independent-model/sealed-execution-approval-dossier.json).
-Its status is `approval_requested`; it is not an authorization receipt.
+This document is the human-readable R2.3 gate. The separate machine-readable
+request is identified as
+`experiments/a0r2-independent-model/sealed-execution-approval-dossier.json`.
+It remains excluded from N3 audit access under
+`excluded_sensitive_role_unverified`; its contents and role have not been
+verified in N3. The historical request status recorded here is
+`approval_requested`; this page is not an authorization receipt.
 
 ## Exact proposed action
 
@@ -102,4 +105,3 @@ model load, material execution, and sealed-target access remain prohibited.
 6. Publish the external dense-asset locator and hash, representation index,
    receipts, result, report, limitations, recovery observation, and manifest.
 7. Verify fail-closed from a fresh clone plus the declared external asset.
-

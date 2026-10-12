@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from tests.a0x_test_support import synthetic_next_model_root
 
 from latent_triz.exp001_next_model_contract import (
     NEXT_MODELS,
@@ -21,23 +22,18 @@ class NextModelContractTests(unittest.TestCase):
         # absent, even though the selection and authorization are valid.
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
-            for relative in (
-                "experiments/exp001-comparative-reference/next-model-selection.json",
-                "experiments/exp001-comparative-reference/next-model-authorization.json",
-                "experiments/exp001-comparative-reference/protocol.json",
-            ):
-                destination = repo / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / relative, destination)
+            synthetic_next_model_root(repo)
             for model_id in NEXT_MODELS:
                 with self.assertRaises(NextModelContractError):
                     validate_next_model_contract(repo, model_id, material_execution=True)
 
     def test_target_free_audit_accepts_unapproved_checkpoint(self):
-        for model_id in NEXT_MODELS:
-            audit = validate_next_model_contract(ROOT, model_id, material_execution=False)
-            self.assertFalse(audit["model_accessed"])
-            self.assertFalse(audit["sealed_targets_accessed"])
+        with tempfile.TemporaryDirectory() as directory:
+            repo = synthetic_next_model_root(Path(directory))
+            for model_id in NEXT_MODELS:
+                audit = validate_next_model_contract(repo, model_id, material_execution=False)
+                self.assertFalse(audit["model_accessed"])
+                self.assertFalse(audit["sealed_targets_accessed"])
 
     def test_refuses_unknown_model_without_model_or_target_access(self):
         with self.assertRaises(NextModelContractError):

@@ -6,12 +6,15 @@ import math
 import tempfile
 import types
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+_ORIGINAL_PATH_OPEN = Path.open
 
 from latent_triz import a0r2_adapter
 from latent_triz.a0r2_adapter import A0R2AdapterError, SmolLM2TransformersAdapter
@@ -125,13 +128,41 @@ def _shared_hidden_states_with_nonfinite(token_count: int):
     return tuple(mutable_layers)
 
 
+def _guard_sealed_target_open(
+    sealed_target_path: Path,
+    attempted_opens: list[str],
+    original_open: Callable[..., object] | None = None,
+) -> Callable[..., object]:
+    blocked_path = sealed_target_path.resolve()
+    delegate = _ORIGINAL_PATH_OPEN if original_open is None else original_open
+
+    def tracked_open(path_obj: Path, *args: object, **kwargs: object) -> object:
+        if path_obj.resolve() == blocked_path:
+            attempted_opens.append(str(path_obj))
+            raise PermissionError("sealed-target path access denied before opener")
+        return delegate(path_obj, *args, **kwargs)
+
+    return tracked_open
+
+
 class A0R2ActivationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(__file__).resolve().parents[1]
+        self.sealed_target_path = self.root / "data/a0r1/targets/sealed.jsonl"
+        self.sealed_open_attempts: list[str] = []
+        self._sealed_open_patch = patch.object(
+            Path,
+            "open",
+            _guard_sealed_target_open(self.sealed_target_path, self.sealed_open_attempts),
+        )
+        self._sealed_open_patch.start()
+        self.addCleanup(self._sealed_open_patch.stop)
         self.protocol_path = self.root / "experiments/a0r2-independent-model/study-protocol.json"
         self.protocol = json.loads(self.protocol_path.read_text(encoding="utf-8"))
         self.independence = json.loads((self.root / "results/a0r1/preoutput/independence.json").read_text(encoding="utf-8"))
-        self.sealed_target_path = self.root / "data/a0r1/targets/sealed.jsonl"
+
+    def tearDown(self) -> None:
+        self.assertEqual([], self.sealed_open_attempts)
 
     def _write_protocol_copy(self, tmpdir: Path, mutator=None) -> Path:
         payload = json.loads(self.protocol_path.read_text(encoding="utf-8"))
@@ -160,35 +191,48 @@ class A0R2ActivationTests(unittest.TestCase):
             (model_root / filename).write_text(filename, encoding="utf-8")
         return model_root
 
+    def test_sealed_target_open_guard_denies_before_delegating(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            synthetic_target = Path(directory) / "sealed.jsonl"
+            attempted_opens: list[str] = []
+            delegated_opens: list[str] = []
+
+            def fake_open(path_obj: Path, *_args: object, **_kwargs: object) -> object:
+                delegated_opens.append(str(path_obj))
+                return object()
+
+            guarded_open = _guard_sealed_target_open(
+                synthetic_target,
+                attempted_opens,
+                original_open=fake_open,
+            )
+            with self.assertRaisesRegex(PermissionError, "sealed-target path access denied"):
+                guarded_open(synthetic_target, "rb")
+
+            self.assertEqual([str(synthetic_target)], attempted_opens)
+            self.assertEqual([], delegated_opens)
+
     def test_activation_flow_hits_expected_counts_and_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tmpdir = Path(directory)
             self._create_model_root(tmpdir)
             output = tmpdir / "activation"
-            sealed_opens: list[str] = []
-            original_open = Path.open
-
-            def tracked_open(path_obj, *args, **kwargs):  # noqa: ANN001
-                if path_obj.resolve() == self.sealed_target_path.resolve():
-                    sealed_opens.append(str(path_obj))
-                return original_open(path_obj, *args, **kwargs)
 
             fake_adapter = _FakeAdapter(_shared_hidden_states)
-            with patch.object(Path, "open", tracked_open):
-                artifacts = run_a0r2_activations(
-                    protocol_path=self.protocol_path,
-                    model_root=tmpdir / "model",
-                    output_dir=output,
-                    created_at="2026-08-15T12:00:00Z",
-                    adapter_factory=lambda **kwargs: fake_adapter,
-                )
+            artifacts = run_a0r2_activations(
+                protocol_path=self.protocol_path,
+                model_root=tmpdir / "model",
+                output_dir=output,
+                created_at="2026-08-15T12:00:00Z",
+                adapter_factory=lambda **kwargs: fake_adapter,
+            )
 
             self.assertEqual(192, len(fake_adapter.calls))
             self.assertTrue(artifacts.dense_path.is_file())
             self.assertTrue(artifacts.index_path.is_file())
             self.assertTrue(artifacts.summary_path.is_file())
             self.assertTrue(artifacts.receipt_path.is_file())
-            self.assertEqual([], sealed_opens)
+            self.assertEqual([], self.sealed_open_attempts)
 
             dense_payload = json.loads(artifacts.dense_path.read_text(encoding="utf-8"))
             index_rows = [

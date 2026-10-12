@@ -28,6 +28,31 @@ class A0XTargetFreeSchemaProfileTests(unittest.TestCase):
             self.fail(f"target-free schema profile API is not implemented: {exc}")
         return ProfileError, load_profile_manifest, read_instance, run_profile
 
+    def test_make_synthetic_aggregate_runs_profile_in_a_separate_process(self) -> None:
+        """Keep the import-isolated N3 profile in the synthetic verification ladder."""
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        target = makefile.split("a0x-synthetic-verify:\n", 1)[1].split("\n\n", 1)[0]
+        recipes = [line[1:] for line in target.splitlines() if line.startswith("\t")]
+
+        self.assertEqual(3, len(recipes))
+        self.assertIn("scripts/a0x_contract_check.py --phase synthetic", recipes[0])
+        isolated_profile = "python3 -B -m unittest tests.test_a0x_target_free_schema_profile -v"
+        self.assertIn(isolated_profile, recipes[1])
+        self.assertEqual(1, recipes[1].count("tests.test_a0x_target_free_schema_profile"))
+        self.assertNotIn("tests.test_a0x_target_free_schema_profile", recipes[2])
+
+        aggregate = recipes[2]
+        aggregate_tokens = aggregate.split()
+        discovered = sorted((ROOT / "tests").glob("test_a0x_*.py"))
+        self.assertEqual(48, len(discovered))
+        for path in discovered:
+            module = f"tests.{path.stem}"
+            with self.subTest(module=module):
+                if module == "tests.test_a0x_target_free_schema_profile":
+                    self.assertNotIn(module, aggregate)
+                else:
+                    self.assertEqual(1, aggregate_tokens.count(module))
+
     def test_report_accounts_for_complete_closed_world_without_public_instance_reads(self) -> None:
         _, _, _, run_profile = self.profile_api()
         report = run_profile(ROOT, MANIFEST)

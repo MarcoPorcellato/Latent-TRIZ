@@ -23,7 +23,7 @@ _GRAPH_KEYS = frozenset({
     "descriptor", "readiness", "gate_a_evidence", "execution_inlet",
     "gate_c_authorization", "trust_file_identities",
 })
-_CONTEXTS = frozenset({"production", "synthetic-target-free"})
+_CONTEXTS = frozenset({"production", "synthetic-target-free", "engineering_rehearsal"})
 
 
 class A0XVerticalProductionAdapterError(ValueError):

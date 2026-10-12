@@ -5,11 +5,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from shutil import copytree
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.a0r1_verify import A0R1VerifyError, _require_equal, verify_a0r1_foundation
+from latent_triz.a0r1_corpus import generate_a0r1_corpus
+from latent_triz.a0r1_preoutput import run_a0r1_preoutput_audits
+from latent_triz.a0r1_freeze import run_a0r1_freeze
+from tests.a0x_test_support import synthetic_a0_source
 
 
 class A0R1VerifyTests(unittest.TestCase):
@@ -19,13 +22,24 @@ class A0R1VerifyTests(unittest.TestCase):
     def _build_mutation_root(self) -> tempfile.TemporaryDirectory:
         directory = tempfile.TemporaryDirectory()
         root = Path(directory.name)
-        copytree(self.root / "data", root / "data")
-        copytree(self.root / "results", root / "results")
-        copytree(self.root / "experiments", root / "experiments")
+        source = synthetic_a0_source(root)
+        protocol = root / "experiments/a0r1-independent-proxy/protocol.json"
+        protocol.parent.mkdir(parents=True)
+        payload = json.loads((self.root / "results/a0r1/freeze/protocol-planned.json").read_text())
+        payload["protocol_id"] = "a0-r1-tier-r1-v99.99"
+        protocol.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        candidate = root / "data/a0r1"
+        preoutput = root / "results/a0r1/preoutput"
+        freeze = root / "results/a0r1/freeze"
+        generate_a0r1_corpus(protocol, candidate)
+        run_a0r1_preoutput_audits(protocol, candidate, source, preoutput)
+        run_a0r1_freeze(protocol, candidate, source, preoutput, freeze)
+        protocol.write_bytes((freeze / "protocol-frozen.json").read_bytes())
         return directory
 
     def test_tracked_foundation_reproduces_byte_for_byte(self) -> None:
-        result = verify_a0r1_foundation(self.root)
+        with self._build_mutation_root() as directory:
+            result = verify_a0r1_foundation(Path(directory))
         self.assertEqual("pass", result["status"])
         self.assertFalse(result["model_output_accessed"])
         self.assertEqual(4, result["corpus_files_verified"])
@@ -64,7 +78,7 @@ class A0R1VerifyTests(unittest.TestCase):
     def test_planned_protocol_paths_skip_freeze_artifact_verification(self) -> None:
         with self._build_mutation_root() as directory:
             root = Path(directory)
-            planned_protocol = self.root / "results/a0r1/freeze/protocol-planned.json"
+            planned_protocol = root / "results/a0r1/freeze/protocol-planned.json"
 
             (root / "experiments/a0r1-independent-proxy/protocol.json").write_bytes(
                 planned_protocol.read_bytes()

@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from latent_triz.exp001_r3_contract import Exp001ContractError, verify_contract
+from tests.a0x_test_support import synthetic_r3_root
 
 
 ROOT = Path(__file__).parents[1]
@@ -14,7 +15,7 @@ class Exp001R3ContractTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.copy = Path(self.tmp.name) / "repo"
-        shutil.copytree(ROOT, self.copy, ignore=shutil.ignore_patterns(".git", ".gitnexus", ".venv", "__pycache__", "artifacts"))
+        synthetic_r3_root(self.copy)
 
     def tearDown(self):
         self.tmp.cleanup()

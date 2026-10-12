@@ -208,12 +208,22 @@ class A0XHiddenStateAdapter:
             raise A0XModelAdapterError("model_root must be a non-empty local path")
         if card.trust_remote_code is not False:
             raise A0XModelAdapterError("model card must forbid trust_remote_code")
+        expected_tokenizer_type: type | None = None
         if torch_module is None or any(factory is None for factory in (config_factory, tokenizer_factory, model_factory)):
             try:
                 import torch
+                import transformers
                 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
             except Exception as error:  # pragma: no cover - material dependency boundary
                 raise A0XModelAdapterError(f"torch/transformers unavailable: {error}") from error
+            # Transformers 5.x preserves the public Fast API as a class alias.
+            # Bind the exact exported type, not a mutable __name__ string; no
+            # generic fast-tokenizer fallback or remote code is accepted.
+            if tokenizer_factory is None:
+                exported = getattr(transformers, card.expected_runtime_tokenizer_class, None)
+                if not isinstance(exported, type):
+                    raise A0XModelAdapterError("declared runtime tokenizer class is unavailable")
+                expected_tokenizer_type = exported
             torch_module = torch if torch_module is None else torch_module
             config_factory = config_factory or AutoConfig.from_pretrained
             tokenizer_factory = tokenizer_factory or AutoTokenizer.from_pretrained
@@ -223,7 +233,11 @@ class A0XHiddenStateAdapter:
             config = config_factory(root, **_LOCAL_FACTORIES)
             _validate_config(config, card)
             tokenizer = tokenizer_factory(root, use_fast=True, **_LOCAL_FACTORIES)
-            if type(tokenizer).__name__ != card.expected_runtime_tokenizer_class:
+            if (
+                type(tokenizer) is not expected_tokenizer_type
+                if expected_tokenizer_type is not None
+                else type(tokenizer).__name__ != card.expected_runtime_tokenizer_class
+            ):
                 raise A0XModelAdapterError("unexpected runtime tokenizer class")
             if not bool(getattr(tokenizer, "is_fast", False)):
                 raise A0XModelAdapterError("fast tokenizer required")

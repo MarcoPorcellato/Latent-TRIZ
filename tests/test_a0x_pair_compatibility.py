@@ -381,7 +381,7 @@ class A0XPairFixtureAdmissionTests(unittest.TestCase):
 
     def test_hardlinked_input_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = _synthetic_oracle_root(Path(directory))
+            root = _synthetic_oracle_root(Path(directory).resolve())
             os.link(root / "src/latent_triz/validator.py", root / "hardlink-sentinel")
             sources = {relative: root / relative for relative in _ADMITTED_PAIR_ENGINEERING_INPUTS}
             with self.assertRaisesRegex(_PairFixtureAdmissionError, "single-link"):
@@ -389,7 +389,7 @@ class A0XPairFixtureAdmissionTests(unittest.TestCase):
 
     def test_fifo_input_is_rejected_without_blocking(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = _synthetic_oracle_root(Path(directory))
+            root = _synthetic_oracle_root(Path(directory).resolve())
             leaf = root / "src/latent_triz/validator.py"
             leaf.unlink()
             os.mkfifo(leaf)
