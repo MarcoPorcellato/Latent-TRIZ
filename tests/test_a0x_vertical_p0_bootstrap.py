@@ -1111,6 +1111,64 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
         self.assertEqual("b" * 64, receipt["dossier_sha256"])
         self.assertEqual("f8027fd0eaeea54caa13c31d31b9fdc459c38b49", receipt["model_revision"])
 
+    @unittest.skipUnless(sys.platform == "darwin", "actual P0 publication requires Darwin renameatx_np")
+    def test_canonical_v2_operator_real_subprocess_uses_production_generator_and_loader(self) -> None:
+        """Run the real preexec/operator/generator/loader against owned public-code fixtures."""
+        from latent_triz.a0x_freeze import _IMPLEMENTATION_PATHS, _LEG_SOURCES
+
+        fixture = self.fixture()
+        paths = set(_IMPLEMENTATION_PATHS) | {
+            "src/latent_triz/__init__.py",
+            "experiments/a0x-six-model/model-registry.json",
+            "experiments/a0x-six-model/material-execution-contract.json",
+            "schemas/a0x-authorization-dossier.schema.json",
+            "schemas/a0x-freeze-manifest.schema.json",
+            "schemas/a0x-implementation.schema.json",
+            "schemas/a0x-protocol.schema.json",
+            "schemas/a0x-vertical-slice-manifest.schema.json",
+            "schemas/a0x-vertical-slice-manifest-v2.schema.json",
+            "schemas/a0x-vertical-package-commitment-v2.schema.json",
+        }
+        for spec in _LEG_SOURCES.values():
+            paths.update(str(spec[name]) for name in ("protocol", "implementation", "protected_tree", "selection"))
+        registry = json.loads((ROOT / "experiments/a0x-six-model/model-registry.json").read_bytes())
+        paths.update(f"experiments/a0x-six-model/{relative}" for relative in registry["cards"])
+        dispositions = json.loads((ROOT / N3_PROFILE_MANIFEST).read_bytes())["instance_dispositions"]
+        protected = PROTECTED_TARGET_PATHS | set(dispositions["excluded_sensitive_role_unverified"])
+        self.assertFalse(paths & protected)
+        for relative in sorted(paths):
+            destination = fixture.root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, destination)
+        fixture._write_ledger_document(fixture._current_lines())
+        fixture.commit_all("owned public-code production P0 integration fixture")
+        completed = fixture.v2_command()
+        head, tree = fixture.identity()
+        terminal_path = (
+            fixture.root / ".a0x-runtime/attempts/p0/v2" / head / tree
+            / "a0/smollm2_360m/p0-v2-test-attempt/terminal-receipt.json"
+        )
+        terminal = json.loads(terminal_path.read_bytes())
+        self.assertEqual(0, completed.returncode, f"{completed.stderr}\n{terminal}")
+        self.assertEqual("target_free_p0_completed", terminal["terminal_class"])
+        binding = json.loads(completed.stdout)
+        package = fixture.root / binding["package_path"]
+        expected_members = {
+            "protocol.json", "implementation.json", "freeze.json",
+            "approval-dossier.json", "slice-manifest.json",
+        }
+        self.assertEqual(expected_members, {path.name for path in package.iterdir()})
+        manifest = json.loads((package / "slice-manifest.json").read_bytes())
+        self.assertEqual("a0x-vertical-slice-manifest-v2", manifest["artifact_class"])
+        self.assertEqual({"head": head, "tree": tree, "ref": "refs/heads/main"}, manifest["qualified_source"])
+        self.assertEqual(_sha256(package / "approval-dossier.json"), binding["dossier_sha256"])
+        self.assertNotEqual("a" * 64, binding["package_commitment_sha256"])
+        self.assertNotEqual("b" * 64, binding["dossier_sha256"])
+        for member in manifest["members"]:
+            raw = (package / member["name"]).read_bytes()
+            self.assertEqual(len(raw), member["size"])
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), member["sha256"])
+
     def test_contract_checker_cli_uses_temporary_synthetic_root_and_fails_closed(self) -> None:
         """The production checker must receive a disposable synthetic root, never ROOT."""
         with tempfile.TemporaryDirectory(prefix="a0x-contract-synthetic-") as temporary:
