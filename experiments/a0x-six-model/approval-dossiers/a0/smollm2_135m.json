@@ -6,7 +6,7 @@
   "empirical": true,
   "evidence_eligible": false,
   "expert_validated": false,
-  "implementation_source_head": "fa9f396c115e3a0c655fd03cf59ccd830491cc47",
+  "implementation_source_head": "98c0946dd6057ea81159b16efd90a73ed4adc75f",
   "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
   "material_contract_raw_sha256": "9d743d1913664290451be62dbd21fa27b7bb6b5285a4cdea75e43c576cac2156",
   "pair_binding": {
@@ -29,7 +29,7 @@
       "view_site_count": 10
     },
     "leg": "a0",
-    "leg_freeze_sha256": "d789cacad9df01d7cc6b865b6a5fc32aa189ea9c0890e7f0774302ec717d4ed4",
+    "leg_freeze_sha256": "978fc6b7a13d2599c62c7a1b25dc724c648777e3c6432fbedbdf54a1615bad0a",
     "model_id": "HuggingFaceTB/SmolLM2-135M",
     "model_key": "smollm2_135m",
     "output_path": "results/a0x/a0/smollm2_135m/a0x-a0-smollm2_135m-93efa2f0-attempt-01",

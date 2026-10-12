@@ -773,9 +773,9 @@
       "sha256": "44486157ef65465409a5ddf6692d5bc9614efdb23d7b4b8dbe17d0c72d037851"
     },
     {
-      "bytes": 92385,
+      "bytes": 96009,
       "path": "tests/test_a0x_vertical_p0_bootstrap.py",
-      "sha256": "bccafb87963c053579cb657641b8cbc001b1b74b4f27425f25317072ff7aef8e"
+      "sha256": "3f06fef7fedaac260f34a1251e12f201ac5757db949cf04c3467df335baf6e2f"
     },
     {
       "bytes": 7351,
