@@ -79,7 +79,15 @@ def main() -> int:
         "tests.test_a0x_hosted_gate_a_workflow",
         "tests.test_a0x_hosted_verifier",
     )
-    run(PYTHON, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py")
+    # The N3 profile intentionally refuses an already imported production
+    # namespace. Execute it independently; run every other module using its
+    # package-qualified name so mutation patches bind the loaded module.
+    run(PYTHON, "-B", "-m", "unittest", "tests.test_a0x_target_free_schema_profile", "-v")
+    test_modules = [
+        "tests." + path.stem for path in sorted((ROOT / "tests").glob("test_*.py"))
+        if path.stem != "test_a0x_target_free_schema_profile"
+    ]
+    run(PYTHON, "-B", "-m", "unittest", *test_modules)
 
     validation_pairs = (
         ("schemas/case.schema.json", "tests/fixtures/case_valid.json"),

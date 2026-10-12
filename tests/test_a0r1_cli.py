@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from latent_triz.cli import main
+from tests.a0x_test_support import synthetic_a0_source
 
 
 class A0R1CliTests(unittest.TestCase):
@@ -22,6 +23,7 @@ class A0R1CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as workdir:
             corpus = Path(workdir) / "corpus"
             audits = Path(workdir) / "audits"
+            source_corpus = synthetic_a0_source(Path(workdir))
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(
                     0,
@@ -39,7 +41,7 @@ class A0R1CliTests(unittest.TestCase):
                         "--candidate-corpus-dir",
                         str(corpus),
                         "--source-corpus-dir",
-                        str(self.root / "data/a0"),
+                        str(source_corpus),
                         "--output-dir",
                         str(audits),
                     ]

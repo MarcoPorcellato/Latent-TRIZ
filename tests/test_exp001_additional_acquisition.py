@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from urllib.request import Request
+from tests.a0x_test_support import synthetic_acquisition_authorization
 
 from latent_triz.exp001_additional_acquisition import (
     MODEL_SPECS,
@@ -53,8 +54,8 @@ class _TimeoutResponse(_Response):
 class AdditionalAcquisitionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.authorization = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
-        cls.next_authorization = json.loads(NEXT_AUTH_PATH.read_text(encoding="utf-8"))
+        cls.authorization = synthetic_acquisition_authorization()
+        cls.next_authorization = synthetic_acquisition_authorization(next_models=True)
 
     def test_exact_authorization_binds_both_candidates(self):
         for model_id in ("openai-community/gpt2", "HuggingFaceTB/SmolLM2-135M"):

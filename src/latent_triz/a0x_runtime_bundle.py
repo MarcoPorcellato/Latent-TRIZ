@@ -683,10 +683,12 @@ def _build_vertical_descriptor(
     readiness: Mapping[str, Any],
     gate_a_evidence_document: Mapping[str, Any],
     readiness_document: Mapping[str, Any],
+    authorization_id: str,
+    attempt_id: str,
 ) -> dict[str, Any]:
     """Build the acyclic V2 descriptor without touching legacy route builders."""
-    if inputs.child_path != _repository_file(root, "scripts/a0x_material_child.py"):
-        raise A0XRuntimeBundleError("child script is not the fixed repository child")
+    if inputs.child_path != _repository_file(root, "scripts/a0x_vertical_material_child.py"):
+        raise A0XRuntimeBundleError("vertical child script is not the fixed repository child")
     del gate_a_evidence, readiness
     return {
         "artifact_class": "a0x-vertical-launch-descriptor",
@@ -694,8 +696,11 @@ def _build_vertical_descriptor(
         "qualified_source": {"head": source_head, "tree": source_tree, "ref": "refs/heads/main"},
         "pair_binding": pair.as_mapping(),
         "vertical_package": _vertical_package_projection(binding),
+        "authorization_id": authorization_id,
+        "attempt_id": attempt_id,
+        "ccp": dict(inputs.ccp_identity),
         "child_script": {
-            "role": "child", "path": "scripts/a0x_material_child.py", "sha256": inputs.child_sha256,
+            "role": "child", "path": "scripts/a0x_vertical_material_child.py", "sha256": inputs.child_sha256,
         },
         "python": {"role": "python", "path": str(inputs.python_path), "sha256": inputs.python_sha256},
         "runtime_readiness": _vertical_document_reference(
@@ -813,7 +818,7 @@ def _build_vertical_output_documents(
         )
     descriptor = _build_vertical_descriptor(
         root, binding, pair, source_head, source_tree, inputs, paths, gate_a_evidence, readiness,
-        documents["gate_a_evidence"], documents["readiness"],
+        documents["gate_a_evidence"], documents["readiness"], authorization_id, attempt_id,
     )
     documents["descriptor"] = _vertical_output_document(
         kind="descriptor", payload=descriptor, binding=binding, pair=pair,
@@ -923,7 +928,7 @@ def _validate_vertical_output_dependencies(
             payload,
             {
                 "artifact_class", "descriptor_profile", "qualified_source", "pair_binding", "vertical_package",
-                "child_script", "python", "runtime_readiness", "gate_a_evidence", "authorization_reference",
+                "authorization_id", "attempt_id", "ccp", "child_script", "python", "runtime_readiness", "gate_a_evidence", "authorization_reference",
                 "environment_template", "material_contract", "execution",
             },
             "descriptor payload",
@@ -1141,7 +1146,18 @@ def _validate_preparation_inputs(
     except A0XContractError as error:
         raise A0XRuntimeBundleError("material contract bytes are not strict JSON") from error
     _validate_material_contract_schema(contract)
-    ccp_identity = _ccp_identity(contract)
+    if derive_legacy_paths:
+        ccp_identity = _ccp_identity(contract)
+    else:
+        from .a0x_material_contract import active_vertical_guard_identity
+
+        try:
+            selected = active_vertical_guard_identity(contract)
+        except (A0XContractError, TypeError, ValueError) as error:
+            raise A0XRuntimeBundleError("active vertical guard contract is invalid") from error
+        ccp_identity = {"executable_name": "commit-ci-preflight", **{
+            key: selected[key] for key in ("source_commit", "qualified_source_tree", "sha256", "version")
+        }}
     ccp_path = _external_executable(request.ccp_executable, "CCP executable")
     if ccp_identity_verifier is not None:
         try:
@@ -1168,7 +1184,10 @@ def _validate_preparation_inputs(
         if ccp_version_probe(ccp_path) != ccp_identity["version"]:
             raise A0XRuntimeBundleError("CCP executable version differs from material contract")
     python_path = _external_executable(request.python_executable, "Python executable")
-    child_path = _repository_file(root, "scripts/a0x_material_child.py")
+    child_path = _repository_file(
+        root,
+        "scripts/a0x_material_child.py" if derive_legacy_paths else "scripts/a0x_vertical_material_child.py",
+    )
     descriptor_path = derive_runtime_paths(pair).launch_descriptor_path if derive_legacy_paths else None
     return _ValidatedPreparationInputs(
         ccp_path=ccp_path,

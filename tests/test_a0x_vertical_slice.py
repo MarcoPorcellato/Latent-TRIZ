@@ -61,6 +61,12 @@ def _synthetic_repository(destination: Path) -> None:
             "schemas/a0x-implementation.schema.json",
             "schemas/a0x-protocol.schema.json",
             "schemas/a0x-vertical-slice-manifest.schema.json",
+            # The target-free vertical Gate-B tests need these newly introduced
+            # runtime inputs even before the implementation inventory is
+            # regenerated in the later package-binding task.
+            "schemas/a0x-vertical-child-terminal-v1.schema.json",
+            "scripts/a0x_vertical_material_child.py",
+            "src/latent_triz/a0x_vertical_production_adapter.py",
         }
     )
     for spec in _LEG_SOURCES.values():

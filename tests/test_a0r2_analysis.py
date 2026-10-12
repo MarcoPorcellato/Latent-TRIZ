@@ -38,15 +38,41 @@ class A0R2AnalysisTests(unittest.TestCase):
         model.pop("feasibility_receipt_sha256", None)
         return model
 
+    def test_fixture_never_opens_repository_sealed_targets(self) -> None:
+        forbidden = (ROOT / "data/a0r1/targets/sealed.jsonl").absolute()
+        attempted: list[str] = []
+        original_open = Path.open
+
+        def deny_repository_target_open(path_obj: Path, *args: object, **kwargs: object):
+            if path_obj.absolute() == forbidden:
+                attempted.append(str(path_obj))
+                raise AssertionError("analysis fixture must not open repository sealed targets")
+            return original_open(path_obj, *args, **kwargs)
+
+        with patch.object(Path, "open", new=deny_repository_target_open):
+            with tempfile.TemporaryDirectory() as directory:
+                self._build_fixture(Path(directory))
+
+        self.assertEqual([], attempted)
+
     def _build_fixture(self, root: Path, *, primary_value: float = 0.9, surface_value: float = 0.1) -> dict[str, Path | dict[str, dict[str, int]]]:
-        sealed_source = self.root / "data/a0r1/targets/sealed.jsonl"
-        target_rows = [json.loads(line) for line in sealed_source.read_text(encoding="utf-8").splitlines() if line.strip()]
-        family_order: list[str] = []
-        for row in target_rows:
-            family_id = str(row["problem_family_id"])
-            if family_id not in family_order:
-                family_order.append(family_id)
-        positive_families = set(family_order[-17:])
+        r1_result_source = self.root / "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/statistical-result.json"
+        r1_result = json.loads(r1_result_source.read_text(encoding="utf-8"))
+        domain_names = sorted(r1_result["primary"]["domain_direction_successes"])
+        self.assertEqual(6, len(domain_names))
+        target_rows = [
+            {
+                "case_id": f"synthetic_case_{family_index:02d}_{label}",
+                # Keep only the domain vocabulary shared with the fixed R1 comparator;
+                # case, family, and operator-label data remain synthetic.
+                "domain": domain_names[family_index // 4],
+                "problem_family_id": f"synthetic_family_{family_index:02d}",
+                "operator_proxy_family": "segmentation_like" if label == 1 else "inversion_like",
+            }
+            for family_index in range(24)
+            for label in (0, 1)
+        ]
+        positive_families = {f"synthetic_family_{family_index:02d}" for family_index in range(7, 24)}
 
         case_ids = sorted(row["case_id"] for row in target_rows)
         target_by_case = {str(row["case_id"]): row for row in target_rows}
@@ -107,7 +133,34 @@ class A0R2AnalysisTests(unittest.TestCase):
         summary_path = root / "summary.json"
         output_path = root / "analysis.json"
 
-        targets_path.write_bytes(sealed_source.read_bytes())
+        targets_path.write_text(
+            "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in target_rows),
+            encoding="utf-8",
+        )
+
+        repo_root = root / "analysis-root"
+        protocol_path = repo_root / "experiments/a0r2-independent-model/study-protocol.json"
+        protocol_schema_path = repo_root / "schemas/a0r2-study-protocol.schema.json"
+        shortcut_path = repo_root / "results/a0r1/preoutput/shortcuts.json"
+        r1_result_path = repo_root / "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/statistical-result.json"
+        protocol_path.parent.mkdir(parents=True)
+        protocol_schema_path.parent.mkdir(parents=True)
+        shortcut_path.parent.mkdir(parents=True)
+        r1_result_path.parent.mkdir(parents=True)
+        shortcut_path.write_bytes(self.shortcut_path.read_bytes())
+        r1_result_path.write_bytes(r1_result_source.read_bytes())
+        protocol = copy.deepcopy(self.protocol)
+        protocol["inputs"]["sealed_targets_sha256"] = analysis._sha256(targets_path)
+        protocol["inputs"]["shortcuts_sha256"] = analysis._sha256(shortcut_path)
+        protocol_path.write_text(json.dumps(protocol, sort_keys=True, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        protocol_schema = json.loads(analysis.PROTOCOL_SCHEMA_PATH.read_text(encoding="utf-8"))
+        schema_inputs = protocol_schema["properties"]["inputs"]["properties"]
+        schema_inputs["sealed_targets_sha256"]["const"] = protocol["inputs"]["sealed_targets_sha256"]
+        schema_inputs["shortcuts_sha256"]["const"] = protocol["inputs"]["shortcuts_sha256"]
+        protocol_schema_path.write_text(
+            json.dumps(protocol_schema, sort_keys=True, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         index_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in index_rows) + "\n", encoding="utf-8")
         dense_path.write_text(json.dumps(dense_rows, sort_keys=True) + "\n", encoding="utf-8")
         summary_path.write_text(json.dumps({"summary": True}, sort_keys=True) + "\n", encoding="utf-8")
@@ -172,10 +225,18 @@ class A0R2AnalysisTests(unittest.TestCase):
                 "exact_head": "4" * 40,
             },
         }
+        receipt["input_hashes"]["protocol_sha256"] = analysis._sha256(protocol_path)
+        receipt["input_hashes"]["sealed_targets_sha256"] = protocol["inputs"]["sealed_targets_sha256"]
+        receipt["input_hashes"]["shortcuts_sha256"] = protocol["inputs"]["shortcuts_sha256"]
         receipt_path = root / "receipt.json"
         receipt_path.write_text(json.dumps(receipt, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
         return {
+            "repo_root": repo_root,
+            "protocol_path": protocol_path,
+            "protocol_schema_path": protocol_schema_path,
+            "shortcut_path": shortcut_path,
+            "r1_result_path": r1_result_path,
             "targets_path": targets_path,
             "index_path": index_path,
             "dense_path": dense_path,
@@ -204,18 +265,21 @@ class A0R2AnalysisTests(unittest.TestCase):
             return primary_operator if float(matrix.mean()) > score_mean_threshold else surface_operator
 
         kwargs = {
-            "protocol_path": protocol_path or self.protocol_path,
+            "protocol_path": protocol_path or fixture["protocol_path"],
             "activation_receipt_path": fixture["receipt_path"],
             "activation_index_path": fixture["index_path"],
             "dense_path": fixture["dense_path"],
             "targets_path": fixture["targets_path"],
             "output_path": fixture["output_path"],
+            "shortcut_path": shortcut_path or fixture["shortcut_path"],
+            "r1_result_path": fixture["r1_result_path"],
         }
-        if shortcut_path is not None:
-            kwargs["shortcut_path"] = shortcut_path
 
-        with patch.object(analysis, "_score_operator", side_effect=fake_score_operator):
-            payload = analysis.analyze_a0r2(**kwargs)
+        with patch.object(analysis, "REPO_ROOT", fixture["repo_root"]), patch.object(
+            analysis, "PROTOCOL_SCHEMA_PATH", fixture["protocol_schema_path"]
+        ):
+            with patch.object(analysis, "_score_operator", side_effect=fake_score_operator):
+                payload = analysis.analyze_a0r2(**kwargs)
         self.assertTrue(fixture["output_path"].exists())
         return payload
 

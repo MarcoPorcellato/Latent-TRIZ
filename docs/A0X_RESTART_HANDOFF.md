@@ -7,14 +7,18 @@ date: 2026-08-25
 
 # A0X restart handoff
 
-## Current pointer — 2026-09-01
+## Current pointer — 2026-09-25
 
-This handoff is historical evidence. The current A0X lifecycle is
-[A0X six-model campaign](A0X_SIX_MODEL_CAMPAIGN.md), and its approved
-architecture correction is [A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md).
-Before any Gate A/B action, bind the actual exact `HEAD` and prove the
-12 × 2 compatibility oracle, architecture fitness tests, and documentation
-audit. Gate C and all material actions remain separately unauthorized.
+Resume from the durable [public-closure restart checkpoint](A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md).
+It records the isolated clone, exact `HEAD/tree`, dirty state, completed
+target-free validation, review conditions, publication assessment, and next
+allowed action. Revalidate those facts before continuing; this pointer does
+not authorize regeneration or material access.
+
+The [A0X six-model campaign](A0X_SIX_MODEL_CAMPAIGN.md) remains the canonical
+lifecycle/status ledger, and [A0X architecture convergence](A0X_ARCHITECTURE_CONVERGENCE.md)
+remains the architecture specification. Historical checkpoints below retain
+their original evidence and are not current status.
 
 --- Historical checkpoints below; hashes and outcomes are preserved verbatim ---
 

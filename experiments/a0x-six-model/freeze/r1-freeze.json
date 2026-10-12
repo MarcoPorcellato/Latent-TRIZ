@@ -7,12 +7,12 @@
   "freeze_status": "frozen",
   "identity": {
     "leg": "r1",
-    "protected_tree_sha256": "ee4a47ec7d8661beaaed5d1baad1e05750c89474aacad4a2e898c4b9782d1413",
+    "protected_tree_sha256": "9b2a4d07c36eab3141d45258f3956c00d735e2911969447a585e227ee7bbeaa8",
     "protocol_id": "a0x-r1-six-model-v1",
     "selection_corpus_sha256": "46c5cdf796f2abad709deb3066cfadd5fc6e6a30f55a737b3408e0a15b065c06",
     "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
   },
-  "implementation_sha256": "ea15b4e1c798a62960818b5854f9e71d384f0e25c1874022b38b17b8583b2eda",
-  "protocol_sha256": "32d8bbfcbd76e38d51a2eff012c22e65bfe0c1eca4f6d0bf345f309777df4b52",
+  "implementation_sha256": "f32d404f281284890a97287a72180ede42ab370bdadc80ebe731c1352d8d57f7",
+  "protocol_sha256": "fd24072406364dc57beed56854c91c43c5c4ee3ef1d59c0a70abbae663b4c6c8",
   "scientific_status": "exploratory"
 }

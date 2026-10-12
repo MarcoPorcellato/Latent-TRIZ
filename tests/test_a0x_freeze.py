@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import copy
+import builtins
 import hashlib
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -34,6 +37,18 @@ class A0XFreezeTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary_directory.name)
         self.addCleanup(self._temporary_directory.cleanup)
+
+    def test_inventory_binds_real_rehearsal_and_its_calibration_consumer(self) -> None:
+        required = {
+            "scripts/a0x_rehearsal.py",
+            "src/latent_triz/a0_calibration.py",
+            "src/latent_triz/a0_power.py",
+            "src/latent_triz/a0_shortcuts.py",
+            "tests/test_a0_prospective_d1_d7_synthetic.py",
+        }
+        self.assertTrue(required.issubset(a0x_freeze._IMPLEMENTATION_PATHS))
+        self.assertEqual(tuple(sorted(set(a0x_freeze._IMPLEMENTATION_PATHS))),
+                         a0x_freeze._IMPLEMENTATION_PATHS)
 
     def test_implementation_inventory_is_stable_and_binds_task_one_to_six_surface(self) -> None:
         required = {
@@ -311,6 +326,213 @@ class A0XFreezeTests(unittest.TestCase):
             return original_open(path, *args, **kwargs)
         with patch.object(Path, "open", new=deny_target_open):
             verify_protected_tree_metadata_only(self.root, tree)
+
+    @contextmanager
+    def _record_protected_filesystem_access(self, relative_paths: tuple[str, ...]):
+        repository = self.root.resolve()
+        protected = {
+            os.path.abspath(os.fspath(repository / relative))
+            for relative in relative_paths
+        }
+        accesses: list[str] = []
+
+        def normalized(path: object) -> str | None:
+            if isinstance(path, int):
+                return None
+            try:
+                return os.path.abspath(os.fspath(path))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return None
+
+        def record_exact(path: object, operation: str) -> None:
+            candidate = normalized(path)
+            if candidate in protected:
+                accesses.append(f"{operation}:{candidate}")
+
+        def record_enumeration(path: object, operation: str) -> None:
+            candidate = normalized(path)
+            if candidate is None:
+                return
+            prefix = candidate.rstrip(os.sep) + os.sep
+            if any(target == candidate or target.startswith(prefix) for target in protected):
+                accesses.append(f"{operation}:{candidate}")
+
+        with ExitStack() as stack:
+            for name in ("open", "read_bytes", "read_text", "stat", "lstat"):
+                original = getattr(Path, name)
+
+                def guarded_path(path: Path, *args: object, _name: str = name, _original=original, **kwargs: object):
+                    record_exact(path, f"Path.{_name}")
+                    return _original(path, *args, **kwargs)
+
+                stack.enter_context(patch.object(Path, name, new=guarded_path))
+
+            for name in ("glob", "rglob", "iterdir"):
+                original = getattr(Path, name)
+
+                def guarded_enumeration(path: Path, *args: object, _name: str = name, _original=original, **kwargs: object):
+                    record_enumeration(path, f"Path.{_name}")
+                    return _original(path, *args, **kwargs)
+
+                stack.enter_context(patch.object(Path, name, new=guarded_enumeration))
+
+            if hasattr(Path, "walk"):
+                original_walk = Path.walk
+
+                def guarded_walk(path: Path, *args: object, **kwargs: object):
+                    record_enumeration(path, "Path.walk")
+                    return original_walk(path, *args, **kwargs)
+
+                stack.enter_context(patch.object(Path, "walk", new=guarded_walk))
+
+            for module, names in (
+                (builtins, ("open",)),
+                (io, ("open",)),
+                (os, ("open", "stat", "lstat")),
+            ):
+                for name in names:
+                    original = getattr(module, name)
+
+                    def guarded_file_access(path: object, *args: object, _name: str = name, _original=original, **kwargs: object):
+                        record_exact(path, f"{module.__name__}.{_name}")
+                        return _original(path, *args, **kwargs)
+
+                    stack.enter_context(patch.object(module, name, new=guarded_file_access))
+
+            for name in ("listdir", "scandir", "walk", "fwalk"):
+                if not hasattr(os, name):
+                    continue
+                original = getattr(os, name)
+
+                def guarded_directory_access(path: object, *args: object, _name: str = name, _original=original, **kwargs: object):
+                    record_enumeration(path, f"os.{_name}")
+                    return _original(path, *args, **kwargs)
+
+                stack.enter_context(patch.object(os, name, new=guarded_directory_access))
+
+            original_hash = a0x_freeze.sha256_file
+
+            def guarded_hash(path: str | Path) -> str:
+                record_exact(path, "sha256_file")
+                return original_hash(path)
+
+            stack.enter_context(patch.object(a0x_freeze, "sha256_file", new=guarded_hash))
+            yield accesses
+
+    def _prepare_synthetic_canonical_tree_sources(self) -> None:
+        protected_bytes = {
+            "data/a0/procedural-targets/calibration-targets.jsonl": b"synthetic-a0-calibration",
+            "data/a0/sealed-targets/targets.jsonl": b"synthetic-a0-sealed",
+            "data/a0r1/targets/calibration.jsonl": b"synthetic-r1-calibration",
+            "data/a0r1/targets/sealed.jsonl": b"synthetic-r1-sealed",
+        }
+
+        def write(relative: str, data: bytes) -> None:
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+
+        for relative, data in protected_bytes.items():
+            write(relative, data)
+
+        a0_sealed = protected_bytes["data/a0/sealed-targets/targets.jsonl"]
+        r1_sealed = protected_bytes["data/a0r1/targets/sealed.jsonl"]
+        write("data/a0/manifest.json", json.dumps({"files": {
+            "sealed": {"path": "sealed-targets/targets.jsonl", "sha256": hashlib.sha256(a0_sealed).hexdigest(), "size": len(a0_sealed)},
+        }}).encode("utf-8"))
+        write("data/a0r1/manifest.json", json.dumps({"files": {
+            "sealed": {"path": "targets/sealed.jsonl", "sha256": hashlib.sha256(r1_sealed).hexdigest(), "size": len(r1_sealed)},
+        }}).encode("utf-8"))
+
+        dense_path = "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/activation-dense.bin"
+        dense_bytes = b"synthetic-dense-asset"
+        write("results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json", json.dumps({
+            "activation_dense": {
+                "path": dense_path,
+                "bytes": len(dense_bytes),
+                "sha256": hashlib.sha256(dense_bytes).hexdigest(),
+            },
+        }).encode("utf-8"))
+
+        for relative, data in {
+            "experiments/a0-automated-weak-proxy/protocol.json": b"synthetic a0 protocol",
+            "data/a0/cases.jsonl": b"synthetic a0 case\n",
+            "results/a0/calibration/freeze-manifest.json": b"synthetic a0 calibration manifest",
+            "results/a0/a0-v1.0.3-e93a9faa/publication-manifest.json": b"synthetic a0 publication manifest",
+            "experiments/a0r1-independent-proxy/protocol.json": b"synthetic r1 protocol",
+            "data/a0r1/cases.jsonl": b"synthetic r1 case\n",
+            "results/a0r1/freeze/freeze-manifest.json": b"synthetic r1 freeze manifest",
+        }.items():
+            write(relative, data)
+
+    def _assert_canonical_tree_avoids_protected_inputs(
+        self,
+        leg: str,
+        calibration_path: str,
+        sealed_path: str,
+    ) -> None:
+        self._prepare_synthetic_canonical_tree_sources()
+        protected_paths = (
+            "data/a0/procedural-targets/calibration-targets.jsonl",
+            "data/a0/sealed-targets/targets.jsonl",
+            "data/a0r1/targets/calibration.jsonl",
+            "data/a0r1/targets/sealed.jsonl",
+        )
+        with self._record_protected_filesystem_access(protected_paths) as accesses:
+            roots, declarations, provenance, external_assets = a0x_freeze._canonical_tree_inputs(self.root, leg)
+            tree = build_protected_tree(
+                self.root,
+                roots=roots,
+                external_assets=external_assets,
+                sealed_target_declarations=declarations,
+                provenance_manifests=provenance,
+            )
+
+        self.assertEqual([], accesses)
+        self.assertNotIn(Path(calibration_path), roots)
+        self.assertNotIn(calibration_path, provenance)
+        entries = {entry["path"]: entry for entry in tree["entries"]}
+        self.assertNotIn(calibration_path, entries)
+        self.assertEqual("sealed_target", entries[sealed_path]["entry_kind"])
+        self.assertEqual("declaration_only", entries[sealed_path]["verification_phase"])
+
+    def test_a0_canonical_tree_does_not_access_deferred_protected_inputs(self) -> None:
+        self._assert_canonical_tree_avoids_protected_inputs(
+            "a0",
+            "data/a0/procedural-targets/calibration-targets.jsonl",
+            "data/a0/sealed-targets/targets.jsonl",
+        )
+
+    def test_r1_canonical_tree_does_not_access_deferred_protected_inputs(self) -> None:
+        self._assert_canonical_tree_avoids_protected_inputs(
+            "r1",
+            "data/a0r1/targets/calibration.jsonl",
+            "data/a0r1/targets/sealed.jsonl",
+        )
+
+    def test_protected_tree_rejects_roots_overlapping_deferred_inputs(self) -> None:
+        self._prepare_synthetic_canonical_tree_sources()
+        protected_paths = (
+            "data/a0/procedural-targets/calibration-targets.jsonl",
+            "data/a0/sealed-targets/targets.jsonl",
+            "data/a0r1/targets/calibration.jsonl",
+            "data/a0r1/targets/sealed.jsonl",
+        )
+        overlapping_roots = (
+            Path("."),
+            Path("data"),
+            Path("data/a0"),
+            Path("data/a0r1"),
+            *(Path(path) for path in protected_paths),
+            *(Path(f"{path}/child") for path in protected_paths),
+        )
+
+        for root in overlapping_roots:
+            with self.subTest(root=root.as_posix()):
+                with self._record_protected_filesystem_access(protected_paths) as accesses:
+                    with self.assertRaises(A0XFreezeError):
+                        build_protected_tree(self.root, roots=(root,), external_assets=())
+                self.assertEqual([], accesses)
 
     def test_protected_tree_requires_explicit_external_assets(self) -> None:
         external = self.root / "external.bin"

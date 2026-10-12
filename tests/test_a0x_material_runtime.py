@@ -215,6 +215,19 @@ class A0XMaterialRuntimeTests(unittest.TestCase):
         )
         self.assertNotIn("reader_construction", events)
 
+    def test_deadline_then_cleanup_failure_preserves_first_outcome_but_never_completes(self):
+        for failed_cleanup in ("protected_tree_postflight", "model_release"):
+            with self.subTest(stage=failed_cleanup):
+                events=[]
+                result=self._run(pair=self._pair(), dependencies=self._dependencies(events,fail=failed_cleanup),
+                    clock=_Clock(0.0,*([0.0]*20),3300.0))
+                self.assertEqual("post_terminal_failure",result["lifecycle_status"])
+                self.assertEqual("non_interpretable",result["terminal_outcome"]["status"])
+                self.assertEqual("InternalDeadlineExceeded",result["terminal_outcome"]["error_type"])
+                self.assertEqual(failed_cleanup,result["post_terminal_failure"]["stage"])
+                self.assertEqual(1,events.count("model_release"))
+
+
     def test_deadline_after_reader_reservation_seals_real_preanalysis_terminal(self) -> None:
         """An empty reservation is not a completed target-read receipt."""
         from latent_triz.a0x_execution import seal_terminal_attempt

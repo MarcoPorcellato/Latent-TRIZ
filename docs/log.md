@@ -6,6 +6,22 @@ status: canonical
 last_verified: 2026-08-29
 ---
 
+## 2026-09-25 — A0X public-closure contract (local, unpublished)
+
+- Added a target-free contract for public/private artifact roles, exact
+  pre-execution and terminal/postflight bindings, and fail-closed enforcement
+  across parent, child, and production verification. Hashes are documented as
+  integrity/consistency evidence, not proof of consent or runtime truth.
+- Focused validation passed 186/186; broad target-free A0X validation passed
+  706 tests with 1 skipped. Sol returned `PASS_WITH_NOTES`; Astra allowed this
+  preparatory slice with conditions but rejected production-bound regeneration
+  until behavioral refusal-before-dispatch tests are added and separately
+  authorized.
+- This is a local candidate, not a public-main update or scientific result.
+  No freezes/dossiers were regenerated and no material or remote action ran.
+  The restart checkpoint with the exact local anchor and continuation
+  boundary is retained privately; it is not part of the public documentation.
+
 ## 2026-08-29 — A0X Matrix V2 policy bootstrap
 
 - **Problem:** PR #105 was qualified locally with the explicit

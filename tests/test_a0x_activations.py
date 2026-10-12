@@ -95,6 +95,21 @@ class A0XActivationTests(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         self.tmp_path = Path(self._temporary_directory.name)
 
+    def test_v4_commitment_chain_survives_real_activation_receipt_and_occupancy_validation(self):
+        from latent_triz.a0x_a0_activations import extract_a0x_a0
+        from latent_triz.a0x_contract import VERTICAL_EXECUTION_AUTHORIZATION_PROFILE
+
+        pair = pair_binding(Leg.A0, hidden_width=2)
+        chain = authorization_chain_for(pair)
+        chain["authorization_commitment"]["profile"] = VERTICAL_EXECUTION_AUTHORIZATION_PROFILE
+        artifacts = extract_a0x_a0(adapter=synthetic_hidden_adapter(layers=8, width=2),
+            cases=public_cases(), selection=selection_manifest(), pair_binding=pair,
+            authorization_chain=chain, output_dir=self.tmp_path / "v4-chain",
+            created_at="2026-10-12T00:00:00Z")
+        self.assertEqual(chain, artifacts.receipt["authorization_chain"])
+        self.assertEqual(chain, artifacts.receipt["activation_stage_occupancy"]["authorization_chain"])
+        self.assertEqual(0, artifacts.receipt["activation_target_content_reads"])
+
     def tearDown(self) -> None:
         self._temporary_directory.cleanup()
 

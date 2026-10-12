@@ -30,6 +30,26 @@ This document is a versioned future-facing specification. Historical receipts,
 frozen packages, dossiers, and prior reports retain their existing bytes,
 identities, and meanings. They are evidence, not mutable configuration.
 
+## Implementation checkpoint — 2026-09-25
+
+The target-free public-closure implementation is present in the local isolated
+candidate recorded in the [A0X campaign ledger](A0X_SIX_MODEL_CAMPAIGN.md) and
+[restart checkpoint](A0X_PUBLIC_CLOSURE_RESTART_2026-09-25.md).
+It adds versioned public/private roles, exact public dossier/specification
+bindings, distinct pre-execution and terminal/postflight bindings, enforcement
+at parent, child, and production-verifier boundaries, production rejection of
+the synthetic experimental profile, and closed schema projections.
+
+The target-free tranche passed 186 focused tests and a broad 706-test A0X
+suite (1 skipped), plus synthetic contract and diff checks. Sol returned
+`PASS_WITH_NOTES` for architecture and security; Astra returned
+`GO_WITH_CONDITIONS` for accepting this preparatory tranche but `NO-GO` for
+production-bound regeneration/material work. The remaining review condition
+is a behavioral test proving absent/mutated closure evidence is rejected
+before runner invocation and child dispatch. No generated freeze/dossier was
+refreshed, and this local result is not a production qualification or public
+GitHub update. Hashes prove integrity/consistency, not consent or truth.
+
 ## Authority, evidence, and limits
 
 ### Verified facts

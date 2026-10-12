@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-public-closure-experimental-v1.schema.json",
+  "title": "A0X experimental synthetic-only public evidence closure manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_class", "profile", "synthetic_only", "source", "pair_binding", "authorization_id", "attempt_id", "p0_package_commitment_sha256", "post_execution_bindings", "roles"],
+  "properties": {
+    "artifact_class": {"const": "a0x-experimental-public-evidence-closure"},
+    "profile": {"const": "a0x-public-evidence-closure-experimental-v1"},
+    "synthetic_only": {"const": true},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "tree"],
+      "properties": {
+        "head": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "tree": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
+      }
+    },
+    "pair_binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["leg", "model_key", "model_id", "revision"],
+      "properties": {
+        "leg": {"const": "a0"},
+        "model_key": {"const": "synthetic_model"},
+        "model_id": {"const": "synthetic/model"},
+        "revision": {"const": "3333333333333333333333333333333333333333"}
+      }
+    },
+    "authorization_id": {"type": "string", "pattern": "^synthetic-[a-z0-9][a-z0-9-]{0,62}$"},
+    "attempt_id": {"type": "string", "pattern": "^synthetic-[a-z0-9][a-z0-9-]{0,62}$"},
+    "p0_package_commitment_sha256": {"$ref": "#/$defs/sha256"},
+    "post_execution_bindings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["authorization_extension_sha256", "terminal_projection_sha256", "terminal_private_raw_sha256", "outer_postflight_projection_sha256", "outer_postflight_private_raw_sha256"],
+      "properties": {
+        "authorization_extension_sha256": {"$ref": "#/$defs/sha256"},
+        "terminal_projection_sha256": {"$ref": "#/$defs/sha256"},
+        "terminal_private_raw_sha256": {"$ref": "#/$defs/sha256"},
+        "outer_postflight_projection_sha256": {"$ref": "#/$defs/sha256"},
+        "outer_postflight_private_raw_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "roles": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/role"}
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "bytes", "raw_sha256"],
+      "properties": {
+        "role": {"enum": [
+          "p0_commitment", "p0_protocol", "p0_implementation", "p0_freeze", "p0_slice_manifest",
+          "p0_dossier_projection", "public_execution_spec", "authorization_extension",
+          "gate_a_evidence", "gate_a_attestation_bundle", "gate_a_trusted_root", "gate_a_transport",
+          "gate_b_authorization_projection", "gate_b_readiness_projection", "terminal_projection",
+          "outer_postflight_projection"
+        ]},
+        "path": {"enum": [
+          "p0/commitment.json", "p0/protocol.json", "p0/implementation.json", "p0/freeze.json",
+          "p0/slice-manifest.json", "p0/dossier-projection.json", "execution/public-spec.json",
+          "authorization/extension-v1.json", "gate-a/evidence.json", "gate-a/attestation.bundle.jsonl",
+          "gate-a/trusted-root.jsonl", "gate-a/transport.json", "gate-b/authorization-projection.json",
+          "gate-b/readiness-projection.json", "terminal/terminal-projection.json",
+          "terminal/outer-postflight-projection.json"
+        ]},
+        "bytes": {"type": "integer", "minimum": 1},
+        "raw_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

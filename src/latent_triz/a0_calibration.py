@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .a0_power import calibrate_a0_power
-from .a0_shortcuts import audit_a0_shortcuts
+from .a0_shortcuts import (
+    audit_a0_shortcuts, _validate_prospective_selection, bind_production_mechanics,
+    production_mechanics_recipe, _audit_prospective_records, _validate_prospective_controls,
+)
 
 
 class A0CalibrationError(RuntimeError):
@@ -50,11 +53,74 @@ def _verify_file(corpus_root: Path, entry: Mapping[str, Any], label: str) -> Pat
     return path
 
 
+def run_production_shortcut_calibration(
+    protocol_path: str | Path, cases_path: str | Path, targets_path: str | Path,
+    recipe: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Execute the approved prospective controls without recalibrating primary analysis.
+
+    The production caller owns material authorization and input hash checks.
+    Recipe and public metadata are admitted before calibration targets are read.
+    Derived hashes prove integrity only, never human consent or independent review.
+    The frozen primary power, sample size, permutations and stopping rules remain
+    unchanged; an adverse shortcut remains adverse rather than a literal PASS.
+    """
+    if not isinstance(recipe, Mapping) or _stable(recipe) != _stable(production_mechanics_recipe()):
+        raise A0CalibrationError("production mechanical recipe differs")
+    protocol = _load_object(Path(protocol_path), "frozen production protocol")
+    if (
+        protocol.get("protocol_id") != recipe["protocol_id"]
+        or protocol.get("protocol_status") != "frozen"
+        or set(protocol.get("target_families", ())) != set(recipe["classes"])
+        or set(protocol.get("neutral_domains", ())) != set(recipe["domains"])
+        or protocol.get("calibration_families_per_domain") != 8
+    ):
+        raise A0CalibrationError("frozen production protocol does not bind the mechanical recipe")
+    frozen = protocol.get("frozen_analysis", {})
+    for key, expected in (("selected_families_per_domain", 4), ("selected_family_count", 24),
+                          ("selected_permutation_budget", 199), ("critical_successes", 19),
+                          ("max_statistic_multiplicity", 12)):
+        if frozen.get(key) != expected:
+            raise A0CalibrationError("frozen primary analysis changed")
+    configuration = protocol.get("shortcut_evaluation", {})
+    _validate_prospective_controls(protocol)
+    if configuration.get("macro_f1_threshold") != 0.65 or configuration.get("margin_over_majority") != 0.10:
+        raise A0CalibrationError("approved prospective sentinel thresholds changed")
+    def rows(path: str | Path) -> list[dict[str, Any]]:
+        return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+    cases = [row for row in rows(cases_path) if row.get("split") == "calibration"]
+    binding = bind_production_mechanics(cases, recipe)
+    from .a0_activation_sites import build_view_texts
+    rendered = []
+    for case in cases:
+        if any(key.startswith("__model_") for key in case):
+            raise A0CalibrationError("public inputs contain reserved rendered-payload fields")
+        views = build_view_texts(case, sentinel_text=recipe["sentinel_text"])
+        rendered.append({**case, **{f"__model_{name}": value for name, value in views.items()}})
+    targets = rows(targets_path)
+    result = _audit_prospective_records(rendered, targets, protocol, binding["evaluation"])
+    result.update({
+        "production_mechanics_profile": recipe["schema"],
+        "production_recipe_sha256": binding["recipe_sha256"],
+        "production_binding_status": "validated_against_source_recipe",
+        "human_consent_verified": False,
+        "primary_analysis_recalibrated": False,
+        "input_hashes": {"protocol": hashlib.sha256(Path(protocol_path).read_bytes()).hexdigest(),
+            "cases": hashlib.sha256(Path(cases_path).read_bytes()).hexdigest(),
+            "targets": hashlib.sha256(Path(targets_path).read_bytes()).hexdigest()},
+    })
+    return result
+
+
 def run_a0_calibration(
     protocol_path: str | Path,
     corpus_dir: str | Path,
     output_dir: str | Path,
+    *,
+    method_selection: Mapping[str, Any] | None = None,
+    mechanical_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _validate_prospective_selection(method_selection, mechanical_evidence)
     protocol_file = Path(protocol_path).resolve()
     corpus_root = Path(corpus_dir).resolve()
     output_root = Path(output_dir).resolve()
@@ -92,7 +158,13 @@ def run_a0_calibration(
     # Deliberately do not open the sealed target file during calibration.
 
     power = calibrate_a0_power(protocol_file)
-    shortcuts = audit_a0_shortcuts(cases_path, calibration_targets_path, protocol_file)
+    if method_selection is None:
+        shortcuts = audit_a0_shortcuts(cases_path, calibration_targets_path, protocol_file)
+    else:
+        shortcuts = audit_a0_shortcuts(
+            cases_path, calibration_targets_path, protocol_file,
+            method_selection=method_selection, mechanical_evidence=mechanical_evidence,
+        )
     if protocol.get("protocol_status") == "frozen":
         frozen = protocol.get("frozen_analysis")
         selected = power.get("selected")
@@ -107,6 +179,8 @@ def run_a0_calibration(
         if any(selected.get(key) != value for key, value in expected_selection.items()):
             raise A0CalibrationError("frozen selection does not match exact recalibration")
     status = "pass" if power["status"] == "pass" and shortcuts["status"] == "pass" else "failed"
+    if method_selection is not None:
+        status = shortcuts["status"] if power["status"] == "pass" else "FAIL"
     summary = {
         "artifact_class": "a0-calibration-summary",
         "protocol_id": protocol["protocol_id"],
@@ -126,6 +200,15 @@ def run_a0_calibration(
             "No model activation or sealed outcome is inspected in this phase.",
         ],
     }
+    if method_selection is not None:
+        summary.update({
+            "method_selection": dict(method_selection),
+            "production_qualified": False,
+            "shortcut_reasons": shortcuts["controls"],
+        })
+        summary["limitations"].append(
+            "Prospective engineering evidence is not an independently qualified production freeze."
+        )
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=str(output_root.parent)) as temporary:
@@ -153,6 +236,12 @@ def run_a0_calibration(
             "claim_ids": [],
             "status": "frozen" if status == "pass" and protocol.get("protocol_status") == "frozen" else "failed",
         }
+        if method_selection is not None:
+            freeze_manifest.update({
+                "status": status,
+                "production_qualified": False,
+                "method_selection": dict(method_selection),
+            })
         (staging / "freeze-manifest.json").write_text(
             _stable(freeze_manifest) + "\n", encoding="utf-8", newline="\n"
         )

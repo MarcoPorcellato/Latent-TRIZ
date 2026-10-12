@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from .a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
     EXECUTION_AUTHORIZATION_PROFILE,
+    VERTICAL_EXECUTION_AUTHORIZATION_PROFILE,
     Commitment,
     Leg,
     LegFreezeBinding,
@@ -54,7 +55,7 @@ def validate_authorization_chain(value: Mapping[str, Any]) -> dict[str, Any]:
         authorization = Commitment.from_mapping(_mapping(value, "authorization_commitment"))
         if dossier.profile != APPROVAL_DOSSIER_PROFILE:
             raise ValueError("dossier commitment profile is invalid")
-        if authorization.profile != EXECUTION_AUTHORIZATION_PROFILE:
+        if authorization.profile not in {EXECUTION_AUTHORIZATION_PROFILE, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE}:
             raise ValueError("authorization commitment profile is invalid")
     except (TypeError, ValueError) as error:
         raise A0XExecutionError("authorization chain is invalid") from error

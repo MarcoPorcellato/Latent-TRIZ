@@ -278,7 +278,7 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
         version = mock.Mock(return_value="commit-ci-preflight 0.1.0")
         expected_ccp = json.loads(
             (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
+        )["vertical_guard"]["sha256"]
         actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
         with mock.patch(
             "latent_triz.a0x_runtime_bundle.sha256_file",
@@ -379,7 +379,7 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
         readiness = mock.Mock(side_effect=AssertionError("readiness reached"))
         expected_ccp = json.loads(
             (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
+        )["vertical_guard"]["sha256"]
         actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
         with (
             mock.patch(
@@ -431,7 +431,7 @@ class A0XVerticalRuntimeBundleTests(unittest.TestCase):
 
         expected_ccp = json.loads(
             (self.root / "experiments/a0x-six-model/material-execution-contract.json").read_text(encoding="utf-8")
-        )["ccp"]["sha256"]
+        )["vertical_guard"]["sha256"]
         actual_hash = __import__("latent_triz.a0x_runtime_bundle", fromlist=["sha256_file"]).sha256_file
         with (
             mock.patch(

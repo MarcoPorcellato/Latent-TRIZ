@@ -11,7 +11,10 @@
             {
               "properties": {
                 "profile": {
-                  "const": "a0x-execution-authorization-json-v2"
+                  "enum": [
+                    "a0x-execution-authorization-json-v2",
+                    "a0x-execution-authorization-json-v4"
+                  ]
                 }
               }
             }

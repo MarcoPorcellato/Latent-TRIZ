@@ -17,6 +17,66 @@ from tests.a0x_test_support import authorization_documents, pair_binding, sha
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class ActiveVerticalGuardTests(unittest.TestCase):
+    def test_vertical_child_rejects_unknown_or_malformed_native_environment(self):
+        from scripts.a0x_vertical_material_child import (
+            A0XVerticalMaterialChildError, _admit_vertical_process_environment, _ENVIRONMENT,
+        )
+        expected = dict(item.split("=", 1) for item in _ENVIRONMENT)
+        self.assertEqual(expected, _admit_vertical_process_environment(expected))
+        for extra in ({"HOME": "/synthetic"}, {"GH_TOKEN": "synthetic"},
+                      {"LC_CTYPE": "unexpected"}, {"__CF_USER_TEXT_ENCODING": "malformed"}):
+            with self.subTest(extra=extra), self.assertRaises(A0XVerticalMaterialChildError):
+                _admit_vertical_process_environment({**expected, **extra})
+
+    def test_vertical_child_envelope_excludes_coordination_and_credentials(self):
+        import os, subprocess, tempfile
+        from latent_triz.a0x_material_contract import _build_guard_argv_template, TimeoutEnvelope
+        resource = {"profile":"a0x-material", "workload_family":"latent-triz-a0x-v1", "executor":"native",
+            "cache_state":"warm", "execution_mode":"native", "target_platform":"macos-arm64", "memory_limit_bytes":8*1024**3}
+        timeout = TimeoutEnvelope.from_mapping({"outer_timeout_seconds":3600,"internal_budget_seconds":3300,
+            "cleanup_margin_seconds":300,"admission_timeout_seconds":300})
+        tokens = _build_guard_argv_template(resource=resource, timeouts=timeout, isolate_child=True)
+        with tempfile.TemporaryDirectory() as temporary:
+            probe = Path(temporary) / "probe.py"
+            probe.write_text("import sys,os,json\nsys.path[:0]="+repr([str(ROOT),str(ROOT/"src")])+"\n"
+                "from scripts.a0x_vertical_material_child import _admit_vertical_process_environment,_validate_environment,_ENVIRONMENT\n"
+                "admitted=_admit_vertical_process_environment(dict(os.environ))\n"
+                "_validate_environment(list(_ENVIRONMENT),admitted)\nprint(json.dumps(admitted,sort_keys=True))\n", encoding="utf-8")
+            argv=[{"{PYTHON}":sys.executable,"{CHILD}":str(probe),"{DESCRIPTOR}":"synthetic"}.get(item,item)
+                for item in tokens[tokens.index("--")+1:]]
+            outer={**os.environ,"HOME":"/synthetic-coordination","PATH":"/synthetic-path","LC_ALL":"C",
+                "GH_TOKEN":"synthetic-secret","HF_TOKEN":"synthetic-secret"}
+            result=subprocess.run(argv,env=outer,capture_output=True,text=True,check=False)
+            self.assertEqual(0,result.returncode,result.stderr)
+            observed=json.loads(result.stdout)
+            self.assertEqual({"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1","HF_DATASETS_OFFLINE":"1",
+                "TOKENIZERS_PARALLELISM":"false","PYTHONNOUSERSITE":"1"},observed)
+
+    def test_current_contract_selects_only_the_installed_guard_producer(self) -> None:
+        import latent_triz.a0x_material_contract as contract_module
+        selector = getattr(contract_module, "active_vertical_guard_identity", None)
+        self.assertTrue(callable(selector), "current vertical guard selector is absent")
+        root = Path(__file__).resolve().parents[1]
+        current = json.loads((root / "experiments/a0x-six-model/material-execution-contract.json").read_bytes())
+        identity = selector(current)
+        self.assertEqual("1015a0b42962dbf18334fd6dfc0d9148551d4984", identity["source_commit"])
+        self.assertEqual("2ebad04d6dc718c7aaa2534d304cde7797460a97", identity["qualified_source_tree"])
+        self.assertEqual("45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2", identity["sha256"])
+        for mutation in ("historical", "producer", "receipt", "config"):
+            changed = copy.deepcopy(current)
+            if mutation == "historical":
+                changed.pop("vertical_guard")
+            elif mutation == "producer":
+                changed["vertical_guard"]["sha256"] = changed["ccp"]["sha256"]
+            elif mutation == "receipt":
+                changed["vertical_guard"]["emits_receipt"] = True
+            else:
+                changed["vertical_guard"]["uses_repository_configuration"] = True
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(A0XContractError, "vertical guard"):
+                selector(changed)
+
+
 class A0XMaterialContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.pair = PairBinding.from_mapping(pair_binding(Leg.A0, "gpt2"))

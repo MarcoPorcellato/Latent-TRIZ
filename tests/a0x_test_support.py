@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
+import copy
+import re
 
 from latent_triz.a0x_contract import (
     APPROVAL_DOSSIER_PROFILE,
@@ -21,6 +23,223 @@ from latent_triz.a0x_contract import (
 
 def sha(value: int) -> str:
     return f"{value:064x}"[-64:]
+
+
+def synthetic_schema_object(schema: dict, *, document: dict | None = None):
+    """Construct test values from public schema constraints, never receipt bytes.
+
+    This deliberately small fixture constructor supports the local contract
+    schemas used by historical boundary tests. Unsupported patterns fail instead
+    of consulting a protected instance. Callers supply cross-field bindings.
+    """
+    document = schema if document is None else document
+    if "$ref" in schema:
+        reference = schema["$ref"]
+        if not reference.startswith("#/"):
+            raise ValueError("synthetic fixture refuses external schema references")
+        target = document
+        for component in reference[2:].split("/"):
+            target = target[component.replace("~1", "/").replace("~0", "~")]
+        siblings = {key: value for key, value in schema.items() if key != "$ref"}
+        merged = {**target, **siblings}
+        if "properties" in siblings:
+            merged["properties"] = {**target.get("properties", {}), **siblings["properties"]}
+        return synthetic_schema_object(merged, document=document)
+    if "const" in schema:
+        return copy.deepcopy(schema["const"])
+    if "enum" in schema:
+        return copy.deepcopy(schema["enum"][0])
+    if "anyOf" in schema or "oneOf" in schema:
+        return synthetic_schema_object(schema.get("anyOf", schema.get("oneOf"))[0], document=document)
+    kind = schema.get("type")
+    if isinstance(kind, list):
+        kind = next((item for item in kind if item != "null"), "null")
+    if kind == "object" or "properties" in schema:
+        properties = schema.get("properties", {})
+        return {name: synthetic_schema_object(properties[name], document=document)
+                for name in schema.get("required", properties)}
+    if kind == "array":
+        count = schema.get("minItems", 0)
+        items = schema.get("items", {})
+        if schema.get("uniqueItems") and "enum" in items:
+            return copy.deepcopy(items["enum"][:count])
+        return [synthetic_schema_object(items, document=document) for _ in range(count)]
+    if kind in {"integer", "number"}:
+        return schema.get("minimum", schema.get("exclusiveMinimum", 0) + 1)
+    if kind == "boolean":
+        return False
+    if kind == "null":
+        return None
+    pattern = schema.get("pattern", "")
+    if pattern:
+        hexadecimal = re.fullmatch(r"\^\[(?:a-f0-9|0-9a-f)\]\{(\d+)\}\$", pattern)
+        if hexadecimal:
+            return "a" * int(hexadecimal.group(1))
+        if pattern.startswith("^artifacts/models/"):
+            return "artifacts/models/synthetic"
+        if re.fullmatch(r"\^[\d-]+\$", pattern):
+            return pattern[1:-1]
+        if re.search(pattern, "synthetic"):
+            return "synthetic"
+        raise ValueError(f"unsupported synthetic fixture pattern: {pattern}")
+    if schema.get("format") == "date-time":
+        return "2026-01-01T00:00:00Z"
+    if schema.get("format") == "date":
+        return "2026-01-01"
+    return "s" * max(schema.get("minLength", 1), 9)
+
+
+def synthetic_a0_source(root: Path, *, seed: int = 314159) -> Path:
+    """Generate an independent temporary source corpus; no repository targets."""
+    from latent_triz.a0_corpus import generate_a0_corpus
+
+    repository = Path(__file__).resolve().parents[1]
+    protocol = json.loads((repository / "experiments/a0-automated-weak-proxy/protocol.json").read_text())
+    protocol["protocol_id"] = "independent-engineering-source"
+    protocol["protocol_status"] = "draft"
+    protocol["seed"] = seed
+    protocol_path = root / "synthetic-source-protocol.json"
+    protocol_path.parent.mkdir(parents=True, exist_ok=True)
+    protocol_path.write_text(json.dumps(protocol, sort_keys=True), encoding="utf-8")
+    corpus = root / "data/a0"
+    generate_a0_corpus(protocol_path, corpus, seed=seed)
+    return corpus
+
+
+def synthetic_acquisition_authorization(*, next_models: bool = False) -> dict:
+    """Public schema/spec projection, not a record of actual operator consent."""
+    from latent_triz.exp001_additional_acquisition import MODEL_SPECS
+
+    repository = Path(__file__).resolve().parents[1]
+    schema_name = "exp001-next-model-authorization" if next_models else "exp001-additional-model-authorization"
+    schema = json.loads((repository / f"schemas/{schema_name}.schema.json").read_text())
+    result = synthetic_schema_object(schema)
+    result["status"] = "authorized"
+    result["operator_approval"]["granted"] = True
+    result["operator_approval"]["approved_at"] = "2026-08-19"
+    result["operator_approval"]["approval_text_sha256"] = (
+        "2f70403f386c1a573ae4cc133f25d4612af8b58f6c1c0fe285b30a4d7e5df5a1" if next_models else "a" * 64
+    )
+    models = ("EleutherAI/gpt-neo-125m", "Qwen/Qwen2.5-0.5B") if next_models else (
+        "openai-community/gpt2", "HuggingFaceTB/SmolLM2-135M")
+    result["candidates"] = []
+    for index, model_id in enumerate(models):
+        spec = MODEL_SPECS[model_id]
+        candidate = synthetic_schema_object(schema["$defs"]["candidate"], document=schema)
+        candidate.update(model_id=model_id, revision=spec.revision, license_id=spec.license_id,
+                         runtime_root=spec.root_locator, disk_budget_bytes=spec.disk_budget_bytes,
+                         runtime_files=[{"path": name, "size_bytes": size} for name, size in spec.files])
+        candidate["permissions"] = {key: True for key in candidate["permissions"]}
+        if next_models:
+            candidate["role"] = ("architecture_family_control", "provider_scale_control")[index]
+            candidate["declared_total_bytes"] = spec.total_declared_bytes
+            candidate["source_tree_metadata_sha256"] = (
+                "d1ccf3ef0d557671bddcc36d212b4d911bc1acdb3f80d54847270b316dd3692b",
+                "ef8a4ae0108fc7582ce1104466c49dc37d1fa057dc854a01d0e1342f76b6efab",
+            )[index]
+            for file in candidate["runtime_files"]:
+                file["source_oid"] = "a" * 40
+        result["candidates"].append(candidate)
+    return result
+
+
+def copy_public_contract_inputs(root: Path, relative_paths: tuple[str, ...], *, replacements: dict | None = None) -> Path:
+    """Copy only declared public contracts; sensitive instances need synthetic replacements."""
+    repository = Path(__file__).resolve().parents[1]
+    manifest = json.loads((repository / "docs/qualification/a0x-target-free-schema-profile-v1-manifest.json").read_text())
+    dispositions = manifest["instance_dispositions"]
+    protected = set(dispositions["excluded_sensitive_role_unverified"])
+    protected.update(item[0] for item in dispositions["deferred_protected"])
+    replacements = {} if replacements is None else replacements
+    for relative in relative_paths:
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or relative in protected and relative not in replacements:
+            raise AssertionError(f"fixture input is not public: {relative}")
+    for relative in relative_paths:
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if relative in replacements:
+            target.write_text(json.dumps(replacements[relative], sort_keys=True) + "\n", encoding="utf-8")
+        else:
+            target.write_bytes((repository / relative).read_bytes())
+    return root
+
+
+def synthetic_comparative_root(root: Path) -> Path:
+    """The comparative consumer's fixed public closure and a fake consent fixture."""
+    experiment = "experiments/exp001-comparative-reference/"
+    authorization = {
+        "status": "authorized", "operator_approval": {"granted": True},
+        "permissions_requested": {
+            "download_qwen_runtime_files_only": True, "load_existing_pythia_once": True,
+            "load_existing_smollm2_once": True, "load_qwen_once_after_integrity": True,
+            "sealed_target_read": "exactly_one_per_model_at_analysis_boundary",
+        },
+    }
+    paths = tuple(experiment + name for name in (
+        "model-registry.json", "protocol.json", "analysis-plan.json",
+        "qwen-acquisition-dossier.json", "execution-authorization.json"))
+    copy_public_contract_inputs(root, paths, replacements={experiment + "execution-authorization.json": authorization})
+    return root
+
+
+def synthetic_next_model_root(root: Path) -> Path:
+    experiment = "experiments/exp001-comparative-reference/"
+    paths = tuple(experiment + name for name in ("next-model-selection.json", "next-model-authorization.json", "protocol.json"))
+    return copy_public_contract_inputs(root, paths, replacements={
+        experiment + "next-model-authorization.json": synthetic_acquisition_authorization(next_models=True),
+    })
+
+
+def synthetic_r3_root(root: Path) -> Path:
+    """Copy the R3 public fixture closure, not the repository or private inputs."""
+    from latent_triz.exp001_r3_contract import _HASHES, _FIXTURES, _SCHEMAS
+    from latent_triz.exp001_r3_implementation import CODE_PATHS, RECEIPT_PATHS, build_implementation_binding
+
+    experiment = "experiments/exp001-reference-integrated/"
+    paths = set(_HASHES) | set(CODE_PATHS) | set(RECEIPT_PATHS)
+    paths.add(experiment + "protocol.json")
+    paths.update(experiment + relative for relative in _FIXTURES.values())
+    paths.update("schemas/" + name for name in _SCHEMAS.values())
+    paths.update(("schemas/exp001-r3-implementation.schema.json", "schemas/exp001-r3-freeze-manifest.schema.json"))
+    paths.update("schemas/" + name for name in (
+        "exp001-r3-protocol.schema.json", "exp001-r3-statistical-result.schema.json",
+        "exp001-r3-execution-receipt.schema.json", "exp001-r3-response-index.schema.json",
+        "exp001-r3-publication-manifest.schema.json", "exp001-r3-run-failure.schema.json",
+    ))
+    copy_public_contract_inputs(root, tuple(sorted(paths)))
+    binding = root / (experiment + "implementation.json")
+    binding.write_text(json.dumps(build_implementation_binding(root), sort_keys=True) + "\n", encoding="utf-8")
+    return root
+
+
+def synthetic_auto_contract_root(root: Path) -> Path:
+    """The AUTO checker reads an independently constructed empty key template."""
+    repository = Path(__file__).resolve().parents[1]
+    manifest = json.loads((repository / "experiments/exp002-auto/input-manifest.json").read_text())
+    paths = set(manifest["input_bindings"])
+    paths.update("experiments/exp002-auto/" + name for name in (
+        "protocol.json", "schedule.json", "input-manifest.json", "approval-dossier.json"))
+    paths.update("results/exp002-auto/preexecution/" + name for name in (
+        "execution-receipt-template.json", "publication-manifest.json"))
+    paths.update("schemas/" + name for name in (
+        "exp002-auto-protocol.schema.json", "exp002-auto-public-record.schema.json",
+        "exp002-auto-combined-target-key.schema.json", "exp002-auto-schedule.schema.json",
+        "exp002-auto-approval-dossier.schema.json", "exp002-auto-execution-receipt.schema.json",
+        "exp002-auto-publication-manifest.schema.json"))
+    paths.update("src/latent_triz/" + name + ".py" for name in (
+        "exp002_auto_contract", "exp002_auto_fixtures", "exp002_auto_schedule",
+        "exp002_auto_execution", "exp002_auto_stage_gate", "exp002_auto_analysis",
+        "exp002_auto_report", "exp002_auto_material"))
+    paths.add("scripts/exp002_auto_contract_check.py")
+    copy_public_contract_inputs(root, tuple(sorted(paths)))
+    template = root / "experiments/exp002-auto/combined-target-key-template.json"
+    template.write_text(json.dumps({
+        "artifact_class": "exp002-auto-combined-target-key", "protocol_id": "exp002-auto-v1.0.0",
+        "status": "not_ready", "record_count": 226, "records": [],
+        "sealed_target_accessed": False, "claim_ids": [],
+    }, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    return root
 
 
 def qualification_receipt(source_head: str, *, generation: int = 1, version: str = "commit-ci-preflight 0.1.0") -> bytes:
@@ -564,7 +783,7 @@ def artifact(name: str) -> dict[str, object]:
                 "location_roles": {"repository_root": "repository_root", "managed_cache_root": "managed_cache_root"},
                 "matrix_plan_binding": {"plan_output_sha256": "0969a1eeb62b2a92593cda0b75c8814d7eca893bebc736ec968f02aa9f2a5fad", "outer_digest": "sha256:8eb0172c30aac8f9b47f65cebd222ee6615b17e4053a5a16e2be5583f3a10331", "python311_digest": "sha256:aa69a8795e20733a516fac99b253cfc26a9f963825ff1fa9ca5638364f7fc943", "python312_digest": "sha256:072e50972a02f2df710bf81620ca058d230f0637bcc16a47ba35562fe1358510"},
             },
-            "gate_a": {"provider": "github-hosted-attestation-v1", "workflow_path": ".github/workflows/a0x-hosted-gate-a.yml", "event": "push", "ref": "refs/heads/main", "required_lanes": ["a0x-no-model", "a0x-synthetic", "documentation-audit", "repository-python311", "repository-python312", "schema-cross-validation-python311", "schema-cross-validation-python312"], "size_ceilings_bytes": {"manifest": 32768, "attestation_bundle": 1048576, "trusted_root": 2097152, "transport": 16384}, "verifier": {"role": "github_cli_verifier", "version": "gh version 2.97.0 (2026-07-31)", "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c", "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4"}, "predicate_type": "https://slsa.dev/provenance/v1", "cert_oidc_issuer": "https://token.actions.githubusercontent.com", "deny_self_hosted_runners": True, "require_verified_timestamp": True, "workflow_raw_sha256": "e61045e9592237aadb6057ca752061855135109fd9e5bbdf508e55c706ab1458", "requirements_schema_lock_raw_sha256": "0bbafebbe4fdb6028f5e8565eae397d18d6ace90e7e5e2c5b9472aa924162be7", "action_manifest_raw_sha256": "f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd", "lane_manifest_raw_sha256": "4a6754e77e4a440d9e1af03d16017272e194bc6953cec16dd9473aa0b5929a97"},
+            "gate_a": {"provider": "github-hosted-attestation-v1", "workflow_path": ".github/workflows/a0x-hosted-gate-a.yml", "event": "push", "ref": "refs/heads/main", "required_lanes": ["a0x-no-model", "a0x-synthetic", "documentation-audit", "repository-python311", "repository-python312", "schema-cross-validation-python311", "schema-cross-validation-python312"], "size_ceilings_bytes": {"manifest": 32768, "attestation_bundle": 1048576, "trusted_root": 2097152, "transport": 16384}, "verifier": {"role": "github_cli_verifier", "version": "gh version 2.97.0 (2026-07-31)", "sha256": "6a2ab5fa89553eac1f0df50a26a5eaeea9a665d8971f5a51b32487b72c708f5c", "policy_raw_sha256": "e2e11f6bec9740d7e2025eae80fe87fa29d79436faa3a2c5c1ca7d55ceb9e4b4"}, "predicate_type": "https://slsa.dev/provenance/v1", "cert_oidc_issuer": "https://token.actions.githubusercontent.com", "deny_self_hosted_runners": True, "require_verified_timestamp": True, "workflow_raw_sha256": "76800cbdcf5db80b4f025c254de8936b4ceef8842702807ae426f03c0363d079", "requirements_schema_lock_raw_sha256": "0bbafebbe4fdb6028f5e8565eae397d18d6ace90e7e5e2c5b9472aa924162be7", "action_manifest_raw_sha256": "f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd", "lane_manifest_raw_sha256": "4a6754e77e4a440d9e1af03d16017272e194bc6953cec16dd9473aa0b5929a97"},
             "offline": {"network": False, "generation": False, "local_cpu_float32": True},
             "max_run_count": 1,
             "stop_boundaries": ["before_model_load", "after_first_terminal_outcome", "after_one_sealed_target_read"],

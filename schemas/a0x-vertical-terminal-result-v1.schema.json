@@ -1,0 +1,294 @@
+{
+  "$defs": {
+    "package_digests": {
+      "additionalProperties": false,
+      "properties": {
+        "commitment_raw_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "dossier_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "package_commitment_sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "required": [
+        "commitment_raw_sha256",
+        "package_commitment_sha256",
+        "dossier_sha256"
+      ],
+      "type": "object"
+    },
+    "pair_binding": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_profile": {
+          "const": "a0x-pair-scope-v2"
+        },
+        "dense_bound": {
+          "additionalProperties": false,
+          "properties": {
+            "atomic_dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "cap_bytes": {
+              "enum": [
+                33554432,
+                4194304
+              ]
+            },
+            "cases": {
+              "const": 48,
+              "type": "integer"
+            },
+            "dense_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "dense_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "endpoint_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "hidden_width": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "index_copy_count": {
+              "const": 2,
+              "type": "integer"
+            },
+            "index_reservation_bytes": {
+              "enum": [
+                6291456,
+                1048576
+              ]
+            },
+            "leg": {
+              "enum": [
+                "a0",
+                "r1"
+              ]
+            },
+            "payload_allowance_bytes": {
+              "enum": [
+                2097152,
+                524288
+              ]
+            },
+            "scalar_bytes": {
+              "const": 4,
+              "type": "integer"
+            },
+            "total_bytes": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "vector_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "view_site_count": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "leg",
+            "cases",
+            "view_site_count",
+            "endpoint_count",
+            "hidden_width",
+            "scalar_bytes",
+            "vector_count",
+            "dense_bytes",
+            "dense_copy_count",
+            "atomic_dense_bytes",
+            "index_copy_count",
+            "index_reservation_bytes",
+            "payload_allowance_bytes",
+            "total_bytes",
+            "cap_bytes"
+          ],
+          "type": "object"
+        },
+        "leg": {
+          "enum": [
+            "a0",
+            "r1"
+          ]
+        },
+        "leg_freeze_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_key": {
+          "enum": [
+            "gpt2",
+            "gpt_neo_125m",
+            "qwen2_5_0_5b",
+            "qwen3_0_6b_base",
+            "smollm2_135m",
+            "smollm2_360m"
+          ]
+        },
+        "output_path": {
+          "pattern": "^results/a0x/(?:a0|r1)/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[a-f0-9]{40}$",
+          "type": "string"
+        },
+        "run_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding_profile",
+        "dense_bound",
+        "leg",
+        "leg_freeze_sha256",
+        "model_id",
+        "model_key",
+        "output_path",
+        "revision",
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "sha": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "head": {
+          "pattern": "^[a-f0-9]{40}$",
+          "type": "string"
+        },
+        "ref": {
+          "const": "refs/heads/main"
+        },
+        "tree": {
+          "pattern": "^[a-f0-9]{40}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "head",
+        "tree",
+        "ref"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/MarcoPorcellato/Latent-TRIZ/schemas/a0x-vertical-terminal-result-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_class": {
+      "const": "a0x-vertical-terminal-result"
+    },
+    "attempt_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "authorization_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "claim_ids": {
+      "maxItems": 0,
+      "type": "array"
+    },
+    "evidence_eligible": {
+      "const": false
+    },
+    "expert_validated": {
+      "const": false
+    },
+    "pair_binding": {
+      "$ref": "#/$defs/pair_binding"
+    },
+    "qualification_context": {
+      "enum": [
+        "production",
+        "synthetic-target-free",
+        "engineering_rehearsal"
+      ]
+    },
+    "qualified_source": {
+      "$ref": "#/$defs/source"
+    },
+    "reached_frontier": {
+      "enum": [
+        "validated_graph",
+        "sealed"
+      ]
+    },
+    "result_payload": {
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_code": {
+          "enum": [
+            "SYNTHETIC_FIXTURE",
+            "MODEL_INCOMPATIBLE",
+            "PREFLIGHT_FAILED",
+            "TARGET_READ_FAILED",
+            "ANALYSIS_FAILED",
+            "CLEANUP_UNCERTAIN",
+            "OUTER_EXECUTION_FAILED"
+          ]
+        },
+        "statistical_result_sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      },
+      "type": "object"
+    },
+    "scientific_outcome": {
+      "enum": [
+        "positive",
+        "null",
+        "non_interpretable",
+        "incompatible",
+        "failed"
+      ]
+    },
+    "terminal_profile": {
+      "const": "a0x-vertical-terminal-result-v1"
+    },
+    "vertical_package_digests": {
+      "$ref": "#/$defs/package_digests"
+    }
+  },
+  "required": [
+    "artifact_class",
+    "terminal_profile",
+    "qualified_source",
+    "pair_binding",
+    "vertical_package_digests",
+    "qualification_context",
+    "authorization_id",
+    "attempt_id",
+    "reached_frontier",
+    "scientific_outcome",
+    "evidence_eligible",
+    "expert_validated",
+    "claim_ids",
+    "result_payload"
+  ],
+  "type": "object"
+}

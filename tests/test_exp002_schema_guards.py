@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from tests.a0x_test_support import synthetic_schema_object
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +19,8 @@ class Exp002SchemaGuardTests(unittest.TestCase):
         self.transfer_schema = json.loads((ROOT / "schemas/exp002-transfer-corpus.schema.json").read_text(encoding="utf-8"))
         self.transfer_template = json.loads((ROOT / "experiments/exp002-qwen3-followup/transfer-corpus-template.json").read_text(encoding="utf-8"))
         self.target_schema = json.loads((ROOT / "schemas/exp002-transfer-target-key.schema.json").read_text(encoding="utf-8"))
-        self.target_template = json.loads((ROOT / "experiments/exp002-qwen3-followup/transfer-target-key-template.json").read_text(encoding="utf-8"))
+        self.target_template = synthetic_schema_object(self.target_schema)
+        self.target_template["target_content_sha256"] = None
         self.dossier_schema = json.loads((ROOT / "schemas/exp002-study-approval-dossier.schema.json").read_text(encoding="utf-8"))
         self.dossier = json.loads((ROOT / "experiments/exp002-qwen3-followup/exp002b-approval-dossier.json").read_text(encoding="utf-8"))
 

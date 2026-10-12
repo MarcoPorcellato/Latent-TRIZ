@@ -9,6 +9,10 @@ __pycache__/
 .a0x-runtime/
 .gitnexus/
 
+# Pair-scoped pre-execution closure is staged locally after Gate B and must not
+# alter the exact source checkout consumed by Gate C. Publish deliberately later.
+/experiments/a0x-six-model/vertical-slices/*/*/*/public-closure/v1/
+
 # Notebooks and local experiment output
 .ipynb_checkpoints/
 artifacts/

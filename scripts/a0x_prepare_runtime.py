@@ -160,12 +160,14 @@ def main(
 
     try:
         if isinstance(request, VerticalRuntimePreparationRequest):
-            operation = preflight_vertical_runtime_bundle if arguments.preflight else prepare_vertical_runtime_bundle
-            receipt = operation(
-                repository, request, source_state_probe=vertical_source_state_probe,
-                ccp_version_probe=ccp_version_probe, runtime_readiness_probe=runtime_readiness_probe,
-                gate_a_verifier=default_gate_a_verifier if gate_a_verifier is None else gate_a_verifier,
-            )
+            if arguments.preflight:
+                receipt = preflight_vertical_runtime_bundle(
+                    repository, request, source_state_probe=vertical_source_state_probe,
+                    ccp_version_probe=ccp_version_probe, runtime_readiness_probe=runtime_readiness_probe,
+                    gate_a_verifier=default_gate_a_verifier if gate_a_verifier is None else gate_a_verifier,
+                )
+            else:
+                receipt = prepare_vertical_runtime_bundle(repository, request)
         else:
             operation = preflight_runtime_bundle if arguments.preflight else prepare_runtime_bundle
             receipt = operation(

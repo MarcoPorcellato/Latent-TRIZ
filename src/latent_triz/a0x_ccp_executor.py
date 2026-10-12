@@ -14,13 +14,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import stat
 import subprocess
 import threading
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from .a0x_contract import (
@@ -37,6 +39,7 @@ from .a0x_contract import (
 )
 from .a0x_material_contract import (
     A0XGuardLaunch,
+    VerticalA0XGuardLaunch,
     ADMISSION_TIMEOUT_SECONDS,
     CLEANUP_MARGIN_SECONDS,
     INTERNAL_BUDGET_SECONDS,
@@ -48,6 +51,7 @@ from .a0x_material_contract import (
     validate_qualification_evidence,
 )
 from .a0x_hosted_gate_a import canonical_json_bytes as hosted_gate_a_canonical_json_bytes
+from .a0x_public_closure import A0XPublicClosureError, load_pre_execution_public_closure
 from .a0x_runner import A0XRunnerError, planned_material_dossiers, vertical_slice_dossier_path
 from .a0x_runtime_readiness import (
     A0XRuntimeReadinessError,
@@ -66,6 +70,7 @@ _CAPTURE_LIMIT_BYTES = 65_536
 _SUPERVISION_TIMEOUT_SECONDS = OUTER_TIMEOUT_SECONDS + CLEANUP_MARGIN_SECONDS
 _PREFLIGHT_TIMEOUT_SECONDS = 30
 _PREFLIGHT_CAPTURE_LIMIT_BYTES = 65_536
+_ACTIVE_CCP_SHA256 = "45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2"
 _GATE_A_FILE_ORDER = (
     "manifest",
     "attestation_bundle",
@@ -163,6 +168,19 @@ class _ExecutableIdentityEvidence:
     synthetic: bool = False
 
 
+@dataclass(frozen=True)
+class _VerticalSchemaBinding:
+    """No-follow schema bytes and inode captured before the guarded interval."""
+
+    root: Path
+    relative_path: str
+    device: int
+    inode: int
+    size: int
+    sha256: str
+    document: Mapping[str, Any]
+
+
 class _ExecutableIdentityVerifier(Protocol):
     """Private capability: production hashes bytes; tests may model an identity."""
 
@@ -209,12 +227,16 @@ class SubprocessGuardPreflightProducer:
     public Git role combines exact HEAD and clean-status probes.
     """
 
-    def produce(self, *, ccp_path: Path, repository_root: Path) -> Sequence[GuardPreflightOutput]:
+    def produce(self, *, ccp_path: Path, repository_root: Path, allowed_untracked: frozenset[str] | None = None) -> Sequence[GuardPreflightOutput]:
+        identity = _ProductionExecutableIdentityVerifier()
+        identity.verify(role="ccp", path=ccp_path, expected_sha256=_ACTIVE_CCP_SHA256)
         version = self._run((str(ccp_path), "--version"), repository_root)
-        resource = self._run((str(ccp_path), "resource", "status", "--json"), repository_root)
-        admission = self._run((str(ccp_path), "admission", "status", "--json"), repository_root)
+        status = self._run(("git", "-c", "core.fsmonitor=false", "-c", "core.trustctime=false", "status", "--short", "--branch"), repository_root)
         head = self._run(("git", "rev-parse", "HEAD"), repository_root)
-        status = self._run(("git", "status", "--short", "--branch"), repository_root)
+        identity.verify(role="ccp", path=ccp_path, expected_sha256=_ACTIVE_CCP_SHA256)
+        resource = self._run((str(ccp_path), "resource", "status", "--json"), repository_root)
+        identity.verify(role="ccp", path=ccp_path, expected_sha256=_ACTIVE_CCP_SHA256)
+        admission = self._run((str(ccp_path), "admission", "status", "--json"), repository_root)
         source_exit = 0 if head.exit_code == 0 and status.exit_code == 0 else 1
         try:
             status_lines = status.raw.decode("utf-8").splitlines()
@@ -225,6 +247,12 @@ class SubprocessGuardPreflightProducer:
         except UnicodeDecodeError:
             source_raw = b"{}"
             source_exit = 1
+        if allowed_untracked is not None:
+            from .a0x_vertical_slice import _checkout_state
+            observed_head, _tree, clean = _checkout_state(repository_root, allowed_untracked)
+            if observed_head != head.raw.decode("ascii").strip():
+                raise A0XCcpExecutorError("source changed during scoped guard telemetry")
+            source_raw = _canonical_json({"head": observed_head, "clean": clean})
         context = self._run(("docker", "context", "show"), repository_root)
         containers = self._run(("docker", "ps", "-q"), repository_root)
         return (
@@ -241,6 +269,7 @@ class SubprocessGuardPreflightProducer:
         process = subprocess.Popen(
             list(argv), cwd=str(cwd), shell=False, stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env=_coordination_environment(),
         )
         capture = _StreamingCapture(_PREFLIGHT_CAPTURE_LIMIT_BYTES)
         thread = threading.Thread(target=capture.drain, args=(process.stdout,), daemon=True)
@@ -377,10 +406,12 @@ def launch_vertical_runtime_package(
 ) -> dict[str, Any]:
     """Production v2 entry point: adapters are fixed, never caller selected."""
     root = Path(repository_root).resolve(strict=True)
+    from .a0x_vertical_slice import _checkout_state, vertical_public_pre_execution_paths
+    allowed = vertical_public_pre_execution_paths(package_binding.pair_binding, package_binding.qualified_source_head, package_binding.qualified_source_tree)
     return _launch_validated_vertical_v2(
         repository_root=root, package_binding=package_binding,
         execution_authorization_path=execution_authorization_path,
-        source_state_probe=lambda: _production_vertical_source_state(root), process_executor=_SubprocessExecutor(),
+        source_state_probe=lambda: _checkout_state(root, allowed), process_executor=_SubprocessExecutor(),
         guard_preflight_producer=SubprocessGuardPreflightProducer(),
         executable_identity_verifier=_ProductionExecutableIdentityVerifier(),
         expected_qualification_context="production",
@@ -430,6 +461,9 @@ def _launch_validated_vertical_v2(
     if not isinstance(package_binding, VerticalPackageBinding):
         raise A0XCcpExecutorError("vertical Gate C package binding is invalid")
     root = Path(repository_root).resolve(strict=True)
+    terminal_schema_binding = _read_vertical_schema_binding(
+        root, "a0x-vertical-child-terminal-v1.schema.json",
+    )
     try:
         source_head, source_tree, clean = source_state_probe()
     except Exception as error:
@@ -449,7 +483,7 @@ def _launch_validated_vertical_v2(
     try:
         # Local import avoids the intentional Gate-B -> Gate-C import cycle.
         from .a0x_runtime_bundle import validate_vertical_runtime_output
-        load_vertical_runtime_package(root, package_binding)
+        load_vertical_runtime_package(root, package_binding, allow_public_pre_execution=expected_qualification_context == "production")
         paths = _vertical_gate_b_output_paths(package_binding)
         outputs = {
             name: validate_vertical_runtime_output(
@@ -521,7 +555,9 @@ def _launch_validated_vertical_v2(
     if evidence != reconstructed_evidence:
         raise A0XCcpExecutorError("vertical Gate C Gate A evidence is not reconstructed from Gate B bytes")
     try:
-        launch = A0XGuardLaunch.from_mapping(_mapping(authorization, "guard_launch", "vertical Gate C authorization"))
+        launch = VerticalA0XGuardLaunch.from_mapping(
+            _mapping(authorization, "guard_launch", "vertical Gate C authorization")
+        )
     except (A0XContractError, TypeError, ValueError) as error:
         raise A0XCcpExecutorError("vertical Gate C guard launch is invalid") from error
     descriptor_raw = _unique_repository_file(root, paths["descriptor"], "vertical Gate B descriptor").read_bytes()
@@ -553,6 +589,49 @@ def _launch_validated_vertical_v2(
         ):
             raise A0XCcpExecutorError("vertical Gate C executable identity context differs")
 
+    public_extension_sha256: str | None = None
+
+    def validate_public_pre_execution_binding() -> None:
+        nonlocal public_extension_sha256
+        if expected_qualification_context != "production":
+            return
+        try:
+            p0_dossier_raw = _unique_repository_file(
+                root, package_binding.dossier_path, "vertical P0 dossier",
+            ).read_bytes()
+            gate_b_v4_auth_raw = _unique_repository_file(
+                root, paths["authorization"], "vertical Gate B authorization v4",
+            ).read_bytes()
+            gate_b_v4_readiness_raw = _unique_repository_file(
+                root, paths["readiness"], "vertical Gate B readiness v4",
+            ).read_bytes()
+            observed = load_pre_execution_public_closure(
+                root,
+                expected_identity={
+                    "qualified_source": expected_source,
+                    "pair_binding": pair.as_mapping(),
+                    "authorization_id": authorization["authorization_id"],
+                    "attempt_id": authorization["attempt_id"],
+                    "p0_package_commitment_sha256": package_binding.package_commitment_sha256,
+                },
+                private_input_sha256={
+                    "p0_dossier_raw": _sha256_bytes(p0_dossier_raw),
+                    "gate_b_authorization_v4": _sha256_bytes(gate_b_v4_auth_raw),
+                    "gate_b_readiness_v4": _sha256_bytes(gate_b_v4_readiness_raw),
+                },
+            )
+        except (A0XPublicClosureError, OSError, KeyError, TypeError, ValueError) as error:
+            raise A0XCcpExecutorError("vertical Gate C public pre-execution closure is invalid") from error
+        if public_extension_sha256 is None:
+            public_extension_sha256 = observed.extension_sha256
+        elif public_extension_sha256 != observed.extension_sha256:
+            raise A0XCcpExecutorError("vertical Gate C public authorization extension drifted")
+
+    # Production must prove the public inputs were pinned before the one-shot
+    # guard. The private synthetic test seam intentionally cannot satisfy this.
+    validate_public_pre_execution_binding()
+    parent_capability = None
+
     child_identity = executable_identity_verifier.verify(
         role="child", path=child_path, expected_sha256=launch.child_script_sha256,
     )
@@ -565,9 +644,22 @@ def _launch_validated_vertical_v2(
     )
     for observed in (child_identity, ccp_executable_identity, python_identity):
         require_identity_context(observed)
+    if expected_qualification_context == "production":
+        from .a0x_vertical_production_adapter import load_vertical_production_capability
+        parent_capability = load_vertical_production_capability(root, launch.launch_descriptor_path)
     synthetic_identity = expected_synthetic_identity
+    if expected_qualification_context == "production" and (
+        pair.leg is not Leg.A0 or pair.model_key != "smollm2_360m"
+        or pair.revision != "f8027fd0eaeea54caa13c31d31b9fdc459c38b49"
+        or launch.ccp_sha256 != _ACTIVE_CCP_SHA256
+    ):
+        raise A0XCcpExecutorError("vertical production launch is outside the approved first-result producer/pair")
+    from .a0x_vertical_slice import vertical_public_pre_execution_paths
+    preflight_scope = vertical_public_pre_execution_paths(pair, source_head, source_tree)
+    raw_preflight = (guard_preflight_producer.produce(ccp_path=ccp_path, repository_root=root, allowed_untracked=preflight_scope)
+                     if expected_qualification_context == "production" else guard_preflight_producer.produce(ccp_path=ccp_path, repository_root=root))
     guard_preflight = _validate_guard_preflight(
-        guard_preflight_producer.produce(ccp_path=ccp_path, repository_root=root),
+        raw_preflight,
         launch=launch, pair=pair, source_head=source_head,
         ccp_identity=ccp_identity,
     )
@@ -581,7 +673,7 @@ def _launch_validated_vertical_v2(
         if (live_head, live_tree, live_clean) != (source_head, source_tree, True):
             raise A0XCcpExecutorError("vertical Gate C source state drifted")
         try:
-            load_vertical_runtime_package(root, package_binding)
+            load_vertical_runtime_package(root, package_binding, allow_public_pre_execution=expected_qualification_context == "production")
             for name, relative in paths.items():
                 validate_vertical_runtime_output(
                     root, relative, package_binding,
@@ -595,6 +687,7 @@ def _launch_validated_vertical_v2(
             raise A0XCcpExecutorError("vertical Gate B authorization drifted")
         if _sha256_bytes(_unique_repository_file(root, gate_b_receipt_relative, "vertical Gate B verification receipt").read_bytes()) != _sha256_bytes(gate_b_receipt_raw):
             raise A0XCcpExecutorError("vertical Gate B verification receipt drifted")
+        validate_public_pre_execution_binding()
 
     # A preflight is not a reservation. Re-open every mutable trust input before claim.
     revalidate_graph()
@@ -626,12 +719,13 @@ def _launch_validated_vertical_v2(
     result: ProcessResult | None = None
     argv: tuple[str, ...] | None = None
     environment: dict[str, str] | None = None
+    guard_invoked = False
     # Claim precedes the final revalidation deliberately: a later drift consumes
     # the one shot rather than silently authorizing a retry.
     try:
         pre_run_path = _write_vertical_pre_run(
             root, authorization_path, pair, launch, claim_path,
-            _sha256_bytes(authorization_raw), synthetic_identity,
+            _sha256_bytes(authorization_raw),
         )
         revalidate_graph()
         for role, path, digest, version in (
@@ -645,10 +739,17 @@ def _launch_validated_vertical_v2(
             require_identity_context(observed)
         argv = _materialize_argv(launch, ccp_path=ccp_path, python_path=python_path, child_path=child_path)
         environment = _frozen_environment(launch)
-        result = process_executor.run(
-            argv, cwd=root, env=environment, timeout_seconds=_SUPERVISION_TIMEOUT_SECONDS,
-            capture_limit_bytes=_CAPTURE_LIMIT_BYTES,
-        )
+        if expected_qualification_context == "production":
+            # The active macOS producer requires HOME for its persistent
+            # admission root. Credentials remain absent from the child.
+            environment.update(_coordination_environment())
+        permission_window = _a0_material_permission_window(root) if expected_qualification_context == "production" else nullcontext()
+        with permission_window:
+            guard_invoked = True
+            result = process_executor.run(
+                argv, cwd=root, env=environment, timeout_seconds=_SUPERVISION_TIMEOUT_SECONDS,
+                capture_limit_bytes=_CAPTURE_LIMIT_BYTES,
+            )
         # A child outcome is not authority to skip the final identity boundary:
         # a replacement during execution must seal recovery rather than publish
         # a completed attempt.
@@ -661,27 +762,76 @@ def _launch_validated_vertical_v2(
                 role=role, path=path, expected_sha256=digest, expected_version=version,
             )
             require_identity_context(observed)
+        _revalidate_vertical_schema_binding(terminal_schema_binding)
     except BaseException as error:
+        if guard_invoked and expected_qualification_context == "production":
+            try:
+                guard_preflight_producer.produce(ccp_path=ccp_path, repository_root=root)
+            except BaseException as post_error:
+                _exclusive_write(authorization_path.parent / "observations/postflight-probe-failure.json", _canonical_json({
+                    "artifact_class": "a0x-private-postflight-probe-failure", "error_type": type(post_error).__name__,
+                    "state": "UNVERIFIED", "retry_permitted": False,
+                }), "postflight probe failure")
         _write_vertical_terminal(
             root, authorization_path, pair, launch, result, "recovery_required",
             _sha256_bytes(authorization_raw), error, pre_run_path=pre_run_path,
-            synthetic_identity=synthetic_identity,
+            terminal_schema_raw_sha256=terminal_schema_binding.sha256,
         )
         raise A0XCcpExecutorError("vertical Gate C could not produce a terminal result") from error
     _validate_process_result(result)
     classification = _classify_outer_exit(result)
-    child_terminal_status = (
-        _parse_child_terminal(result.stdout_prefix)
+    child_terminal = (
+        _parse_vertical_child_terminal(
+            result.stdout_prefix,
+            expected_source=expected_source,
+            expected_pair=pair.as_mapping(),
+            expected_authorization_id=str(authorization["authorization_id"]),
+            expected_attempt_id=str(authorization["attempt_id"]),
+            expected_qualification_context=expected_qualification_context,
+            terminal_schema=terminal_schema_binding.document,
+        )
         if classification == "completed" and result.stdout_bytes == len(result.stdout_prefix)
         else None
     )
+    child_terminal_status = child_terminal.get("scientific_outcome") if child_terminal is not None else None
+    package_verified, postflight_verified = False, False
+    postflight_error: BaseException | None = None
+    try:
+        if expected_qualification_context == "production":
+            # Guard exit is not a release handoff, including pressure/timeout.
+            from .a0x_vertical_slice import _checkout_state, vertical_terminal_output_paths
+            from .a0x_vertical_slice import vertical_public_pre_execution_paths
+            postflight_scope = vertical_terminal_output_paths(pair, source_head, source_tree) | vertical_public_pre_execution_paths(pair, source_head, source_tree)
+            postflight_outputs = guard_preflight_producer.produce(ccp_path=ccp_path, repository_root=root, allowed_untracked=postflight_scope)
+            live_head, live_tree, live_clean = _checkout_state(root, postflight_scope)
+            if (live_head, live_tree, live_clean) != (source_head, source_tree, True):
+                raise A0XCcpExecutorError("post-guard source state differs outside the exact output set")
+            _validate_guard_preflight(postflight_outputs, launch=launch, pair=pair, source_head=source_head, ccp_identity=ccp_identity)
+            postflight_verified = True
+            if child_terminal is not None:
+                _verify_vertical_parent_package(root, package_binding, launch.launch_descriptor_path, child_terminal, parent_capability=parent_capability)
+                package_verified = True
+    except BaseException as error:
+        postflight_error = error
     terminal_path = _write_vertical_terminal(
-        root, authorization_path, pair, launch, result, classification, _sha256_bytes(authorization_raw), None,
+        root, authorization_path, pair, launch, result, classification, _sha256_bytes(authorization_raw), postflight_error,
         child_terminal_status=child_terminal_status, pre_run_path=pre_run_path,
-        synthetic_identity=synthetic_identity,
+        child_terminal=child_terminal,
+        terminal_schema_raw_sha256=terminal_schema_binding.sha256,
+        completion_verified=_vertical_completion_verified(
+            expected_qualification_context, classification, child_terminal,
+            package_verified=package_verified, postflight_verified=postflight_verified,
+        ),
     )
-    if classification != "completed" or child_terminal_status is None:
-        raise A0XCcpExecutorError("vertical Gate C terminal outcome is not a completed child terminal")
+    if (
+        not _vertical_completion_verified(
+            expected_qualification_context, classification, child_terminal,
+            package_verified=package_verified, postflight_verified=postflight_verified,
+        )
+    ):
+        raise A0XCcpExecutorError(
+            "vertical Gate C terminal lacks independently verified package and postflight closure"
+        )
     return {
         "status": "synthetic_completed" if expected_qualification_context == "synthetic-target-free" else "completed",
         "qualified_source": expected_source,
@@ -691,8 +841,110 @@ def _launch_validated_vertical_v2(
         "claim_path": claim_path.relative_to(root).as_posix(),
         "terminal_observation_path": terminal_path,
         "child_terminal_status": child_terminal_status,
-        "publication_eligible": expected_qualification_context == "production" and not synthetic_identity,
+        "child_terminal": child_terminal,
+        "publication_eligible": False,
     }
+
+
+@contextmanager
+def _a0_material_permission_window(root: Path):
+    """Metadata-only macOS descriptors restore two A0 targets for one guard.
+
+    The operator must already have authorized this exact Gate C invocation.
+    Requires the activity-owned source snapshot to have no concurrent mutator.
+    Mode-000 files cannot be opened even with O_EVTONLY. Directory-relative
+    metadata admission precedes chmod; the resulting inode is pinned before
+    any content access. This detects drift, not hostile concurrent replacement.
+    """
+    event_only = getattr(os, "O_EVTONLY", None)
+    if event_only is None:
+        raise A0XCcpExecutorError("protected permission window requires the qualified macOS metadata API")
+    relatives = ("data/a0/procedural-targets/calibration-targets.jsonl", "data/a0/sealed-targets/targets.jsonl")
+    files: list[tuple[str, int, str, tuple[int, int, int], int | None]] = []
+    try:
+        for relative in relatives:
+            directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                parts = PurePosixPath(relative).parts
+                for part in parts[:-1]:
+                    child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+                    os.close(directory)
+                    directory = child
+                info = os.stat(parts[-1], dir_fd=directory, follow_symlinks=False)
+            except BaseException:
+                os.close(directory)
+                raise
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0:
+                os.close(directory)
+                raise A0XCcpExecutorError("protected target is not an independent mode-000 regular file")
+            files.append((relative, directory, parts[-1], (info.st_dev, info.st_ino, info.st_size), None))
+        for index, (relative, directory, name, identity, _fd) in enumerate(files):
+            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            if (info.st_dev, info.st_ino, info.st_size) != identity or info.st_nlink != 1:
+                raise A0XCcpExecutorError("protected target identity changed before permission restoration")
+            os.chmod(name, 0o600, dir_fd=directory, follow_symlinks=False)
+            fd = os.open(name, event_only | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+            files[index] = (relative, directory, name, identity, fd)
+            held = os.fstat(fd)
+            if (held.st_dev, held.st_ino, held.st_size) != identity or held.st_nlink != 1:
+                raise A0XCcpExecutorError("protected target identity changed during permission restoration")
+        yield
+    finally:
+        failure = False
+        for relative, directory, name, identity, fd in files:
+            try:
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                if (named.st_dev, named.st_ino, named.st_size) != identity or named.st_nlink != 1:
+                    failure = True
+                if fd is not None:
+                    held = os.fstat(fd)
+                    if (held.st_dev, held.st_ino, held.st_size) == identity:
+                        os.fchmod(fd, 0)
+                    else:
+                        failure = True
+                elif not failure:
+                    os.chmod(name, 0, dir_fd=directory, follow_symlinks=False)
+            except OSError:
+                failure = True
+            finally:
+                if fd is not None:
+                    os.close(fd)
+                os.close(directory)
+        if failure:
+            raise A0XCcpExecutorError("protected permission cleanup has uncertain ownership")
+
+
+def _verify_vertical_parent_package(root: Path, binding: VerticalPackageBinding, descriptor_path: str, child_terminal: Mapping[str, Any], *, parent_capability: Any) -> None:
+    """Recreate expectations independently; never trust adjacent package self-hashes."""
+    from dataclasses import replace
+    from .a0x_vertical_production_adapter import load_vertical_production_capability
+    from .a0x_vertical_terminal_package import VerticalTerminalExpectation, verify_vertical_terminal_package, _read_independent, capture_material_evidence
+    capability = load_vertical_production_capability(root, descriptor_path, _terminal_outputs=True)
+    context = capability.context
+    if parent_capability is None or context != parent_capability.context or capability.package_documents != parent_capability.package_documents:
+        raise A0XCcpExecutorError("terminal inputs differ from the parent's pre-execution capability")
+    if context.source_head != binding.qualified_source_head or context.source_tree != binding.qualified_source_tree or context.pair_binding != binding.pair_binding.as_mapping():
+        raise A0XCcpExecutorError("independent terminal capability differs from the parent package")
+    reference = child_terminal.get("terminal_package")
+    if not isinstance(reference, Mapping) or reference.get("package_relative_path") != binding.pair_binding.output_path:
+        raise A0XCcpExecutorError("child terminal package path is not the exact pair destination")
+    manifest, _info = _read_independent(root, binding.pair_binding.output_path + "/publication-manifest.json")
+    receipt, _info = _read_independent(root, binding.pair_binding.output_path + "/root-receipt.json")
+    if _sha256_bytes(manifest) != reference.get("manifest_raw_sha256") or _sha256_bytes(receipt) != reference.get("root_receipt_raw_sha256"):
+        raise A0XCcpExecutorError("child package reference differs from actual terminal bytes")
+    terminal_raw, _info = _read_independent(root, binding.pair_binding.output_path + "/terminal-result.json")
+    terminal = _strict_object(terminal_raw, "private terminal result")
+    if terminal.get("scientific_outcome") != child_terminal.get("scientific_outcome") or terminal.get("reached_frontier") != child_terminal.get("reached_frontier"):
+        raise A0XCcpExecutorError("child outcome differs from independently read package")
+    assets = None
+    if child_terminal.get("reached_frontier") == "sealed":
+        pair = binding.pair_binding
+        context = capture_material_evidence(root, context)
+        base = root / "results/a0x-external-assets" / context.source_head / context.source_tree / "a0" / pair.model_key / pair.run_id
+        assets = {"dense": base / "dense-output.bin", "index": base / "representation-index.json"}
+    expectation = VerticalTerminalExpectation.from_production_capability(capability, material_context=context, external_assets=assets)
+    verify_vertical_terminal_package(package_root=root / binding.pair_binding.output_path, repository_root=root,
+        expected=expectation, expected_manifest_sha256=_sha256_bytes(manifest), expected_root_receipt_sha256=_sha256_bytes(receipt))
 
 
 def _vertical_gate_b_output_paths(binding: VerticalPackageBinding) -> dict[str, str]:
@@ -801,22 +1053,106 @@ def _vertical_gate_a_evidence_from_raw(
         raise A0XCcpExecutorError("vertical Gate C reconstructed Gate A evidence is invalid") from error
 
 
-def _validate_vertical_raw_schema(value: Mapping[str, Any], filename: str, label: str) -> None:
-    path = Path(__file__).resolve().parents[2] / "schemas" / filename
+def _validate_vertical_raw_schema(
+    value: Mapping[str, Any], filename: str, label: str, *,
+    schema_document: Mapping[str, Any] | None = None,
+) -> None:
     try:
-        schema = json.loads(path.read_bytes())
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        schema = (
+            schema_document
+            if schema_document is not None
+            else _read_vertical_schema_binding(
+                Path(__file__).resolve().parents[2], filename,
+            ).document
+        )
+    except (A0XCcpExecutorError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise A0XCcpExecutorError(f"{label} schema is unavailable") from error
-    issues = validate(dict(value), schema)
+    if not isinstance(schema, Mapping):
+        raise A0XCcpExecutorError(f"{label} schema is invalid")
+    issues = validate(dict(value), dict(schema))
     if issues:
         raise A0XCcpExecutorError(f"{label} schema rejected input: {issues[0].message}")
+
+
+def _read_vertical_schema_binding(root: Path, filename: str) -> _VerticalSchemaBinding:
+    """Read one schema through no-follow descriptors and retain inode identity."""
+    if not isinstance(filename, str) or Path(filename).name != filename or not filename.endswith(".schema.json"):
+        raise A0XCcpExecutorError("vertical schema filename is invalid")
+    relative = f"schemas/{filename}"
+    parts = PurePosixPath(relative).parts
+    repository = root.resolve(strict=True)
+    directory_fd = os.open(repository, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        for part in parts[:-1]:
+            next_fd = os.open(
+                part,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=directory_fd,
+            )
+            os.close(directory_fd)
+            directory_fd = next_fd
+            if not stat.S_ISDIR(os.fstat(directory_fd).st_mode):
+                raise A0XCcpExecutorError("vertical schema path contains a non-directory")
+        file_fd = os.open(
+            parts[-1], os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=directory_fd,
+        )
+        try:
+            before = os.fstat(file_fd)
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > 1_048_576:
+                raise A0XCcpExecutorError("vertical schema is not an independent regular file")
+            chunks: list[bytes] = []
+            remaining = 1_048_577
+            while remaining:
+                chunk = os.read(file_fd, min(65_536, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            raw = b"".join(chunks)
+            after = os.fstat(file_fd)
+        finally:
+            os.close(file_fd)
+    except OSError as error:
+        raise A0XCcpExecutorError("vertical schema is unavailable or uses a link") from error
+    finally:
+        os.close(directory_fd)
+    if (
+        len(raw) > 1_048_576 or after.st_nlink != 1
+        or (before.st_dev, before.st_ino, before.st_size)
+        != (after.st_dev, after.st_ino, after.st_size)
+    ):
+        raise A0XCcpExecutorError("vertical schema changed during read")
+    try:
+        document = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise A0XCcpExecutorError("vertical schema bytes are not JSON") from error
+    if not isinstance(document, dict):
+        raise A0XCcpExecutorError("vertical schema root is not an object")
+    return _VerticalSchemaBinding(
+        root=repository, relative_path=relative, device=before.st_dev, inode=before.st_ino,
+        size=len(raw), sha256=_sha256_bytes(raw), document=document,
+    )
+
+
+def _revalidate_vertical_schema_binding(binding: _VerticalSchemaBinding) -> None:
+    observed = _read_vertical_schema_binding(binding.root, Path(binding.relative_path).name)
+    if (
+        observed.relative_path != binding.relative_path
+        or (observed.device, observed.inode, observed.size, observed.sha256)
+        != (binding.device, binding.inode, binding.size, binding.sha256)
+    ):
+        raise A0XCcpExecutorError("vertical schema inode or bytes changed after binding")
 
 
 def _write_vertical_terminal(
     root: Path, authorization_path: Path, pair: PairBinding, launch: A0XGuardLaunch,
     result: ProcessResult | None, classification: str, authorization_raw_sha256: str,
     error: BaseException | None, *, child_terminal_status: str | None = None,
-    pre_run_path: str | None = None, synthetic_identity: bool = False,
+    pre_run_path: str | None = None,
+    child_terminal: Mapping[str, Any] | None = None,
+    completion_verified: bool = False,
+    terminal_schema_raw_sha256: str | None = None,
 ) -> str:
     """Seal a v2 terminal record without borrowing the historical namespace."""
     directory = authorization_path.parent / "observations"
@@ -829,10 +1165,14 @@ def _write_vertical_terminal(
         "authorization_raw_sha256": authorization_raw_sha256,
         "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
         "outer_exit_classification": classification,
-        "recovery_required": classification != "completed" or child_terminal_status is None,
+        "recovery_required": not completion_verified,
         "child_terminal_status": child_terminal_status,
+        "child_terminal": dict(child_terminal) if child_terminal is not None else None,
+        "terminal_schema_raw_sha256": terminal_schema_raw_sha256,
         "pre_run_observation_path": pre_run_path,
-        "publication_eligible": not synthetic_identity,
+        # Eligibility is computed only by the final verifier after outer and
+        # postflight closure. An inner child can never grant publication.
+        "publication_eligible": False,
     }
     if result is None:
         payload["process"] = None
@@ -847,9 +1187,40 @@ def _write_vertical_terminal(
     return path.relative_to(root).as_posix()
 
 
+def _vertical_completion_verified(
+    qualification_context: str, outer_classification: str,
+    child_terminal: Mapping[str, Any] | None, *,
+    package_verified: bool, postflight_verified: bool,
+) -> bool:
+    """Separate child completion from parent-owned package/postflight closure."""
+    if (
+        outer_classification != "completed"
+        or not isinstance(child_terminal, Mapping)
+        or child_terminal.get("exit_class") != "completed"
+    ):
+        return False
+    if qualification_context == "synthetic-target-free":
+        return (
+            child_terminal.get("reached_frontier") == "validated_graph"
+            and child_terminal.get("scientific_outcome") is None
+            and child_terminal.get("terminal_package") is None
+        )
+    if qualification_context == "production":
+        return (
+            (child_terminal.get("reached_frontier") == "sealed"
+             or child_terminal.get("reached_frontier") == "validated_graph" and child_terminal.get("scientific_outcome") in {"failed", "incompatible"})
+            and child_terminal.get("scientific_outcome")
+            in {"positive", "null", "non_interpretable", "incompatible", "failed"}
+            and isinstance(child_terminal.get("terminal_package"), Mapping)
+            and package_verified is True
+            and postflight_verified is True
+        )
+    return False
+
+
 def _write_vertical_pre_run(
     root: Path, authorization_path: Path, pair: PairBinding, launch: A0XGuardLaunch,
-    claim_path: Path, authorization_raw_sha256: str, synthetic_identity: bool,
+    claim_path: Path, authorization_raw_sha256: str,
 ) -> str:
     """Seal the claim-to-guard boundary without exposing argv or environment."""
     directory = authorization_path.parent / "observations"
@@ -862,7 +1233,7 @@ def _write_vertical_pre_run(
         "claim_path": claim_path.relative_to(root).as_posix(),
         "authorization_raw_sha256": authorization_raw_sha256,
         "guard_launch_sha256": _sha256_bytes(_canonical_json(launch.as_mapping())),
-        "publication_eligible": not synthetic_identity,
+        "publication_eligible": False,
     }
     _exclusive_write(path, _canonical_json(payload), "vertical Gate C pre-run observation")
     return path.relative_to(root).as_posix()
@@ -1357,13 +1728,15 @@ def _validate_guard_preflight(
     version = _strict_text(by_role["ccp_version"], "CCP version")
     if version != ccp_identity.get("version"):
         raise A0XCcpExecutorError("guard preflight CCP version differs from authorization")
-    resource = _strict_object(by_role["resource_status"], "guard resource status")
+    resource = _resource_status_object(by_role["resource_status"])
     if resource.get("decision") != "admit":
         raise A0XCcpExecutorError("guard preflight resource decision is not Admit")
     admission = _strict_object(by_role["admission_status"], "guard admission status")
     slot = admission.get("slot")
     if admission.get("active") is not False or admission.get("queue_count") != 0 or not isinstance(slot, Mapping) or slot.get("state") != "free":
         raise A0XCcpExecutorError("guard preflight admission is not inactive with a free slot")
+    if ccp_identity.get("sha256") == _ACTIVE_CCP_SHA256:
+        _validate_active_guard_status(resource, admission)
     source = _strict_object(by_role["git_source_state"], "guard Git source state")
     if source != {"head": source_head, "clean": True}:
         raise A0XCcpExecutorError("guard preflight source HEAD is dirty or differs from authorization")
@@ -1394,6 +1767,51 @@ def _validate_guard_preflight(
     }
     _assert_public_safe_preflight(observation)
     return observation
+
+
+def _validate_active_guard_status(resource: Mapping[str, Any], admission: Mapping[str, Any]) -> None:
+    """Validate the active macos-v5 contract without treating static swap as a veto."""
+    constants = {"schema_version": "1.0", "policy_version": "macos-v5", "platform": "macos",
+                 "capability": "supported_enforced", "decision": "admit", "consecutive_soft_samples": 0}
+    numbers = {"available_percent", "reclaimable_uncompressed_bytes", "compressor_occupied_bytes",
+               "total_memory_bytes", "swap_used_bytes", "swap_total_bytes"}
+    if set(resource) != set(constants) | numbers or any(resource.get(key) != value for key, value in constants.items()):
+        raise A0XCcpExecutorError("active guard resource contract is incomplete or differs")
+    if type(resource["consecutive_soft_samples"]) is not int:
+        raise A0XCcpExecutorError("active guard resource counter is malformed")
+    if any(isinstance(resource[key], bool) or not isinstance(resource[key], (int, float))
+           or not math.isfinite(resource[key]) or resource[key] < 0 for key in numbers):
+        raise A0XCcpExecutorError("active guard resource telemetry is malformed")
+    if resource["available_percent"] < 20 or resource["available_percent"] > 100 or resource["reclaimable_uncompressed_bytes"] < 3 * 1024**3:
+        raise A0XCcpExecutorError("active guard resource telemetry contradicts Admit")
+    if resource["total_memory_bytes"] <= 0 or resource["reclaimable_uncompressed_bytes"] > resource["total_memory_bytes"] or resource["compressor_occupied_bytes"] > resource["total_memory_bytes"] or resource["swap_used_bytes"] > resource["swap_total_bytes"]:
+        raise A0XCcpExecutorError("active guard resource telemetry is contradictory")
+    if set(admission) != {"schema_version", "active", "queue_count", "ticket_ids", "slot", "queue_lock", "process_visibility_note"} or admission.get("schema_version") != "1.0" or admission.get("active") is not False or type(admission.get("queue_count")) is not int or admission["queue_count"] != 0 or admission.get("ticket_ids") != [] or not isinstance(admission.get("process_visibility_note"), str):
+        raise A0XCcpExecutorError("active guard admission evidence is incomplete or busy")
+    for key in ("slot", "queue_lock"):
+        lock = admission[key]
+        if not isinstance(lock, Mapping) or set(lock) != {"kind", "state", "owner_run_id", "acquired_at_unix_seconds", "heartbeat_at_unix_seconds", "lease_state"} or lock.get("kind") != key or lock.get("state") != "free" or lock.get("lease_state") != "not_applicable" or any(lock.get(field) is not None for field in ("owner_run_id", "acquired_at_unix_seconds", "heartbeat_at_unix_seconds")):
+            raise A0XCcpExecutorError("active guard admission lock is not demonstrably free")
+
+
+def _resource_status_object(raw: bytes) -> dict[str, Any]:
+    """Native telemetry may contain decimal percentages; commitments may not."""
+    def pairs(entries):
+        result = {}
+        for key, value in entries:
+            if key in result:
+                raise ValueError("duplicate telemetry key")
+            result[key] = value
+        return result
+    def reject(value):
+        raise ValueError("non-finite telemetry constant")
+    try:
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=pairs, parse_constant=reject)
+    except (UnicodeError, ValueError, TypeError) as error:
+        raise A0XCcpExecutorError("guard resource status is malformed native JSON") from error
+    if not isinstance(value, dict):
+        raise A0XCcpExecutorError("guard resource status is not an object")
+    return value
 
 
 def _strict_text(raw: bytes, label: str) -> str:
@@ -1467,6 +1885,14 @@ def _frozen_environment(launch: A0XGuardLaunch) -> dict[str, str]:
     if len(environment) != len(launch.environment_template):
         raise A0XCcpExecutorError("guard environment template is not exact")
     return environment
+
+
+def _coordination_environment() -> dict[str, str]:
+    """Minimal private environment shared by guard and its status probes."""
+    home = os.environ.get("HOME")
+    if not isinstance(home, str) or not Path(home).is_absolute() or ".." in Path(home).parts or home == "/":
+        raise A0XCcpExecutorError("native persistent coordination HOME is unavailable")
+    return {"HOME": home, "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C"}
 
 
 def _classify_outer_exit(result: ProcessResult) -> str:
@@ -1739,6 +2165,85 @@ def _parse_child_terminal(raw: bytes) -> str | None:
         return status if status in {"positive", "null", "non_interpretable", "incompatible", "failed"} else None
     except (UnicodeDecodeError, A0XContractError):
         return None
+
+
+def _parse_vertical_child_terminal(
+    raw: bytes,
+    *,
+    expected_source: Mapping[str, str],
+    expected_pair: Mapping[str, Any],
+    expected_authorization_id: str,
+    expected_attempt_id: str,
+    expected_qualification_context: Literal["production", "synthetic-target-free"],
+    terminal_schema: Mapping[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Parse only the exact, context-bound v1 vertical child terminal wire.
+
+    This parser is intentionally separate from the historical child parser.
+    Invalid or unbound bytes return ``None`` so the outer guard records a
+    recovery-required engineering outcome rather than inferring a result.
+    """
+    if not isinstance(raw, bytes) or not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw:
+        return None
+    body = raw[:-1]
+    if not body or b"\n" in body:
+        return None
+    try:
+        value = strict_json_object(body)
+        canonical = _canonical_json(value)
+        if canonical != body:
+            return None
+        _validate_vertical_raw_schema(
+            value, "a0x-vertical-child-terminal-v1.schema.json", "vertical child terminal",
+            schema_document=terminal_schema,
+        )
+        pair = PairBinding.from_mapping(value["pair_binding"])
+    except (A0XCcpExecutorError, A0XContractError, KeyError, TypeError, ValueError):
+        return None
+    if (
+        value.get("exit_class") != "completed"
+        or value.get("qualified_source") != dict(expected_source)
+        or pair.as_mapping() != dict(expected_pair)
+        or value.get("authorization_id") != expected_authorization_id
+        or value.get("attempt_id") != expected_attempt_id
+        or value.get("qualification_context") != expected_qualification_context
+    ):
+        return None
+    if expected_qualification_context == "synthetic-target-free":
+        if (
+            value.get("reached_frontier") != "validated_graph"
+            or value.get("scientific_outcome") is not None
+            or value.get("terminal_package") is not None
+        ):
+            return None
+    elif (
+        expected_qualification_context != "production"
+        or value.get("reached_frontier") != "sealed"
+        or value.get("scientific_outcome") not in {"positive", "null", "non_interpretable", "incompatible", "failed"}
+        or not isinstance(value.get("terminal_package"), Mapping)
+        or not _valid_vertical_terminal_package_reference(
+            value.get("terminal_package"), expected_pair,
+        )
+    ):
+        return None
+    return value
+
+
+def _valid_vertical_terminal_package_reference(
+    value: Any, expected_pair: Mapping[str, Any],
+) -> bool:
+    """Check reference shape/path; parent must independently verify package bytes."""
+    if not isinstance(value, Mapping) or set(value) != {
+        "package_relative_path", "manifest_raw_sha256", "root_receipt_raw_sha256",
+    }:
+        return False
+    return (
+        value.get("package_relative_path") == expected_pair.get("output_path")
+        and isinstance(value.get("manifest_raw_sha256"), str)
+        and _SHA256.fullmatch(value["manifest_raw_sha256"]) is not None
+        and isinstance(value.get("root_receipt_raw_sha256"), str)
+        and _SHA256.fullmatch(value["root_receipt_raw_sha256"]) is not None
+    )
 
 
 def _validate_process_result(value: ProcessResult) -> None:

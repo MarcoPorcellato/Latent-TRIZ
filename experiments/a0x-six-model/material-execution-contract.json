@@ -49,12 +49,26 @@
     "cert_oidc_issuer": "https://token.actions.githubusercontent.com",
     "deny_self_hosted_runners": true,
     "require_verified_timestamp": true,
-    "workflow_raw_sha256": "e61045e9592237aadb6057ca752061855135109fd9e5bbdf508e55c706ab1458",
+    "workflow_raw_sha256": "76800cbdcf5db80b4f025c254de8936b4ceef8842702807ae426f03c0363d079",
     "requirements_schema_lock_raw_sha256": "0bbafebbe4fdb6028f5e8565eae397d18d6ace90e7e5e2c5b9472aa924162be7",
     "action_manifest_raw_sha256": "f84777250a50082cd4f2390d949193c73d983475d32c08b02536fdf5ebd8a7fd",
     "lane_manifest_raw_sha256": "4a6754e77e4a440d9e1af03d16017272e194bc6953cec16dd9473aa0b5929a97"
   },
-  "contract_version": "a0x-material-execution-contract-v2",
+  "contract_version": "a0x-material-execution-contract-v3",
+  "ccp_binding_role": "historical_matrix_only",
+  "vertical_guard": {
+    "producer_role": "ccp_executable",
+    "source_commit": "1015a0b42962dbf18334fd6dfc0d9148551d4984",
+    "source_tree": "2ebad04d6dc718c7aaa2534d304cde7797460a97",
+    "sha256": "45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2",
+    "version": "commit-ci-preflight 0.1.0",
+    "resource_policy": "macos-v5",
+    "qualification_basis": "operator-recorded-isolated-guard",
+    "uses_repository_configuration": false,
+    "emits_receipt": false,
+    "hash_before_command": true,
+    "max_guard_exec_count": 1
+  },
   "max_run_count": 1,
   "offline": {
     "generation": false,

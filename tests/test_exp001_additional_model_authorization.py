@@ -6,6 +6,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from latent_triz.validator import validate as validate_minimal
+from tests.a0x_test_support import synthetic_acquisition_authorization
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +18,7 @@ class AdditionalModelAuthorizationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-        cls.instance = json.loads(INSTANCE.read_text(encoding="utf-8"))
+        cls.instance = synthetic_acquisition_authorization()
 
     def test_authorization_is_valid_under_both_validators(self):
         self.assertEqual(validate_minimal(self.instance, self.schema), [])

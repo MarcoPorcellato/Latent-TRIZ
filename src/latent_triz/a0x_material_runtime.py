@@ -206,7 +206,7 @@ def run_material_lifecycle(
         cleanup_error = release()
         if cleanup_error is not None and post_terminal_failure is None:
             post_terminal_failure = {"stage": stage, "error_type": type(cleanup_error).__name__}
-        final_status = "post_terminal_failure" if lifecycle_status == "completed" and post_terminal_failure else lifecycle_status
+        final_status = "post_terminal_failure" if post_terminal_failure else lifecycle_status
         return _result(
             pair=pair, lifecycle_status=final_status, terminal_outcome=terminal,
             package_path=package_path, target_content_reads=target_content_reads,
@@ -260,7 +260,7 @@ def run_material_lifecycle(
                     "failure sealer did not return a terminal mapping after model cleanup"
                 )
             terminal_outcome = dict(sealed)
-            if isinstance(error, InternalDeadlineExceeded):
+            if isinstance(error, InternalDeadlineExceeded) and terminal_outcome.get("artifact_class") != "a0x-vertical-terminal-result":
                 # A full analysis budget is an inconclusive measurement, not a
                 # generic software failure. This classification remains fixed
                 # whether the one permitted target read has happened or not.

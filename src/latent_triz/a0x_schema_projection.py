@@ -10,10 +10,13 @@ from typing import Any, Mapping
 from latent_triz.a0x_pair import PAIR_BINDING_FIELD_METADATA
 
 
-A0X_SCHEMA_COUNT = 43
-A0X_PAIR_DEFINITION_COUNT = 21
+A0X_SCHEMA_COUNT = 52
+A0X_PAIR_DEFINITION_COUNT = 28
 _REGISTRY_PATH = Path("schemas/a0x-pair-projections.json")
 _FRAGMENT_PATH = Path("schemas/a0x-pair-binding.fragment.json")
+_NON_PAIR_PROJECTION_SCHEMAS = frozenset({
+    "schemas/a0x-public-closure-manifest-v1.schema.json",
+})
 _PAIR_FIELDS = frozenset(PAIR_BINDING_FIELD_METADATA)
 
 
@@ -41,13 +44,16 @@ def discovered_pair_definitions(root: Path) -> frozenset[tuple[str, str]]:
         )
     definitions: set[tuple[str, str]] = set()
     for path in paths:
+        relative = path.relative_to(repository).as_posix()
+        if relative in _NON_PAIR_PROJECTION_SCHEMAS:
+            continue
         document = _load_json(path)
         raw_definitions = document.get("$defs", {})
         if not isinstance(raw_definitions, dict):
             raise ProjectionError(f"A0X schema $defs is not an object: {path}")
         for name, definition in raw_definitions.items():
             if _is_pair_definition(definition):
-                definitions.add((path.relative_to(repository).as_posix(), name))
+                definitions.add((relative, name))
     if len(definitions) != A0X_PAIR_DEFINITION_COUNT:
         raise ProjectionError(
             "PairBinding definition cardinality drift: "

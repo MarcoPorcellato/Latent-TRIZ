@@ -55,10 +55,18 @@ class _FakeGuardPreflight:
         self.calls.append((ccp_path, repository_root))
         if self.outputs is not None:
             return self.outputs
+        resource = {"schema_version": "1.0", "policy_version": "macos-v5", "platform": "macos", "capability": "supported_enforced",
+            "decision": "admit", "available_percent": 30.0, "reclaimable_uncompressed_bytes": 5 * 1024**3,
+            "compressor_occupied_bytes": 0, "total_memory_bytes": 16 * 1024**3, "swap_used_bytes": 0,
+            "swap_total_bytes": 0, "consecutive_soft_samples": 0}
+        lock = {"kind": "slot", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None,
+                "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"}
+        admission = {"schema_version": "1.0", "active": False, "queue_count": 0, "ticket_ids": [], "slot": lock,
+                     "queue_lock": {**lock, "kind": "queue_lock"}, "process_visibility_note": "synthetic"}
         return (
             GuardPreflightOutput("ccp_version", 0, self.version.encode()),
-            GuardPreflightOutput("resource_status", 0, b'{"decision":"admit"}'),
-            GuardPreflightOutput("admission_status", 0, b'{"active":false,"queue_count":0,"slot":{"state":"free"}}'),
+            GuardPreflightOutput("resource_status", 0, json.dumps(resource, separators=(",", ":")).encode()),
+            GuardPreflightOutput("admission_status", 0, json.dumps(admission, separators=(",", ":")).encode()),
             GuardPreflightOutput("git_source_state", 0, json.dumps({"head": self.source_head, "clean": True}, separators=(",", ":")).encode()),
             GuardPreflightOutput("docker_context", 0, b"orbstack\n"),
             GuardPreflightOutput("docker_active_count", 0, b""),
@@ -67,6 +75,55 @@ class _FakeGuardPreflight:
 
 class A0XCcpExecutorTests(unittest.TestCase):
     _dossier = "experiments/a0x-six-model/approval-dossiers/a0/gpt2.json"
+
+    def test_vertical_guard_keeps_coordination_home_without_credentials(self):
+        from latent_triz import a0x_ccp_executor as executor
+        select = getattr(executor, "_coordination_environment", None)
+        self.assertTrue(callable(select), "coordination environment is absent")
+        with patch.dict(os.environ, {"GH_TOKEN": "synthetic-secret", "HF_TOKEN": "synthetic-secret"}):
+            observed = select()
+        self.assertEqual(os.environ["HOME"], observed["HOME"])
+        self.assertEqual({"HOME", "PATH", "LC_ALL"}, set(observed))
+        self.assertNotIn("synthetic-secret", observed.values())
+
+    def test_active_guard_policy_rejects_incomplete_or_old_resource_evidence(self):
+        from latent_triz import a0x_ccp_executor as executor
+        validator = getattr(executor, "_validate_active_guard_status", None)
+        self.assertTrue(callable(validator), "active producer status validator is absent")
+        resource = {"schema_version": "1.0", "policy_version": "macos-v5", "platform": "macos",
+            "capability": "supported_enforced", "decision": "admit", "available_percent": 30.0,
+            "reclaimable_uncompressed_bytes": 5 * 1024**3, "compressor_occupied_bytes": 0,
+            "total_memory_bytes": 16 * 1024**3, "swap_used_bytes": 8 * 1024**3,
+            "swap_total_bytes": 12 * 1024**3, "consecutive_soft_samples": 0}
+        lock = {"kind": "slot", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None,
+                "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"}
+        admission = {"schema_version": "1.0", "active": False, "queue_count": 0, "ticket_ids": [],
+                     "slot": lock, "queue_lock": {**lock, "kind": "queue_lock"}, "process_visibility_note": "synthetic"}
+        validator(resource, admission)
+        for changed in ({**resource, "policy_version": "macos-v4"}, {"decision": "admit"},
+                        {**resource, "available_percent": 19}, {**resource, "reclaimable_uncompressed_bytes": 2 * 1024**3}):
+            with self.subTest(changed=changed), self.assertRaises(A0XCcpExecutorError):
+                validator(changed, admission)
+        with self.assertRaises(A0XCcpExecutorError):
+            validator(resource, {**admission, "ticket_ids": ["unexpected"]})
+
+    @unittest.skipUnless(hasattr(os, "O_EVTONLY"), "qualified macOS metadata API only")
+    def test_target_permission_window_reprotects_after_failure_without_reading_content(self):
+        from latent_triz.a0x_ccp_executor import _a0_material_permission_window
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = [root / relative for relative in (
+                "data/a0/procedural-targets/calibration-targets.jsonl", "data/a0/sealed-targets/targets.jsonl")]
+            for path in files:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"independent synthetic sentinel")
+                path.chmod(0)
+            with patch("latent_triz.a0x_ccp_executor.os.read", side_effect=AssertionError("content read")):
+                with self.assertRaisesRegex(RuntimeError, "synthetic abort"):
+                    with _a0_material_permission_window(root):
+                        self.assertTrue(all(path.stat().st_mode & 0o777 == 0o600 for path in files))
+                        raise RuntimeError("synthetic abort")
+            self.assertTrue(all(path.stat().st_mode & 0o777 == 0 for path in files))
 
     def _fixture(self, *, result: ProcessResult | None = None):
         directory = TemporaryDirectory()
@@ -405,9 +462,9 @@ class A0XCcpExecutorTests(unittest.TestCase):
         from latent_triz.a0x_ccp_executor import SubprocessGuardPreflightProducer
 
         responses = iter((
-            b"commit-ci-preflight 0.1.0\n", b'{"decision":"admit"}',
+            b"commit-ci-preflight 0.1.0\n", b"## agent/test\n", ("a" * 40 + "\n").encode(), b'{"decision":"admit"}',
             b'{"active":false,"queue_count":0,"slot":{"state":"free"}}',
-            ("a" * 40 + "\n").encode(), b"## agent/test\n", b"orbstack\n", b"",
+            b"orbstack\n", b"",
         ))
         calls: list[tuple[str, ...]] = []
         waits: list[int | None] = []
@@ -423,10 +480,13 @@ class A0XCcpExecutorTests(unittest.TestCase):
         def fake_popen(argv, **_kwargs):
             calls.append(tuple(argv))
             return FakePopen(next(responses))
-        with patch("latent_triz.a0x_ccp_executor.subprocess.Popen", side_effect=fake_popen):
+        with patch("latent_triz.a0x_ccp_executor.subprocess.Popen", side_effect=fake_popen), patch(
+            "latent_triz.a0x_ccp_executor._ProductionExecutableIdentityVerifier.verify",
+        ) as verify_identity:
             rows = SubprocessGuardPreflightProducer().produce(
                 ccp_path=Path("/private/tmp/ccp"), repository_root=Path("/private/tmp/repository"),
             )
+        self.assertEqual(3, verify_identity.call_count)
         self.assertEqual(
             ["ccp_version", "resource_status", "admission_status", "git_source_state", "docker_context", "docker_active_count"],
             [row.role for row in rows],

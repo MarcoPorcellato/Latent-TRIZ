@@ -59,6 +59,16 @@ def _load_cli_module():
 
 
 class A0XVerticalMaterialTests(unittest.TestCase):
+    def test_child_never_reports_completion_after_cleanup_failure(self) -> None:
+        from scripts.a0x_vertical_material_child import _lifecycle_can_complete
+        for status in ("completed", "sealed_failure"):
+            result = {"package_verified": True, "lifecycle_status": status, "post_terminal_failure": None}
+            self.assertTrue(_lifecycle_can_complete(result))
+            with self.subTest(status=status):
+                self.assertFalse(_lifecycle_can_complete({**result, "post_terminal_failure": {"stage": "release"}}))
+                self.assertFalse(_lifecycle_can_complete({key: value for key, value in result.items() if key != "post_terminal_failure"}))
+        self.assertFalse(_lifecycle_can_complete({"package_verified": True, "lifecycle_status": "post_terminal_failure", "post_terminal_failure": None}))
+
     def test_v2_launcher_is_a_distinct_typed_entrypoint(self) -> None:
         """Future Gate C must not select the historical v1/batch launcher."""
         from latent_triz.a0x_ccp_executor import launch_vertical_runtime_package
@@ -102,7 +112,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             "environment_template": descriptor["environment_template"],
             "resource": {"profile": "a0x-material", "workload_family": "latent-triz-a0x-v1", "executor": "native", "cache_state": "warm", "execution_mode": "native", "target_platform": "macos-arm64", "memory_limit_bytes": 8589934592},
             "timeouts": {"outer_timeout_seconds": 3600, "internal_budget_seconds": 3300, "cleanup_margin_seconds": 300, "admission_timeout_seconds": 300},
-            "argv_template": ["{CCP}", "guard", "exec", "--admission-timeout-seconds", "300", "--timeout-seconds", "3600", "--resource-profile", "a0x-material", "--resource-workload-family", "latent-triz-a0x-v1", "--resource-executor", "native", "--resource-cache-state", "warm", "--resource-execution-mode", "native", "--resource-target-platform", "macos-arm64", "--resource-memory-limit-bytes", "8589934592", "--", "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}"],
+            "argv_template": ["{CCP}", "guard", "exec", "--admission-timeout-seconds", "300", "--timeout-seconds", "3600", "--resource-profile", "a0x-material", "--resource-workload-family", "latent-triz-a0x-v1", "--resource-executor", "native", "--resource-cache-state", "warm", "--resource-execution-mode", "native", "--resource-target-platform", "macos-arm64", "--resource-memory-limit-bytes", "8589934592", "--", "/usr/bin/env", "-i", "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1", "{PYTHON}", "-I", "-B", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}"],
         }
         return {
             "artifact_class": "a0x-vertical-execution-authorization",
@@ -123,6 +133,24 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             "authorization_id": "gate-c-auth-test-01", "attempt_id": "gate-c-attempt-test-01",
             "max_guard_exec_count": 1, "stop_boundary": "after_one_sealed_target_read",
         }
+
+    @staticmethod
+    def _synthetic_vertical_terminal(authorization) -> bytes:
+        """Build the only acceptable target-free v1 terminal wire."""
+        terminal = {
+            "artifact_class": "a0x-vertical-material-child-terminal",
+            "terminal_profile": "a0x-vertical-child-terminal-v1",
+            "exit_class": "completed",
+            "qualified_source": authorization["qualified_source"],
+            "pair_binding": authorization["pair_binding"],
+            "authorization_id": authorization["authorization_id"],
+            "attempt_id": authorization["attempt_id"],
+            "qualification_context": authorization["qualification_context"],
+            "reached_frontier": "validated_graph",
+            "scientific_outcome": None,
+            "terminal_package": None,
+        }
+        return json.dumps(terminal, sort_keys=True, separators=(",", ":")).encode() + b"\n"
 
     @staticmethod
     def _compact_json(value) -> bytes:
@@ -150,12 +178,13 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path = root / vertical_execution_authorization_path(binding)
         path.parent.mkdir(parents=True)
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        self_terminal = self._synthetic_vertical_terminal(authorization)
 
         class Inert:
             calls = 0
             def run(self, *args, **kwargs):
                 self.calls += 1
-                terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+                terminal = self_terminal
                 return ProcessResult(0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0, stdout_prefix=terminal)
 
         inert = Inert()
@@ -182,6 +211,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path = root / vertical_execution_authorization_path(binding)
         path.parent.mkdir(parents=True)
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        self_terminal = self._synthetic_vertical_terminal(authorization)
 
         class CountingSynthetic(_SyntheticExecutableIdentityVerifier):
             def __init__(self):
@@ -193,7 +223,7 @@ class A0XVerticalMaterialTests(unittest.TestCase):
 
         class Inert:
             def run(self, *args, **kwargs):
-                terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+                terminal = self_terminal
                 return ProcessResult(0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0, stdout_prefix=terminal)
 
         verifier = CountingSynthetic()
@@ -496,7 +526,16 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path = root / vertical_execution_authorization_path(binding)
         path.parent.mkdir(parents=True)
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-        terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+        terminal = self._synthetic_vertical_terminal(authorization)
+        from latent_triz.a0x_ccp_executor import _parse_vertical_child_terminal
+        self.assertIsNotNone(_parse_vertical_child_terminal(
+            terminal,
+            expected_source=authorization["qualified_source"],
+            expected_pair=authorization["pair_binding"],
+            expected_authorization_id=authorization["authorization_id"],
+            expected_attempt_id=authorization["attempt_id"],
+            expected_qualification_context=authorization["qualification_context"],
+        ))
 
         class TruncatedTerminal:
             def run(self, *args, **kwargs):

@@ -3,8 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+import os
+import posixpath
 import re
+import stat
 import tomllib
+from urllib.parse import unquote
 
 from typing import Dict, List, Tuple
 
@@ -16,6 +20,50 @@ REQUIRED_PROFILE_FIELDS = {
 }
 ALLOWED_ENTRY_POINT_SUFFIX = ".md"
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Mirrors the N3 manifest's distinct dispositions. Keep in sync; tests
+# compare these sets to the manifest using path strings only.
+A0X_N3_PROTECTED_LINK_PATHS = frozenset(
+    {
+        "data/a0/procedural-targets/calibration-targets.jsonl",
+        "data/a0/sealed-targets/targets.jsonl",
+        "data/a0r1/targets/calibration.jsonl",
+        "data/a0r1/targets/sealed.jsonl",
+    }
+)
+A0X_N3_EXCLUDED_SENSITIVE_LINK_PATHS = frozenset(
+    {
+        "experiments/exp001-comparative-reference/additional-model-authorization.json",
+        "experiments/exp001-comparative-reference/execution-authorization.json",
+        "experiments/exp001-comparative-reference/next-model-authorization.json",
+        "experiments/exp001-comparative-reference/qwen-download-authorization.json",
+        "experiments/exp001-reference-integrated/execution-authorization.json",
+        "experiments/a0r2-independent-model/sealed-execution-approval-dossier.json",
+        "results/a0r2/preexecution/smollm2-360m-f8027fd0/sealed-execution-authorization.json",
+        "results/a0r2c1/preexecution/sealed-execution-authorization.json",
+        "experiments/exp002-auto/combined-target-key-template.json",
+        "experiments/exp002-qwen3-followup/transfer-target-key-template.json",
+        "results/exp002/preexecution/sealed-key-access-template.json",
+        "results/exp001-comparative/pythia-70m-e93a9faa-pythia-20260818-01/sealed-key-access.json",
+        "results/exp001-comparative/qwen3-0.6b-da87bfb-qwen3-20260818-01/sealed-key-access.json",
+        "results/exp001-comparative/smollm2-360m-f8027fd0-smollm2-20260818-01/sealed-key-access.json",
+    }
+)
+A0X_N3_DEFERRED_LINK_PATHS = A0X_N3_PROTECTED_LINK_PATHS | A0X_N3_EXCLUDED_SENSITIVE_LINK_PATHS
+_A0X_N3_DEFERRED_LINK_DISPOSITIONS_CASEFOLDED = {
+    **{path.casefold(): "deferred_protected" for path in A0X_N3_PROTECTED_LINK_PATHS},
+    **{
+        path.casefold(): "excluded_sensitive_role_unverified"
+        for path in A0X_N3_EXCLUDED_SENSITIVE_LINK_PATHS
+    },
+}
+_HAS_SAFE_NOFOLLOW_DIR_FD = (
+    hasattr(os, "O_NOFOLLOW")
+    and hasattr(os, "O_DIRECTORY")
+    and os.open in os.supports_dir_fd
+    and os.stat in os.supports_dir_fd
+    and os.stat in os.supports_follow_symlinks
+)
 
 
 @dataclass(frozen=True)
@@ -108,11 +156,41 @@ def audit_docs(profile: OkfProfile, root: Path, as_of: date) -> List[DocsIssue]:
     issues: List[DocsIssue] = []
     canonical_seen: Dict[Tuple[str, str], str] = {}
     canonical_status = "canonical"
+    root_path = root.resolve()
 
     for entry_point in profile.entry_points:
-        path = root / entry_point
-        rel = entry_point.replace("\\", "/")
-        if not path.is_file():
+        rel = _normalize_repo_relative_path(entry_point)
+        if rel is None:
+            issues.append(
+                DocsIssue(
+                    file=entry_point.replace("\\", "/"),
+                    line=1,
+                    code="DOCS_ROOT_ESCAPE",
+                    message=f"entry point escapes repository root: {entry_point}",
+                )
+            )
+            continue
+
+        entry_disposition = _deferred_link_disposition(rel)
+        if entry_disposition is not None:
+            if entry_disposition == "deferred_protected":
+                code = "DOCS_ENTRY_POINT_DEFERRED_PROTECTED"
+                message = "deferred_protected / UNVERIFIED: entry point was not resolved or inspected"
+            else:
+                code = "DOCS_ENTRY_POINT_EXCLUDED_SENSITIVE_UNVERIFIED"
+                message = "excluded_sensitive_role_unverified / UNVERIFIED: entry point was not resolved or inspected"
+            issues.append(
+                DocsIssue(
+                    file=rel,
+                    line=1,
+                    code=code,
+                    message=message,
+                )
+            )
+            continue
+
+        entry_status, text = _inspect_repo_file(root_path, rel, read_contents=True)
+        if entry_status == "missing":
             issues.append(
                 DocsIssue(
                     file=rel,
@@ -122,9 +200,18 @@ def audit_docs(profile: OkfProfile, root: Path, as_of: date) -> List[DocsIssue]:
                 )
             )
             continue
+        if entry_status != "ok" or text is None:
+            issues.append(
+                DocsIssue(
+                    file=rel,
+                    line=1,
+                    code="DOCS_ENTRY_POINT_UNVERIFIED",
+                    message="UNVERIFIED: entry point could not be opened without following a filesystem link",
+                )
+            )
+            continue
 
-        with path.open("r", encoding="utf-8") as handle:
-            text = handle.read()
+        path = root_path.joinpath(*rel.split("/"))
 
         reserved_nested_index = rel.endswith("/index.md") and rel != "docs/index.md"
         frontmatter, fm_issues = _parse_frontmatter(rel, text)
@@ -134,7 +221,7 @@ def audit_docs(profile: OkfProfile, root: Path, as_of: date) -> List[DocsIssue]:
 
         if frontmatter is None:
             if reserved_nested_index:
-                issues.extend(_validate_markdown_links(path, rel, root, text))
+                issues.extend(_validate_markdown_links(path, rel, root_path, text))
             continue
 
         for field in profile.required_fields:
@@ -176,7 +263,7 @@ def audit_docs(profile: OkfProfile, root: Path, as_of: date) -> List[DocsIssue]:
                 else:
                     canonical_seen[key] = rel
 
-        issues.extend(_validate_markdown_links(path, rel, root, text))
+        issues.extend(_validate_markdown_links(path, rel, root_path, text))
 
     issues.sort(key=lambda item: (item.file, item.line, item.code, item.message))
     return issues
@@ -272,6 +359,143 @@ def _validate_last_verified(
         )
 
 
+def _normalize_repo_relative_path(raw_path: str) -> str | None:
+    try:
+        normalized = posixpath.normpath(unquote(raw_path, errors="strict").replace("\\", "/"))
+    except UnicodeError:
+        return None
+    if (
+        not normalized
+        or normalized in {".", ".."}
+        or normalized.startswith("../")
+        or normalized.startswith("/")
+        or re.match(r"^[A-Za-z]:", normalized)
+    ):
+        return None
+    return normalized
+
+
+def _normalize_link_target(root: Path, source_rel: str, target_path: str) -> str | None:
+    try:
+        decoded = unquote(target_path, errors="strict").replace("\\", "/")
+    except UnicodeError:
+        return None
+
+    if re.match(r"^[A-Za-z]:", decoded):
+        return None
+    if decoded.startswith("/"):
+        root_text = posixpath.normpath(root.as_posix())
+        target_text = posixpath.normpath(decoded)
+        if target_text == root_text:
+            candidate = "."
+        elif target_text.startswith(root_text.rstrip("/") + "/"):
+            candidate = posixpath.relpath(target_text, root_text)
+        else:
+            return None
+    else:
+        candidate = posixpath.normpath(
+            posixpath.join(posixpath.dirname(source_rel.replace("\\", "/")), decoded)
+        )
+
+    if candidate in {".", ".."} or candidate.startswith("../") or candidate.startswith("/"):
+        return None
+    return candidate
+
+
+def _is_deferred_link_path(repo_relative_path: str) -> bool:
+    return _deferred_link_disposition(repo_relative_path) is not None
+
+
+def _deferred_link_disposition(repo_relative_path: str) -> str | None:
+    folded = posixpath.normpath(repo_relative_path.replace("\\", "/")).casefold()
+    for blocked, disposition in _A0X_N3_DEFERRED_LINK_DISPOSITIONS_CASEFOLDED.items():
+        if folded == blocked or folded.startswith(blocked + "/"):
+            return disposition
+    return None
+
+
+def _same_file_identity(left: os.stat_result, right: os.stat_result) -> bool:
+    return left.st_dev == right.st_dev and left.st_ino == right.st_ino
+
+
+def _inspect_repo_file(
+    root: Path,
+    repo_relative_path: str,
+    *,
+    read_contents: bool,
+) -> tuple[str, str | None]:
+    """Inspect a public repository file without following symlink components."""
+    if not _HAS_SAFE_NOFOLLOW_DIR_FD:
+        return "unverified", None
+
+    parts = repo_relative_path.split("/")
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return "unverified", None
+
+    root_fd: int | None = None
+    current_fd: int | None = None
+    file_fd: int | None = None
+    try:
+        root_fd = os.open(
+            os.fspath(root),
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        current_fd = root_fd
+
+        for component in parts[:-1]:
+            observed = os.stat(component, dir_fd=current_fd, follow_symlinks=False)
+            if stat.S_ISLNK(observed.st_mode):
+                return "unverified", None
+            if not stat.S_ISDIR(observed.st_mode):
+                return "missing", None
+            child_fd = os.open(
+                component,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=current_fd,
+            )
+            opened = os.fstat(child_fd)
+            if not stat.S_ISDIR(opened.st_mode) or not _same_file_identity(observed, opened):
+                os.close(child_fd)
+                return "unverified", None
+            if current_fd != root_fd:
+                os.close(current_fd)
+            current_fd = child_fd
+
+        leaf = parts[-1]
+        observed = os.stat(leaf, dir_fd=current_fd, follow_symlinks=False)
+        if stat.S_ISLNK(observed.st_mode):
+            return "unverified", None
+        if not stat.S_ISREG(observed.st_mode):
+            return "missing", None
+        if observed.st_nlink != 1:
+            return "unverified", None
+        if not read_contents:
+            return "ok", None
+
+        file_fd = os.open(leaf, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=current_fd)
+        opened = os.fstat(file_fd)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or not _same_file_identity(observed, opened)
+        ):
+            return "unverified", None
+        with os.fdopen(file_fd, "rb") as handle:
+            file_fd = None
+            return "ok", handle.read().decode("utf-8")
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, ValueError, UnicodeError):
+        return "unverified", None
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        if current_fd is not None and current_fd != root_fd:
+            os.close(current_fd)
+        if root_fd is not None:
+            os.close(root_fd)
+
+
 def _validate_markdown_links(
     path: Path,
     rel: str,
@@ -280,8 +504,6 @@ def _validate_markdown_links(
 ) -> List[DocsIssue]:
     issues: List[DocsIssue] = []
     link_re = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-    heading_cache: Dict[Path, set[str]] = {}
-    root_path = root.resolve()
 
     lines = text.splitlines()
     in_fence: str | None = None
@@ -306,22 +528,50 @@ def _validate_markdown_links(
             if target_path is None and not anchor:
                 continue
 
-            if target_path is None:
-                target_file = path
-            else:
-                target_file = (path.parent / target_path).resolve()
-                if not target_file.is_relative_to(root_path):
-                    issues.append(
-                        DocsIssue(
-                            file=rel,
-                            line=line_no,
-                            code="DOCS_ROOT_ESCAPE",
-                            message=f"link escapes docs root: {target}",
-                        )
+            repo_relative_path = (
+                _normalize_repo_relative_path(rel)
+                if target_path is None
+                else _normalize_link_target(root, rel, target_path)
+            )
+            if repo_relative_path is None:
+                issues.append(
+                    DocsIssue(
+                        file=rel,
+                        line=line_no,
+                        code="DOCS_ROOT_ESCAPE",
+                        message=f"link escapes docs root: {target}",
                     )
-                    continue
+                )
+                continue
 
-            if not target_file.is_file():
+            link_disposition = _deferred_link_disposition(repo_relative_path)
+            if link_disposition is not None:
+                if link_disposition == "deferred_protected":
+                    code = "DOCS_LINK_TARGET_DEFERRED_PROTECTED"
+                    message = "deferred_protected / UNVERIFIED: N3 target was not resolved or inspected"
+                else:
+                    code = "DOCS_LINK_TARGET_EXCLUDED_SENSITIVE_UNVERIFIED"
+                    message = "excluded_sensitive_role_unverified / UNVERIFIED: N3 target was not resolved or inspected"
+                issues.append(
+                    DocsIssue(
+                        file=rel,
+                        line=line_no,
+                        code=code,
+                        message=message,
+                    )
+                )
+                continue
+
+            target_status, target_text = (
+                ("ok", text)
+                if target_path is None
+                else _inspect_repo_file(
+                    root,
+                    repo_relative_path,
+                    read_contents=bool(anchor),
+                )
+            )
+            if target_status == "missing":
                 issues.append(
                     DocsIssue(
                         file=rel,
@@ -331,11 +581,19 @@ def _validate_markdown_links(
                     )
                 )
                 continue
+            if target_status != "ok" or (anchor and target_text is None):
+                issues.append(
+                    DocsIssue(
+                        file=rel,
+                        line=line_no,
+                        code="DOCS_LINK_TARGET_UNVERIFIED",
+                        message="UNVERIFIED: target could not be classified without following a filesystem link",
+                    )
+                )
+                continue
 
             if anchor:
-                if target_file not in heading_cache:
-                    heading_cache[target_file] = _collect_heading_anchors(target_file)
-                if anchor not in heading_cache[target_file]:
+                if anchor not in _collect_heading_anchors(target_text):
                     issues.append(
                         DocsIssue(
                             file=rel,
@@ -367,10 +625,9 @@ def _normalize_anchor(anchor: str) -> str:
     return re.sub(r"-+", "-", re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", anchor.strip().lower()))).strip("-")
 
 
-def _collect_heading_anchors(path: Path) -> set[str]:
+def _collect_heading_anchors(text: str) -> set[str]:
     anchor_re = re.compile(r"^#{1,6}\s+(.+)$")
     headings: set[str] = set()
-    text = path.read_text(encoding="utf-8")
     for line in text.splitlines():
         match = anchor_re.match(line.strip())
         if match:

@@ -17,6 +17,8 @@ import tempfile
 import unittest
 import inspect
 import hashlib
+import importlib.util
+import io
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -49,6 +51,16 @@ from tests.test_a0x_vertical_slice import ROOT, _copy_file, _publish_at, _synthe
 _GIT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
 
 
+def _load_prepare_runtime_module():
+    script = ROOT / "scripts/a0x_prepare_runtime.py"
+    spec = importlib.util.spec_from_file_location("a0x_prepare_runtime_for_vertical_test", script)
+    if spec is None or spec.loader is None:
+        raise AssertionError("A0X runtime preparation CLI is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
     """P0 v2 must be constructible without changing real Git identity."""
 
@@ -58,16 +70,22 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
         self.root.mkdir()
         _synthetic_repository(self.root)
         for relative in (
+            "scripts/a0x_vertical_material_child.py",
             "schemas/a0x-vertical-slice-manifest-v2.schema.json",
             "schemas/a0x-vertical-package-commitment-v2.schema.json",
             "schemas/a0x-gate-b-authorization-v2.schema.json",
             "schemas/a0x-vertical-gate-b-output-v2.schema.json",
             "schemas/a0x-execution-authorization-v4.schema.json",
+            "schemas/a0x-vertical-child-terminal-v1.schema.json",
+            "schemas/a0x-public-authorization-extension-v1.schema.json",
+            "schemas/a0x-public-closure-manifest-v1.schema.json",
             "schemas/a0x-hosted-gate-a-verification-receipt-synthetic-target-free-v1.schema.json",
+            "src/latent_triz/a0x_public_closure.py",
         ):
             _copy_file(ROOT, self.root, relative)
+        source_gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
         (self.root / ".gitignore").write_text(
-            ".a0x-runtime/\ngate-b/\nbin/\n", encoding="utf-8"
+            source_gitignore + "\ngate-b/\nbin/\n__pycache__/\n", encoding="utf-8"
         )
         self._git("init", "-q")
         self._git("config", "user.name", "A0X Target-Free Test")
@@ -122,6 +140,153 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
             self._git_output("rev-parse", "HEAD^{tree}"),
             self._git_output("status", "--porcelain=v1", "--untracked-files=all") == "",
         )
+
+    def _write_valid_public_closure(self, binding, prepared, gate_c):
+        """Build actual canonical closure bytes from independently read chain files.
+
+        The closure loader, schema validation, hash checks, and parent/child Git
+        probes remain production code. Only source documents are synthetic.
+        """
+        from latent_triz.a0x_public_closure import (
+            PRE_EXECUTION_EXTENSION_PATH,
+            PRE_EXECUTION_PUBLIC_ROLE_PATHS,
+            PRE_EXECUTION_PUBLIC_ROLES,
+            pre_execution_closure_relative_path,
+        )
+
+        source = {"head": self.head, "tree": self.tree, "ref": "refs/heads/main"}
+        pair = binding.pair_binding.as_mapping()
+        authorization_id = gate_c["authorization_id"]
+        attempt_id = gate_c["attempt_id"]
+        identity = {
+            "qualified_source": source,
+            "pair_binding": pair,
+            "authorization_id": authorization_id,
+            "attempt_id": attempt_id,
+            "p0_package_commitment_sha256": binding.package_commitment_sha256,
+        }
+        private_paths = {
+            "p0_dossier_raw": binding.dossier_path,
+            "gate_b_authorization_v4": prepared["vertical_outputs"]["authorization"],
+            "gate_b_readiness_v4": prepared["vertical_outputs"]["readiness"],
+        }
+        private_hashes = {
+            role: hashlib.sha256((self.root / relative).read_bytes()).hexdigest()
+            for role, relative in private_paths.items()
+        }
+        package_root = self.root / binding.package_path
+        roles = {
+            "p0_commitment": canonical_json_bytes(json.loads(
+                (self.root / binding.commitment_path).read_bytes()
+            )),
+            "p0_protocol": (package_root / "protocol.json").read_bytes(),
+            "p0_implementation": (package_root / "implementation.json").read_bytes(),
+            "p0_freeze": (package_root / "freeze.json").read_bytes(),
+            "p0_slice_manifest": (package_root / "slice-manifest.json").read_bytes(),
+        }
+        roles.update({
+            "public_dossier": canonical_json_bytes({
+                "artifact_class": "a0x-public-dossier-projection",
+                "profile": "a0x-public-dossier-projection-v1",
+                **{key: identity[key] for key in (
+                    "qualified_source", "pair_binding", "authorization_id", "attempt_id",
+                )},
+                "original_raw_sha256": private_hashes["p0_dossier_raw"],
+            }),
+            "execution_spec": canonical_json_bytes({
+                "artifact_class": "a0x-public-execution-specification",
+                "profile": "a0x-public-execution-spec-v1",
+                **{key: identity[key] for key in (
+                    "qualified_source", "pair_binding", "authorization_id", "attempt_id",
+                )},
+                "protocol_sha256": hashlib.sha256(roles["p0_protocol"]).hexdigest(),
+            }),
+            "gate_a_evidence": canonical_json_bytes({
+                "artifact_class": "a0x-public-gate-a-evidence",
+                "profile": "a0x-public-gate-a-evidence-v1",
+                **{key: identity[key] for key in (
+                    "qualified_source", "pair_binding", "authorization_id", "attempt_id",
+                )},
+            }),
+            "gate_a_attestation_bundle": b'{"synthetic":true}\n',
+            "gate_a_trusted_root": b'{"synthetic":true}\n',
+            "gate_a_transport": canonical_json_bytes({"synthetic": True}),
+            "gate_b_authorization_projection": canonical_json_bytes({
+                "artifact_class": "a0x-public-gate-b-authorization-projection",
+                "profile": "a0x-public-gate-b-authorization-projection-v1",
+                **{key: identity[key] for key in (
+                    "qualified_source", "pair_binding", "authorization_id", "attempt_id",
+                )},
+                "source_raw_sha256": private_hashes["gate_b_authorization_v4"],
+            }),
+            "gate_b_readiness_projection": canonical_json_bytes({
+                "artifact_class": "a0x-public-gate-b-readiness-projection",
+                "profile": "a0x-public-gate-b-readiness-projection-v1",
+                **{key: identity[key] for key in (
+                    "qualified_source", "pair_binding", "authorization_id", "attempt_id",
+                )},
+                "source_raw_sha256": private_hashes["gate_b_readiness_v4"],
+            }),
+        })
+        self.assertEqual(set(PRE_EXECUTION_PUBLIC_ROLES), set(roles))
+        root = self.root / pre_execution_closure_relative_path(identity)
+        for role, relative in PRE_EXECUTION_PUBLIC_ROLE_PATHS.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(roles[role])
+        extension = {
+            "artifact_class": "a0x-public-authorization-extension",
+            "profile": "a0x-public-authorization-extension-v1",
+            "schema_version": 1,
+            **identity,
+            "bindings": {
+                "public_role_sha256": {
+                    role: hashlib.sha256(raw).hexdigest() for role, raw in roles.items()
+                },
+                "private_input_sha256": private_hashes,
+            },
+            "claims": {
+                "document_bindings_consistent": True,
+                "derivation_authenticated": False,
+                "operator_approval_authenticated": False,
+                "authorization_verified": False,
+                "publication_eligible": False,
+            },
+        }
+        extension_path = root / PRE_EXECUTION_EXTENSION_PATH
+        extension_path.parent.mkdir(parents=True, exist_ok=True)
+        extension_path.write_bytes(canonical_json_bytes(extension))
+        self.assertEqual((self.head, self.tree, True), self._source_state())
+        return root
+
+    def _prepare_production_context(self, binding, prepared, execution_path):
+        """Create a production Gate-C identity without rewriting Gate-B bytes."""
+        wrappers = {
+            name: json.loads((self.root / path).read_bytes())
+            for name, path in prepared["vertical_outputs"].items()
+        }
+        gate_c = self._synthetic_execution_authorization(binding, prepared)
+        gate_c["qualification_context"] = "production"
+        execution_path.write_bytes(canonical_json_bytes(gate_c))
+        return wrappers, gate_c
+
+    def _production_closure_chain(self):
+        binding, prepared, _capabilities, execution_path = self._private_synthetic_chain()
+        wrappers, gate_c = self._prepare_production_context(binding, prepared, execution_path)
+        p0_commitment = json.loads((self.root / binding.commitment_path).read_bytes())
+        gate_b_authorization = json.loads(
+            (self.root / prepared["gate_b_authorization_path"]).read_bytes()
+        )
+        authorization_ids = {
+            p0_commitment["authorization_id"],
+            gate_b_authorization["authorization_id"],
+            gate_c["authorization_id"],
+        }
+        if len(authorization_ids) != 3 or p0_commitment["attempt_id"] == gate_c["attempt_id"]:
+            raise AssertionError("synthetic P0, Gate-B, and Gate-C phase IDs must be distinct")
+        closure_root = self._write_valid_public_closure(binding, prepared, gate_c)
+        self.assertEqual((self.head, self.tree, True), self._source_state())
+        return binding, prepared, execution_path, wrappers, gate_c, closure_root
 
     def _synthetic_gate_b_request(self, binding) -> VerticalRuntimePreparationRequest:
         """Create ignored, exact-bound synthetic external inputs for private core only."""
@@ -306,6 +471,29 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
             set(inspect.signature(prepare_vertical_runtime_bundle).parameters),
         )
 
+    def test_real_vertical_cli_production_dispatch_has_no_private_callback_typeerror(self) -> None:
+        """The actual vertical CLI must call its hardened public entrypoint only."""
+        binding = self._binding()
+        request = self._synthetic_gate_b_request(binding)
+        module = _load_prepare_runtime_module()
+        stdout = io.StringIO()
+        code = module.main(
+            [
+                "--vertical-commitment", binding.commitment_path,
+                "--gate-b-authorization", str(request.gate_b_authorization),
+                "--verifier", str(request.verifier_executable),
+                "--verifier-policy", str(request.verifier_policy),
+                "--ccp", str(request.ccp_executable),
+                "--python", str(request.python_executable),
+                "--authorization-id", request.authorization_id,
+                "--attempt-id", request.attempt_id,
+            ],
+            root=self.root,
+            stdout=stdout,
+        )
+        self.assertEqual(2, code)
+        self.assertEqual({"status": "refused"}, json.loads(stdout.getvalue()))
+
     def _invalid_gate_b_request(self, binding):
         """A package refusal must occur before these deliberately unusable inputs."""
         return VerticalRuntimePreparationRequest(
@@ -350,6 +538,28 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
             {entry.name for entry in (envelope / "package").iterdir()},
         )
         self.assertEqual(binding.package_commitment_sha256, loaded["package_commitment_sha256"])
+
+    def test_real_git_public_closure_is_ignored_but_unrelated_dirt_is_not(self) -> None:
+        """Only the canonical runtime closure stays outside the frozen source tree."""
+        binding = self._binding()
+        closure_member = (
+            self.root / "experiments/a0x-six-model/vertical-slices"
+            / self.head / "a0/smollm2_360m/public-closure/v1/public/dossier.json"
+        )
+        closure_member.parent.mkdir(parents=True, exist_ok=True)
+        closure_member.write_bytes(b"synthetic closure fixture")
+        self.assertEqual(
+            "",
+            self._git_output("status", "--porcelain=v1", "--untracked-files=all"),
+            "the exact canonical closure path must not dirty the qualified checkout",
+        )
+        unrelated = self.root / "unrelated-untracked.txt"
+        unrelated.write_text("not part of the closure\n", encoding="utf-8")
+        self.assertNotEqual(
+            "",
+            self._git_output("status", "--porcelain=v1", "--untracked-files=all"),
+            "the narrow ignore rule must not hide unrelated untracked files",
+        )
 
     def test_real_git_p0_mutations_refuse_before_gate_b_capabilities(self) -> None:
         """Every damaged ignored P0 envelope is terminal before Gate-B hooks."""
@@ -494,7 +704,7 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
                 "--resource-workload-family", "latent-triz-a0x-v1", "--resource-executor", "native",
                 "--resource-cache-state", "warm", "--resource-execution-mode", "native",
                 "--resource-target-platform", "macos-arm64", "--resource-memory-limit-bytes", "8589934592",
-                "--", "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}",
+                "--", "/usr/bin/env", "-i", "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_DATASETS_OFFLINE=1", "TOKENIZERS_PARALLELISM=false", "PYTHONNOUSERSITE=1", "{PYTHON}", "-I", "-B", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}",
             ],
         }
         return {
@@ -523,6 +733,23 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
             "max_guard_exec_count": 1, "stop_boundary": "after_one_sealed_target_read",
         }
 
+    def test_v4_schema_rejects_open_pair_and_guard_launch_shapes(self) -> None:
+        """A v4 authorization must close both trust-bearing nested objects."""
+        from latent_triz.validator import validate
+
+        binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        authorization = self._synthetic_execution_authorization(binding, prepared)
+        schema = json.loads((ROOT / "schemas/a0x-execution-authorization-v4.schema.json").read_bytes())
+        self.assertEqual([], validate(authorization, schema))
+
+        open_pair = dict(authorization)
+        open_pair["pair_binding"] = {**authorization["pair_binding"], "unexpected": "accepted?"}
+        self.assertTrue(validate(open_pair, schema), "v4 pair binding accepted an unknown field")
+
+        open_launch = dict(authorization)
+        open_launch["guard_launch"] = {**authorization["guard_launch"], "unexpected": "accepted?"}
+        self.assertTrue(validate(open_launch, schema), "v4 guard launch accepted an unknown field")
+
     def _private_synthetic_chain(self):
         """Material-free P0/Gate-B graph rooted in this test's committed H/T."""
         from latent_triz.a0x_ccp_executor import vertical_execution_authorization_path
@@ -542,6 +769,579 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
         execution_path.parent.mkdir(parents=True)
         execution_path.write_bytes(canonical_json_bytes(self._synthetic_execution_authorization(binding, prepared)))
         return binding, prepared, capabilities, execution_path
+
+    def test_vertical_gate_b_binds_only_the_fixed_v2_child(self) -> None:
+        """The v2 descriptor and its inlet share one internal, non-legacy child binding."""
+        binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        descriptor = json.loads((self.root / prepared["vertical_outputs"]["descriptor"]).read_text(encoding="utf-8"))["payload"]
+        inlet = json.loads((self.root / prepared["vertical_outputs"]["authorization"]).read_text(encoding="utf-8"))["payload"]
+        child = self.root / "scripts/a0x_vertical_material_child.py"
+        self.assertTrue(child.is_file())
+        self.assertEqual("scripts/a0x_vertical_material_child.py", descriptor["child_script"]["path"])
+        self.assertEqual(hashlib.sha256(child.read_bytes()).hexdigest(), descriptor["child_script"]["sha256"])
+        self.assertEqual(descriptor["child_script"]["sha256"], inlet["child_sha256"])
+        self.assertEqual("gate-b-real-git-auth-01", descriptor["authorization_id"])
+        self.assertEqual("gate-b-real-git-attempt-01", descriptor["attempt_id"])
+
+    def test_private_v2_child_revalidates_every_bound_trust_file_before_factory(self) -> None:
+        """Replacing a bound graph member after its read must refuse before the inert factory."""
+        import contextlib
+        import importlib.util
+
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_mutation_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+
+        for target_kind in (
+            "descriptor", "readiness", "gate_a_evidence", "commitment", "dossier", "authorization",
+            "execution-authorization", "child",
+        ):
+            with self.subTest(target_kind=target_kind):
+                shutil.rmtree(self.root / ".a0x-runtime", ignore_errors=True)
+                binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+                paths = {
+                    "descriptor": prepared["vertical_outputs"]["descriptor"],
+                    "readiness": prepared["vertical_outputs"]["readiness"],
+                    "gate_a_evidence": prepared["vertical_outputs"]["gate_a_evidence"],
+                    "commitment": binding.commitment_path,
+                    "dossier": binding.dossier_path,
+                    "authorization": prepared["vertical_outputs"]["authorization"],
+                    "execution-authorization": _execution_path.relative_to(self.root).as_posix(),
+                    "child": "scripts/a0x_vertical_material_child.py",
+                }
+                target = paths[target_kind]
+                original_read = child._read_independent
+                replaced = False
+
+                def replace_after_read(root, relative):
+                    nonlocal replaced
+                    raw, identity = original_read(root, relative)
+                    if relative == target and not replaced:
+                        replaced = True
+                        (Path(root) / relative).write_bytes(b"{}")
+                    return raw, identity
+
+                calls = []
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(mock.patch.object(child, "_read_independent", side_effect=replace_after_read))
+                    code = child._run_child_core(
+                        ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+                        root=self.root,
+                        source_head_probe=lambda: (self.head, self.tree, True),
+                        environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+                        cwd=self.root,
+                        child_script_path=child_path,
+                        qualification_context="synthetic-target-free",
+                        inert_factory=lambda graph: calls.append(graph),
+                        stdout=io.StringIO(),
+                    )
+                self.assertTrue(replaced)
+                self.assertEqual(2, code)
+                self.assertEqual([], calls)
+                shutil.rmtree(self.root / ".a0x-runtime", ignore_errors=True)
+
+    def test_private_v2_child_reaches_inert_factory_once_for_the_exact_graph(self) -> None:
+        """Only an entirely rebound synthetic graph may cross the private target-free seam."""
+        import importlib.util
+
+        binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_valid_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        calls = []
+        output = io.StringIO()
+        graph = child._validate_graph(
+            self.root,
+            prepared["vertical_outputs"]["descriptor"],
+            source_state_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            expected_context="synthetic-target-free",
+        )
+        self.assertEqual(binding.pair_binding.as_mapping(), graph["descriptor"]["pair_binding"])
+        trust_files = graph["trust_file_identities"]
+        self.assertEqual(
+            {
+                binding.commitment_path,
+                binding.dossier_path,
+                prepared["vertical_outputs"]["descriptor"],
+                prepared["vertical_outputs"]["readiness"],
+                prepared["vertical_outputs"]["gate_a_evidence"],
+                prepared["vertical_outputs"]["authorization"],
+                prepared["vertical_outputs"]["mapping"],
+                prepared["gate_b_authorization_path"],
+                prepared["verification_receipt_path"],
+                "scripts/a0x_vertical_material_child.py",
+                "schemas/a0x-execution-authorization-v4.schema.json",
+                _execution_path.relative_to(self.root).as_posix(),
+            },
+            set(trust_files) - {f".a0x-runtime/gate-a/evidence/{self.head}/{name}" for name in (
+                "hosted-gate-a-evidence.json", "hosted-gate-a-attestation.bundle.jsonl",
+                "github-trusted-root.jsonl", "hosted-gate-a-transport.json")},
+        )
+        self.assertTrue({f".a0x-runtime/gate-a/evidence/{self.head}/{name}" for name in (
+            "hosted-gate-a-evidence.json", "hosted-gate-a-attestation.bundle.jsonl",
+            "github-trusted-root.jsonl", "hosted-gate-a-transport.json")} <= set(trust_files))
+        with self.assertRaises(TypeError):
+            trust_files["injected"] = {}
+        with self.assertRaises(TypeError):
+            trust_files["scripts/a0x_vertical_material_child.py"]["sha256"] = "0" * 64
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: calls.append(graph),
+            stdout=output,
+        )
+        self.assertEqual(0, code)
+        self.assertEqual(1, len(calls))
+        terminal = json.loads(output.getvalue())
+        self.assertEqual("a0x-vertical-child-terminal-v1", terminal["terminal_profile"])
+        self.assertEqual("completed", terminal["exit_class"])
+        self.assertEqual("validated_graph", terminal["reached_frontier"])
+        self.assertIsNone(terminal["scientific_outcome"])
+        self.assertEqual("synthetic-target-free", terminal["qualification_context"])
+        self.assertEqual(binding.pair_binding.as_mapping(), terminal["pair_binding"])
+        self.assertEqual(self.head, terminal["qualified_source"]["head"])
+        self.assertEqual("gate-c-real-git-auth-01", terminal["authorization_id"])
+        self.assertEqual("gate-c-real-git-attempt-01", terminal["attempt_id"])
+        self.assertEqual(binding.pair_binding.as_mapping(), calls[0].descriptor["pair_binding"])
+
+    def test_private_v2_child_refuses_semantic_inlet_mutations_before_factory(self) -> None:
+        """Canonical inlet bytes must still agree with every descriptor-bound identity."""
+        import importlib.util
+
+        for field in ("qualified_source", "gate_a_evidence", "runtime_readiness", "ccp", "python_sha256", "child_sha256"):
+            with self.subTest(field=field):
+                shutil.rmtree(self.root / ".a0x-runtime", ignore_errors=True)
+                _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+                child_path = self.root / "scripts/a0x_vertical_material_child.py"
+                spec = importlib.util.spec_from_file_location(f"a0x_vertical_child_semantic_{field}", child_path)
+                self.assertIsNotNone(spec)
+                self.assertIsNotNone(spec.loader)
+                child = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(child)
+                authorization_path = self.root / prepared["vertical_outputs"]["authorization"]
+                authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+                payload = authorization["payload"]
+                if field == "qualified_source":
+                    payload[field] = {"head": "0" * 40, "tree": "1" * 40, "ref": "refs/heads/main"}
+                elif field in {"gate_a_evidence", "runtime_readiness"}:
+                    payload[field] = {**payload[field], "sha256": "0" * 64}
+                elif field == "ccp":
+                    payload[field] = {**payload[field], "sha256": "0" * 64}
+                else:
+                    payload[field] = "0" * 64
+                authorization["payload_sha256"] = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+                authorization_path.write_bytes(canonical_json_bytes(authorization))
+                calls = []
+                code = child._run_child_core(
+                    ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+                    root=self.root,
+                    source_head_probe=lambda: (self.head, self.tree, True),
+                    environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+                    cwd=self.root,
+                    child_script_path=child_path,
+                    qualification_context="synthetic-target-free",
+                    inert_factory=lambda graph: calls.append(graph),
+                    stdout=io.StringIO(),
+                )
+                self.assertEqual(2, code)
+                self.assertEqual([], calls)
+                shutil.rmtree(self.root / ".a0x-runtime", ignore_errors=True)
+
+    def test_private_v2_child_refuses_live_tree_or_cleanliness_drift_before_factory(self) -> None:
+        """The private factory requires the committed descriptor head, tree, and clean state."""
+        import importlib.util
+
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_source_state_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        for observed in ((self.head, "0" * 40, True), (self.head, self.tree, False)):
+            with self.subTest(observed=observed):
+                shutil.rmtree(self.root / ".a0x-runtime", ignore_errors=True)
+                _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+                calls = []
+                code = child._run_child_core(
+                    ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+                    root=self.root,
+                    source_head_probe=lambda observed=observed: observed,
+                    environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+                    cwd=self.root,
+                    child_script_path=child_path,
+                    qualification_context="synthetic-target-free",
+                    inert_factory=lambda graph: calls.append(graph),
+                    stdout=io.StringIO(),
+                )
+                self.assertEqual(2, code)
+                self.assertEqual([], calls)
+
+    def test_default_source_state_refuses_failed_git_status(self) -> None:
+        """A failed cleanliness probe is not interchangeable with an empty clean-status result."""
+        import importlib.util
+
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_git_status_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        results = [
+            subprocess.CompletedProcess(("git", "rev-parse", "HEAD"), 0, stdout=(self.head + "\n").encode("ascii")),
+            subprocess.CompletedProcess(("git", "rev-parse", "HEAD^{tree}"), 0, stdout=(self.tree + "\n").encode("ascii")),
+            subprocess.CompletedProcess(("git", "status"), 1, stdout=b""),
+        ]
+        with mock.patch.object(child.subprocess, "run", side_effect=results):
+            self.assertEqual(("", "", False), child._default_source_state(self.root))
+
+    def test_private_v2_child_refuses_descriptor_commitment_binding_drift_before_factory(self) -> None:
+        """A self-consistent descriptor/inlet cannot substitute the committed P0 package digest."""
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_commitment_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        descriptor_path = self.root / prepared["vertical_outputs"]["descriptor"]
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        descriptor["payload"]["vertical_package"]["package_commitment_sha256"] = "0" * 64
+        descriptor["payload_sha256"] = hashlib.sha256(canonical_json_bytes(descriptor["payload"])).hexdigest()
+        descriptor_path.write_bytes(canonical_json_bytes(descriptor))
+        authorization_path = self.root / prepared["vertical_outputs"]["authorization"]
+        authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+        authorization["payload"]["vertical_package"]["package_commitment_sha256"] = "0" * 64
+        authorization["payload"]["descriptor"]["sha256"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
+        authorization["payload_sha256"] = hashlib.sha256(canonical_json_bytes(authorization["payload"])).hexdigest()
+        authorization_path.write_bytes(canonical_json_bytes(authorization))
+        calls = []
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: calls.append(graph),
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+
+    def test_private_v2_child_refuses_semantically_invalid_gate_a_payload_before_factory(self) -> None:
+        """A coherent wrapper-hash rewrite cannot replace the validated hosted-evidence payload."""
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_gate_a_semantics_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+
+        evidence_path = self.root / prepared["vertical_outputs"]["gate_a_evidence"]
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["payload"]["repository"] = "Wrong/Repository"
+        evidence["payload_sha256"] = hashlib.sha256(canonical_json_bytes(evidence["payload"])).hexdigest()
+        evidence_path.write_bytes(canonical_json_bytes(evidence))
+
+        descriptor_path = self.root / prepared["vertical_outputs"]["descriptor"]
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        descriptor["payload"]["gate_a_evidence"]["sha256"] = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        descriptor["payload_sha256"] = hashlib.sha256(canonical_json_bytes(descriptor["payload"])).hexdigest()
+        descriptor_path.write_bytes(canonical_json_bytes(descriptor))
+
+        authorization_path = self.root / prepared["vertical_outputs"]["authorization"]
+        authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+        authorization["payload"]["gate_a_evidence"]["sha256"] = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        authorization["payload"]["descriptor"]["sha256"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
+        authorization["payload_sha256"] = hashlib.sha256(canonical_json_bytes(authorization["payload"])).hexdigest()
+        authorization_path.write_bytes(canonical_json_bytes(authorization))
+
+        calls = []
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: calls.append(graph),
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+
+    def test_private_v2_child_refuses_noncanonical_gate_a_reference_before_factory(self) -> None:
+        """A valid output copied to an arbitrary root-relative path is not a derived v2 dependency."""
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_gate_a_path_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+
+        evidence_path = self.root / prepared["vertical_outputs"]["gate_a_evidence"]
+        alternate_relative = prepared["vertical_outputs"]["gate_a_evidence"].replace(
+            "gate-a-evidence.json", "alternate-gate-a-evidence.json",
+        )
+        alternate_path = self.root / alternate_relative
+        alternate_path.write_bytes(evidence_path.read_bytes())
+
+        descriptor_path = self.root / prepared["vertical_outputs"]["descriptor"]
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        descriptor["payload"]["gate_a_evidence"] = {
+            "role": "gate_a_evidence", "path": alternate_relative,
+            "sha256": hashlib.sha256(alternate_path.read_bytes()).hexdigest(),
+        }
+        descriptor["payload_sha256"] = hashlib.sha256(canonical_json_bytes(descriptor["payload"])).hexdigest()
+        descriptor_path.write_bytes(canonical_json_bytes(descriptor))
+
+        authorization_path = self.root / prepared["vertical_outputs"]["authorization"]
+        authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+        authorization["payload"]["gate_a_evidence"] = dict(descriptor["payload"]["gate_a_evidence"])
+        authorization["payload"]["descriptor"]["sha256"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
+        authorization["payload_sha256"] = hashlib.sha256(canonical_json_bytes(authorization["payload"])).hexdigest()
+        authorization_path.write_bytes(canonical_json_bytes(authorization))
+
+        calls = []
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: calls.append(graph),
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+
+    def test_private_v2_child_refuses_same_inode_same_size_trust_rewrite_before_factory(self) -> None:
+        """Final revalidation must hash bytes, not merely compare an inode and its size."""
+        import contextlib
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_same_size_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        target = prepared["vertical_outputs"]["descriptor"]
+        original_read = child._read_independent
+        rewritten = False
+
+        def same_size_rewrite(root, relative):
+            nonlocal rewritten
+            raw, identity = original_read(root, relative)
+            if relative == target and not rewritten:
+                rewritten = True
+                (Path(root) / relative).write_bytes(b" " * len(raw))
+            return raw, identity
+
+        calls = []
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(child, "_read_independent", side_effect=same_size_rewrite))
+            code = child._run_child_core(
+                ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+                root=self.root,
+                source_head_probe=lambda: (self.head, self.tree, True),
+                environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+                cwd=self.root,
+                child_script_path=child_path,
+                qualification_context="synthetic-target-free",
+                inert_factory=lambda graph: calls.append(graph),
+                stdout=io.StringIO(),
+            )
+        self.assertTrue(rewritten)
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+
+    def test_private_v2_child_binds_gate_b_authorization_identity_to_raw_authority(self) -> None:
+        """Descriptor/inlet agreement alone cannot substitute the raw Gate-B authorization ID."""
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_gate_b_id_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        descriptor_path = self.root / prepared["vertical_outputs"]["descriptor"]
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        descriptor["payload"]["authorization_id"] = "substituted-gate-b-auth"
+        descriptor["payload_sha256"] = hashlib.sha256(canonical_json_bytes(descriptor["payload"])).hexdigest()
+        descriptor_path.write_bytes(canonical_json_bytes(descriptor))
+        authorization_path = self.root / prepared["vertical_outputs"]["authorization"]
+        authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+        authorization["payload"]["authorization_id"] = "substituted-gate-b-auth"
+        authorization["payload"]["descriptor"]["sha256"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
+        authorization["payload_sha256"] = hashlib.sha256(canonical_json_bytes(authorization["payload"])).hexdigest()
+        authorization_path.write_bytes(canonical_json_bytes(authorization))
+        calls = []
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: calls.append(graph),
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+
+    def test_private_v2_child_refuses_descriptor_wrapper_context_drift_before_factory(self) -> None:
+        """The descriptor wrapper context is a bound capability boundary, not a cosmetic field."""
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_context_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        descriptor_path = self.root / prepared["vertical_outputs"]["descriptor"]
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        descriptor["qualification_context"] = "production"
+        descriptor_path.write_bytes(canonical_json_bytes(descriptor))
+        authorization_path = self.root / prepared["vertical_outputs"]["authorization"]
+        authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+        authorization["payload"]["descriptor"]["sha256"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
+        authorization["payload_sha256"] = hashlib.sha256(canonical_json_bytes(authorization["payload"])).hexdigest()
+        authorization_path.write_bytes(canonical_json_bytes(authorization))
+        calls = []
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: calls.append(graph),
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+
+    def test_private_v2_child_refuses_descriptor_wrapper_package_drift_before_factory(self) -> None:
+        """A coherently rehashed wrapper cannot replace its validated vertical-package identity."""
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_wrapper_package_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        descriptor_path = self.root / prepared["vertical_outputs"]["descriptor"]
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        descriptor["vertical_package"] = {}
+        descriptor_path.write_bytes(canonical_json_bytes(descriptor))
+        authorization_path = self.root / prepared["vertical_outputs"]["authorization"]
+        authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+        authorization["payload"]["descriptor"]["sha256"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
+        authorization["payload_sha256"] = hashlib.sha256(canonical_json_bytes(authorization["payload"])).hexdigest()
+        authorization_path.write_bytes(canonical_json_bytes(authorization))
+        calls = []
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: calls.append(graph),
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+
+    def test_private_v2_child_refuses_fifo_within_bounded_subprocess(self) -> None:
+        """A nonregular trust leaf must refuse; it must never wait for a FIFO writer."""
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        readiness = self.root / prepared["vertical_outputs"]["readiness"]
+        readiness.unlink()
+        os.mkfifo(readiness)
+        runner = (
+            "import importlib.util,sys;from pathlib import Path;"
+            "root=Path(sys.argv[1]);path=root/'scripts/a0x_vertical_material_child.py';"
+            "spec=importlib.util.spec_from_file_location('vertical_fifo_runner',path);"
+            "child=importlib.util.module_from_spec(spec);spec.loader.exec_module(child);"
+            "env={item.split('=',1)[0]:item.split('=',1)[1] for item in child._ENVIRONMENT};"
+            "raise SystemExit(child._run_child_core(['--launch-descriptor',sys.argv[2]],root=root,source_head_probe=None,environment=env,cwd=root,child_script_path=path,qualification_context='synthetic-target-free',inert_factory=lambda _graph:None,stdout=sys.stdout))"
+        )
+        completed = subprocess.run(
+            (sys.executable, "-c", runner, str(self.root), prepared["vertical_outputs"]["descriptor"]),
+            cwd=self.root, check=False, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5,
+        )
+        self.assertEqual(2, completed.returncode)
+        self.assertEqual(
+            '{"artifact_class":"a0x-vertical-material-child-terminal","exit_class":"refused","terminal_profile":"a0x-vertical-child-terminal-v1"}\n',
+            completed.stdout,
+        )
+
+    def test_private_v2_child_returns_a_deeply_immutable_graph(self) -> None:
+        """A private factory receives immutable snapshots, not mutable nested live dictionaries."""
+        import importlib.util
+
+        _binding, prepared, _capabilities, _execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_immutable_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        captured = []
+        code = child._run_child_core(
+            ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+            root=self.root,
+            source_head_probe=lambda: (self.head, self.tree, True),
+            environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+            cwd=self.root,
+            child_script_path=child_path,
+            qualification_context="synthetic-target-free",
+            inert_factory=lambda graph: captured.append(graph),
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(0, code)
+        self.assertIsInstance(captured[0].descriptor["environment_template"], tuple)
+        with self.assertRaises(TypeError):
+            captured[0].descriptor["child_script"]["path"] = "wrong"
 
     def _assert_gate_c_refuses_before_guard(self, binding, execution_path) -> None:
         """Mutation matrix boundary: no identity, preflight, or guard capability is spent."""
@@ -563,6 +1363,459 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
         identity.verify.assert_not_called()
         preflight.produce.assert_not_called()
         executor.run.assert_not_called()
+
+    def test_production_parent_refuses_missing_public_closure_before_claim_or_guard(self) -> None:
+        """The production parent checks closure before identity, claim, preflight, or execution."""
+        import latent_triz.a0x_ccp_executor as executor_module
+        import latent_triz.a0x_public_closure as public_closure
+        import latent_triz.a0x_runtime_bundle as runtime_bundle
+        from latent_triz.a0x_ccp_executor import A0XCcpExecutorError, _launch_validated_vertical_v2
+
+        binding, prepared, _capabilities, execution_path = self._private_synthetic_chain()
+        authorization = self._synthetic_execution_authorization(binding, prepared)
+        authorization["qualification_context"] = "production"
+        execution_path.write_bytes(canonical_json_bytes(authorization))
+        output_documents = {
+            name: json.loads((self.root / path).read_bytes())
+            for name, path in prepared["vertical_outputs"].items()
+        }
+        real_output_validator = runtime_bundle.validate_vertical_runtime_output
+
+        def production_context_output(root, relative, package_binding, *, expected_qualification_context=None):
+            value = real_output_validator(
+                root, relative, package_binding,
+                expected_qualification_context="synthetic-target-free",
+            )
+            value["qualification_context"] = "production"
+            return value
+
+        identity = mock.Mock()
+        identity.verify.side_effect = AssertionError("executable identity reached before closure")
+        preflight = mock.Mock()
+        preflight.produce.side_effect = AssertionError("guard preflight reached before closure")
+        executor = mock.Mock()
+        executor.run.side_effect = AssertionError("guard reached before closure")
+        closure_calls = []
+        real_closure_loader = executor_module.load_pre_execution_public_closure
+
+        def observe_closure(*args, **kwargs):
+            closure_calls.append((args, kwargs))
+            return real_closure_loader(*args, **kwargs)
+
+        with (
+            mock.patch.object(runtime_bundle, "validate_vertical_runtime_output", side_effect=production_context_output),
+            mock.patch.object(
+                executor_module, "_vertical_gate_a_evidence_from_raw",
+                return_value=output_documents["gate_a_evidence"]["payload"],
+            ),
+            mock.patch.object(executor_module, "load_pre_execution_public_closure", side_effect=observe_closure),
+        ):
+            with self.assertRaises(A0XCcpExecutorError) as raised:
+                _launch_validated_vertical_v2(
+                    repository_root=self.root, package_binding=binding,
+                    execution_authorization_path=execution_path.relative_to(self.root).as_posix(),
+                    source_state_probe=self._source_state, process_executor=executor,
+                    guard_preflight_producer=preflight, executable_identity_verifier=identity,
+                    expected_qualification_context="production",
+                )
+        identity.verify.assert_not_called()
+        preflight.produce.assert_not_called()
+        executor.run.assert_not_called()
+        self.assertIn("public pre-execution closure is invalid", str(raised.exception))
+        self.assertEqual(1, len(closure_calls))
+        self.assertFalse(execution_path.with_name("attempt-claim.json").exists())
+
+    def test_production_child_refuses_incomplete_ignored_closure_before_bind_or_dispatch(self) -> None:
+        """An ignored canonical path is still content-validated before graph binding."""
+        import importlib.util
+        from latent_triz.a0x_public_closure import pre_execution_closure_relative_path
+
+        binding, prepared, _capabilities, execution_path = self._private_synthetic_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_production_closure_test", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+
+        wrappers = {
+            name: json.loads((self.root / path).read_bytes())
+            for name, path in prepared["vertical_outputs"].items()
+        }
+        for name, document in wrappers.items():
+            document["qualification_context"] = "production"
+            (self.root / prepared["vertical_outputs"][name]).write_bytes(canonical_json_bytes(document))
+
+        readiness_hash = hashlib.sha256(
+            (self.root / prepared["vertical_outputs"]["readiness"]).read_bytes()
+        ).hexdigest()
+        evidence_hash = hashlib.sha256(
+            (self.root / prepared["vertical_outputs"]["gate_a_evidence"]).read_bytes()
+        ).hexdigest()
+        descriptor_path = self.root / prepared["vertical_outputs"]["descriptor"]
+        descriptor_document = json.loads(descriptor_path.read_bytes())
+        descriptor = descriptor_document["payload"]
+        descriptor["runtime_readiness"]["sha256"] = readiness_hash
+        descriptor["gate_a_evidence"]["sha256"] = evidence_hash
+        descriptor_document["payload_sha256"] = hashlib.sha256(canonical_json_bytes(descriptor)).hexdigest()
+        descriptor_path.write_bytes(canonical_json_bytes(descriptor_document))
+        descriptor_hash = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
+
+        inlet_path = self.root / prepared["vertical_outputs"]["authorization"]
+        inlet_document = json.loads(inlet_path.read_bytes())
+        inlet = inlet_document["payload"]
+        inlet["runtime_readiness"]["sha256"] = readiness_hash
+        inlet["gate_a_evidence"]["sha256"] = evidence_hash
+        inlet["descriptor"]["sha256"] = descriptor_hash
+        inlet_document["payload_sha256"] = hashlib.sha256(canonical_json_bytes(inlet)).hexdigest()
+        inlet_path.write_bytes(canonical_json_bytes(inlet_document))
+
+        gate_c = self._synthetic_execution_authorization(binding, prepared)
+        gate_c["qualification_context"] = "production"
+        execution_path.write_bytes(canonical_json_bytes(gate_c))
+        closure_root = self.root / pre_execution_closure_relative_path({
+            "qualified_source": gate_c["qualified_source"],
+            "pair_binding": gate_c["pair_binding"],
+            "authorization_id": gate_c["authorization_id"],
+            "attempt_id": gate_c["attempt_id"],
+            "p0_package_commitment_sha256": binding.package_commitment_sha256,
+        })
+        only_projection = closure_root / "public/dossier.json"
+        only_projection.parent.mkdir(parents=True, exist_ok=True)
+        only_projection.write_bytes(b"synthetic incomplete closure")
+        self.assertEqual("", self._git_output("status", "--porcelain=v1", "--untracked-files=all"))
+
+        evidence_payload = wrappers["gate_a_evidence"]["payload"]
+        calls = []
+        closure_calls = []
+        real_closure_loader = child.load_pre_execution_public_closure
+
+        def observe_closure(*args, **kwargs):
+            closure_calls.append((args, kwargs))
+            return real_closure_loader(*args, **kwargs)
+
+        def production_gate_c(*_args, **_kwargs):
+            return gate_c, ()
+
+        with (
+            mock.patch.object(child, "_validate_inlet"),
+            mock.patch.object(child, "_read_gate_c_authorization", side_effect=production_gate_c),
+            mock.patch.object(child, "_vertical_gate_a_evidence_from_raw", return_value=evidence_payload),
+            mock.patch.object(child, "load_pre_execution_public_closure", side_effect=observe_closure),
+            mock.patch.object(child, "bind_validated_vertical_graph") as bind_graph,
+        ):
+            code = child._run_child_core(
+                ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+                root=self.root,
+                source_head_probe=lambda: (self.head, self.tree, True),
+                environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+                cwd=self.root,
+                child_script_path=child_path,
+                qualification_context="production",
+                inert_factory=lambda graph: calls.append(graph),
+                stdout=io.StringIO(),
+            )
+        self.assertEqual(2, code)
+        self.assertEqual([], calls)
+        self.assertEqual(1, len(closure_calls))
+        bind_graph.assert_not_called()
+
+    def test_production_parent_valid_closure_reaches_identity_sentinel_before_claim_or_guard(self) -> None:
+        """Real closure validation accepts distinct P0/B/C IDs before later capabilities."""
+        import latent_triz.a0x_ccp_executor as executor_module
+        import latent_triz.a0x_runtime_bundle as runtime_bundle
+        from latent_triz.a0x_ccp_executor import _launch_validated_vertical_v2
+
+        binding, prepared, execution_path, wrappers, gate_c, _closure_root = self._production_closure_chain()
+
+        class ReachedIdentity(RuntimeError):
+            pass
+
+        class IdentitySentinel:
+            calls = 0
+
+            def verify(inner_self, **_kwargs):
+                inner_self.calls += 1
+                raise ReachedIdentity("valid public closure reached next identity boundary")
+
+        identity = IdentitySentinel()
+        preflight = mock.Mock(side_effect=AssertionError("preflight must remain after sentinel"))
+        executor = mock.Mock(side_effect=AssertionError("guard must remain after sentinel"))
+        closure_results = []
+        real_closure_loader = executor_module.load_pre_execution_public_closure
+
+        def observe_closure(*args, **kwargs):
+            result = real_closure_loader(*args, **kwargs)
+            closure_results.append(result)
+            return result
+
+        real_output_validator = runtime_bundle.validate_vertical_runtime_output
+
+        def production_context_output(root, relative, package_binding, *, expected_qualification_context=None):
+            value = real_output_validator(
+                root, relative, package_binding,
+                expected_qualification_context="synthetic-target-free",
+            )
+            value["qualification_context"] = "production"
+            return value
+
+        before = self._source_state()
+        with (
+            # The graph wrappers were created in the synthetic Gate-B lane.
+            # Validate their actual bytes and dependencies, then adapt only the
+            # outer context label to exercise the later production parent path.
+            mock.patch.object(runtime_bundle, "validate_vertical_runtime_output", side_effect=production_context_output),
+            # Hosted evidence is fixture-generated, so reconstructing its real
+            # signature chain is outside this closure-boundary test.
+            mock.patch.object(
+                executor_module, "_vertical_gate_a_evidence_from_raw",
+                return_value=wrappers["gate_a_evidence"]["payload"],
+            ),
+            mock.patch.object(executor_module, "load_pre_execution_public_closure", side_effect=observe_closure),
+        ):
+            with self.assertRaises(ReachedIdentity):
+                _launch_validated_vertical_v2(
+                    repository_root=self.root, package_binding=binding,
+                    execution_authorization_path=execution_path.relative_to(self.root).as_posix(),
+                    source_state_probe=self._source_state, process_executor=executor,
+                    guard_preflight_producer=preflight, executable_identity_verifier=identity,
+                    expected_qualification_context="production",
+                )
+
+        self.assertEqual(1, len(closure_results))
+        self.assertTrue(closure_results[0].document_bindings_consistent)
+        self.assertEqual(13, closure_results[0].public_role_count)
+        self.assertFalse(closure_results[0].operator_approval_authenticated)
+        self.assertEqual(1, identity.calls)
+        preflight.assert_not_called()
+        executor.assert_not_called()
+        self.assertFalse(execution_path.with_name("attempt-claim.json").exists())
+        self.assertEqual(before, self._source_state())
+        self.assertEqual((self.head, self.tree, True), before)
+        self.assertEqual("gate-c-real-git-auth-01", gate_c["authorization_id"])
+        self.assertEqual(
+            "p0-real-git-auth-01",
+            json.loads((self.root / binding.commitment_path).read_bytes())["authorization_id"],
+        )
+        self.assertEqual(
+            "gate-b-real-git-auth-01",
+            json.loads((self.root / prepared["gate_b_authorization_path"]).read_bytes())["authorization_id"],
+        )
+
+    def test_production_parent_rejects_corrupted_valid_closure_before_identity_sentinel(self) -> None:
+        """A semantic member mutation with its public role hash rebound still refuses."""
+        import latent_triz.a0x_ccp_executor as executor_module
+        import latent_triz.a0x_runtime_bundle as runtime_bundle
+        from latent_triz.a0x_ccp_executor import A0XCcpExecutorError, _launch_validated_vertical_v2
+        from latent_triz.a0x_public_closure import PRE_EXECUTION_EXTENSION_PATH, PRE_EXECUTION_PUBLIC_ROLE_PATHS
+
+        binding, prepared, execution_path, wrappers, _gate_c, closure_root = self._production_closure_chain()
+        member = closure_root / PRE_EXECUTION_PUBLIC_ROLE_PATHS["execution_spec"]
+        document = json.loads(member.read_bytes())
+        document["protocol_sha256"] = "0" * 64
+        member_raw = canonical_json_bytes(document)
+        member.write_bytes(member_raw)
+        extension_path = closure_root / PRE_EXECUTION_EXTENSION_PATH
+        extension = json.loads(extension_path.read_bytes())
+        extension["bindings"]["public_role_sha256"]["execution_spec"] = hashlib.sha256(member_raw).hexdigest()
+        extension_path.write_bytes(canonical_json_bytes(extension))
+        self.assertEqual((self.head, self.tree, True), self._source_state())
+
+        identity = mock.Mock()
+        identity.verify.side_effect = AssertionError("corrupt closure must refuse before identity")
+        preflight = mock.Mock(side_effect=AssertionError("preflight must remain after closure"))
+        executor = mock.Mock(side_effect=AssertionError("guard must remain after closure"))
+        closure_calls = []
+        real_closure_loader = executor_module.load_pre_execution_public_closure
+
+        def observe_closure(*args, **kwargs):
+            closure_calls.append(True)
+            return real_closure_loader(*args, **kwargs)
+
+        real_output_validator = runtime_bundle.validate_vertical_runtime_output
+
+        def production_context_output(root, relative, package_binding, *, expected_qualification_context=None):
+            value = real_output_validator(
+                root, relative, package_binding,
+                expected_qualification_context="synthetic-target-free",
+            )
+            value["qualification_context"] = "production"
+            return value
+
+        with (
+            mock.patch.object(runtime_bundle, "validate_vertical_runtime_output", side_effect=production_context_output),
+            mock.patch.object(
+                executor_module, "_vertical_gate_a_evidence_from_raw",
+                return_value=wrappers["gate_a_evidence"]["payload"],
+            ),
+            mock.patch.object(executor_module, "load_pre_execution_public_closure", side_effect=observe_closure),
+        ):
+            with self.assertRaises(A0XCcpExecutorError) as raised:
+                _launch_validated_vertical_v2(
+                    repository_root=self.root, package_binding=binding,
+                    execution_authorization_path=execution_path.relative_to(self.root).as_posix(),
+                    source_state_probe=self._source_state, process_executor=executor,
+                    guard_preflight_producer=preflight, executable_identity_verifier=identity,
+                    expected_qualification_context="production",
+                )
+        self.assertIn("public pre-execution closure is invalid", str(raised.exception))
+        self.assertEqual([True], closure_calls)
+        identity.verify.assert_not_called()
+        preflight.assert_not_called()
+        executor.assert_not_called()
+        self.assertFalse(execution_path.with_name("attempt-claim.json").exists())
+        self.assertEqual((self.head, self.tree, True), self._source_state())
+
+    def test_production_child_valid_closure_reaches_post_bind_sentinel_before_dispatch(self) -> None:
+        """The real child loader and binder accept a fully canonical synthetic closure."""
+        import importlib.util
+        binding, prepared, execution_path, wrappers, gate_c, _closure_root = self._production_closure_chain()
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_production_positive", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        closure_results = []
+        bound_graphs = []
+        factory_calls = []
+        real_loader = child.load_pre_execution_public_closure
+        real_binder = child.bind_validated_vertical_graph
+
+        class ReachedDispatch(RuntimeError):
+            pass
+
+        def observe_loader(*args, **kwargs):
+            result = real_loader(*args, **kwargs)
+            closure_results.append(result)
+            return result
+
+        def bind_then_stop(graph, *, qualification_context):
+            bound = real_binder(graph, qualification_context=qualification_context)
+            bound_graphs.append(bound)
+            raise ReachedDispatch("valid production graph reached post-bind stop boundary")
+
+        def production_gate_c(*_args, **_kwargs):
+            return gate_c, ()
+
+        real_canonical_output = child._canonical_output
+
+        def production_context_output(raw, label):
+            value = real_canonical_output(raw, label)
+            if value.get("qualification_context") == "synthetic-target-free":
+                value["qualification_context"] = "production"
+            return value
+
+        before = self._source_state()
+        output = io.StringIO()
+        with (
+            # Production expects production outer labels. Translate only the
+            # synthetic Gate-B wrapper context after canonical-byte parsing;
+            # closure loading and its independent hash checks remain real.
+            mock.patch.object(child, "_canonical_output", side_effect=production_context_output),
+            # These bypass synthetic upstream auth/attestation reconstruction,
+            # not the public closure loader, Git probe, or graph binder.
+            mock.patch.object(child, "_validate_inlet"),
+            mock.patch.object(child, "_read_gate_c_authorization", side_effect=production_gate_c),
+            mock.patch.object(
+                child, "_vertical_gate_a_evidence_from_raw",
+                return_value=wrappers["gate_a_evidence"]["payload"],
+            ),
+            mock.patch.object(child, "load_pre_execution_public_closure", side_effect=observe_loader),
+            mock.patch.object(child, "bind_validated_vertical_graph", side_effect=bind_then_stop),
+        ):
+            try:
+                child._run_child_core(
+                    ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+                    root=self.root, source_head_probe=self._source_state,
+                    environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+                    cwd=self.root, child_script_path=child_path,
+                    qualification_context="production",
+                    inert_factory=lambda graph: factory_calls.append(graph),
+                    stdout=output,
+                )
+            except ReachedDispatch:
+                pass
+            else:
+                self.fail(f"valid closure did not reach post-bind sentinel: {output.getvalue()}")
+
+        self.assertEqual(2, len(closure_results))
+        self.assertEqual(closure_results[0], closure_results[1])
+        self.assertTrue(closure_results[0].document_bindings_consistent)
+        self.assertEqual(13, closure_results[0].public_role_count)
+        self.assertEqual(1, len(bound_graphs))
+        self.assertEqual("production", bound_graphs[0].qualification_context)
+        self.assertEqual([], factory_calls)
+        self.assertEqual(before, self._source_state())
+        self.assertEqual((self.head, self.tree, True), before)
+        self.assertEqual("gate-c-real-git-auth-01", gate_c["authorization_id"])
+
+    def test_production_child_rejects_corrupted_valid_closure_before_bind_or_dispatch(self) -> None:
+        """A semantically corrupted closure member cannot reach the real graph binder."""
+        import importlib.util
+        from latent_triz.a0x_public_closure import PRE_EXECUTION_EXTENSION_PATH, PRE_EXECUTION_PUBLIC_ROLE_PATHS
+
+        binding, prepared, _execution_path, wrappers, gate_c, closure_root = self._production_closure_chain()
+        member = closure_root / PRE_EXECUTION_PUBLIC_ROLE_PATHS["execution_spec"]
+        document = json.loads(member.read_bytes())
+        document["protocol_sha256"] = "0" * 64
+        member_raw = canonical_json_bytes(document)
+        member.write_bytes(member_raw)
+        extension_path = closure_root / PRE_EXECUTION_EXTENSION_PATH
+        extension = json.loads(extension_path.read_bytes())
+        extension["bindings"]["public_role_sha256"]["execution_spec"] = hashlib.sha256(member_raw).hexdigest()
+        extension_path.write_bytes(canonical_json_bytes(extension))
+        self.assertEqual((self.head, self.tree, True), self._source_state())
+
+        child_path = self.root / "scripts/a0x_vertical_material_child.py"
+        spec = importlib.util.spec_from_file_location("a0x_vertical_child_production_corrupt", child_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        child = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(child)
+        loader_calls = []
+        real_loader = child.load_pre_execution_public_closure
+
+        def observe_loader(*args, **kwargs):
+            loader_calls.append(True)
+            return real_loader(*args, **kwargs)
+
+        def production_gate_c(*_args, **_kwargs):
+            return gate_c, ()
+
+        real_canonical_output = child._canonical_output
+
+        def production_context_output(raw, label):
+            value = real_canonical_output(raw, label)
+            if value.get("qualification_context") == "synthetic-target-free":
+                value["qualification_context"] = "production"
+            return value
+
+        factory_calls = []
+        with (
+            mock.patch.object(child, "_canonical_output", side_effect=production_context_output),
+            mock.patch.object(child, "_validate_inlet"),
+            mock.patch.object(child, "_read_gate_c_authorization", side_effect=production_gate_c),
+            mock.patch.object(
+                child, "_vertical_gate_a_evidence_from_raw",
+                return_value=wrappers["gate_a_evidence"]["payload"],
+            ),
+            mock.patch.object(child, "load_pre_execution_public_closure", side_effect=observe_loader),
+            mock.patch.object(child, "bind_validated_vertical_graph") as bind_graph,
+        ):
+            code = child._run_child_core(
+                ["--launch-descriptor", prepared["vertical_outputs"]["descriptor"]],
+                root=self.root, source_head_probe=self._source_state,
+                environment={item.split("=", 1)[0]: item.split("=", 1)[1] for item in child._ENVIRONMENT},
+                cwd=self.root, child_script_path=child_path,
+                qualification_context="production",
+                inert_factory=lambda graph: factory_calls.append(graph), stdout=io.StringIO(),
+            )
+        self.assertEqual(2, code)
+        self.assertEqual([True], loader_calls)
+        bind_graph.assert_not_called()
+        self.assertEqual([], factory_calls)
+        self.assertEqual((self.head, self.tree, True), self._source_state())
 
     def test_real_git_gate_c_refuses_package_drift_before_guard(self) -> None:
         binding, _prepared, _capabilities, execution_path = self._private_synthetic_chain()
@@ -649,9 +1902,37 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
                 )
 
         class InertGuard:
-            def run(inner_self, *args, **kwargs):
+            def run(inner_self, argv, *, cwd, env, timeout_seconds, capture_limit_bytes):
+                import contextlib
+                import importlib.util
+                import io
+
                 capabilities["guard"] += 1
-                terminal = b'{"artifact_class":"a0x-material-child-terminal","exit_class":"completed","terminal_status":"null"}\n'
+                child_path = self.root / "scripts/a0x_vertical_material_child.py"
+                spec = importlib.util.spec_from_file_location("a0x_vertical_child_e2e", child_path)
+                self.assertIsNotNone(spec)
+                self.assertIsNotNone(spec.loader)
+                child = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(child)
+                delimiter = argv.index("--")
+                child_envelope = list(argv[delimiter + 1:])
+                self.assertEqual(["/usr/bin/env", "-i"], child_envelope[:2])
+                self.assertEqual(list(child._ENVIRONMENT), child_envelope[2:7])
+                self.assertEqual(["-I", "-B", str(child_path.resolve(strict=True))], child_envelope[8:11])
+                descriptor_argv = child_envelope[11:]
+                child_environment = dict(item.split("=", 1) for item in child_envelope[2:7])
+                terminal_stream = io.StringIO()
+                error_stream = io.StringIO()
+                with contextlib.redirect_stderr(error_stream):
+                    child_exit = child._run_child_core(
+                        descriptor_argv, root=cwd, source_head_probe=self._source_state,
+                        environment=child_environment, cwd=cwd, child_script_path=child_path,
+                        qualification_context="synthetic-target-free",
+                        inert_factory=lambda graph: capabilities.update(child_graph=graph),
+                        stdout=terminal_stream,
+                    )
+                self.assertEqual(0, child_exit, error_stream.getvalue() + terminal_stream.getvalue())
+                terminal = terminal_stream.getvalue().encode("utf-8")
                 return ProcessResult(
                     0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0,
                     stdout_prefix=terminal,

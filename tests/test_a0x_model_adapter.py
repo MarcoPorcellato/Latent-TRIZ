@@ -4,8 +4,9 @@ from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 import math
+import sys
 import unittest
-from unittest.mock import ANY
+from unittest.mock import ANY, patch
 
 from latent_triz.a0x_model_adapter import A0XHiddenStateAdapter, A0XModelAdapterError
 from latent_triz.a0x_preflight import A0XModelCard, load_registry
@@ -171,6 +172,31 @@ def load_synthetic(card: A0XModelCard, *, config=None, tokenizer=None, model=Non
 
 
 class A0XHiddenStateAdapterTests(unittest.TestCase):
+    def _exported_alias_loader(self, *, spoof_name=False):
+        card = next(card for card in registry_cards() if card.model_key == "smollm2_360m")
+        calls = []
+        exported = type("GPT2Tokenizer", (FakeTokenizer,), {})
+        returned = type("GPT2TokenizerFast", (FakeTokenizer,), {})(calls) if spoof_name else exported(calls)
+        model = FakeModel(calls, layers=card.num_hidden_layers, width=card.hidden_size)
+        external = SimpleNamespace(
+            GPT2TokenizerFast=exported,
+            AutoConfig=SimpleNamespace(from_pretrained=lambda *_args, **_kwargs: config_for(card)),
+            AutoTokenizer=SimpleNamespace(from_pretrained=lambda *_args, **_kwargs: returned),
+            AutoModelForCausalLM=SimpleNamespace(from_pretrained=lambda *_args, **_kwargs: model),
+        )
+        with patch.dict(sys.modules, {"torch": FakeTorch, "transformers": external}):
+            return A0XHiddenStateAdapter.load("/synthetic/exported-alias", card=card)
+
+    def test_default_loader_accepts_exact_fast_api_export_when_python_class_was_renamed(self):
+        adapter = self._exported_alias_loader()
+        self.assertEqual("GPT2Tokenizer", type(adapter.tokenizer).__name__)
+        self.assertTrue(adapter.tokenizer.is_fast)
+        self.assertTrue(adapter.model_loaded)
+
+    def test_default_loader_rejects_name_spoof_not_equal_to_the_exported_class(self):
+        with self.assertRaisesRegex(A0XModelAdapterError, "tokenizer class"):
+            self._exported_alias_loader(spoof_name=True)
+
     def test_all_six_cards_load_in_required_order_with_only_synthetic_factories(self):
         observed = []
         for card in registry_cards():

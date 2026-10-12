@@ -49,6 +49,39 @@ _GATE_A_VERIFIER = {
 }
 DESCRIPTOR_PROFILE = "a0x-material-child-descriptor-v2"
 MATERIAL_CONTRACT_PATH = "experiments/a0x-six-model/material-execution-contract.json"
+_ACTIVE_VERTICAL_GUARD = {
+    "producer_role": "ccp_executable",
+    "source_commit": "1015a0b42962dbf18334fd6dfc0d9148551d4984",
+    "source_tree": "2ebad04d6dc718c7aaa2534d304cde7797460a97",
+    "sha256": "45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2",
+    "version": "commit-ci-preflight 0.1.0",
+    "resource_policy": "macos-v5",
+    "qualification_basis": "operator-recorded-isolated-guard",
+    "uses_repository_configuration": False,
+    "emits_receipt": False,
+    "hash_before_command": True,
+    "max_guard_exec_count": 1,
+}
+
+
+def active_vertical_guard_identity(contract: Mapping[str, Any]) -> dict[str, str]:
+    """Select the installed producer, never the retained historical Matrix producer.
+
+    This is a public role/hash contract, not a binary verification, current
+    admission observation, replacement procedure or execution authorization.
+    """
+    if (
+        not isinstance(contract, Mapping)
+        or contract.get("contract_version") != "a0x-material-execution-contract-v3"
+        or contract.get("ccp_binding_role") != "historical_matrix_only"
+        or contract.get("vertical_guard") != _ACTIVE_VERTICAL_GUARD
+    ):
+        raise A0XContractError("active vertical guard binding is absent or differs")
+    return {
+        "role": "ccp", "source_commit": _ACTIVE_VERTICAL_GUARD["source_commit"],
+        "qualified_source_tree": _ACTIVE_VERTICAL_GUARD["source_tree"],
+        "sha256": _ACTIVE_VERTICAL_GUARD["sha256"], "version": _ACTIVE_VERTICAL_GUARD["version"],
+    }
 
 
 @dataclass(frozen=True)
@@ -240,6 +273,52 @@ class A0XGuardLaunch:
         }
 
 
+@dataclass(frozen=True)
+class VerticalA0XGuardLaunch(A0XGuardLaunch):
+    """The v2-only Guard binding; it never widens the historical child route."""
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> "VerticalA0XGuardLaunch":
+        expected_keys = {
+            "launch_profile", "ccp", "python", "cwd_kind", "source_head", "child_script",
+            "launch_descriptor", "environment_template", "resource", "timeouts", "argv_template",
+        }
+        if not isinstance(value, Mapping) or set(value) != expected_keys:
+            raise A0XContractError("vertical guard launch fields do not match the frozen profile")
+        if value["launch_profile"] != GUARD_LAUNCH_PROFILE:
+            raise A0XContractError("vertical guard launch profile is unsupported")
+        ccp_role, ccp_sha256 = _runtime_role(value.get("ccp"), "CCP", "ccp")
+        python_role, python_sha256 = _runtime_role(value.get("python"), "Python", "python")
+        if value.get("cwd_kind") != "repository_root":
+            raise A0XContractError("vertical guard launch cwd kind must identify the repository root")
+        source_head = value.get("source_head")
+        _require_revision(source_head, "vertical source head")
+        child = value.get("child_script")
+        if (
+            not isinstance(child, Mapping) or set(child) != {"role", "path", "sha256"}
+            or child.get("role") != "child" or child.get("path") != "scripts/a0x_vertical_material_child.py"
+            or not isinstance(child.get("sha256"), str) or not _SHA256.fullmatch(child["sha256"])
+        ):
+            raise A0XContractError("vertical guard launch child script must be the fixed v2 script")
+        descriptor_path, descriptor_sha256 = _launch_descriptor(value.get("launch_descriptor"))
+        if not descriptor_path.startswith(".a0x-runtime/gate-b/v2/"):
+            raise A0XContractError("vertical guard launch descriptor is outside the v2 runtime inlet")
+        environment = _environment(value.get("environment_template"))
+        resource = _resource(value.get("resource"))
+        timeouts = TimeoutEnvelope.from_mapping(_mapping(value, "timeouts", "vertical guard launch"))
+        argv = _argv_template(value.get("argv_template"))
+        if argv != _build_guard_argv_template(resource=dict(resource), timeouts=timeouts, isolate_child=True):
+            raise A0XContractError("vertical guard launch argv template does not match the canonical shell-free command")
+        return cls(
+            launch_profile=GUARD_LAUNCH_PROFILE, ccp_role=ccp_role, ccp_sha256=ccp_sha256,
+            python_role=python_role, python_sha256=python_sha256, cwd_kind="repository_root",
+            source_head=source_head, child_script_path="scripts/a0x_vertical_material_child.py",
+            child_script_sha256=child["sha256"], launch_descriptor_path=descriptor_path,
+            launch_descriptor_sha256=descriptor_sha256, environment_template=environment,
+            resource=resource, timeouts=timeouts, argv_template=argv,
+        )
+
+
 def canonical_guard_commitment(value: A0XGuardLaunch | Mapping[str, Any]) -> str:
     """Return the canonical SHA-256 commitment of a complete guard launch."""
     launch = value if isinstance(value, A0XGuardLaunch) else A0XGuardLaunch.from_mapping(value)
@@ -400,8 +479,11 @@ def validate_vertical_gate_a_evidence(value: Mapping[str, Any]) -> dict[str, Any
 
 
 def _build_guard_argv_template(
-    *, resource: Mapping[str, str | int], timeouts: TimeoutEnvelope,
+    *, resource: Mapping[str, str | int], timeouts: TimeoutEnvelope, isolate_child: bool = False,
 ) -> tuple[str, ...]:
+    child = ("/usr/bin/env", "-i", *_ENVIRONMENT_TEMPLATE, "{PYTHON}", "-I", "-B", "{CHILD}",
+        "--launch-descriptor", "{DESCRIPTOR}") if isolate_child else (
+        "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}")
     return (
         "{CCP}", "guard", "exec",
         "--admission-timeout-seconds", str(timeouts.admission_timeout_seconds),
@@ -413,7 +495,7 @@ def _build_guard_argv_template(
         "--resource-execution-mode", str(resource["execution_mode"]),
         "--resource-target-platform", str(resource["target_platform"]),
         "--resource-memory-limit-bytes", str(resource["memory_limit_bytes"]),
-        "--", "{PYTHON}", "{CHILD}", "--launch-descriptor", "{DESCRIPTOR}",
+        "--", *child,
     )
 
 

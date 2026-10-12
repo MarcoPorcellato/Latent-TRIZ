@@ -11,6 +11,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from latent_triz.validator import validate
+from tests.a0x_test_support import synthetic_schema_object
 
 
 ROOT = Path(__file__).parents[1]
@@ -29,8 +30,8 @@ def _sha256(path: Path) -> str:
 
 class ApprovalDossierTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.dossier = json.loads(DOSSIER_PATH.read_text(encoding="utf-8"))
         self.schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        self.dossier = synthetic_schema_object(self.schema)
         self.validator = Draft202012Validator(self.schema)
 
     def assert_rejected(self, mutation) -> None:

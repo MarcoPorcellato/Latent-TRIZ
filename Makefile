@@ -26,7 +26,8 @@ ANNOTATION_OUTPUT ?= artifacts/annotations/dataset-annotations.jsonl
 ANNOTATION_PORT ?= 8765
 
 test:
-	PYTHONPATH=$(PYTHONPATH) python3 -m unittest discover -s tests -p "test_*.py"
+	PYTHONPATH=$(PYTHONPATH) python3 -B -m unittest tests.test_a0x_target_free_schema_profile -v
+	PYTHONPATH=$(PYTHONPATH) python3 -B -c 'from pathlib import Path; import unittest; names = ["tests." + path.stem for path in sorted(Path("tests").glob("test_*.py")) if path.stem != "test_a0x_target_free_schema_profile"]; result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromNames(names)); raise SystemExit(not result.wasSuccessful())'
 
 validate:
 	PYTHONPATH=$(PYTHONPATH) python3 -m latent_triz.cli validate --schema schemas/case.schema.json tests/fixtures/case_valid.json
@@ -75,8 +76,8 @@ schema-cross-validate:
 
 a0x-synthetic-verify:
 	PYTHONPATH=$(PYTHONPATH) python3 scripts/a0x_contract_check.py --phase synthetic
-	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_runner tests.test_a0x_contract_check tests.test_a0x_material tests.test_a0x_material_child tests.test_a0x_material_contract tests.test_a0x_material_runtime tests.test_a0x_runtime_bundle tests.test_a0x_runtime_readiness tests.test_a0x_apfs tests.test_a0x_wheelhouse tests.test_a0x_gate_b_builder tests.test_a0x_production_adapter tests.test_a0x_ccp_executor tests.test_a0x_contract tests.test_a0x_architecture tests.test_a0x_preflight tests.test_a0x_freeze tests.test_a0x_frozen_package tests.test_a0x_schemas tests.test_a0x_validator tests.test_a0x_schema_projection tests.test_a0x_pair_compatibility tests.test_a0x_activations tests.test_a0x_a0_analysis tests.test_a0x_r1_analysis tests.test_a0x_report tests.test_a0x_verify tests.test_a0x_execution tests.test_a0x_model_adapter tests.test_a0x_matrix_plan_binding tests.test_a0x_hosted_gate_a_workflow tests.test_a0x_hosted_gate_a tests.test_a0x_hosted_verifier tests.test_a0x_hosted_capture tests.test_a0x_capture_hosted_gate_a tests.test_a0x_vertical_slice tests.test_a0x_vertical_slice_v2 tests.test_a0x_vertical_runtime_bundle tests.test_a0x_vertical_material tests.test_a0x_vertical_gate_chain_v2 tests.test_a0x_vertical_p0_bootstrap
-	@echo "A0X synthetic implementation verified: no model, tokenizer, sealed target, or CCP access."
+	PYTHONPATH=$(PYTHONPATH) python3 -B -m unittest tests.test_a0x_target_free_schema_profile -v
+	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_runner tests.test_a0x_contract_check tests.test_a0x_material tests.test_a0x_material_child tests.test_a0x_material_contract tests.test_a0x_material_runtime tests.test_a0x_runtime_bundle tests.test_a0x_runtime_readiness tests.test_a0x_apfs tests.test_a0x_wheelhouse tests.test_a0x_gate_b_builder tests.test_a0x_production_adapter tests.test_a0x_ccp_executor tests.test_a0x_contract tests.test_a0x_architecture tests.test_a0x_preflight tests.test_a0x_freeze tests.test_a0x_frozen_package tests.test_a0x_schemas tests.test_a0x_validator tests.test_a0x_schema_projection tests.test_a0x_pair_compatibility tests.test_a0x_activations tests.test_a0x_a0_analysis tests.test_a0x_r1_analysis tests.test_a0x_report tests.test_a0x_verify tests.test_a0x_execution tests.test_a0x_model_adapter tests.test_a0x_matrix_plan_binding tests.test_a0x_hosted_gate_a_workflow tests.test_a0x_hosted_gate_a tests.test_a0x_hosted_verifier tests.test_a0x_hosted_capture tests.test_a0x_capture_hosted_gate_a tests.test_a0x_vertical_slice tests.test_a0x_vertical_slice_v2 tests.test_a0x_vertical_runtime_bundle tests.test_a0x_vertical_material tests.test_a0x_vertical_gate_chain_v2 tests.test_a0x_vertical_p0_bootstrap tests.test_a0x_vertical_material_child tests.test_a0x_vertical_production_adapter tests.test_a0x_vertical_terminal tests.test_a0x_vertical_terminal_package tests.test_a0x_public_closure tests.test_a0x_public_closure_experimental && echo "A0X synthetic implementation verified: no model, tokenizer, sealed target, or CCP access."
 
 a0x-vertical-slice-verify:
 	PYTHONPATH=$(PYTHONPATH) python3 -m unittest tests.test_a0x_vertical_slice tests.test_a0x_vertical_material tests.test_a0x_vertical_p0_bootstrap -v
