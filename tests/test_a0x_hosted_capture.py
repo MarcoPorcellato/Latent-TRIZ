@@ -237,6 +237,38 @@ class HostedCaptureTest(unittest.TestCase):
                     with self.assertRaisesRegex(capture.A0XHostedCaptureError, capture.CAPTURE_INVALID):
                         constructor(value)
 
+    def test_pinned_cli_revalidation_accepts_exact_official_two_line_version(self) -> None:
+        """Requiring one line rejects the real hash-bound Homebrew producer before transport."""
+        from latent_triz.a0x_hosted_capture import PinnedGitHubCLI, revalidate_pinned_cli
+
+        with TemporaryDirectory() as temporary:
+            executable = Path(temporary).resolve() / "synthetic-gh"
+            executable.write_bytes(b"synthetic pinned bytes\n")
+            pinned = PinnedGitHubCLI(executable, hashlib.sha256(executable.read_bytes()).hexdigest())
+            revalidate_pinned_cli(
+                pinned, executable,
+                b"gh version 2.97.0 (2026-07-31)\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n",
+            )
+
+    def test_pinned_cli_revalidation_refuses_every_nonexact_version_output(self) -> None:
+        """Accepting only the first line would admit missing, changed, or injected version output."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, PIN_INVALID, PinnedGitHubCLI, revalidate_pinned_cli
+
+        valid = b"gh version 2.97.0 (2026-07-31)\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n"
+        with TemporaryDirectory() as temporary:
+            executable = Path(temporary).resolve() / "synthetic-gh"
+            executable.write_bytes(b"synthetic pinned bytes\n")
+            pinned = PinnedGitHubCLI(executable, hashlib.sha256(executable.read_bytes()).hexdigest())
+            for output in (
+                b"gh version 2.97.0 (2026-07-31)\n", valid[:-1], b" " + valid,
+                valid + b"\n", valid + b"unexpected\n", valid.replace(b"\n", b"\r\n"),
+                valid.replace(b"v2.97.0", b"v2.100.0"), valid.replace(b"https://github.com", b"https://example.com"),
+                valid.replace(b"2026-07-31", b"2026-08-01"), valid + b"\x00", valid + b"\xff",
+            ):
+                with self.subTest(output=output):
+                    with self.assertRaisesRegex(A0XHostedCaptureError, PIN_INVALID):
+                        revalidate_pinned_cli(pinned, executable, output)
+
     def test_pinned_cli_revalidation_refuses_version_path_or_bytes_drift(self) -> None:
         """Removing any per-call executable binding check would admit a substituted CLI."""
         from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, PIN_INVALID, PinnedGitHubCLI, revalidate_pinned_cli
@@ -248,14 +280,14 @@ class HostedCaptureTest(unittest.TestCase):
             pinned = PinnedGitHubCLI(executable, hashlib.sha256(executable.read_bytes()).hexdigest())
             for path, version in (
                 (executable, b"wrong version\n"),
-                (root / "other-gh", b"gh version 2.97.0 (2026-07-31)\n"),
+                (root / "other-gh", b"gh version 2.97.0 (2026-07-31)\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n"),
             ):
                 with self.subTest(path=path, version=version):
                     with self.assertRaisesRegex(A0XHostedCaptureError, PIN_INVALID):
                         revalidate_pinned_cli(pinned, path, version)
             executable.write_bytes(b"substituted bytes\n")
             with self.assertRaisesRegex(A0XHostedCaptureError, PIN_INVALID):
-                revalidate_pinned_cli(pinned, executable, b"gh version 2.97.0 (2026-07-31)\n")
+                revalidate_pinned_cli(pinned, executable, b"gh version 2.97.0 (2026-07-31)\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n")
 
     def test_capture_refuses_extra_traversal_encrypted_or_nonregular_zip_members(self) -> None:
         """Removing ZIP member gates would permit a path, encryption, or nonregular archive attack."""

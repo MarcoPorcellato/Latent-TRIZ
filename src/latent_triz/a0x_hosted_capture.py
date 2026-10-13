@@ -157,7 +157,9 @@ class PinnedGitHubCLI:
         return cls(path.resolve(strict=True), GH_SHA256)
 
 def revalidate_pinned_cli(pinned: PinnedGitHubCLI, path: Path, version_output: bytes) -> None:
-    if not isinstance(pinned, PinnedGitHubCLI) or Path(path) != pinned.path or version_output != (GH_VERSION + "\n").encode() or _sha(_read_regular(pinned.path, PIN_INVALID)) != pinned.raw_sha256:
+    # The pinned producer emits two lines. Never discard unexpected output.
+    expected_output = (GH_VERSION + "\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n").encode()
+    if not isinstance(pinned, PinnedGitHubCLI) or Path(path) != pinned.path or version_output != expected_output or _sha(_read_regular(pinned.path, PIN_INVALID)) != pinned.raw_sha256:
         raise A0XHostedCaptureError(PIN_INVALID)
 
 PublishExclusiveAt = Callable[[int, str, str], None]

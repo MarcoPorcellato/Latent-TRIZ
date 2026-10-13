@@ -25,8 +25,9 @@ SCRIPT_PATH = ROOT / "scripts" / "a0x_capture_hosted_gate_a.py"
 HEAD = "a" * 40
 TREE = "b" * 40
 DOWNLOAD_HELP = b"""Download attestations associated with an artifact for offline use.
-Any associated bundle(s) will be written to a file in the current directory named after the artifact's digest.
-the file will be named "sha256:1234.jsonl".
+Any associated bundle(s) will be written to a file in the
+current directory named after the artifact's digest. For example, if the
+digest is "sha256:1234", the file will be named "sha256:1234.jsonl".
 USAGE
   gh attestation download [<file-path> | oci://<image-uri>] [--owner | --repo] [flags]
   -L, --limit int
@@ -139,7 +140,7 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 ) -> tuple[int, bytes, bytes]:
                     calls.append((argv, cwd))
                     if argv[-1] == "--version":
-                        return 0, b"synthetic gh version\n", b""
+                        return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                     help_output = _help_output(argv)
                     if help_output is not None:
                         return 0, help_output, b""
@@ -203,7 +204,7 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 ) -> tuple[int, bytes, bytes]:
                     calls.append((argv, env, cwd))
                     if argv[-1] == "--version":
-                        return 0, b"synthetic gh version\n", b""
+                        return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                     help_output = _help_output(argv)
                     if help_output is not None:
                         return 0, help_output, b""
@@ -271,7 +272,7 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 ) -> tuple[int, bytes, bytes]:
                     calls.append(argv)
                     if argv[-1] == "--version":
-                        return 0, b"synthetic gh version\n", b""
+                        return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                     help_output = _help_output(argv)
                     if help_output is not None:
                         return 0, help_output, b""
@@ -365,7 +366,7 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                         ) -> tuple[int, bytes, bytes]:
                             calls.append((argv, timeout, stdout_limit))
                             if argv[-1] == "--version":
-                                return 0, b"synthetic gh version\n", b""
+                                return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                             help_output = _help_output(argv)
                             if help_output is not None:
                                 return 0, help_output, b""
@@ -561,7 +562,7 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                     _stdout_limit: int, cwd: Path | None,
                 ) -> tuple[int, bytes, bytes]:
                     if argv[-1] == "--version":
-                        return 0, b"synthetic gh version\n", b""
+                        return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                     help_output = _help_output(argv)
                     if help_output is not None:
                         return 0, help_output, b""
@@ -608,7 +609,7 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 ) -> tuple[int, bytes, bytes]:
                     calls.append(argv)
                     if argv[-1] == "--version":
-                        return 0, b"synthetic gh version\n", b""
+                        return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                     return 0, b"incompatible help\n", b""
 
                 with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
