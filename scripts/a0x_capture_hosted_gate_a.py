@@ -25,7 +25,6 @@ from latent_triz import a0x_hosted_capture as capture_library
 GH_VERSION = capture_library.GH_VERSION
 GH_SHA256 = capture_library.GH_SHA256
 FIXED_ENV = {
-    "HOME": "/nonexistent",
     "LANG": "C",
     "LC_ALL": "C",
     "PATH": "/usr/bin:/bin",
@@ -48,6 +47,60 @@ TRUSTED_ROOT_HELP_MARKERS = (
     "Output contents for a trusted_root.jsonl file",
     "gh attestation trusted-root [--tuf-url <url> --tuf-root <file-path>] [--verify-only] [flags]",
 )
+
+
+def _is_private_owned_directory(path: Path) -> bool:
+    """Accept only a canonical, caller-owned mode-0700 directory without following links."""
+    try:
+        metadata = path.lstat()
+        return (
+            path.is_absolute()
+            and path.resolve(strict=True) == path
+            and stat.S_ISDIR(metadata.st_mode)
+            and metadata.st_uid == os.getuid()
+            and stat.S_IMODE(metadata.st_mode) == 0o700
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def _transaction_env(work: Path) -> dict[str, str]:
+    """Create private GH state beneath a caller-owned TemporaryDirectory.
+
+    The caller owns the lifetime of ``work`` and must keep it alive through the
+    child calls. This helper deliberately reads no ambient HOME or XDG settings.
+    """
+    if not isinstance(work, Path) or not _is_private_owned_directory(work):
+        raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID)
+    home, cache = work / "home", work / "cache"
+    try:
+        home.mkdir(mode=0o700)
+        cache.mkdir(mode=0o700)
+    except OSError as error:
+        raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID) from error
+    if not _is_private_owned_directory(home) or not _is_private_owned_directory(cache):
+        raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID)
+    return {**FIXED_ENV, "HOME": str(home), "XDG_CACHE_HOME": str(cache)}
+
+
+def _valid_transaction_env(env: dict[str, str], work: Path) -> bool:
+    """Recheck each private state path immediately before launching a child."""
+    if (
+        not isinstance(env, dict)
+        or not isinstance(work, Path)
+        or not _is_private_owned_directory(work)
+    ):
+        return False
+    expected = {
+        **FIXED_ENV,
+        "HOME": str(work / "home"),
+        "XDG_CACHE_HOME": str(work / "cache"),
+    }
+    return (
+        env == expected
+        and _is_private_owned_directory(work / "home")
+        and _is_private_owned_directory(work / "cache")
+    )
 
 
 def _write_private_regular(path: Path, raw: bytes) -> None:
@@ -188,15 +241,14 @@ def _production_runner(
         stdout_limit: int, cwd: Path | None,
     ) -> tuple[int, bytes, bytes]:
         if (
-            env != FIXED_ENV or not isinstance(argv, tuple) or not argv
+            not _valid_transaction_env(env, cwd) or not isinstance(argv, tuple) or not argv
             or not all(isinstance(value, str) and value and "\x00" not in value for value in argv)
             or not Path(argv[0]).is_absolute()
             or type(timeout) is not int or not 1 <= timeout <= TRANSPORT_TIMEOUT_SECONDS
             or type(stdout_limit) is not int or not 0 <= stdout_limit <= capture_library.MAX_ARCHIVE_BYTES
-            or cwd is None or not isinstance(cwd, Path) or not cwd.is_absolute() or not cwd.is_dir()
         ):
             raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID)
-        child_env = dict(FIXED_ENV)
+        child_env = dict(env)
         child_env.update({"GH_PROMPT_DISABLED": "1", "GH_TOKEN": token})
         try:
             process = run(
@@ -213,11 +265,12 @@ def _production_runner(
 
 
 def _invoke(
-    runner: Runner, argv: tuple[str, ...], stdout_limit: int, *, cwd: Path | None = None,
+    runner: Runner, argv: tuple[str, ...], stdout_limit: int, *,
+    env: dict[str, str], cwd: Path | None = None,
 ) -> bytes:
     try:
         _return_code, stdout, _stderr = _require_result(
-            runner(argv, dict(FIXED_ENV), TRANSPORT_TIMEOUT_SECONDS, stdout_limit, cwd), stdout_limit,
+            runner(argv, dict(env), TRANSPORT_TIMEOUT_SECONDS, stdout_limit, cwd), stdout_limit,
         )
     except capture_library.A0XHostedCaptureError:
         raise
@@ -235,19 +288,21 @@ def _pinned_cli(path: Path) -> capture_library.PinnedGitHubCLI:
 
 def _checked_transport_call(
     pinned: capture_library.PinnedGitHubCLI, runner: Runner, command: tuple[str, ...], stdout_limit: int,
-    *, cwd: Path | None = None,
+    *, env: dict[str, str], cwd: Path | None = None,
 ) -> bytes:
     """Rehash and recheck exact CLI version immediately before one transport call."""
     fresh = _pinned_cli(pinned.path)
     if fresh.path != pinned.path or fresh.raw_sha256 != pinned.raw_sha256:
         raise capture_library.A0XHostedCaptureError(capture_library.PIN_INVALID)
-    version = _invoke(runner, (str(pinned.path), "--version"), MAX_VERSION_STDOUT_BYTES, cwd=cwd)
+    version = _invoke(
+        runner, (str(pinned.path), "--version"), MAX_VERSION_STDOUT_BYTES, env=env, cwd=cwd,
+    )
     capture_library.revalidate_pinned_cli(pinned, pinned.path, version)
-    return _invoke(runner, command, stdout_limit, cwd=cwd)
+    return _invoke(runner, command, stdout_limit, env=env, cwd=cwd)
 
 
 def _validate_cli_help_contract(
-    pinned: capture_library.PinnedGitHubCLI, runner: Runner, *, cwd: Path,
+    pinned: capture_library.PinnedGitHubCLI, runner: Runner, *, env: dict[str, str], cwd: Path,
 ) -> None:
     """Refuse before transport unless the exact CLI exposes the frozen 2.97.0 shapes."""
     for command, markers in (
@@ -255,7 +310,7 @@ def _validate_cli_help_contract(
         ((str(pinned.path), "attestation", "trusted-root", "--help"), TRUSTED_ROOT_HELP_MARKERS),
     ):
         raw = _checked_transport_call(
-            pinned, runner, command, MAX_HELP_STDOUT_BYTES, cwd=cwd,
+            pinned, runner, command, MAX_HELP_STDOUT_BYTES, env=env, cwd=cwd,
         )
         try:
             text = raw.decode("utf-8", "strict")
@@ -304,11 +359,12 @@ def capture(
         raise capture_library.A0XHostedCaptureError(capture_library.CAPTURE_INVALID)
     with TemporaryDirectory(prefix="a0x-hosted-capture-") as temporary:
         work = Path(temporary).resolve()
-        _validate_cli_help_contract(pinned, runner, cwd=work)
+        transaction_env = _transaction_env(work)
+        _validate_cli_help_contract(pinned, runner, env=transaction_env, cwd=work)
         archive = _checked_transport_call(
             pinned, runner,
             (str(pinned.path), "api", "--method", "GET", f"/repos/{bootstrap.repository}/actions/artifacts/{bootstrap.artifact_id}/zip"),
-            bootstrap.archive_size_bytes, cwd=work,
+            bootstrap.archive_size_bytes, env=transaction_env, cwd=work,
         )
         archive_path = work / "archive.zip"
         _write_private_regular(archive_path, archive)
@@ -325,14 +381,14 @@ def capture(
                 "--repo", request.repository, "--predicate-type",
                 "https://slsa.dev/provenance/v1", "--limit", "30",
             ),
-            capture_library.MAX_TRANSPORT_BYTES, cwd=work,
+            capture_library.MAX_TRANSPORT_BYTES, env=transaction_env, cwd=work,
         )
         bundle = capture_library.read_regular_file(
             expected_bundle, capture_library.CAPTURE_INVALID, capture_library.MAX_BUNDLE_BYTES,
         )
         trusted_root = _checked_transport_call(
             pinned, runner, (str(pinned.path), "attestation", "trusted-root"),
-            capture_library.MAX_TRUSTED_ROOT_BYTES, cwd=work,
+            capture_library.MAX_TRUSTED_ROOT_BYTES, env=transaction_env, cwd=work,
         )
         return capture_library.capture_hosted_gate_a(
             request, transport, archive_path, bundle, trusted_root, publish_at=publish_at,

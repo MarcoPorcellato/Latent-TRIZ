@@ -35,8 +35,14 @@ the trusted root from `gh attestation trusted-root` standard output. The obsolet
 `--digest` form is forbidden because GitHub CLI 2.97.0 does not expose it.
 
 The real entry point is shell-free and accepts the GitHub credential only from
-`GH_TOKEN`. It passes only that credential plus a minimal fixed environment to
-child processes; the token is absent from argv, logs, and published artifacts.
+`GH_TOKEN`. Each transaction creates an owned mode-0700 `home` and `cache`
+directory beneath its private temporary working directory. Child processes get
+`HOME` and `XDG_CACHE_HOME` set to those directories, plus the fixed locale and
+`PATH`; ambient user home, cache, and configuration settings are not inherited.
+The wrapper revalidates the transaction directories as owned, non-symlink
+directories before each child call. `TemporaryDirectory` removes them on both
+success and failure. The token is absent from argv, logs, and published
+artifacts.
 Every CLI operation revalidates the executable path, SHA-256, and exact version.
 The pinned producer's complete `--version` output consists of the version line
 followed by `https://github.com/cli/cli/releases/tag/v2.97.0`, each ending in
