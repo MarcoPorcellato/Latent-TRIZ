@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -326,6 +327,109 @@ def prepare_constructible_runtime_bundle() -> ConstructibleRuntimeBundle:
 
 
 class A0XRuntimeBundleTests(unittest.TestCase):
+    def test_production_hosted_verifier_isolates_gh_state_and_cleans_it_on_success_and_failure(self) -> None:
+        from latent_triz.a0x_hosted_verifier import GateBVerificationRequest
+        from latent_triz.a0x_runtime_bundle import _ProductionHostedGateAVerifier
+
+        version = "gh version 2.97.0 (2026-07-31)"
+        version_output = (
+            version + "\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n"
+        ).encode("ascii")
+
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                executable_bytes = b"synthetic pinned verifier executable\n"
+                executable = root / "gh"
+                executable.write_bytes(executable_bytes)
+                executable.chmod(0o700)
+                authorization = root / "authorization.json"
+                authorization.write_text(json.dumps({
+                    "verifier": {
+                        "role": "github_cli_verifier",
+                        "sha256": hashlib.sha256(executable_bytes).hexdigest(),
+                        "version": version,
+                    },
+                }), encoding="utf-8")
+                request = GateBVerificationRequest(
+                    root, authorization, executable, root / "policy.json",
+                )
+                child_environments: list[dict[str, str]] = []
+                child_cwds: list[Path] = []
+                private_state_paths: list[Path] = []
+                cwd_fallback_state_paths: list[Path] = []
+                private_directory_metadata: list[tuple[int, int]] = []
+
+                def fake_run(argv, **kwargs):
+                    environment = dict(kwargs["env"])
+                    child_environments.append(environment)
+                    child_cwds.append(Path(kwargs.get("cwd") or Path.cwd()))
+                    state_home = environment.get("XDG_STATE_HOME")
+                    if state_home:
+                        device = Path(state_home) / "gh/device-id"
+                        device.parent.mkdir(parents=True, exist_ok=True)
+                        device.write_text("synthetic device id", encoding="utf-8")
+                        private_state_paths.append(device)
+                        for value in (
+                            environment["HOME"], environment["XDG_CONFIG_HOME"],
+                            environment["XDG_CACHE_HOME"], environment["XDG_DATA_HOME"], state_home,
+                        ):
+                            metadata = Path(value).stat()
+                            private_directory_metadata.append((metadata.st_uid, metadata.st_mode & 0o777))
+                    else:
+                        cwd_fallback_state_paths.append(
+                            child_cwds[-1] / ".local/state/gh/device-id",
+                        )
+                    output = version_output if tuple(argv)[-1] == "--version" else b"verified\n"
+                    return subprocess.CompletedProcess(argv, 0, output, b"")
+
+                def fake_hosted_verify(_request, *, runner, source_state_probe):
+                    runner((str(executable), "attestation", "verify"), root)
+                    if fail:
+                        raise RuntimeError("synthetic verifier failure")
+                    return b"synthetic verification receipt"
+
+                with patch.dict(os.environ, {
+                    "GH_TOKEN": "user-secret",
+                    "GITHUB_TOKEN": "user-secret",
+                    "XDG_CONFIG_HOME": str(root / "user-config"),
+                    "XDG_CACHE_HOME": str(root / "user-cache"),
+                }), patch("latent_triz.a0x_runtime_bundle.subprocess.run", side_effect=fake_run), patch(
+                    "latent_triz.a0x_runtime_bundle.verify_hosted_gate_a",
+                    side_effect=fake_hosted_verify,
+                ):
+                    verifier = _ProductionHostedGateAVerifier()
+                    if fail:
+                        with self.assertRaises(RuntimeError):
+                            verifier.verify(request)
+                    else:
+                        result = verifier.verify(request)
+                        self.assertEqual(b"synthetic verification receipt", result.receipt_raw)
+
+                self.assertGreaterEqual(len(child_environments), 2)
+                self.assertEqual(1, child_cwds.count(root))
+                self.assertEqual([], cwd_fallback_state_paths)
+                self.assertTrue(all(
+                    set(environment) == {
+                        "PATH", "LC_ALL", "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+                        "XDG_DATA_HOME", "XDG_STATE_HOME",
+                    }
+                    and "GH_TOKEN" not in environment
+                    and "GITHUB_TOKEN" not in environment
+                    for environment in child_environments
+                ))
+                self.assertTrue(all(
+                    len({environment[key] for environment in child_environments}) == 1
+                    for key in ("HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")
+                ))
+                self.assertTrue(private_directory_metadata)
+                self.assertTrue(all(
+                    owner == os.getuid() and mode == 0o700
+                    for owner, mode in private_directory_metadata
+                ))
+                self.assertTrue(all(not path.exists() for path in private_state_paths))
+                self.assertFalse((root / ".local").exists())
+
     @staticmethod
     def _cli_module():
         path = Path(__file__).parents[1] / "scripts/a0x_prepare_runtime.py"

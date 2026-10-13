@@ -497,6 +497,62 @@ class A0XCcpExecutorTests(unittest.TestCase):
         self.assertNotIn("dry-run", flattened)
         self.assertTrue(all(value == 30 for value in waits))
 
+    def test_production_identity_accepts_exact_gh_two_line_output_and_keeps_ccp_single_line(self) -> None:
+        from latent_triz.a0x_ccp_executor import (
+            _ProductionExecutableIdentityVerifier,
+            _private_gh_environment,
+        )
+
+        gh_version = "gh version 2.97.0 (2026-07-31)"
+        gh_output = (
+            gh_version + "\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n"
+        ).encode("ascii")
+        executable_bytes = b"synthetic pinned executable bytes\n"
+        with TemporaryDirectory() as temporary:
+            executable = Path(temporary) / "pinned-tool"
+            executable.write_bytes(executable_bytes)
+            executable.chmod(0o700)
+            verifier = _ProductionExecutableIdentityVerifier()
+
+            def probe(role: str, version: str, raw: bytes):
+                completed = subprocess.CompletedProcess(
+                    args=(str(executable), "--version"), returncode=0, stdout=raw, stderr=b"",
+                )
+                with patch(
+                    "latent_triz.a0x_ccp_executor.subprocess.run", return_value=completed,
+                ):
+                    if role == "github_cli_verifier":
+                        with _private_gh_environment() as environment:
+                            return verifier.verify(
+                                role=role, path=executable,
+                                expected_sha256=_sha(executable_bytes), expected_version=version,
+                                environment=environment,
+                            )
+                    return verifier.verify(
+                        role=role, path=executable,
+                        expected_sha256=_sha(executable_bytes), expected_version=version,
+                    )
+
+            evidence = probe("github_cli_verifier", gh_version, gh_output)
+            self.assertEqual(gh_version, evidence.version)
+
+            for malformed in (
+                gh_output[:-1],
+                gh_output.replace(b"\n", b"\r\n"),
+                gh_output.replace(b"cli/cli/releases/tag/v2.97.0", b"other/releases/tag/v2.97.0"),
+                gh_output + b"unexpected\n",
+            ):
+                with self.subTest(malformed=malformed), self.assertRaises(A0XCcpExecutorError):
+                    probe("github_cli_verifier", gh_version, malformed)
+
+            ccp_version = "commit-ci-preflight 0.1.0"
+            ccp_output = (ccp_version + "\n").encode("ascii")
+            ccp_evidence = probe("ccp", ccp_version, ccp_output)
+            self.assertEqual(ccp_version, ccp_evidence.version)
+
+            with self.assertRaises(A0XCcpExecutorError):
+                probe("ccp", ccp_version, ccp_output + b"extra\n")
+
     def test_production_preflight_probe_timeout_and_oversize_output_fail_closed(self) -> None:
         from latent_triz.a0x_ccp_executor import SubprocessGuardPreflightProducer
 
