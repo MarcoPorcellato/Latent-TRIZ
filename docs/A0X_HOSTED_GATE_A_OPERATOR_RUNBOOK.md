@@ -38,6 +38,11 @@ The real entry point is shell-free and accepts the GitHub credential only from
 `GH_TOKEN`. It passes only that credential plus a minimal fixed environment to
 child processes; the token is absent from argv, logs, and published artifacts.
 Every CLI operation revalidates the executable path, SHA-256, and exact version.
+The pinned producer's complete `--version` output consists of the version line
+followed by `https://github.com/cli/cli/releases/tag/v2.97.0`, each ending in
+one LF. Both lines are compared byte-for-byte; missing lines, altered URLs,
+extra output, and other line endings are refused. The download-help contract
+also preserves the line break emitted by the same pinned producer.
 Before archive transport, the wrapper also checks the pinned executable's exact
 download and trusted-root help shapes. Timeout, stdout, and stderr are bounded
 during pipe acquisition; an over-limit byte terminates the child. Temporary

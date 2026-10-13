@@ -37,7 +37,7 @@ MAX_STDERR_BYTES = 16 * 1024
 Runner = Callable[[tuple[str, ...], dict[str, str], int, int, Path | None], tuple[int, bytes, bytes]]
 SubprocessCall = Callable[..., object]
 DOWNLOAD_HELP_MARKERS = (
-    "Any associated bundle(s) will be written to a file in the current directory named after the artifact's digest.",
+    "Any associated bundle(s) will be written to a file in the\ncurrent directory named after the artifact's digest.",
     'the file will be named "sha256:1234.jsonl".',
     "gh attestation download [<file-path> | oci://<image-uri>] [--owner | --repo] [flags]",
     "-L, --limit int",
