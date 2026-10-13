@@ -288,9 +288,9 @@
       "sha256": "b4dffcaf9c93e76e0f2d55577aa730d6828b2027a7ffa4ce0e3598f00f6bffca"
     },
     {
-      "bytes": 16112,
+      "bytes": 18301,
       "path": "scripts/a0x_capture_hosted_gate_a.py",
-      "sha256": "b55dc928df36ffdf52efe7a2b21a7589447a476cbd5651132298adce640bb635"
+      "sha256": "04fdb608de698fe2c809710546528267218cd35eaf7a463b5817c05fe04490d7"
     },
     {
       "bytes": 1403,
@@ -613,9 +613,9 @@
       "sha256": "013897727eca3a7533f38f70dec57277fdb0a6ad2547593809801926cee5a958"
     },
     {
-      "bytes": 33279,
+      "bytes": 35753,
       "path": "tests/test_a0x_capture_hosted_gate_a.py",
-      "sha256": "601fa9d048dcc93cd9b0c0e5315cee65ff3717cc52e7f016fa9ec758a8632215"
+      "sha256": "2900faa43273d10616e6093bc99d17a6b420ab632b0922886976f75b563ae113"
     },
     {
       "bytes": 48519,

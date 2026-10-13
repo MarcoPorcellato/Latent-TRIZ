@@ -12,7 +12,7 @@
     "selection_corpus_sha256": "cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295",
     "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
   },
-  "implementation_sha256": "d755b2caee206cd66b66c69e408078f75baf86ba50882949d116fa7ecb5fd241",
+  "implementation_sha256": "85b77f282f44527f5c9052ae868d7013c24cdda180b3317dd8936afc440e968c",
   "protocol_sha256": "370de9fa95caa42bb7d5a1e1169d6bba100d0cde2ef220f2f8a4cebd3de90211",
   "scientific_status": "exploratory"
 }

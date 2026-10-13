@@ -203,6 +203,13 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                     _stdout_limit: int, cwd: Path | None,
                 ) -> tuple[int, bytes, bytes]:
                     calls.append((argv, env, cwd))
+                    self.assertIsNotNone(cwd)
+                    self.assertEqual(str(cwd / "home"), env["HOME"])
+                    self.assertEqual(str(cwd / "cache"), env["XDG_CACHE_HOME"])
+                    for private_path in (Path(env["HOME"]), Path(env["XDG_CACHE_HOME"])):
+                        metadata = private_path.stat()
+                        self.assertEqual(os.getuid(), metadata.st_uid)
+                        self.assertEqual(0o700, metadata.st_mode & 0o777)
                     if argv[-1] == "--version":
                         return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                     help_output = _help_output(argv)
@@ -245,7 +252,17 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                     ],
                     [argv for argv, _env, _cwd in calls],
                 )
-                self.assertTrue(all(env == module.FIXED_ENV for _argv, env, _cwd in calls))
+                self.assertTrue(all(env == calls[0][1] for _argv, env, _cwd in calls))
+                self.assertEqual(
+                    {
+                        **module.FIXED_ENV,
+                        "HOME": calls[0][1]["HOME"],
+                        "XDG_CACHE_HOME": calls[0][1]["XDG_CACHE_HOME"],
+                    },
+                    calls[0][1],
+                )
+                self.assertFalse(Path(calls[0][1]["HOME"]).exists())
+                self.assertFalse(Path(calls[0][1]["XDG_CACHE_HOME"]).exists())
             finally:
                 capture_library.GH_SHA256, capture_library.GH_VERSION = original_sha, original_version
 
@@ -462,13 +479,14 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
             observed.append((argv, kwargs))
             return subprocess.CompletedProcess(argv, 0, stdout=b"ok\n", stderr=b"")
 
-        runner = module._production_runner(
-            environ={"GH_TOKEN": token, "UNRELATED_SECRET": "must-not-pass"}, run=fake_run,
-        )
         with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            transaction_env = module._transaction_env(root)
+            runner = module._production_runner(
+                environ={"GH_TOKEN": token, "UNRELATED_SECRET": "must-not-pass"}, run=fake_run,
+            )
             result = runner(
-                ("/absolute/gh", "--version"), dict(module.FIXED_ENV), 9, 32,
-                Path(temporary).resolve(),
+                ("/absolute/gh", "--version"), transaction_env, 9, 32, root,
             )
 
         self.assertEqual((0, b"ok\n", b""), result)
@@ -482,9 +500,30 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
         self.assertEqual(32, kwargs["stdout_limit"])
         self.assertEqual(module.MAX_STDERR_BYTES, kwargs["stderr_limit"])
         child_env = kwargs["env"]
+        self.assertEqual(
+            {**transaction_env, "GH_PROMPT_DISABLED": "1", "GH_TOKEN": token}, child_env,
+        )
         self.assertEqual(token, child_env["GH_TOKEN"])
         self.assertNotIn("UNRELATED_SECRET", child_env)
         self.assertNotIn(token.encode(), result[1] + result[2])
+
+    def test_transaction_environment_refuses_symlinked_home(self) -> None:
+        """A caller cannot redirect GitHub CLI state outside its owned transaction directory."""
+        from latent_triz.a0x_hosted_capture import A0XHostedCaptureError, CAPTURE_INVALID
+
+        module = _script_module()
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            work = root / "transaction"
+            work.mkdir(mode=0o700)
+            outside = root / "outside"
+            outside.mkdir(mode=0o700)
+            (work / "home").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
+                module._transaction_env(work)
+
+            self.assertEqual([], list(outside.iterdir()))
 
     def test_production_runner_refuses_oversized_stderr(self) -> None:
         """Untrusted stderr is bounded independently from operation stdout."""
@@ -497,12 +536,13 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 argv, 0, stdout=b"", stderr=b"x" * (module.MAX_STDERR_BYTES + 1),
             )
 
-        runner = module._production_runner(environ={"GH_TOKEN": "secret"}, run=fake_run)
         with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            transaction_env = module._transaction_env(root)
+            runner = module._production_runner(environ={"GH_TOKEN": "secret"}, run=fake_run)
             with self.assertRaisesRegex(A0XHostedCaptureError, CAPTURE_INVALID):
                 runner(
-                    ("/absolute/gh", "api"), dict(module.FIXED_ENV), 9, 32,
-                    Path(temporary).resolve(),
+                    ("/absolute/gh", "api"), transaction_env, 9, 32, root,
                 )
 
     def test_bounded_subprocess_stops_while_stdout_exceeds_limit(self) -> None:
@@ -601,13 +641,13 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                 module.GH_SHA256 = hashlib.sha256(executable.read_bytes()).hexdigest()
                 module.GH_VERSION = "synthetic gh version"
                 arguments = self._arguments(module, executable, archive, manifest, root / "capture")
-                calls: list[tuple[str, ...]] = []
+                calls: list[tuple[tuple[str, ...], dict[str, str], Path | None]] = []
 
                 def runner(
-                    argv: tuple[str, ...], _env: dict[str, str], _timeout: int,
-                    _stdout_limit: int, _cwd: Path | None,
+                    argv: tuple[str, ...], env: dict[str, str], _timeout: int,
+                    _stdout_limit: int, cwd: Path | None,
                 ) -> tuple[int, bytes, bytes]:
-                    calls.append(argv)
+                    calls.append((argv, env, cwd))
                     if argv[-1] == "--version":
                         return 0, b"synthetic gh version\nhttps://github.com/cli/cli/releases/tag/v2.97.0\n", b""
                     return 0, b"incompatible help\n", b""
@@ -617,8 +657,15 @@ class CaptureHostedGateAAdapterTest(unittest.TestCase):
                         arguments, runner=runner, publish_at=self._publish_at,
                         supported_host=lambda: True,
                     )
-                self.assertFalse(any("/zip" in value for call in calls for value in call))
+                self.assertFalse(any("/zip" in value for call, _env, _cwd in calls for value in call))
                 self.assertFalse(arguments.output_root.exists())
+                self.assertTrue(calls)
+                work = calls[0][2]
+                self.assertIsNotNone(work)
+                self.assertEqual(str(work / "home"), calls[0][1]["HOME"])
+                self.assertEqual(str(work / "cache"), calls[0][1]["XDG_CACHE_HOME"])
+                self.assertFalse(Path(calls[0][1]["HOME"]).exists())
+                self.assertFalse(Path(calls[0][1]["XDG_CACHE_HOME"]).exists())
             finally:
                 capture_library.GH_SHA256, capture_library.GH_VERSION = original_sha, original_version
 
