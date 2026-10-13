@@ -21,6 +21,8 @@ from .a0x_ccp_executor import (
     _ExecutableIdentityEvidence,
     _ExecutableIdentityVerifier,
     _ProductionExecutableIdentityVerifier,
+    _private_gh_environment,
+    _valid_private_gh_environment,
     runtime_mapping_path,
 )
 from .a0x_contract import (
@@ -129,32 +131,37 @@ class _ProductionHostedGateAVerifier:
         if not all(isinstance(value, str) for value in (expected_role, expected_sha256, expected_version)):
             raise A0XRuntimeBundleError("vertical Gate B verifier identity is invalid")
         identity_verifier = _ProductionExecutableIdentityVerifier()
-        before = identity_verifier.verify(
-            role=expected_role, path=request.verifier_executable,
-            expected_sha256=expected_sha256, expected_version=expected_version,
-        )
+        with _private_gh_environment() as gh_environment:
+            before = identity_verifier.verify(
+                role=expected_role, path=request.verifier_executable,
+                expected_sha256=expected_sha256, expected_version=expected_version,
+                environment=gh_environment,
+            )
 
-        def runner(argv: tuple[str, ...], cwd: Path) -> tuple[int, bytes, bytes]:
-            try:
-                completed = subprocess.run(
-                    argv, cwd=str(cwd), shell=False, check=False, stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"}, timeout=60,
-                )
-            except (OSError, subprocess.TimeoutExpired) as error:
-                raise A0XRuntimeBundleError("vertical Gate B hosted verifier execution failed") from error
-            return completed.returncode, completed.stdout, completed.stderr
+            def runner(argv: tuple[str, ...], cwd: Path) -> tuple[int, bytes, bytes]:
+                if not _valid_private_gh_environment(gh_environment):
+                    raise A0XRuntimeBundleError("vertical Gate B private GH environment changed")
+                try:
+                    completed = subprocess.run(
+                        argv, cwd=str(cwd), shell=False, check=False, stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        env=dict(gh_environment), timeout=60,
+                    )
+                except (OSError, subprocess.TimeoutExpired) as error:
+                    raise A0XRuntimeBundleError("vertical Gate B hosted verifier execution failed") from error
+                return completed.returncode, completed.stdout, completed.stderr
 
-        raw = verify_hosted_gate_a(
-            request, runner=runner, source_state_probe=_production_vertical_source_state,
-        )
-        after = identity_verifier.verify(
-            role=expected_role, path=request.verifier_executable,
-            expected_sha256=expected_sha256, expected_version=expected_version,
-        )
-        if after != before:
-            raise A0XRuntimeBundleError("vertical Gate B verifier identity drifted")
-        return _HostedVerificationResult(raw, after, "production")
+            raw = verify_hosted_gate_a(
+                request, runner=runner, source_state_probe=_production_vertical_source_state,
+            )
+            after = identity_verifier.verify(
+                role=expected_role, path=request.verifier_executable,
+                expected_sha256=expected_sha256, expected_version=expected_version,
+                environment=gh_environment,
+            )
+            if after != before:
+                raise A0XRuntimeBundleError("vertical Gate B verifier identity drifted")
+            return _HostedVerificationResult(raw, after, "production")
 
 
 def _strict_repository_json(root: Path, path: Path, label: str) -> dict[str, Any]:

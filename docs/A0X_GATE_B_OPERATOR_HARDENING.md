@@ -80,6 +80,14 @@ boundary never implies success or authorization at the next boundary.
 
 ## Boundary 1: no-write bundle preflight
 
+Production GitHub CLI identity checks validate the complete pinned 2.97.0
+version output: the version line, the official release URL, and the exact line
+feeds. They retain the version line as the semantic identity. CCP continues to
+require its existing single-line version output. GitHub CLI identity and
+attestation commands use owned temporary HOME, config, cache, data, and state
+directories, without inheriting operator credentials or creating state in the
+source checkout. These directories are removed on success and failure.
+
 Run `scripts/a0x_prepare_runtime.py --preflight` with the same pair, receipt,
 CCP, Python, evidence commit, authorization ID and attempt ID that would be
 used by preparation. The preflight executes the same target-free validation

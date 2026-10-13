@@ -23,6 +23,7 @@ import threading
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from .a0x_contract import (
@@ -194,7 +195,16 @@ class _ProductionExecutableIdentityVerifier:
 
     def verify(
         self, *, role: str, path: Path, expected_sha256: str, expected_version: str | None = None,
+        environment: Mapping[str, str] | None = None,
     ) -> _ExecutableIdentityEvidence:
+        if role == "github_cli_verifier":
+            if expected_version is None or not _valid_private_gh_environment(environment):
+                raise A0XCcpExecutorError("github_cli_verifier requires its private transaction environment")
+            probe_environment = dict(environment)
+        else:
+            if environment is not None:
+                raise A0XCcpExecutorError(f"{role} executable does not accept a private GH environment")
+            probe_environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
         try:
             metadata = path.lstat()
         except OSError as error:
@@ -209,11 +219,11 @@ class _ProductionExecutableIdentityVerifier:
             completed = subprocess.run(
                 (str(path), "--version"), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, check=False, timeout=_PREFLIGHT_TIMEOUT_SECONDS,
-                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                env=probe_environment,
             )
             if completed.returncode != 0:
                 raise A0XCcpExecutorError(f"{role} executable version probe failed")
-            version = _strict_text(completed.stdout, f"{role} executable version")
+            version = _strict_executable_version(completed.stdout, role, expected_version)
             if version != expected_version:
                 raise A0XCcpExecutorError(f"{role} executable version differs")
         return _ExecutableIdentityEvidence(role=role, path=path, sha256=observed, version=version)
@@ -1824,6 +1834,23 @@ def _strict_text(raw: bytes, label: str) -> str:
     return text
 
 
+def _strict_executable_version(raw: bytes, role: str, expected_version: str) -> str:
+    if role != "github_cli_verifier":
+        return _strict_text(raw, f"{role} executable version")
+    match = re.fullmatch(
+        r"gh version ([0-9]+\.[0-9]+\.[0-9]+) \([0-9]{4}-[0-9]{2}-[0-9]{2}\)",
+        expected_version,
+    )
+    if match is None:
+        raise A0XCcpExecutorError("github_cli_verifier expected version is invalid")
+    expected_output = (
+        expected_version + "\nhttps://github.com/cli/cli/releases/tag/v" + match.group(1) + "\n"
+    ).encode("ascii")
+    if raw != expected_output:
+        raise A0XCcpExecutorError("github_cli_verifier executable version output differs")
+    return expected_version
+
+
 def _assert_public_safe_preflight(value: Mapping[str, Any]) -> None:
     forbidden_keys = {"argv", "path", "raw", "stdout", "stderr", "environment", "container_id", "local_path"}
     def walk(item: Any) -> None:
@@ -1893,6 +1920,69 @@ def _coordination_environment() -> dict[str, str]:
     if not isinstance(home, str) or not Path(home).is_absolute() or ".." in Path(home).parts or home == "/":
         raise A0XCcpExecutorError("native persistent coordination HOME is unavailable")
     return {"HOME": home, "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C"}
+
+
+@contextmanager
+def _private_gh_environment():
+    """Own one credential-free HOME/XDG tree for a complete GH transaction."""
+    with TemporaryDirectory(prefix="a0x-gh-private-") as temporary:
+        root = Path(temporary).resolve(strict=True)
+        if not _private_owned_directory(root):
+            raise A0XCcpExecutorError("private GH transaction root is not owned and mode 0700")
+        environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+        for key, name in (
+            ("HOME", "home"),
+            ("XDG_CONFIG_HOME", "config"),
+            ("XDG_CACHE_HOME", "cache"),
+            ("XDG_DATA_HOME", "data"),
+            ("XDG_STATE_HOME", "state"),
+        ):
+            path = root / name
+            try:
+                path.mkdir(mode=0o700)
+            except OSError as error:
+                raise A0XCcpExecutorError("private GH transaction directory could not be created") from error
+            environment[key] = str(path)
+        if not _valid_private_gh_environment(environment):
+            raise A0XCcpExecutorError("private GH transaction environment is invalid")
+        yield environment
+
+
+def _private_owned_directory(path: Path) -> bool:
+    try:
+        metadata = path.lstat()
+        return (
+            path.is_absolute()
+            and path.resolve(strict=True) == path
+            and stat.S_ISDIR(metadata.st_mode)
+            and metadata.st_uid == os.getuid()
+            and stat.S_IMODE(metadata.st_mode) == 0o700
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def _valid_private_gh_environment(environment: Mapping[str, str] | None) -> bool:
+    if not isinstance(environment, Mapping) or set(environment) != {
+        "PATH", "LC_ALL", "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+    }:
+        return False
+    if environment.get("PATH") != "/usr/bin:/bin" or environment.get("LC_ALL") != "C":
+        return False
+    home = environment.get("HOME")
+    if not isinstance(home, str) or not home:
+        return False
+    root = Path(home).parent
+    expected = {
+        "HOME": root / "home",
+        "XDG_CONFIG_HOME": root / "config",
+        "XDG_CACHE_HOME": root / "cache",
+        "XDG_DATA_HOME": root / "data",
+        "XDG_STATE_HOME": root / "state",
+    }
+    if any(environment.get(key) != str(path) for key, path in expected.items()):
+        return False
+    return _private_owned_directory(root) and all(_private_owned_directory(path) for path in expected.values())
 
 
 def _classify_outer_exit(result: ProcessResult) -> str:
