@@ -328,9 +328,9 @@
       "sha256": "e779d001f44e244cdb66c82013a03a30580d4e9ca3ea50841e6955a2a3d68389"
     },
     {
-      "bytes": 8343,
+      "bytes": 9422,
       "path": "scripts/a0x_prepare_runtime.py",
-      "sha256": "d3ce2c28a7788acca5078b93cea5d5753c8b1f726db200e896f31e269cceec7c"
+      "sha256": "bb50b3fda4dafea55d279ff5d793d1e23307ff0830a63f4463f18f1226c4e15d"
     },
     {
       "bytes": 16153,
@@ -403,9 +403,9 @@
       "sha256": "6e862c4b0d88a1450c86551d1309726e55fd16f7ef4f073b30146125ca566158"
     },
     {
-      "bytes": 128058,
+      "bytes": 128305,
       "path": "src/latent_triz/a0x_ccp_executor.py",
-      "sha256": "44be20e442513d0ff3c8cc451f31c4ee224bbe21a62385452953c8db610fcae1"
+      "sha256": "edeb2f8eaa44299ec8db51793c10ef34139cfa3c4ac2ed456154a01079a2bf1a"
     },
     {
       "bytes": 7989,
@@ -728,9 +728,9 @@
       "sha256": "c27f52b1fadcd222c41da596dc9afd0ef013647f8c261908f84617250f667e6b"
     },
     {
-      "bytes": 86268,
+      "bytes": 87683,
       "path": "tests/test_a0x_runtime_bundle.py",
-      "sha256": "5db863924576dc470c6f34e733bf1c0e9a649f1219bf0b26a38e48e390f1df8e"
+      "sha256": "fc8c40a94ec12e74a1be261da5b429147cbc4b4481006fdfc40ffc3a72e869d7"
     },
     {
       "bytes": 8229,
@@ -758,14 +758,14 @@
       "sha256": "3d5d17fa16e45127622632447f319db1bce06c0d0829b972b7dc25f910ba4988"
     },
     {
-      "bytes": 107194,
+      "bytes": 107326,
       "path": "tests/test_a0x_vertical_gate_chain_v2.py",
-      "sha256": "27e4fcb80c8ffe8d46539ca2743b1fdb9e514a88a9bae38824e3fb8c3e8a56ff"
+      "sha256": "8d815a8e8bf20408f2e3c0cc785ff34e1ed510e8bdd0cbf81e61f86163038187"
     },
     {
-      "bytes": 50951,
+      "bytes": 59083,
       "path": "tests/test_a0x_vertical_material.py",
-      "sha256": "52fa07dcf67023e1f7ed33e6ebf870e028d97d820232e8daeabe85d9030ac4af"
+      "sha256": "33af58f8a56abd70cf216b5a5950c30f95ec61713bd5555846dbf06652c410a3"
     },
     {
       "bytes": 3414,

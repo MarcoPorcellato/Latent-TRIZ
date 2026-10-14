@@ -492,7 +492,9 @@ class A0XVerticalGateChainV2RealGitTests(unittest.TestCase):
             stdout=stdout,
         )
         self.assertEqual(2, code)
-        self.assertEqual({"status": "refused"}, json.loads(stdout.getvalue()))
+        self.assertEqual({"status": "refused", "error": {
+            "code": "A0X_GATE_B_BINDING_REFUSED", "message": "Runtime bundle binding or readiness refused"}},
+            json.loads(stdout.getvalue()))
 
     def _invalid_gate_b_request(self, binding):
         """A package refusal must occur before these deliberately unusable inputs."""
