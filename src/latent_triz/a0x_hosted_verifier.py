@@ -100,6 +100,8 @@ def validate_verification_result(
         raise A0XHostedVerifierError(ATTESTATION_REFUSED)
     result = value[0]
     verification = result["verificationResult"]
+    for timestamp in verification["verifiedTimestamps"]:
+        _validate_verified_timestamp(timestamp["timestamp"])
     statement = verification["statement"]
     certificate = verification["signature"]["certificate"]
     expected_workflow_uri = f"https://github.com/{signer_workflow}@{required_ref}"
@@ -144,6 +146,16 @@ def validate_verification_result(
     if not expected:
         raise A0XHostedVerifierError(EXPECTATION_MISMATCH)
     return result
+
+
+def _validate_verified_timestamp(value: str) -> None:
+    """Check calendar validity without normalizing the producer's timestamp bytes."""
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+    except (TypeError, ValueError) as error:
+        raise A0XHostedVerifierError(ATTESTATION_REFUSED) from error
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise A0XHostedVerifierError(ATTESTATION_REFUSED)
 
 
 def _verified_identity_matches(identity: Any, workflow_uri: str, issuer: str) -> bool:

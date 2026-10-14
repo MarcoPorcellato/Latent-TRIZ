@@ -113,9 +113,9 @@
       "sha256": "bc0f52d81a0280a8a59423eb4ab54ed63b06e4753e72ea095e78616873554874"
     },
     {
-      "bytes": 6933,
+      "bytes": 7031,
       "path": "schemas/a0x-gh-2.97.0-verification-result.schema.json",
-      "sha256": "ae6b10ae31d9667a6a9c76ee219384d3c9bcb640d2098b006adc4be60be6f0d2"
+      "sha256": "b170107eaf65cef246b60c9a38e2070bafafd86ba41a6392d67e713bd59653d7"
     },
     {
       "bytes": 3479,
@@ -448,9 +448,9 @@
       "sha256": "e18dc826f46145dfd122ea96611cc790833a823c84d1609f82004c6a231006ae"
     },
     {
-      "bytes": 24964,
+      "bytes": 25562,
       "path": "src/latent_triz/a0x_hosted_verifier.py",
-      "sha256": "687c2c74607774e07c79b6e5e60300ed58d355af221b1fb2c37851a7e0c096e9"
+      "sha256": "6bda43e4cc36c9a5d764877e402fdffbaded5398a924bf050b8033498cbeff76"
     },
     {
       "bytes": 31027,
@@ -668,9 +668,9 @@
       "sha256": "011eb743a77881b1a2814b763df0ee8faee56535f964dd5b2ea106a8b6c14d12"
     },
     {
-      "bytes": 39587,
+      "bytes": 48939,
       "path": "tests/test_a0x_hosted_verifier.py",
-      "sha256": "9faf02cc9a0a99bedf4d60ad4383f4859a54c1bf49438059ca39205bc56a8858"
+      "sha256": "e4a83956c7dc5b2d22106996d888e3663ff1d1dd51d104d6710b822f3d685adc"
     },
     {
       "bytes": 2434,
@@ -775,7 +775,7 @@
     {
       "bytes": 102488,
       "path": "tests/test_a0x_vertical_p0_bootstrap.py",
-      "sha256": "8d0acb6e3fcc6e1c4da7a77d1c77a52dff890f4196142b7aee5b4d68d3e3708a"
+      "sha256": "218997b9066b8cd4db30591f23edac8eb43ff4b05575eae8eecde8bdaef2dc0f"
     },
     {
       "bytes": 8877,

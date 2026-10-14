@@ -62,11 +62,10 @@ class HostedVerifierContractTest(unittest.TestCase):
             self.assertEqual(raised.exception.code, "A0X_GATE_B_INPUT_INVALID")
 
     def test_signed_fixture_verifies_one_exact_manifest(self) -> None:
-        """Changing any signed binding must make offline Gate B refuse it."""
+        """Synthetic returned metadata must retain the exact manifest binding."""
         from latent_triz.a0x_hosted_verifier import validate_verification_result
 
-        fixture = Path(__file__).parent / "fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json"
-        result = fixture.read_bytes()
+        result = self._result_fixture()
         self.assertEqual(
             validate_verification_result(
                 result,
@@ -81,6 +80,132 @@ class HostedVerifierContractTest(unittest.TestCase):
             )["verificationResult"]["statement"]["subject"][0]["digest"]["sha256"],
             "1" * 64,
         )
+
+    def test_original_signed_basename_is_accepted_without_rewriting_input(self) -> None:
+        """The schema must accept the workflow's original signed subject name."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
+
+        raw = self._result_fixture()
+        expected = json.loads(raw)[0]
+        self.assertEqual(
+            expected["verificationResult"]["statement"]["subject"][0]["name"],
+            "a0x-hosted-gate-a-evidence.json",
+        )
+        try:
+            actual = self._validate_result(raw)
+        except A0XHostedVerifierError as error:
+            self.fail(f"The original signed subject was refused: {error.code}")
+        self.assertEqual(actual, expected)
+        self.assertEqual(raw, self._result_fixture())
+
+    def test_local_capture_basename_is_not_a_signed_subject_alias(self) -> None:
+        """A local capture rename cannot substitute for the original signed name."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
+
+        historical = Path(__file__).parent / "fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json"
+        with self.assertRaises(A0XHostedVerifierError) as raised:
+            self._validate_result(historical.read_bytes())
+        self.assertEqual(raised.exception.code, "A0X_GATE_B_ATTESTATION_REFUSED")
+
+    def test_verified_result_accepts_aware_offsets_and_preserves_timestamp_bytes(self) -> None:
+        """Valid producer offsets must pass without rewriting signed result metadata."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
+
+        for timestamp in (
+            "2026-10-13T11:51:33+02:00",
+            "2026-10-13T09:51:33Z",
+            "2026-10-13T09:51:33+00:00",
+            "2026-10-13T04:21:33-05:30",
+            "2026-10-13T10:21:33+00:30",
+            "2026-10-13T09:21:33-00:30",
+            "2026-10-13T09:51:33.1Z",
+            "2026-10-13T11:51:33.123456789+02:00",
+            "2026-10-13T04:21:33.123456789-05:30",
+            "2024-02-29T12:00:00+02:00",
+        ):
+            with self.subTest(timestamp=timestamp):
+                value = json.loads(self._result_fixture())
+                value[0]["verificationResult"]["verifiedTimestamps"][0]["timestamp"] = timestamp
+                raw = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+                with mock.patch("subprocess.run", side_effect=AssertionError("pure parsing must not launch a process")), mock.patch("subprocess.Popen", side_effect=AssertionError("pure parsing must not launch a process")):
+                    try:
+                        result = self._validate_result(raw)
+                    except A0XHostedVerifierError as error:
+                        self.fail(f"Valid aware timestamp was refused: {timestamp}: {error.code}")
+                self.assertEqual(result, value[0])
+                self.assertEqual(result["verificationResult"]["verifiedTimestamps"][0]["timestamp"], timestamp)
+                self.assertEqual(json.loads(raw), value)
+
+    def test_verified_result_rejects_invalid_calendar_naive_and_malformed_offsets(self) -> None:
+        """Accepting offsets must not admit invalid dates or unbounded syntax."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
+
+        for timestamp in (
+            "2026-02-30T12:00:00Z", "2026-02-29T12:00:00+02:00",
+            "2026-04-31T12:00:00Z", "0000-01-01T12:00:00Z",
+            "2026-13-01T12:00:00Z", "2026-01-00T12:00:00Z",
+            "2026-10-13T24:00:00Z", "2026-10-13T11:60:00Z", "2026-10-13T11:51:60Z",
+            "2026-10-13T11:51:33", "2026-10-13 11:51:33Z", "2026-10-13T11:51:33z",
+            "2026-10-13T11:51:33+0200", "2026-10-13T11:51:33+24:00",
+            "2026-10-13T11:51:33+02:60", "2026-10-13T11:51:33-02:60",
+            "2026-10-13T11:51:33.Z", "2026-10-13T11:51:33.1234567890Z",
+            "2026-10-13T11:51:33Z\n", "2026-10-13T11:51:33Zextra",
+            None, True, 3,
+        ):
+            with self.subTest(timestamp=timestamp):
+                value = json.loads(self._result_fixture())
+                value[0]["verificationResult"]["verifiedTimestamps"][0]["timestamp"] = timestamp
+                with self.assertRaises(A0XHostedVerifierError) as raised:
+                    self._validate_result(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+                self.assertEqual(raised.exception.code, "A0X_GATE_B_ATTESTATION_REFUSED")
+
+    def test_every_verified_timestamp_requires_a_valid_calendar(self) -> None:
+        """A valid first timestamp cannot hide an invalid later calendar date."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
+
+        value = json.loads(self._result_fixture())
+        value[0]["verificationResult"]["verifiedTimestamps"].append({
+            "type": "Tlog", "uri": "https://rekor.sigstore.dev", "timestamp": "2026-02-30T12:00:00Z",
+        })
+        with self.assertRaises(A0XHostedVerifierError) as raised:
+            self._validate_result(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+        self.assertEqual(raised.exception.code, "A0X_GATE_B_ATTESTATION_REFUSED")
+
+    def test_offset_result_still_rejects_all_security_binding_mutations(self) -> None:
+        """The new timestamp representation must never short-circuit trust checks."""
+        from latent_triz.a0x_hosted_verifier import A0XHostedVerifierError
+
+        baseline = json.loads(self._result_fixture())
+        baseline[0]["verificationResult"]["verifiedTimestamps"][0]["timestamp"] = "2026-10-13T11:51:33+02:00"
+        mutations = {
+            "digest": lambda v: v[0]["verificationResult"]["statement"]["subject"][0]["digest"].__setitem__("sha256", "2" * 64),
+            "signed_name": lambda v: v[0]["verificationResult"]["statement"]["subject"][0].__setitem__("name", "wrong-evidence.json"),
+            "signer": lambda v: v[0]["verificationResult"]["signature"]["certificate"].__setitem__("buildSignerDigest", "b" * 40),
+            "source": lambda v: v[0]["verificationResult"]["signature"]["certificate"].__setitem__("sourceRepositoryDigest", "b" * 40),
+            "issuer": lambda v: v[0]["verificationResult"]["signature"]["certificate"].__setitem__("issuer", "https://wrong.invalid"),
+            "san": lambda v: v[0]["verificationResult"]["signature"]["certificate"].__setitem__("subjectAlternativeName", "https://wrong.invalid"),
+            "ref": lambda v: v[0]["verificationResult"]["signature"]["certificate"].__setitem__("sourceRepositoryRef", "refs/heads/other"),
+            "runner": lambda v: v[0]["verificationResult"]["signature"]["certificate"].__setitem__("runnerEnvironment", "self-hosted"),
+            "repository": lambda v: v[0]["verificationResult"]["signature"]["certificate"].__setitem__("sourceRepositoryURI", "https://github.com/other/repository"),
+            "workflow": lambda v: v[0]["verificationResult"]["statement"]["predicate"]["buildDefinition"]["externalParameters"]["workflow"].__setitem__("path", ".github/workflows/other.yml"),
+            "run": lambda v: v[0]["verificationResult"]["statement"]["predicate"]["runDetails"]["metadata"].__setitem__("invocationId", "https://github.com/MarcoPorcellato/Latent-TRIZ/actions/runs/2002/attempts/2"),
+            "extra_field": lambda v: v[0].__setitem__("extra", True),
+            "two_subjects": lambda v: v[0]["verificationResult"]["statement"]["subject"].append(dict(v[0]["verificationResult"]["statement"]["subject"][0])),
+        }
+        self._validate_result(json.dumps(baseline, sort_keys=True, separators=(",", ":")).encode())
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                value = json.loads(json.dumps(baseline))
+                mutate(value)
+                with self.assertRaises(A0XHostedVerifierError):
+                    self._validate_result(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+
+        raw = json.dumps(baseline, sort_keys=True, separators=(",", ":")).encode()
+        duplicate = raw.replace(b'"verifiedTimestamps":', b'"verifiedTimestamps":[],"verifiedTimestamps":', 1)
+        self.assertNotEqual(duplicate, raw)
+        with self.assertRaises(A0XHostedVerifierError) as raised:
+            self._validate_result(duplicate)
+        self.assertEqual(raised.exception.code, "A0X_GATE_B_ATTESTATION_REFUSED")
 
     def test_positive_hosted_fixture_snapshots_match_canonical_pair_builders(self) -> None:
         """Changing builder output or either checked-in Hosted snapshot must fail."""
@@ -546,7 +671,25 @@ class HostedVerifierContractTest(unittest.TestCase):
 
     @staticmethod
     def _result_fixture() -> bytes:
-        return (Path(__file__).parent / "fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json").read_bytes()
+        """Build current synthetic metadata without changing the historical seed."""
+        seed = Path(__file__).parent / "fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json"
+        value = json.loads(seed.read_bytes())
+        value[0]["verificationResult"]["statement"]["subject"][0]["name"] = "a0x-hosted-gate-a-evidence.json"
+        return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+    @staticmethod
+    def _validate_result(raw: bytes):
+        """Exercise the production parser, never a verifier process or mock verdict."""
+        from latent_triz.a0x_hosted_verifier import validate_verification_result
+
+        return validate_verification_result(
+            raw, manifest_sha256="1" * 64, job_workflow_sha="a" * 40, source_sha="a" * 40,
+            repository="MarcoPorcellato/Latent-TRIZ",
+            signer_workflow="MarcoPorcellato/Latent-TRIZ/.github/workflows/a0x-hosted-gate-a.yml",
+            predicate_type="https://slsa.dev/provenance/v1",
+            cert_oidc_issuer="https://token.actions.githubusercontent.com",
+            required_ref="refs/heads/main", run_id=2002, run_attempt=1,
+        )
 
     @staticmethod
     def _portable_verifier(root: Path):

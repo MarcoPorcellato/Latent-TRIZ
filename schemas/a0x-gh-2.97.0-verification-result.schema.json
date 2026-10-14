@@ -5,7 +5,7 @@
   "$defs": {
     "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
-    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"},
+    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])(?![\\s\\S])"},
     "result": {"type": "object", "additionalProperties": false, "required": ["attestation", "verificationResult"], "properties": {
       "attestation": {"type": "object", "additionalProperties": false, "required": ["bundle", "bundle_url", "initiator"], "properties": {"bundle": {"type": "object"}, "bundle_url": {"type": "string"}, "initiator": {"type": "string"}}}, "verificationResult": {"$ref": "#/$defs/verification"}
     }},
@@ -18,7 +18,7 @@
     "san_matcher": {"type": "object", "additionalProperties": false, "required": ["subjectAlternativeName", "regexp"], "properties": {"subjectAlternativeName": {"type": "string"}, "regexp": {"type": "string", "maxLength": 1024}}},
     "issuer_matcher": {"type": "object", "additionalProperties": false, "required": ["issuer", "regexp"], "properties": {"issuer": {"type": "string"}, "regexp": {"type": "string", "maxLength": 1024}}},
     "statement": {"type": "object", "additionalProperties": false, "required": ["_type", "subject", "predicateType", "predicate"], "properties": {
-      "_type": {"const": "https://in-toto.io/Statement/v1"}, "subject": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["name", "digest"], "properties": {"name": {"const": "hosted-gate-a-evidence.json"}, "digest": {"type": "object", "additionalProperties": false, "required": ["sha256"], "properties": {"sha256": {"$ref": "#/$defs/sha"}}}}}},
+      "_type": {"const": "https://in-toto.io/Statement/v1"}, "subject": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["name", "digest"], "properties": {"name": {"const": "a0x-hosted-gate-a-evidence.json"}, "digest": {"type": "object", "additionalProperties": false, "required": ["sha256"], "properties": {"sha256": {"$ref": "#/$defs/sha"}}}}}},
       "predicateType": {"const": "https://slsa.dev/provenance/v1"}, "predicate": {"type": "object", "additionalProperties": false, "required": ["buildDefinition", "runDetails"], "properties": {"buildDefinition": {"$ref": "#/$defs/build_definition"}, "runDetails": {"$ref": "#/$defs/run_details"}}}
     }},
     "build_definition": {"type": "object", "additionalProperties": false, "required": ["buildType", "externalParameters", "internalParameters", "resolvedDependencies"], "properties": {
