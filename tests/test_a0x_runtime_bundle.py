@@ -1649,4 +1649,27 @@ class A0XRuntimeBundleTests(unittest.TestCase):
                 gate_a_verifier=Mock(side_effect=ValueError("refused")),
             )
         self.assertEqual(2, code)
-        self.assertEqual({"status": "refused"}, json.loads(output.getvalue()))
+        self.assertEqual({"status": "refused", "error": {
+            "code": "A0X_GATE_B_VERIFICATION_REFUSED", "message": "Hosted Gate A verification refused"}},
+            json.loads(output.getvalue()))
+
+    def test_cli_production_refusal_does_not_echo_private_exception(self) -> None:
+        from latent_triz.a0x_runtime_bundle import A0XRuntimeBundleError
+
+        temporary, root, request = self._fixture()
+        self.addCleanup(temporary.cleanup)
+        cli = self._cli_module()
+        argv = ["--fixed-dossier", request.fixed_dossier,
+            "--gate-b-authorization", str(request.gate_b_authorization),
+            "--verifier", str(request.verifier_executable), "--verifier-policy", str(request.verifier_policy),
+            "--ccp", str(request.ccp_executable), "--python", str(request.python_executable),
+            "--authorization-id", request.authorization_id, "--attempt-id", request.attempt_id]
+        secret = "/Users/private/example gh_token=synthetic-secret"
+        output = io.StringIO()
+        with patch.object(cli, "prepare_runtime_bundle", side_effect=A0XRuntimeBundleError(secret, code=secret)):
+            code = cli.main(argv, root=root, stdout=output)
+        self.assertEqual(2, code)
+        self.assertEqual({"status": "refused", "error": {
+            "code": "A0X_GATE_B_BINDING_REFUSED", "message": "Runtime bundle binding or readiness refused"}},
+            json.loads(output.getvalue()))
+        self.assertNotIn(secret, output.getvalue())

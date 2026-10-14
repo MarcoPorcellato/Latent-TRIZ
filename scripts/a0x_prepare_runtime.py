@@ -185,6 +185,21 @@ def main(
                 code = "A0X_RUNTIME_BUNDLE_REFUSED"
                 message = "runtime bundle preflight refused"
             refusal["error"] = {"code": code, "message": message}
+        else:
+            # Only fixed public diagnostics cross this boundary. Never emit
+            # arbitrary exception text, chained errors, paths or credentials.
+            if isinstance(error, A0XRuntimeBundleError):
+                if str(error) in {"Gate B verification refused", "vertical Gate B verification refused"}:
+                    code, message = "A0X_GATE_B_VERIFICATION_REFUSED", "Hosted Gate A verification refused"
+                else:
+                    code, message = "A0X_GATE_B_BINDING_REFUSED", "Runtime bundle binding or readiness refused"
+            elif isinstance(error, OSError):
+                code, message = "A0X_GATE_B_FILESYSTEM_REFUSED", "Runtime preparation filesystem operation refused"
+            elif isinstance(error, subprocess.SubprocessError):
+                code, message = "A0X_GATE_B_PROBE_REFUSED", "Runtime preparation subprocess refused"
+            else:
+                code, message = "A0X_GATE_B_INPUT_REFUSED", "Runtime preparation input refused"
+            refusal["error"] = {"code": code, "message": message}
         print(json.dumps(refusal, sort_keys=True, separators=(",", ":")), file=stream)
         return 2
     print(json.dumps(receipt, sort_keys=True, separators=(",", ":")), file=stream)

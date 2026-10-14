@@ -413,6 +413,116 @@ class A0XVerticalMaterialTests(unittest.TestCase):
                 self.assertFalse(path.with_name("attempt-claim.json").exists())
                 self.assertIn("not canonical JSON", str(caught.exception))
 
+    def test_v2_reconstruction_accepts_producer_single_lf_and_preserves_raw_binding(self) -> None:
+        from latent_triz.a0x_ccp_executor import _vertical_gate_a_evidence_from_raw
+        from latent_triz.a0x_hosted_gate_a import canonical_json_bytes
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        original = json.loads((root / prepared["gate_b_authorization_path"]).read_bytes())
+        for ending in (b"", b"\n"):
+            with self.subTest(ending=ending):
+                raw = canonical_json_bytes(original).removesuffix(b"\n") + ending
+                receipt = json.loads((root / prepared["verification_receipt_path"]).read_bytes())
+                receipt["authorization_raw_sha256"] = hashlib.sha256(raw).hexdigest()
+                evidence = _vertical_gate_a_evidence_from_raw(
+                    gate_b_authorization_raw=raw,
+                    gate_b_authorization_path=prepared["gate_b_authorization_path"],
+                    gate_b_receipt_raw=canonical_json_bytes(receipt),
+                    gate_b_receipt_path=prepared["verification_receipt_path"],
+                    expected_source={"head": head, "tree": tree, "ref": "refs/heads/main"},
+                    pair=binding.pair_binding,
+                    expected_package=json.loads((root / prepared["vertical_outputs"]["descriptor"]).read_bytes())["payload"]["vertical_package"],
+                    expected_qualification_context="synthetic-target-free",
+                )
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), evidence["gate_b_authorization_raw_sha256"])
+
+    def test_v2_reconstruction_refuses_other_authorization_whitespace(self) -> None:
+        from latent_triz.a0x_ccp_executor import _vertical_gate_a_evidence_from_raw
+        from latent_triz.a0x_hosted_gate_a import canonical_json_bytes
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        auth = json.loads((root / prepared["gate_b_authorization_path"]).read_bytes())
+        compact = canonical_json_bytes(auth).removesuffix(b"\n")
+        for raw in (compact+b"\n\n", compact+b"\r\n", compact+b" ", b" "+compact, json.dumps(auth,indent=2).encode()):
+            with self.subTest(raw_suffix=raw[-8:]):
+                receipt = json.loads((root / prepared["verification_receipt_path"]).read_bytes())
+                receipt["authorization_raw_sha256"] = hashlib.sha256(raw).hexdigest()
+                with self.assertRaisesRegex(A0XCcpExecutorError, "not canonical JSON"):
+                    _vertical_gate_a_evidence_from_raw(
+                        gate_b_authorization_raw=raw,
+                        gate_b_authorization_path=prepared["gate_b_authorization_path"],
+                        gate_b_receipt_raw=canonical_json_bytes(receipt),
+                        gate_b_receipt_path=prepared["verification_receipt_path"],
+                        expected_source={"head": head, "tree": tree, "ref": "refs/heads/main"},
+                        pair=binding.pair_binding,
+                        expected_package=json.loads((root / prepared["vertical_outputs"]["descriptor"]).read_bytes())["payload"]["vertical_package"],
+                        expected_qualification_context="synthetic-target-free",
+                    )
+
+    def test_v2_reconstruction_refuses_key_aliases_and_raw_hash_drift(self) -> None:
+        from latent_triz.a0x_ccp_executor import _vertical_gate_a_evidence_from_raw
+        from latent_triz.a0x_hosted_gate_a import canonical_json_bytes
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        auth = json.loads((root / prepared["gate_b_authorization_path"]).read_bytes())
+        compact = canonical_json_bytes(auth).removesuffix(b"\n")
+        reordered = json.dumps(dict(reversed(list(auth.items()))), separators=(",", ":")).encode()
+        duplicate = b'{"authorization_profile":' + json.dumps(auth["authorization_profile"]).encode() + b',' + compact[1:]
+        for raw, rebind_receipt in ((reordered, True), (duplicate, True), (compact+b"\n", False)):
+            with self.subTest(raw_suffix=raw[-8:], rebind_receipt=rebind_receipt):
+                receipt = json.loads((root / prepared["verification_receipt_path"]).read_bytes())
+                receipt["authorization_raw_sha256"] = hashlib.sha256(raw if rebind_receipt else compact).hexdigest()
+                with self.assertRaises(A0XCcpExecutorError):
+                    _vertical_gate_a_evidence_from_raw(
+                        gate_b_authorization_raw=raw,
+                        gate_b_authorization_path=prepared["gate_b_authorization_path"],
+                        gate_b_receipt_raw=canonical_json_bytes(receipt),
+                        gate_b_receipt_path=prepared["verification_receipt_path"],
+                        expected_source={"head": head, "tree": tree, "ref": "refs/heads/main"},
+                        pair=binding.pair_binding,
+                        expected_package=json.loads((root / prepared["vertical_outputs"]["descriptor"]).read_bytes())["payload"]["vertical_package"],
+                        expected_qualification_context="synthetic-target-free",
+                    )
+
+    def test_child_graph_accepts_real_gate_b_producer_lf_without_material_dispatch(self) -> None:
+        from scripts.a0x_vertical_material_child import _validate_graph
+        from latent_triz.a0x_ccp_executor import vertical_execution_authorization_path
+        from latent_triz.a0x_hosted_gate_a import canonical_json_bytes
+
+        root, binding, prepared, head, tree = self._prepared_v2_graph()
+        auth_path = root / prepared["gate_b_authorization_path"]
+        raw = canonical_json_bytes(json.loads(auth_path.read_bytes()))
+        auth_path.write_bytes(raw)
+        receipt_path = root / prepared["verification_receipt_path"]
+        receipt = json.loads(receipt_path.read_bytes())
+        receipt["authorization_raw_sha256"] = hashlib.sha256(raw).hexdigest()
+        receipt_raw = canonical_json_bytes(receipt)
+        receipt_path.write_bytes(receipt_raw)
+        outputs = prepared["vertical_outputs"]
+        evidence_sha = self._rewrite_vertical_output(root, outputs["gate_a_evidence"], lambda payload: payload.update({
+            "gate_b_authorization_raw_sha256": hashlib.sha256(raw).hexdigest(),
+            "verification_receipt": {"path": prepared["verification_receipt_path"], "sha256": hashlib.sha256(receipt_raw).hexdigest()},
+        }))
+        evidence_ref = {"role": "gate_a_evidence", "path": outputs["gate_a_evidence"], "sha256": evidence_sha}
+        descriptor_sha = self._rewrite_vertical_output(root, outputs["descriptor"], lambda payload: payload.update({"gate_a_evidence": evidence_ref}))
+        inlet_sha = self._rewrite_vertical_output(root, outputs["authorization"], lambda payload: payload.update({
+            "gate_a_evidence": evidence_ref,
+            "descriptor": {"role": "descriptor", "path": outputs["descriptor"], "sha256": descriptor_sha},
+        }))
+        self._rewrite_vertical_output(root, outputs["mapping"], lambda payload: payload.update({
+            "descriptor": {"role": "descriptor", "path": outputs["descriptor"], "sha256": descriptor_sha},
+            "authorization": {"role": "authorization", "path": outputs["authorization"], "sha256": inlet_sha},
+        }))
+        authorization = self._v4_authorization(root, binding, prepared, head, tree)
+        gate_c_path = root / vertical_execution_authorization_path(binding)
+        gate_c_path.parent.mkdir(parents=True)
+        gate_c_path.write_bytes(self._compact_json(authorization))
+        graph = _validate_graph(root, outputs["descriptor"], source_state_probe=lambda: (head, tree, True),
+            environment=dict(item.split("=", 1) for item in authorization["guard_launch"]["environment_template"]),
+            cwd=root, child_script_path=root / "scripts/a0x_vertical_material_child.py", expected_context="synthetic-target-free")
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), graph["gate_a_evidence"]["gate_b_authorization_raw_sha256"])
+        self.assertFalse(gate_c_path.with_name("attempt-claim.json").exists())
+
     def test_v2_gate_c_reconstructs_evidence_and_refuses_a_rebound_gate_b_package(self) -> None:
         """Raw Gate-B bytes cannot be rebound to a different P0 package graph."""
         from latent_triz.a0x_ccp_executor import (

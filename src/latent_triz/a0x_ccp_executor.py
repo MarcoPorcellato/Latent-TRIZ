@@ -994,7 +994,10 @@ def _vertical_gate_a_evidence_from_raw(
     """Reconstruct the sole v2 Gate-A projection from raw Gate-B documents."""
     authorization = _strict_object(gate_b_authorization_raw, "vertical Gate B authorization")
     receipt = _strict_object(gate_b_receipt_raw, "vertical Gate B verification receipt")
-    if _canonical_json(authorization) != gate_b_authorization_raw:
+    # Hosted Gate B producers write one LF; historical synthetic fixtures do
+    # not. Admit precisely these two serializations and retain the raw hash.
+    canonical_authorization = _canonical_json(authorization)
+    if gate_b_authorization_raw not in (canonical_authorization, canonical_authorization + b"\n"):
         raise A0XCcpExecutorError("vertical Gate B authorization is not canonical JSON")
     if hosted_gate_a_canonical_json_bytes(receipt) != gate_b_receipt_raw:
         raise A0XCcpExecutorError("vertical Gate B verification receipt is not canonical JSON")
