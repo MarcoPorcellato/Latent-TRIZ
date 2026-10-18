@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import tempfile
 import types
 import unittest
@@ -133,16 +134,45 @@ def _guard_sealed_target_open(
     attempted_opens: list[str],
     original_open: Callable[..., object] | None = None,
 ) -> Callable[..., object]:
-    blocked_path = sealed_target_path.resolve()
+    blocked_path = Path(os.path.abspath(sealed_target_path))
     delegate = _ORIGINAL_PATH_OPEN if original_open is None else original_open
 
     def tracked_open(path_obj: Path, *args: object, **kwargs: object) -> object:
-        if path_obj.resolve() == blocked_path:
+        if Path(os.path.abspath(path_obj)) == blocked_path:
             attempted_opens.append(str(path_obj))
             raise PermissionError("sealed-target path access denied before opener")
         return delegate(path_obj, *args, **kwargs)
 
     return tracked_open
+
+
+class SealedTargetGuardMetadataTests(unittest.TestCase):
+    def test_guard_blocks_lexical_alias_without_metadata_and_allows_public_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            blocked = Path(directory) / "sentinel.jsonl"
+            attempted = []
+            delegated = []
+            sentinel = object()
+
+            def opener(path, *_args, **_kwargs):
+                delegated.append(path)
+                return sentinel
+
+            with (
+                patch.object(Path, "resolve", side_effect=AssertionError("resolve forbidden")),
+                patch.object(Path, "stat", side_effect=AssertionError("stat forbidden")),
+                patch.object(Path, "lstat", side_effect=AssertionError("lstat forbidden")),
+                patch.object(os, "readlink", side_effect=AssertionError("readlink forbidden")),
+            ):
+                guard = _guard_sealed_target_open(blocked, attempted, original_open=opener)
+                with self.assertRaisesRegex(PermissionError, "before opener"):
+                    guard(blocked, "rb")
+                with self.assertRaisesRegex(PermissionError, "before opener"):
+                    guard(Path(directory) / "unused" / ".." / "sentinel.jsonl", "rb")
+                allowed = Path(directory) / "public.json"
+                self.assertIs(sentinel, guard(allowed, "rb"))
+            self.assertEqual(2, len(attempted))
+            self.assertEqual([allowed], delegated)
 
 
 class A0R2ActivationTests(unittest.TestCase):

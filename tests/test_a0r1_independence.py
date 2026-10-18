@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -149,9 +150,9 @@ class A0R1IndependenceTests(unittest.TestCase):
         source_manifest_path = self.ROOT / "data/a0/manifest.json"
         source_cases_path = self.ROOT / "data/a0/cases.jsonl"
         source_calibration_targets_path = self.targets_source_calibration_path
-        repository_sealed_path = (
+        repository_sealed_path = Path(os.path.abspath(
             self.ROOT / "data/a0/sealed-targets/targets.jsonl"
-        ).resolve()
+        ))
 
         # Manifest/template compatibility uses public cases. Both sets of target
         # rows are synthetic, never read from either protected target file.
@@ -178,17 +179,17 @@ class A0R1IndependenceTests(unittest.TestCase):
         original_read_bytes = Path.read_bytes
 
         def reject_repository_sealed_open(path: Path, *args, **kwargs):
-            if path.resolve() == repository_sealed_path:
+            if Path(os.path.abspath(path)) == repository_sealed_path:
                 raise AssertionError("repository sealed-target path must not be opened")
             return original_open(path, *args, **kwargs)
 
         def reject_repository_sealed_read_text(path: Path, *args, **kwargs):
-            if path.resolve() == repository_sealed_path:
+            if Path(os.path.abspath(path)) == repository_sealed_path:
                 raise AssertionError("repository sealed-target path must not be read")
             return original_read_text(path, *args, **kwargs)
 
         def reject_repository_sealed_read_bytes(path: Path, *args, **kwargs):
-            if path.resolve() == repository_sealed_path:
+            if Path(os.path.abspath(path)) == repository_sealed_path:
                 raise AssertionError("repository sealed-target path must not be read")
             return original_read_bytes(path, *args, **kwargs)
 
@@ -215,6 +216,29 @@ class A0R1IndependenceTests(unittest.TestCase):
         self.assertEqual("pass", report["status"])
         self.assertEqual([], report["violations"])
         self.assertTrue(report["ready"])
+
+    def test_published_manifest_guard_never_resolves_or_probes_sealed_path(self) -> None:
+        """Catch metadata access by the test guard before any real OS call."""
+        blocked = os.path.abspath(self.ROOT / "data/a0/sealed-targets/targets.jsonl")
+        original_resolve = Path.resolve
+        original_stat = Path.stat
+        original_lstat = Path.lstat
+        original_readlink = os.readlink
+
+        def checked(original):
+            def invoke(path, *args, **kwargs):
+                if os.path.abspath(path) == blocked:
+                    raise AssertionError("sealed-path metadata operation reached sentinel")
+                return original(path, *args, **kwargs)
+            return invoke
+
+        with (
+            patch.object(Path, "resolve", new=checked(original_resolve)),
+            patch.object(Path, "stat", new=checked(original_stat)),
+            patch.object(Path, "lstat", new=checked(original_lstat)),
+            patch.object(os, "readlink", new=checked(original_readlink)),
+        ):
+            self.test_published_a0_manifest_and_nested_template_contract_are_supported()
 
     def test_reused_case_family_template_and_seed_fail(self) -> None:
         candidate_cases = [self._base_case("a0_a", "a0fam_a", "a0tpl_a", "A machine slows on peak load.")]
