@@ -403,9 +403,9 @@
       "sha256": "6e862c4b0d88a1450c86551d1309726e55fd16f7ef4f073b30146125ca566158"
     },
     {
-      "bytes": 171684,
+      "bytes": 172285,
       "path": "src/latent_triz/a0x_ccp_executor.py",
-      "sha256": "f45d81ab60e2e8025e23db262bca7e72bfc7914346ca6a8f4c63fc80fcf1e149"
+      "sha256": "c1cdecf73451b177a46f9ddb6ee10ff0dc7c232726dbc4ebebdf88ace3baf992"
     },
     {
       "bytes": 7989,
@@ -688,9 +688,9 @@
       "sha256": "8dede33c6b9cf589472f796780e878961a36fd37b63eb1c99724e4405a0c5ca9"
     },
     {
-      "bytes": 43456,
+      "bytes": 80524,
       "path": "tests/test_a0x_gate_c_preflight.py",
-      "sha256": "3dc04f458e24103df75979109228257f12201078b9bb043676ad0efb693be78c"
+      "sha256": "3f6ed99fdd4a3a5738e4553ae2684b3b72f1f8f7f3ccf468fd0dba2abfc49f78"
     },
     {
       "bytes": 50668,
@@ -818,9 +818,9 @@
       "sha256": "e215ce66417c46f3f83265eec8cc9b7f3dc4b33cc50a370ecd4106d7a29b494f"
     },
     {
-      "bytes": 8877,
+      "bytes": 18322,
       "path": "tests/test_a0x_vertical_production_adapter.py",
-      "sha256": "36bf2052ba533ad3813500a0e6c22ad4d9bc7811d67ff9d85c824dda24ea10dc"
+      "sha256": "6a76e3107b84cedd162483d2853c75c2dbb9076f28e5f1dedea65b8edbd643a0"
     },
     {
       "bytes": 31124,
