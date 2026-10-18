@@ -8,6 +8,7 @@ import builtins
 import importlib.util
 import io
 import json
+from dataclasses import replace
 import signal
 import stat
 import subprocess
@@ -19,11 +20,338 @@ from contextlib import redirect_stdout
 from unittest import mock
 
 from latent_triz import a0x_ccp_executor as executor
-from latent_triz.a0x_contract import Leg, PairBinding
+from latent_triz.a0x_contract import Leg, PairBinding, canonical_json_sha256
+from latent_triz.a0x_vertical_slice import VerticalPackageBinding
 from tests.a0x_test_support import pair_binding
 
 
 TARGETS = ("data/a0/procedural-targets/calibration-targets.jsonl", "data/a0/sealed-targets/targets.jsonl")
+
+
+def _write_synthetic_json(root: Path, relative: str, value: object) -> bytes:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    raw = (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+    path.write_bytes(raw)
+    return raw
+
+
+class _ActiveA0MetadataFixture:
+    """Hash-linked public metadata fixture; never creates protected target files."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.a0_targets = ("synthetic/a0/calibration.jsonl", "synthetic/a0/sealed/targets.jsonl")
+        self.r1_targets = ("synthetic/r1/calibration.jsonl", "synthetic/r1/sealed.jsonl")
+        self.sensitive_paths = tuple(f"synthetic/sensitive/{index}.json" for index in range(14))
+        self.profile_path = "synthetic-profile/manifest.json"
+        self.package_path = "synthetic/active-p0"
+        self.a0_tree_path = "experiments/a0x-six-model/protected-a0-tree.json"
+        self.r1_tree_path = "experiments/a0x-six-model/protected-a0r1-tree.json"
+        self.selection_path = "experiments/a0x-six-model/a0-selection-manifest.json"
+        self.manifest_path = "data/a0/manifest.json"
+        self._write_tree(
+            leg=Leg.A0, target_path=self.a0_targets[1],
+            manifest_path="synthetic/a0/target-provenance.json", tree_path=self.a0_tree_path,
+        )
+        self._write_tree(
+            leg=Leg.R1, target_path=self.r1_targets[1],
+            manifest_path="synthetic/r1/target-provenance.json", tree_path=self.r1_tree_path,
+        )
+        self.manifest_raw = _write_synthetic_json(root, self.manifest_path, {
+            "files": {
+                "calibration_targets_jsonl": {
+                    "path": "procedural-targets/calibration-targets.jsonl",
+                    "size": 19,
+                    "sha256": "1" * 64,
+                },
+            },
+        })
+        cases = []
+        for domain in ("agriculture", "energy", "manufacturing", "medicine", "software", "transport"):
+            for family_index in range(4):
+                family = f"{domain}-family-{family_index}"
+                for case_index in range(2):
+                    cases.append({
+                        "case_id": f"{family}-case-{case_index}",
+                        "case_content_sha256": "2" * 64,
+                        "domain": domain,
+                        "problem_family_id": family,
+                        "split": "synthetic",
+                    })
+        selection = {
+            "artifact_class": "a0x-selection-manifest",
+            "empirical": True,
+            "scientific_status": "exploratory",
+            "evidence_eligible": False,
+            "expert_validated": False,
+            "claim_ids": [],
+            "selection_corpus_sha256": "3" * 64,
+            "selection_path": self.selection_path,
+            "selected_case_count": 48,
+            "source_cases_path": "synthetic/cases.jsonl",
+            "source_corpus_manifest_path": self.manifest_path,
+            "source_cases_sha256": "4" * 64,
+            "source_corpus_manifest_sha256": hashlib.sha256(self.manifest_raw).hexdigest(),
+            "selection_rule": {
+                "cases_per_family": 2,
+                "families_per_domain": 4,
+                "family_order": "lexicographic",
+                "domain_order": "frozen",
+            },
+            "cases": cases,
+            "target_content_reads": 0,
+        }
+        self.selection_raw = _write_synthetic_json(root, self.selection_path, selection)
+        a0_identity = self._identity(
+            Leg.A0, protected_tree_sha256=self.a0_tree_sha256,
+            selection_corpus_sha256=hashlib.sha256(self.selection_raw).hexdigest(),
+        )
+        self.a0_freeze_raw = self._write_leg_wrapper(self.package_path, a0_identity)
+        r1_identity = self._identity(
+            Leg.R1, protected_tree_sha256=self.r1_tree_sha256,
+            selection_corpus_sha256="5" * 64,
+        )
+        self.r1_freeze_raw = self._write_leg_wrapper("experiments/a0x-six-model/r1", r1_identity)
+
+        # Intentionally invalid historical docs and a different batch freeze.
+        # Active A0 validation must not read or fall back to these.
+        _write_synthetic_json(root, "experiments/a0-automated-weak-proxy/protocol.json", {
+            "artifact_class": "legacy-protocol-without-identity",
+        })
+        _write_synthetic_json(root, "experiments/a0-automated-weak-proxy/implementation.json", {
+            "artifact_class": "legacy-implementation-without-identity",
+        })
+        self.batch_freeze_raw = _write_synthetic_json(
+            root, "experiments/a0x-six-model/freeze/a0-freeze.json", {
+                "artifact_class": "different-batch-freeze",
+                "identity": {"leg": "a0"},
+            },
+        )
+        _write_synthetic_json(root, "experiments/a0r1-independent-proxy/protocol.json", {
+            "artifact_class": "legacy-r1-protocol-without-identity",
+        })
+        _write_synthetic_json(root, "experiments/a0r1-independent-proxy/implementation.json", {
+            "artifact_class": "legacy-r1-implementation-without-identity",
+        })
+        self.profile_raw = _write_synthetic_json(root, self.profile_path, {
+            "instance_dispositions": {
+                "excluded_sensitive_role_unverified": list(self.sensitive_paths),
+            },
+        })
+        pair = PairBinding.from_mapping(pair_binding(Leg.A0, "smollm2_360m", hidden_width=960))
+        self.active_freeze_sha256 = hashlib.sha256(self.a0_freeze_raw).hexdigest()
+        self.pair = replace(pair, leg_freeze_sha256=self.active_freeze_sha256)
+        self.package_binding = VerticalPackageBinding(
+            envelope_path="synthetic/active-p0/envelope.json",
+            package_path=self.package_path,
+            commitment_path="synthetic/active-p0/commitment.json",
+            commitment_raw_sha256="6" * 64,
+            package_commitment_sha256="7" * 64,
+            dossier_path="synthetic/active-p0/dossier.json",
+            dossier_sha256="8" * 64,
+            qualified_source_head="a" * 40,
+            qualified_source_tree="b" * 40,
+            leg=Leg.A0,
+            model_key=self.pair.model_key,
+            model_revision=self.pair.revision,
+            pair_binding=self.pair,
+        )
+
+    def _write_tree(self, *, leg: Leg, target_path: str, manifest_path: str, tree_path: str) -> None:
+        target_bytes = 23
+        provenance = {
+            "files": {
+                "synthetic-target": {
+                    "path": Path(target_path).relative_to(Path(manifest_path).parent).as_posix(),
+                    "sha256": "9" * 64,
+                    "size": target_bytes,
+                },
+            },
+        }
+        provenance_raw = _write_synthetic_json(self.root, manifest_path, provenance)
+        entry = {
+            "entry_kind": "sealed_target",
+            "path": target_path,
+            "bytes": target_bytes,
+            "sha256": "9" * 64,
+            "provenance_manifest": manifest_path,
+            "provenance_manifest_sha256": hashlib.sha256(provenance_raw).hexdigest(),
+            "verification_phase": "synthetic-pre-model",
+        }
+        payload = {
+            "artifact_class": "a0x-protected-tree",
+            "source_base_commit": "c" * 40,
+            "entries": [entry],
+        }
+        tree_sha256 = canonical_json_sha256(payload)
+        _write_synthetic_json(self.root, tree_path, {
+            **payload,
+            "protected_tree_sha256": tree_sha256,
+        })
+        setattr(self, f"{leg.value}_tree_sha256", tree_sha256)
+
+    @staticmethod
+    def _identity(leg: Leg, *, protected_tree_sha256: str, selection_corpus_sha256: str) -> dict[str, str]:
+        return {
+            "leg": leg.value,
+            "protocol_id": f"synthetic-{leg.value}-protocol",
+            "protected_tree_sha256": protected_tree_sha256,
+            "selection_corpus_sha256": selection_corpus_sha256,
+            "source_base_commit": "c" * 40,
+        }
+
+    def _write_leg_wrapper(self, package_path: str, identity: dict[str, str]) -> bytes:
+        protocol_raw = _write_synthetic_json(self.root, f"{package_path}/protocol.json", {
+            "identity": identity,
+        })
+        implementation_raw = _write_synthetic_json(self.root, f"{package_path}/implementation.json", {
+            "identity": identity,
+        })
+        freeze_relative = (
+            f"{package_path}/freeze.json"
+            if identity["leg"] == "a0"
+            else "experiments/a0x-six-model/freeze/r1-freeze.json"
+        )
+        freeze = {
+            "identity": identity,
+            "protocol_sha256": hashlib.sha256(protocol_raw).hexdigest(),
+            "implementation_sha256": hashlib.sha256(implementation_raw).hexdigest(),
+        }
+        return _write_synthetic_json(self.root, freeze_relative, freeze)
+
+    def patch_constants(self):
+        return (
+            mock.patch.object(executor, "_A0_TARGET_PATHS", self.a0_targets),
+            mock.patch.object(executor, "_R1_TARGET_PATHS", self.r1_targets),
+            mock.patch.object(executor, "_N3_SENSITIVE_PATHS", self.profile_path),
+            mock.patch.object(executor, "_N3_SENSITIVE_PATHS_SHA256", hashlib.sha256(self.profile_raw).hexdigest()),
+        )
+
+
+class ActiveA0MetadataBindingTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.fixture = _ActiveA0MetadataFixture(self.root)
+
+    def _with_metadata_constants(self, callback):
+        patches = self.fixture.patch_constants()
+        with patches[0], patches[1], patches[2], patches[3]:
+            return callback()
+
+    def _without_target_opens(self, callback):
+        targets = {
+            (self.root / relative).absolute()
+            for relative in (*self.fixture.a0_targets, *self.fixture.r1_targets)
+        }
+
+        def forbid(opener):
+            def guarded(path, *args, **kwargs):
+                try:
+                    candidate = Path(os.fsdecode(path)).absolute()
+                except (TypeError, ValueError):
+                    candidate = None
+                if candidate in targets:
+                    raise AssertionError("synthetic protected target content open attempted")
+                return opener(path, *args, **kwargs)
+            return guarded
+
+        with (
+            mock.patch.object(builtins, "open", side_effect=forbid(builtins.open)),
+            mock.patch.object(io, "open", side_effect=forbid(io.open)),
+            mock.patch.object(os, "open", side_effect=forbid(os.open)),
+        ):
+            return callback()
+
+    def test_metadata_expectations_follow_active_p0_not_legacy_or_batch_freeze(self):
+        self.assertNotEqual(
+            hashlib.sha256(self.fixture.batch_freeze_raw).hexdigest(),
+            self.fixture.active_freeze_sha256,
+        )
+        self.assertEqual(self.fixture.active_freeze_sha256, self.fixture.pair.leg_freeze_sha256)
+
+        # Bind from the validated active P0. Independently invalid legacy and
+        # batch documents must not participate in this metadata decision.
+        sizes, other_paths, sources = self._without_target_opens(lambda: self._with_metadata_constants(lambda: (
+            executor._bound_a0_material_metadata_expectations(self.root, self.fixture.package_binding)
+        )))
+        self.assertEqual(
+            {self.fixture.a0_targets[0]: 19, self.fixture.a0_targets[1]: 23},
+            sizes,
+        )
+        self.assertEqual(16, len(other_paths))
+        self.assertEqual(16, sources["other_protected_path_count"])
+
+    def test_active_p0_freeze_drift_is_refused(self):
+        drifted_pair = replace(self.fixture.pair, leg_freeze_sha256="0" * 64)
+        drifted_binding = replace(self.fixture.package_binding, pair_binding=drifted_pair)
+        with self.assertRaisesRegex(executor.A0XCcpExecutorError, "bound active P0 freeze"):
+            self._with_metadata_constants(lambda: (
+                executor._bound_a0_material_metadata_expectations(self.root, drifted_binding)
+            ))
+
+    def test_r1_wrapper_identity_mismatch_is_refused(self):
+        _write_synthetic_json(self.root, "experiments/a0x-six-model/r1/implementation.json", {
+            "identity": self.fixture._identity(
+                Leg.R1,
+                protected_tree_sha256=self.fixture.r1_tree_sha256,
+                selection_corpus_sha256="a" * 64,
+            ),
+        })
+        with self.assertRaisesRegex(executor.A0XContractError, "identity mismatch"):
+            self._with_metadata_constants(lambda: (
+                executor._bound_a0_material_metadata_expectations(self.root, self.fixture.package_binding)
+            ))
+
+    def test_preflight_writes_canonical_refusal_for_metadata_contract_failure(self):
+        # Malform the validated active P0 protocol identity. The real metadata
+        # helper/build-leg-freeze validator must produce the contract failure.
+        _write_synthetic_json(self.root, f"{self.fixture.package_path}/protocol.json", {
+            "identity": "malformed synthetic P0 identity",
+        })
+
+        def validate_metadata(**_kwargs):
+            return self._with_metadata_constants(lambda: (
+                executor._bound_a0_material_metadata_expectations(self.root, self.fixture.package_binding)
+            ))
+
+        with mock.patch.object(executor, "_launch_validated_vertical_v2", side_effect=validate_metadata):
+            with self.assertRaises(executor.A0XCcpExecutorError) as refused:
+                executor.preflight_vertical_runtime_package(
+                    repository_root=self.root,
+                    package_binding=self.fixture.package_binding,
+                    execution_authorization_path=executor.vertical_execution_authorization_path(
+                        self.fixture.package_binding,
+                    ),
+                )
+
+        report_relative = str(refused.exception).split("private report: ", 1)[1]
+        report = json.loads((self.root / report_relative).read_bytes())
+        self.assertEqual("REFUSED", report["status"])
+        self.assertEqual("A0XContractError", report["failure_type"])
+        self.assertFalse(report["permission_window_entered"])
+        self.assertFalse(report["claim_created"])
+        self.assertFalse(report["material_directory_created"])
+        self.assertFalse(report["guard_invoked"])
+        self.assertEqual([], list(self.root.rglob("attempt-claim.json")))
+        self.assertFalse((self.root / self.fixture.package_binding.pair_binding.output_path).exists())
+
+    def test_preflight_does_not_relabel_programming_errors_as_refusals(self):
+        with mock.patch.object(
+            executor, "_launch_validated_vertical_v2",
+            side_effect=RuntimeError("synthetic programming defect"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "synthetic programming defect"):
+                executor.preflight_vertical_runtime_package(
+                    repository_root=self.root,
+                    package_binding=self.fixture.package_binding,
+                    execution_authorization_path=executor.vertical_execution_authorization_path(
+                        self.fixture.package_binding,
+                    ),
+                )
+        self.assertFalse((self.root / ".a0x-runtime/gate-c-preflight").exists())
 
 
 class GateCPreclaimBoundaryTests(unittest.TestCase):
