@@ -8,6 +8,7 @@ import builtins
 import importlib.util
 import io
 import json
+from dataclasses import replace
 import signal
 import stat
 import subprocess
@@ -19,11 +20,669 @@ from contextlib import redirect_stdout
 from unittest import mock
 
 from latent_triz import a0x_ccp_executor as executor
-from latent_triz.a0x_contract import Leg, PairBinding
+from latent_triz.a0x_contract import Leg, PairBinding, canonical_json_sha256
+from latent_triz.a0x_vertical_slice import VerticalPackageBinding
 from tests.a0x_test_support import pair_binding
 
 
 TARGETS = ("data/a0/procedural-targets/calibration-targets.jsonl", "data/a0/sealed-targets/targets.jsonl")
+
+
+def _write_synthetic_json(root: Path, relative: str, value: object) -> bytes:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    raw = (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+    path.write_bytes(raw)
+    return raw
+
+
+class _ActiveA0MetadataFixture:
+    """Hash-linked public metadata fixture; never creates protected target files."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.a0_targets = ("synthetic/a0/calibration.jsonl", "synthetic/a0/sealed/targets.jsonl")
+        self.r1_targets = ("synthetic/r1/calibration.jsonl", "synthetic/r1/sealed.jsonl")
+        self.sensitive_paths = tuple(f"synthetic/sensitive/{index}.json" for index in range(14))
+        self.profile_path = "synthetic-profile/manifest.json"
+        self.package_path = "synthetic/active-p0"
+        self.a0_tree_path = "experiments/a0x-six-model/protected-a0-tree.json"
+        self.r1_tree_path = "experiments/a0x-six-model/protected-a0r1-tree.json"
+        self.selection_path = "experiments/a0x-six-model/a0-selection-manifest.json"
+        self.manifest_path = "data/a0/manifest.json"
+        self._write_tree(
+            leg=Leg.A0, target_path=self.a0_targets[1],
+            manifest_path="synthetic/a0/target-provenance.json", tree_path=self.a0_tree_path,
+        )
+        self._write_tree(
+            leg=Leg.R1, target_path=self.r1_targets[1],
+            manifest_path="synthetic/r1/target-provenance.json", tree_path=self.r1_tree_path,
+        )
+        self.manifest_raw = _write_synthetic_json(root, self.manifest_path, {
+            "files": {
+                "calibration_targets_jsonl": {
+                    "path": "procedural-targets/calibration-targets.jsonl",
+                    "size": 19,
+                    "sha256": "1" * 64,
+                },
+            },
+        })
+        cases = []
+        for domain in ("agriculture", "energy", "manufacturing", "medicine", "software", "transport"):
+            for family_index in range(4):
+                family = f"{domain}-family-{family_index}"
+                for case_index in range(2):
+                    cases.append({
+                        "case_id": f"{family}-case-{case_index}",
+                        "case_content_sha256": "2" * 64,
+                        "domain": domain,
+                        "problem_family_id": family,
+                        "split": "synthetic",
+                    })
+        selection = {
+            "artifact_class": "a0x-selection-manifest",
+            "empirical": True,
+            "scientific_status": "exploratory",
+            "evidence_eligible": False,
+            "expert_validated": False,
+            "claim_ids": [],
+            "selection_corpus_sha256": "3" * 64,
+            "selection_path": self.selection_path,
+            "selected_case_count": 48,
+            "source_cases_path": "synthetic/cases.jsonl",
+            "source_corpus_manifest_path": self.manifest_path,
+            "source_cases_sha256": "4" * 64,
+            "source_corpus_manifest_sha256": hashlib.sha256(self.manifest_raw).hexdigest(),
+            "selection_rule": {
+                "cases_per_family": 2,
+                "families_per_domain": 4,
+                "family_order": "lexicographic",
+                "domain_order": "frozen",
+            },
+            "cases": cases,
+            "target_content_reads": 0,
+        }
+        self.selection_raw = _write_synthetic_json(root, self.selection_path, selection)
+        a0_identity = self._identity(
+            Leg.A0, protected_tree_sha256=self.a0_tree_sha256,
+            selection_corpus_sha256=hashlib.sha256(self.selection_raw).hexdigest(),
+        )
+        self.a0_freeze_raw = self._write_leg_wrapper(self.package_path, a0_identity)
+        r1_identity = self._identity(
+            Leg.R1, protected_tree_sha256=self.r1_tree_sha256,
+            selection_corpus_sha256="5" * 64,
+        )
+        self.r1_freeze_raw = self._write_leg_wrapper("experiments/a0x-six-model/r1", r1_identity)
+
+        # Intentionally invalid historical docs and a different batch freeze.
+        # Active A0 validation must not read or fall back to these.
+        _write_synthetic_json(root, "experiments/a0-automated-weak-proxy/protocol.json", {
+            "artifact_class": "legacy-protocol-without-identity",
+        })
+        _write_synthetic_json(root, "experiments/a0-automated-weak-proxy/implementation.json", {
+            "artifact_class": "legacy-implementation-without-identity",
+        })
+        self.batch_freeze_raw = _write_synthetic_json(
+            root, "experiments/a0x-six-model/freeze/a0-freeze.json", {
+                "artifact_class": "different-batch-freeze",
+                "identity": {"leg": "a0"},
+            },
+        )
+        _write_synthetic_json(root, "experiments/a0r1-independent-proxy/protocol.json", {
+            "artifact_class": "legacy-r1-protocol-without-identity",
+        })
+        _write_synthetic_json(root, "experiments/a0r1-independent-proxy/implementation.json", {
+            "artifact_class": "legacy-r1-implementation-without-identity",
+        })
+        self.profile_raw = _write_synthetic_json(root, self.profile_path, {
+            "instance_dispositions": {
+                "excluded_sensitive_role_unverified": list(self.sensitive_paths),
+            },
+        })
+        pair = PairBinding.from_mapping(pair_binding(Leg.A0, "smollm2_360m", hidden_width=960))
+        self.active_freeze_sha256 = hashlib.sha256(self.a0_freeze_raw).hexdigest()
+        self.pair = replace(pair, leg_freeze_sha256=self.active_freeze_sha256)
+        self.package_binding = VerticalPackageBinding(
+            envelope_path="synthetic/active-p0/envelope.json",
+            package_path=self.package_path,
+            commitment_path="synthetic/active-p0/commitment.json",
+            commitment_raw_sha256="6" * 64,
+            package_commitment_sha256="7" * 64,
+            dossier_path="synthetic/active-p0/dossier.json",
+            dossier_sha256="8" * 64,
+            qualified_source_head="a" * 40,
+            qualified_source_tree="b" * 40,
+            leg=Leg.A0,
+            model_key=self.pair.model_key,
+            model_revision=self.pair.revision,
+            pair_binding=self.pair,
+        )
+
+    def _write_tree(self, *, leg: Leg, target_path: str, manifest_path: str, tree_path: str) -> None:
+        target_bytes = 23
+        provenance = {
+            "files": {
+                "synthetic-target": {
+                    "path": Path(target_path).relative_to(Path(manifest_path).parent).as_posix(),
+                    "sha256": "9" * 64,
+                    "size": target_bytes,
+                },
+            },
+        }
+        provenance_raw = _write_synthetic_json(self.root, manifest_path, provenance)
+        entry = {
+            "entry_kind": "sealed_target",
+            "path": target_path,
+            "bytes": target_bytes,
+            "sha256": "9" * 64,
+            "provenance_manifest": manifest_path,
+            "provenance_manifest_sha256": hashlib.sha256(provenance_raw).hexdigest(),
+            "verification_phase": "synthetic-pre-model",
+        }
+        payload = {
+            "artifact_class": "a0x-protected-tree",
+            "source_base_commit": "c" * 40,
+            "entries": [entry],
+        }
+        tree_sha256 = canonical_json_sha256(payload)
+        _write_synthetic_json(self.root, tree_path, {
+            **payload,
+            "protected_tree_sha256": tree_sha256,
+        })
+        setattr(self, f"{leg.value}_tree_sha256", tree_sha256)
+
+    @staticmethod
+    def _identity(leg: Leg, *, protected_tree_sha256: str, selection_corpus_sha256: str) -> dict[str, str]:
+        return {
+            "leg": leg.value,
+            "protocol_id": f"synthetic-{leg.value}-protocol",
+            "protected_tree_sha256": protected_tree_sha256,
+            "selection_corpus_sha256": selection_corpus_sha256,
+            "source_base_commit": "c" * 40,
+        }
+
+    def _write_leg_wrapper(self, package_path: str, identity: dict[str, str]) -> bytes:
+        protocol_raw = _write_synthetic_json(self.root, f"{package_path}/protocol.json", {
+            "identity": identity,
+        })
+        implementation_raw = _write_synthetic_json(self.root, f"{package_path}/implementation.json", {
+            "identity": identity,
+        })
+        freeze_relative = (
+            f"{package_path}/freeze.json"
+            if identity["leg"] == "a0"
+            else "experiments/a0x-six-model/freeze/r1-freeze.json"
+        )
+        freeze = {
+            "identity": identity,
+            "protocol_sha256": hashlib.sha256(protocol_raw).hexdigest(),
+            "implementation_sha256": hashlib.sha256(implementation_raw).hexdigest(),
+        }
+        return _write_synthetic_json(self.root, freeze_relative, freeze)
+
+    def patch_constants(self):
+        return (
+            mock.patch.object(executor, "_A0_TARGET_PATHS", self.a0_targets),
+            mock.patch.object(executor, "_R1_TARGET_PATHS", self.r1_targets),
+            mock.patch.object(executor, "_N3_SENSITIVE_PATHS", self.profile_path),
+            mock.patch.object(executor, "_N3_SENSITIVE_PATHS_SHA256", hashlib.sha256(self.profile_raw).hexdigest()),
+        )
+
+
+class ActiveA0MetadataBindingTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.fixture = _ActiveA0MetadataFixture(self.root)
+
+    def _with_metadata_constants(self, callback):
+        patches = self.fixture.patch_constants()
+        with patches[0], patches[1], patches[2], patches[3]:
+            return callback()
+
+    def _without_target_opens(self, callback):
+        targets = {
+            (self.root / relative).absolute()
+            for relative in (*self.fixture.a0_targets, *self.fixture.r1_targets)
+        }
+
+        def forbid(opener):
+            def guarded(path, *args, **kwargs):
+                try:
+                    candidate = Path(os.fsdecode(path)).absolute()
+                except (TypeError, ValueError):
+                    candidate = None
+                if candidate in targets:
+                    raise AssertionError("synthetic protected target content open attempted")
+                return opener(path, *args, **kwargs)
+            return guarded
+
+        with (
+            mock.patch.object(builtins, "open", side_effect=forbid(builtins.open)),
+            mock.patch.object(io, "open", side_effect=forbid(io.open)),
+            mock.patch.object(os, "open", side_effect=forbid(os.open)),
+        ):
+            return callback()
+
+    def test_metadata_expectations_follow_active_p0_not_legacy_or_batch_freeze(self):
+        self.assertNotEqual(
+            hashlib.sha256(self.fixture.batch_freeze_raw).hexdigest(),
+            self.fixture.active_freeze_sha256,
+        )
+        self.assertEqual(self.fixture.active_freeze_sha256, self.fixture.pair.leg_freeze_sha256)
+
+        # Bind from the validated active P0. Independently invalid legacy and
+        # batch documents must not participate in this metadata decision.
+        sizes, other_paths, sources = self._without_target_opens(lambda: self._with_metadata_constants(lambda: (
+            executor._bound_a0_material_metadata_expectations(self.root, self.fixture.package_binding)
+        )))
+        self.assertEqual(
+            {self.fixture.a0_targets[0]: 19, self.fixture.a0_targets[1]: 23},
+            sizes,
+        )
+        self.assertEqual(16, len(other_paths))
+        self.assertEqual(16, sources["other_protected_path_count"])
+
+    def test_active_p0_freeze_drift_is_refused(self):
+        drifted_pair = replace(self.fixture.pair, leg_freeze_sha256="0" * 64)
+        drifted_binding = replace(self.fixture.package_binding, pair_binding=drifted_pair)
+        with self.assertRaisesRegex(executor.A0XCcpExecutorError, "bound active P0 freeze"):
+            self._with_metadata_constants(lambda: (
+                executor._bound_a0_material_metadata_expectations(self.root, drifted_binding)
+            ))
+
+    def test_r1_wrapper_identity_mismatch_is_refused(self):
+        _write_synthetic_json(self.root, "experiments/a0x-six-model/r1/implementation.json", {
+            "identity": self.fixture._identity(
+                Leg.R1,
+                protected_tree_sha256=self.fixture.r1_tree_sha256,
+                selection_corpus_sha256="a" * 64,
+            ),
+        })
+        with self.assertRaisesRegex(executor.A0XContractError, "identity mismatch"):
+            self._with_metadata_constants(lambda: (
+                executor._bound_a0_material_metadata_expectations(self.root, self.fixture.package_binding)
+            ))
+
+    def test_preflight_writes_canonical_refusal_for_metadata_contract_failure(self):
+        # Malform the validated active P0 protocol identity. The real metadata
+        # helper/build-leg-freeze validator must produce the contract failure.
+        _write_synthetic_json(self.root, f"{self.fixture.package_path}/protocol.json", {
+            "identity": "malformed synthetic P0 identity",
+        })
+
+        def validate_metadata(**_kwargs):
+            return self._with_metadata_constants(lambda: (
+                executor._bound_a0_material_metadata_expectations(self.root, self.fixture.package_binding)
+            ))
+
+        with mock.patch.object(executor, "_launch_validated_vertical_v2", side_effect=validate_metadata):
+            with self.assertRaises(executor.A0XCcpExecutorError) as refused:
+                executor.preflight_vertical_runtime_package(
+                    repository_root=self.root,
+                    package_binding=self.fixture.package_binding,
+                    execution_authorization_path=executor.vertical_execution_authorization_path(
+                        self.fixture.package_binding,
+                    ),
+                )
+
+        report_relative = str(refused.exception).split("private report: ", 1)[1]
+        report = json.loads((self.root / report_relative).read_bytes())
+        self.assertEqual("REFUSED", report["status"])
+        self.assertEqual("A0XContractError", report["failure_type"])
+        self.assertFalse(report["permission_window_entered"])
+        self.assertFalse(report["claim_created"])
+        self.assertFalse(report["material_directory_created"])
+        self.assertFalse(report["guard_invoked"])
+        self.assertEqual([], list(self.root.rglob("attempt-claim.json")))
+        self.assertFalse((self.root / self.fixture.package_binding.pair_binding.output_path).exists())
+
+    def test_preflight_does_not_relabel_programming_errors_as_refusals(self):
+        with mock.patch.object(
+            executor, "_launch_validated_vertical_v2",
+            side_effect=RuntimeError("synthetic programming defect"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "synthetic programming defect"):
+                executor.preflight_vertical_runtime_package(
+                    repository_root=self.root,
+                    package_binding=self.fixture.package_binding,
+                    execution_authorization_path=executor.vertical_execution_authorization_path(
+                        self.fixture.package_binding,
+                    ),
+                )
+        self.assertFalse((self.root / ".a0x-runtime/gate-c-preflight").exists())
+
+
+class ProductionPipelineCoverageTests(unittest.TestCase):
+    """Production admission, with only process/identity/git effects doubled."""
+
+    def _production_fixture(self):
+        if sys.platform != "darwin" or getattr(self, "_portable_metadata", False):
+            # Linux hosted CI has no Darwin ACL/flags/O_EVTONLY APIs. These
+            # external metadata observations are simulated only on disposable
+            # files; common ownership, size, inode, mode and link checks stay real.
+            for patcher in (
+                mock.patch.object(executor, "_check_acl_absent"),
+                mock.patch.object(executor, "_read_target_flags", return_value=0),
+                mock.patch.object(os, "O_EVTONLY", os.O_NONBLOCK, create=True),
+            ):
+                patcher.start()
+                self.addCleanup(patcher.stop)
+        from tests.test_a0x_vertical_runtime_bundle import A0XVerticalRuntimeBundleTests, HEAD, TREE
+        from tests.test_a0x_vertical_material import A0XVerticalMaterialTests
+        from latent_triz.a0x_gate_contract import VerifierIdentity
+        from latent_triz.a0x_public_closure import PRE_EXECUTION_PUBLIC_ROLE_PATHS, PRE_EXECUTION_EXTENSION_PATH
+        fixture = A0XVerticalRuntimeBundleTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        root, binding = fixture.root, fixture._binding()
+        prepared, request, _verifier = fixture._prepare_synthetic(binding)
+        paths = prepared["vertical_outputs"]
+        compact = executor._canonical_json
+
+        def read(relative):
+            return json.loads((root / relative).read_bytes())
+
+        def write(relative, value, *, lf=False):
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(compact(value) + (b"\n" if lf else b""))
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+
+        authorization_path = prepared["gate_b_authorization_path"]
+        gate_b = read(authorization_path)
+        gate_b["qualification_context"] = "production"
+        gate_b["verifier"] = VerifierIdentity(
+            policy_raw_sha256=gate_b["verifier"]["policy_raw_sha256"],
+        ).as_mapping()
+        write(authorization_path, gate_b)
+        receipt_path = prepared["verification_receipt_path"]
+        receipt = read(receipt_path)
+        receipt.pop("qualification_context", None)
+        receipt.update(artifact_class="a0x-hosted-gate-a-verification-receipt",
+                       receipt_profile="a0x-hosted-gate-a-verification-receipt-v1",
+                       authorization_raw_sha256=hashlib.sha256((root / authorization_path).read_bytes()).hexdigest(),
+                       verifier=gate_b["verifier"])
+        write(receipt_path, receipt, lf=True)
+        source = {"head": HEAD, "tree": TREE, "ref": "refs/heads/main"}
+        evidence = executor._vertical_gate_a_evidence_from_raw(
+            gate_b_authorization_raw=(root / authorization_path).read_bytes(),
+            gate_b_authorization_path=authorization_path,
+            gate_b_receipt_raw=(root / receipt_path).read_bytes(), gate_b_receipt_path=receipt_path,
+            expected_source=source, pair=binding.pair_binding,
+            expected_package=executor._vertical_package_projection(binding),
+        )
+
+        def output(name, mutate):
+            document = read(paths[name])
+            document["qualification_context"] = "production"
+            mutate(document["payload"])
+            document["payload_sha256"] = hashlib.sha256(compact(document["payload"])).hexdigest()
+            write(paths[name], document)
+
+        def reference(name, role):
+            return {"role": role, "path": paths[name],
+                    "sha256": hashlib.sha256((root / paths[name]).read_bytes()).hexdigest()}
+
+        output("gate_a_evidence", lambda value: (value.clear(), value.update(evidence)))
+        output("readiness", lambda value: value["python"].update(version="3.11.16"))
+        output("descriptor", lambda value: value.update(
+            ccp={**value["ccp"], "sha256": executor._ACTIVE_CCP_SHA256},
+            runtime_readiness=reference("readiness", "readiness"),
+            gate_a_evidence=reference("gate_a_evidence", "gate_a_evidence")))
+        output("authorization", lambda value: value.update(
+            ccp={**value["ccp"], "sha256": executor._ACTIVE_CCP_SHA256},
+            runtime_readiness=reference("readiness", "readiness"),
+            gate_a_evidence=reference("gate_a_evidence", "gate_a_evidence"),
+            descriptor=reference("descriptor", "descriptor")))
+        output("mapping", lambda value: value.update(
+            ccp={**value["ccp"], "sha256": executor._ACTIVE_CCP_SHA256},
+            descriptor=reference("descriptor", "descriptor"),
+            authorization=reference("authorization", "authorization")))
+        authorization = A0XVerticalMaterialTests()._v4_authorization(
+            root, binding, prepared, HEAD, TREE, qualification_context="production")
+        execution_relative = executor.vertical_execution_authorization_path(binding)
+        write(execution_relative, authorization)
+
+        # The real public-closure parser validates all links; these are synthetic
+        # projections, not a claim of attestation, human consent or model truth.
+        identity = {"qualified_source": source, "pair_binding": binding.pair_binding.as_mapping(),
+                    "authorization_id": authorization["authorization_id"],
+                    "attempt_id": authorization["attempt_id"]}
+        private = {"p0_dossier_raw": binding.dossier_sha256,
+                   "gate_b_authorization_v4": hashlib.sha256((root / paths["authorization"]).read_bytes()).hexdigest(),
+                   "gate_b_readiness_v4": hashlib.sha256((root / paths["readiness"]).read_bytes()).hexdigest()}
+        roles = {"p0_commitment": compact(read(binding.commitment_path))}
+        for role, name in (("p0_protocol", "protocol.json"), ("p0_implementation", "implementation.json"),
+                           ("p0_freeze", "freeze.json"), ("p0_slice_manifest", "slice-manifest.json")):
+            roles[role] = (root / binding.package_path / name).read_bytes()
+        for role, artifact_class, profile in (
+            ("public_dossier", "a0x-public-dossier-projection", "a0x-public-dossier-projection-v1"),
+            ("execution_spec", "a0x-public-execution-specification", "a0x-public-execution-spec-v1"),
+            ("gate_a_evidence", "a0x-public-gate-a-evidence", "a0x-public-gate-a-evidence-v1"),
+            ("gate_b_authorization_projection", "a0x-public-gate-b-authorization-projection", "a0x-public-gate-b-authorization-projection-v1"),
+            ("gate_b_readiness_projection", "a0x-public-gate-b-readiness-projection", "a0x-public-gate-b-readiness-projection-v1"),
+        ):
+            value = {"artifact_class": artifact_class, "profile": profile, **identity}
+            if role == "public_dossier": value["original_raw_sha256"] = private["p0_dossier_raw"]
+            if role == "execution_spec": value["protocol_sha256"] = hashlib.sha256(roles["p0_protocol"]).hexdigest()
+            if role.startswith("gate_b_"):
+                value["source_raw_sha256"] = private["gate_b_authorization_v4" if role == "gate_b_authorization_projection" else "gate_b_readiness_v4"]
+            roles[role] = compact(value)
+        for role in ("gate_a_attestation_bundle", "gate_a_trusted_root", "gate_a_transport"):
+            roles[role] = b'{"synthetic":true}\n'
+        public_base = f"experiments/a0x-six-model/vertical-slices/{HEAD}/a0/smollm2_360m/public-closure/v1"
+        for role, relative in PRE_EXECUTION_PUBLIC_ROLE_PATHS.items():
+            destination = root / public_base / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(roles[role])
+        write(f"{public_base}/{PRE_EXECUTION_EXTENSION_PATH}", {
+            "artifact_class": "a0x-public-authorization-extension", "profile": "a0x-public-authorization-extension-v1",
+            "schema_version": 1, **identity, "p0_package_commitment_sha256": binding.package_commitment_sha256,
+            "bindings": {"public_role_sha256": {role: hashlib.sha256(raw).hexdigest() for role, raw in roles.items()},
+                         "private_input_sha256": private},
+            "claims": {"document_bindings_consistent": True, "derivation_authenticated": False,
+                       "operator_approval_authenticated": False, "authorization_verified": False,
+                       "publication_eligible": False},
+        })
+        repository = Path(__file__).resolve().parents[1]
+        for relative in (
+            "docs/qualification/a0x-target-free-schema-profile-v1-manifest.json", "data/a0/manifest.json",
+            "experiments/a0x-six-model/r1/protocol.json", "experiments/a0x-six-model/r1/implementation.json",
+            "results/a0r1/a0r1-v1.0.0-e93a9faa-r1/publication-manifest.json",
+        ):
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes((repository / relative).read_bytes())
+        # Fixture inputs come from independent public declarations, not the
+        # metadata helper whose production call this test must exercise.
+        sizes = {TARGETS[0]: read("data/a0/manifest.json")["files"]["calibration_targets_jsonl"]["size"]}
+        declared = read("experiments/a0x-six-model/protected-a0-tree.json")
+        sizes[TARGETS[1]] = next(entry["bytes"] for entry in declared["entries"]
+                                if entry["entry_kind"] == "sealed_target")
+        profile = read("docs/qualification/a0x-target-free-schema-profile-v1-manifest.json")
+        other_paths = ("data/a0r1/targets/calibration.jsonl", "data/a0r1/targets/sealed.jsonl",
+                       *profile["instance_dispositions"]["excluded_sensitive_role_unverified"])
+        for relative in (*sizes, *other_paths):
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"x" * sizes.get(relative, 1))
+            destination.chmod(0)
+        return root, binding, authorization
+
+    def _seed_completed_package(self, root, binding, authorization):
+        """Produce valid synthetic material evidence, never model/target truth."""
+        import copy
+        from tests.test_a0x_vertical_terminal_package import A0XVerticalTerminalPackageTests
+        from latent_triz import a0x_vertical_production_adapter as adapter
+        from latent_triz import a0x_vertical_terminal_package as package
+        from latent_triz.a0x_contract import canonical_commitment, APPROVAL_DOSSIER_PROFILE, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE
+        template = A0XVerticalTerminalPackageTests()
+        template.setUp()
+        self.addCleanup(template.tearDown)
+        try:
+            old_expectation, terminal = template._production_material_fixture()
+        finally:
+            # The older fixture doubles graph acquisition. Do not retain that
+            # patch: this test validates its own complete real production graph.
+            template.doCleanups()
+        paths = executor._vertical_gate_b_output_paths(binding)
+        capability = adapter.load_vertical_production_capability(root, paths["descriptor"])
+        context = capability.context
+        pair = binding.pair_binding.as_mapping()
+        dossier = json.loads((root / binding.dossier_path).read_bytes())
+        chain = {
+            "dossier_commitment": canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE).as_mapping(),
+            "authorization_commitment": canonical_commitment(authorization, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE).as_mapping(),
+        }
+
+        def rebind(value):
+            if isinstance(value, dict):
+                for key in list(value):
+                    if key == "pair_binding": value[key] = pair
+                    elif key == "authorization_chain": value[key] = chain
+                    else: rebind(value[key])
+            elif isinstance(value, list):
+                for item in value: rebind(item)
+
+        old_context = old_expectation._production_capability.context
+        def material_base(repository, ctx, value):
+            return repository / ".a0x-runtime/gate-c/v2" / ctx.source_head / ctx.source_tree / "a0" / value["model_key"] / value["run_id"] / "material"
+        old_base = material_base(template.root, old_context, old_context.pair_binding)
+        base = material_base(root, context, pair)
+        base.mkdir(parents=True, exist_ok=True)
+        for role, name in package._MATERIAL_EVIDENCE_MEMBERS.items():
+            value = copy.deepcopy(json.loads((old_base / name).read_bytes()))
+            rebind(value)
+            if role == "target":
+                value["activation_receipt_sha256"] = hashlib.sha256((base / package._MATERIAL_EVIDENCE_MEMBERS["activation"]).read_bytes()).hexdigest()
+            if role == "analysis_seal":
+                value["target_read_receipt_sha256"] = hashlib.sha256((base / package._MATERIAL_EVIDENCE_MEMBERS["target"]).read_bytes()).hexdigest()
+                value["statistical_result"] = json.loads((base / package._MATERIAL_EVIDENCE_MEMBERS["statistic"]).read_bytes())
+            destination = base / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(package._canonical_json(value) + b"\n")
+        assets = {}
+        asset_base = root / "results/a0x-external-assets" / context.source_head / context.source_tree / "a0" / pair["model_key"] / pair["run_id"]
+        for asset in old_expectation.external_assets:
+            destination = asset_base / ("dense-output.bin" if asset.role == "dense" else "representation-index.json")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes((template.root / asset.path).read_bytes())
+            assets[asset.role] = destination
+        material_context = package.capture_material_evidence(root, context)
+        expected = package.VerticalTerminalExpectation.from_production_capability(
+            capability, material_context=material_context, external_assets=assets)
+        terminal.update(expected.identity())
+        terminal["result_payload"] = {"statistical_result_sha256": hashlib.sha256((base / package._MATERIAL_EVIDENCE_MEMBERS["statistic"]).read_bytes()).hexdigest()}
+        destination = root / binding.pair_binding.output_path
+        reference = package.build_vertical_terminal_package(
+            repository_root=root, destination=destination, expected=expected, terminal_result=terminal)
+        return {"package_relative_path": binding.pair_binding.output_path,
+                "manifest_raw_sha256": reference.manifest_sha256,
+                "root_receipt_raw_sha256": reference.root_receipt_sha256}
+
+    def test_actual_production_preflight_passes_without_claim_window_or_guard(self):
+        from tests.test_a0x_ccp_executor import _FakeGuardPreflight
+        root, binding, authorization = self._production_fixture()
+
+        class Identity:
+            def verify(self, *, role, path, expected_sha256, expected_version=None):
+                return executor._ExecutableIdentityEvidence(role, path, expected_sha256, expected_version, synthetic=False)
+
+        class Preflight:
+            def produce(self, **_kwargs):
+                return _FakeGuardPreflight().produce(ccp_path=root / "bin/commit-ci-preflight", repository_root=root)
+
+        with (
+            mock.patch.object(executor, "_reserve_claim", side_effect=AssertionError("claim forbidden")),
+            mock.patch.object(executor, "_a0_material_permission_window", side_effect=AssertionError("window forbidden")),
+        ):
+            result = executor._launch_validated_vertical_v2(
+                repository_root=root, package_binding=binding,
+                execution_authorization_path=executor.vertical_execution_authorization_path(binding),
+                source_state_probe=lambda: (binding.qualified_source_head, binding.qualified_source_tree, True),
+                process_executor=mock.Mock(run=mock.Mock(side_effect=AssertionError("guard forbidden"))),
+                guard_preflight_producer=Preflight(), executable_identity_verifier=Identity(),
+                expected_qualification_context="production", preflight_only=True,
+            )
+        report = json.loads((root / result["preflight_report_path"]).read_bytes())
+        self.assertEqual("preflight_passed", result["status"])
+        self.assertEqual("PASS", report["status"])
+        self.assertEqual(18, len(report["protected_metadata"]))
+        self.assertEqual(2, sum(item["path"] in TARGETS for item in report["protected_metadata"]))
+        self.assertEqual(16, report["public_target_size_sources"]["other_protected_path_count"])
+        self.assertFalse(report["claim_created"])
+        self.assertFalse(report["permission_window_entered"])
+        self.assertFalse(report["guard_invoked"])
+        self.assertEqual([], list(root.rglob("attempt-claim.json")))
+        self.assertFalse((root / binding.pair_binding.output_path).exists())
+
+    def test_production_parent_verifies_real_package_and_completes_without_recovery(self):
+        """Catch a late parent admission/package failure after a successful child."""
+        from tests.test_a0x_ccp_executor import _FakeGuardPreflight
+        root, binding, authorization = self._production_fixture()
+        owner = self
+
+        class Identity:
+            def verify(self, *, role, path, expected_sha256, expected_version=None):
+                return executor._ExecutableIdentityEvidence(role, path, expected_sha256, expected_version, synthetic=False)
+
+        class Preflight:
+            def produce(self, **_kwargs):
+                return _FakeGuardPreflight().produce(ccp_path=root / "bin/commit-ci-preflight", repository_root=root)
+
+        class SyntheticProcess:
+            def run(self, *_args, **_kwargs):
+                reference = owner._seed_completed_package(root, binding, authorization)
+                terminal = {"artifact_class": "a0x-vertical-material-child-terminal",
+                            "terminal_profile": "a0x-vertical-child-terminal-v1", "exit_class": "completed",
+                            "qualified_source": authorization["qualified_source"],
+                            "pair_binding": binding.pair_binding.as_mapping(),
+                            "authorization_id": authorization["authorization_id"], "attempt_id": authorization["attempt_id"],
+                            "qualification_context": "production", "reached_frontier": "sealed",
+                            "scientific_outcome": "null", "terminal_package": reference}
+                raw = executor._canonical_json(terminal) + b"\n"
+                return executor.ProcessResult(0, hashlib.sha256(raw).hexdigest(), len(raw),
+                                              hashlib.sha256(b"").hexdigest(), 0, stdout_prefix=raw)
+
+        result = executor._launch_validated_vertical_v2(
+            repository_root=root, package_binding=binding,
+            execution_authorization_path=executor.vertical_execution_authorization_path(binding),
+            source_state_probe=lambda: (binding.qualified_source_head, binding.qualified_source_tree, True),
+            process_executor=SyntheticProcess(), guard_preflight_producer=Preflight(),
+            executable_identity_verifier=Identity(), expected_qualification_context="production",
+        )
+        observed = json.loads((root / result["terminal_observation_path"]).read_bytes())
+        self.assertEqual("completed", result["status"])
+        self.assertEqual("null", result["child_terminal_status"])
+        self.assertFalse(observed["recovery_required"])
+        self.assertFalse(observed["publication_eligible"])
+        self.assertTrue(all((root / relative).stat().st_mode & 0o777 == 0 for relative in TARGETS))
+
+    def test_production_positive_fixtures_remain_portable_without_darwin_metadata_apis(self):
+        """Hosted Linux doubles only the unavailable native metadata seams."""
+        original_acl, original_flags = executor._check_acl_absent, executor._read_target_flags
+        absent = object()
+        original_event_only = getattr(os, "O_EVTONLY", absent)
+        self._portable_metadata = True
+        with mock.patch.object(executor, "_check_acl_absent", side_effect=AssertionError("native ACL unavailable")), \
+             mock.patch.object(executor, "_read_target_flags", side_effect=AssertionError("native flags unavailable")), \
+             mock.patch.object(os, "O_EVTONLY", None, create=True):
+            try:
+                self.test_actual_production_preflight_passes_without_claim_window_or_guard()
+                self.test_production_parent_verifies_real_package_and_completes_without_recovery()
+            finally:
+                # Unwind fixture patches while their enclosing native-absence
+                # patches are still active, not later in unittest teardown.
+                self.doCleanups()
+        self.doCleanups()
+        self.assertIs(original_acl, executor._check_acl_absent)
+        self.assertIs(original_flags, executor._read_target_flags)
+        if original_event_only is absent:
+            self.assertFalse(hasattr(os, "O_EVTONLY"))
+        else:
+            self.assertEqual(original_event_only, os.O_EVTONLY)
 
 
 class GateCPreclaimBoundaryTests(unittest.TestCase):

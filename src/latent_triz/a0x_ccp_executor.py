@@ -465,6 +465,8 @@ def preflight_vertical_runtime_package(
     """Run the full production Gate-C validation without claim or permission changes."""
     root = Path(repository_root).resolve(strict=True)
     from .a0x_vertical_slice import _checkout_state, vertical_public_pre_execution_paths
+    from .a0x_execution import A0XExecutionError
+    from .a0x_freeze import A0XFreezeError
     allowed = vertical_public_pre_execution_paths(
         package_binding.pair_binding,
         package_binding.qualified_source_head,
@@ -482,7 +484,12 @@ def preflight_vertical_runtime_package(
             expected_qualification_context="production",
             preflight_only=True,
         )
-    except A0XCcpExecutorError as error:
+    except (
+        A0XCcpExecutorError,
+        A0XContractError,
+        A0XExecutionError,
+        A0XFreezeError,
+    ) as error:
         report_path = _write_vertical_preflight_report(root, {
             "artifact_class": "a0x-vertical-gate-c-preflight-report",
             "status": "REFUSED",
@@ -783,7 +790,9 @@ def _launch_validated_vertical_v2(
     size_sources: dict[str, Any] | None = None
     protected_metadata: tuple[dict[str, Any], ...] = ()
     if expected_qualification_context == "production":
-        expected_sizes, other_protected_paths, size_sources = _bound_a0_material_metadata_expectations(root, pair)
+        expected_sizes, other_protected_paths, size_sources = _bound_a0_material_metadata_expectations(
+            root, package_binding,
+        )
         _require_vertical_outputs_absent(
             root, pair=pair, source_head=source_head, source_tree=source_tree,
             authorization_path=authorization_path,
@@ -1007,38 +1016,54 @@ def _launch_validated_vertical_v2(
 
 
 def _bound_a0_material_metadata_expectations(
-    root: Path, pair: PairBinding,
+    root: Path, package_binding: VerticalPackageBinding,
 ) -> tuple[dict[str, int], tuple[str, ...], dict[str, Any]]:
     """Derive target sizes and the other protected paths from bound public docs.
 
     Only public declarations, freeze records and provenance manifests are read.
     Neither target file is opened here; the subsequent admission uses lstat only.
     """
-    if not isinstance(pair, PairBinding) or pair.leg is not Leg.A0:
+    if (
+        not isinstance(package_binding, VerticalPackageBinding)
+        or not isinstance(package_binding.pair_binding, PairBinding)
+        or package_binding.leg is not Leg.A0
+        or package_binding.pair_binding.leg is not Leg.A0
+    ):
         raise A0XCcpExecutorError("A0 material metadata binding requires the A0 pair")
+    pair = package_binding.pair_binding
     from .a0x_contract import build_leg_freeze_binding
-    from .a0x_execution import load_a0_public_selection
-    from .a0x_freeze import verify_protected_tree_metadata_only
+    from .a0x_execution import A0XExecutionError, load_a0_public_selection
+    from .a0x_freeze import A0XFreezeError, verify_protected_tree_metadata_only
+
+    active_a0_package = root / package_binding.package_path
+    a0_freeze = build_leg_freeze_binding(
+        active_a0_package / "protocol.json",
+        active_a0_package / "implementation.json",
+        active_a0_package / "freeze.json",
+    )
+    if a0_freeze.leg is not Leg.A0 or a0_freeze.leg_freeze_sha256 != pair.leg_freeze_sha256:
+        raise A0XCcpExecutorError("A0 material size source differs from the bound active P0 freeze")
+    r1_freeze = build_leg_freeze_binding(
+        root / "experiments/a0x-six-model/r1/protocol.json",
+        root / "experiments/a0x-six-model/r1/implementation.json",
+        root / "experiments/a0x-six-model/freeze/r1-freeze.json",
+    )
+    if r1_freeze.leg is not Leg.R1:
+        raise A0XCcpExecutorError("R1 protected-tree metadata source has the wrong leg")
 
     declarations: dict[str, Mapping[str, Any]] = {}
     tree_documents: dict[str, Mapping[str, Any]] = {}
-    for leg, package, tree_relative in (
-        (Leg.A0, "experiments/a0-automated-weak-proxy", "experiments/a0x-six-model/protected-a0-tree.json"),
-        (Leg.R1, "experiments/a0r1-independent-proxy", "experiments/a0x-six-model/protected-a0r1-tree.json"),
+    for leg, freeze, tree_relative in (
+        (Leg.A0, a0_freeze, "experiments/a0x-six-model/protected-a0-tree.json"),
+        (Leg.R1, r1_freeze, "experiments/a0x-six-model/protected-a0r1-tree.json"),
     ):
-        freeze = build_leg_freeze_binding(
-            root / package / "protocol.json", root / package / "implementation.json",
-            root / "experiments/a0x-six-model/freeze" / f"{leg.value}-freeze.json",
-        )
-        if leg is Leg.A0 and freeze.leg_freeze_sha256 != pair.leg_freeze_sha256:
-            raise A0XCcpExecutorError("A0 material size source differs from the bound pair freeze")
         tree_raw = _unique_repository_file(root, tree_relative, f"{leg.value} protected-tree declaration").read_bytes()
         tree = _strict_object(tree_raw, f"{leg.value} protected-tree declaration")
         if tree.get("protected_tree_sha256") != freeze.protected_tree_sha256:
             raise A0XCcpExecutorError(f"{leg.value} protected-tree declaration differs from its freeze")
         try:
             verify_protected_tree_metadata_only(root, tree)
-        except Exception as error:
+        except A0XFreezeError as error:
             raise A0XCcpExecutorError(f"{leg.value} protected-tree metadata declaration is invalid") from error
         entries = tree.get("entries")
         if not isinstance(entries, list):
@@ -1057,13 +1082,9 @@ def _bound_a0_material_metadata_expectations(
     try:
         capability = load_a0_public_selection(
             repository_root=root,
-            leg_freeze=build_leg_freeze_binding(
-                root / "experiments/a0-automated-weak-proxy/protocol.json",
-                root / "experiments/a0-automated-weak-proxy/implementation.json",
-                root / "experiments/a0x-six-model/freeze/a0-freeze.json",
-            ),
+            leg_freeze=a0_freeze,
         )
-    except Exception as error:
+    except A0XExecutionError as error:
         raise A0XCcpExecutorError("A0 selection is not bound to its public freeze") from error
     if capability.source_path != selection_relative or capability.source_sha256 != _sha256_bytes(selection_raw):
         raise A0XCcpExecutorError("A0 selection capability differs from the fixed public source")
