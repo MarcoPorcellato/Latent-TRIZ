@@ -40,7 +40,7 @@ PROTECTED_TARGET_PATHS = frozenset({
     "data/a0r1/targets/sealed.jsonl",
 })
 N3_PROFILE_MANIFEST = Path("docs/qualification/a0x-target-free-schema-profile-v1-manifest.json")
-N3_PROFILE_MANIFEST_SHA256 = "bfc05ea40e8e8eb47bdc38ccfc7604d68539a6e4c9be1056f4dda0d3de177b72"
+N3_PROFILE_MANIFEST_SHA256 = "f85494ba7ae8eafa2a7d23ec8a14e13e890b5862cf9697b4d093018d8ef51f4a"
 MAX_FIXTURE_SOURCE_BYTES = 64 * 1024 * 1024
 
 

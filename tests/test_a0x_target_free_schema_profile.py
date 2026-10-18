@@ -44,7 +44,7 @@ class A0XTargetFreeSchemaProfileTests(unittest.TestCase):
         aggregate = recipes[2]
         aggregate_tokens = aggregate.split()
         discovered = sorted((ROOT / "tests").glob("test_a0x_*.py"))
-        self.assertEqual(48, len(discovered))
+        self.assertEqual(50, len(discovered))
         for path in discovered:
             module = f"tests.{path.stem}"
             with self.subTest(module=module):

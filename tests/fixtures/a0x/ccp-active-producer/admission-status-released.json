@@ -1,0 +1,23 @@
+{
+  "schema_version": "2.0",
+  "active": false,
+  "queue_count": 0,
+  "ticket_ids": [],
+  "slot": {
+    "kind": "slot_lock",
+    "state": "free",
+    "owner_run_id": null,
+    "acquired_at_unix_seconds": null,
+    "heartbeat_at_unix_seconds": null,
+    "lease_state": "absent"
+  },
+  "queue_lock": {
+    "kind": "queue_lock",
+    "state": "free",
+    "owner_run_id": null,
+    "acquired_at_unix_seconds": null,
+    "heartbeat_at_unix_seconds": null,
+    "lease_state": "not_applicable"
+  },
+  "process_visibility_note": "No process visible in the local shell does not prove global inactivity."
+}

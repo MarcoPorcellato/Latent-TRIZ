@@ -12,14 +12,19 @@ cannot become an unbounded in-memory object.
 """
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import math
 import os
 import re
+import secrets
+import signal
 import stat
 import subprocess
 import threading
+import time
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -72,6 +77,20 @@ _SUPERVISION_TIMEOUT_SECONDS = OUTER_TIMEOUT_SECONDS + CLEANUP_MARGIN_SECONDS
 _PREFLIGHT_TIMEOUT_SECONDS = 30
 _PREFLIGHT_CAPTURE_LIMIT_BYTES = 65_536
 _ACTIVE_CCP_SHA256 = "45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2"
+_A0_TARGET_PATHS = (
+    "data/a0/procedural-targets/calibration-targets.jsonl",
+    "data/a0/sealed-targets/targets.jsonl",
+)
+_R1_TARGET_PATHS = (
+    "data/a0r1/targets/calibration.jsonl",
+    "data/a0r1/targets/sealed.jsonl",
+)
+_N3_SENSITIVE_PATHS = "docs/qualification/a0x-target-free-schema-profile-v1-manifest.json"
+_N3_SENSITIVE_PATHS_SHA256 = "f85494ba7ae8eafa2a7d23ec8a14e13e890b5862cf9697b4d093018d8ef51f4a"
+_XATTR_CONTRACT_NOTE = (
+    "xattr: not_in_contract (operator decision 2026-10-18: cannot gate the read; "
+    "content integrity enforced by sealed SHA-256 at read time)"
+)
 _GATE_A_FILE_ORDER = (
     "manifest",
     "attestation_bundle",
@@ -83,6 +102,14 @@ _GATE_A_FILE_ORDER = (
 
 class A0XCcpExecutorError(RuntimeError):
     """The fixed material launcher rejected its execution boundary."""
+
+
+class _GateCSignalInterrupt(A0XCcpExecutorError):
+    """Cooperative signal raised only while Gate C owns the main-thread window."""
+
+    def __init__(self, signum: int) -> None:
+        super().__init__(f"guard interrupted by signal {signum}")
+        self.signum = signum
 
 
 def rehash_gate_a_evidence(
@@ -276,11 +303,14 @@ class SubprocessGuardPreflightProducer:
 
     @staticmethod
     def _run(argv: Sequence[str], cwd: Path) -> GuardPreflightOutput:
-        process = subprocess.Popen(
-            list(argv), cwd=str(cwd), shell=False, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            env=_coordination_environment(),
-        )
+        try:
+            process = subprocess.Popen(
+                list(argv), cwd=str(cwd), shell=False, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                env=_coordination_environment(), start_new_session=True,
+            )
+        except OSError as error:
+            raise A0XCcpExecutorError("guard preflight probe could not be started") from error
         capture = _StreamingCapture(_PREFLIGHT_CAPTURE_LIMIT_BYTES)
         thread = threading.Thread(target=capture.drain, args=(process.stdout,), daemon=True)
         thread.start()
@@ -428,6 +458,48 @@ def launch_vertical_runtime_package(
     )
 
 
+def preflight_vertical_runtime_package(
+    *, repository_root: str | Path, package_binding: VerticalPackageBinding,
+    execution_authorization_path: str,
+) -> dict[str, Any]:
+    """Run the full production Gate-C validation without claim or permission changes."""
+    root = Path(repository_root).resolve(strict=True)
+    from .a0x_vertical_slice import _checkout_state, vertical_public_pre_execution_paths
+    allowed = vertical_public_pre_execution_paths(
+        package_binding.pair_binding,
+        package_binding.qualified_source_head,
+        package_binding.qualified_source_tree,
+    )
+    try:
+        return _launch_validated_vertical_v2(
+            repository_root=root,
+            package_binding=package_binding,
+            execution_authorization_path=execution_authorization_path,
+            source_state_probe=lambda: _checkout_state(root, allowed),
+            process_executor=_SubprocessExecutor(),
+            guard_preflight_producer=SubprocessGuardPreflightProducer(),
+            executable_identity_verifier=_ProductionExecutableIdentityVerifier(),
+            expected_qualification_context="production",
+            preflight_only=True,
+        )
+    except A0XCcpExecutorError as error:
+        report_path = _write_vertical_preflight_report(root, {
+            "artifact_class": "a0x-vertical-gate-c-preflight-report",
+            "status": "REFUSED",
+            "qualification_context": "production",
+            "xattr_contract": _XATTR_CONTRACT_NOTE,
+            "permission_window_entered": False,
+            "claim_created": False,
+            "material_directory_created": False,
+            "guard_invoked": False,
+            "failure_type": type(error).__name__,
+            "refusal_reason": str(error),
+        })
+        raise A0XCcpExecutorError(
+            f"vertical Gate C preflight refused; private report: {report_path}"
+        ) from error
+
+
 def _production_vertical_source_state(root: Path) -> tuple[str, str, bool]:
     """Read the execution identity directly; public callers cannot inject it."""
     def git(*argv: str) -> bytes:
@@ -459,6 +531,7 @@ def _launch_validated_vertical_v2(
     guard_preflight_producer: GuardPreflightProducer,
     executable_identity_verifier: _ExecutableIdentityVerifier,
     expected_qualification_context: Literal["production", "synthetic-target-free"] = "synthetic-target-free",
+    preflight_only: bool = False,
 ) -> dict[str, Any]:
     """Validate the v2 P0/Gate-B graph before one injected future Gate-C guard.
 
@@ -672,6 +745,7 @@ def _launch_validated_vertical_v2(
         raw_preflight,
         launch=launch, pair=pair, source_head=source_head,
         ccp_identity=ccp_identity,
+        production_context=expected_qualification_context == "production",
     )
 
     def revalidate_graph() -> None:
@@ -699,7 +773,24 @@ def _launch_validated_vertical_v2(
             raise A0XCcpExecutorError("vertical Gate B verification receipt drifted")
         validate_public_pre_execution_binding()
 
-    # A preflight is not a reservation. Re-open every mutable trust input before claim.
+    if preflight_only and expected_qualification_context != "production":
+        raise A0XCcpExecutorError("vertical Gate-C preflight is production-only")
+
+    # Bind public declarations to the two protected A0 sizes and the other
+    # sixteen protected paths. This reads only public metadata and documents.
+    expected_sizes: dict[str, int] | None = None
+    other_protected_paths: tuple[str, ...] = ()
+    size_sources: dict[str, Any] | None = None
+    protected_metadata: tuple[dict[str, Any], ...] = ()
+    if expected_qualification_context == "production":
+        expected_sizes, other_protected_paths, size_sources = _bound_a0_material_metadata_expectations(root, pair)
+        _require_vertical_outputs_absent(
+            root, pair=pair, source_head=source_head, source_tree=source_tree,
+            authorization_path=authorization_path,
+        )
+
+    # The final graph and executable revalidation stay before the permission
+    # window: only the claim and pre-run filesystem writes may occur after it.
     revalidate_graph()
     for role, path, digest, version in (
         ("child", child_path, launch.child_script_sha256, None),
@@ -710,8 +801,56 @@ def _launch_validated_vertical_v2(
             role=role, path=path, expected_sha256=digest, expected_version=version,
         )
         require_identity_context(observed)
+    if expected_qualification_context == "production":
+        assert expected_sizes is not None
+        protected_metadata = _admit_a0_material_metadata(
+            root, expected_sizes=expected_sizes,
+            other_protected_paths=other_protected_paths,
+        )
+    argv = _materialize_argv(launch, ccp_path=ccp_path, python_path=python_path, child_path=child_path)
+    environment = _frozen_environment(launch)
+    if expected_qualification_context == "production":
+        # The active macOS producer requires HOME for persistent admission.
+        # Credentials remain absent from the child environment.
+        environment.update(_coordination_environment())
+    if preflight_only:
+        if expected_sizes is None or size_sources is None:
+            raise A0XCcpExecutorError("vertical Gate-C preflight metadata binding is unavailable")
+        report_path = _write_vertical_preflight_report(root, {
+            "artifact_class": "a0x-vertical-gate-c-preflight-report",
+            "status": "PASS",
+            "qualification_context": "production",
+            "qualified_source": expected_source,
+            "pair_binding": pair.as_mapping(),
+            "package_commitment_sha256": package_binding.package_commitment_sha256,
+            "execution_authorization_raw_sha256": _sha256_bytes(authorization_raw),
+            "guard_preflight": guard_preflight,
+            "private_resource_telemetry": _private_guard_resource_telemetry(raw_preflight),
+            "public_target_size_sources": size_sources,
+            "protected_metadata": list(protected_metadata),
+            "xattr_contract": _XATTR_CONTRACT_NOTE,
+            "outputs_absent": True,
+            "materialized_process": {
+                "argv": list(argv),
+                "argv_sha256": _sha256_bytes(_canonical_json({"argv": list(argv)})),
+                "environment": dict(environment),
+                "environment_sha256": _sha256_bytes(_canonical_json({"environment": environment})),
+            },
+            "permission_window_entered": False,
+            "claim_created": False,
+            "material_directory_created": False,
+            "guard_invoked": False,
+        })
+        return {
+            "status": "preflight_passed",
+            "qualified_source": expected_source,
+            "pair_binding": pair.as_mapping(),
+            "preflight_report_path": report_path,
+            "publication_eligible": False,
+        }
+
     claim_path = authorization_path.with_name("attempt-claim.json")
-    _reserve_claim(claim_path, {
+    claim_payload = {
         "artifact_class": "a0x-vertical-gate-c-attempt-claim",
         "qualified_source": expected_source,
         "pair_binding": pair.as_mapping(),
@@ -724,37 +863,29 @@ def _launch_validated_vertical_v2(
         "attempt_id": authorization["attempt_id"],
         "max_guard_exec_count": 1,
         "qualification_context": expected_qualification_context,
-    })
+    }
     pre_run_path: str | None = None
     result: ProcessResult | None = None
-    argv: tuple[str, ...] | None = None
-    environment: dict[str, str] | None = None
     guard_invoked = False
-    # Claim precedes the final revalidation deliberately: a later drift consumes
-    # the one shot rather than silently authorizing a retry.
+    claim_created = False
     try:
-        pre_run_path = _write_vertical_pre_run(
-            root, authorization_path, pair, launch, claim_path,
-            _sha256_bytes(authorization_raw),
-        )
-        revalidate_graph()
-        for role, path, digest, version in (
-            ("child", child_path, launch.child_script_sha256, None),
-            ("ccp", ccp_path, launch.ccp_sha256, ccp_identity.get("version")),
-            ("python", python_path, launch.python_sha256, None),
-        ):
-            observed = executable_identity_verifier.verify(
-                role=role, path=path, expected_sha256=digest, expected_version=version,
+        permission_window = (
+            _a0_material_permission_window(
+                root, expected_sizes=expected_sizes,
+                other_protected_paths=other_protected_paths,
             )
-            require_identity_context(observed)
-        argv = _materialize_argv(launch, ccp_path=ccp_path, python_path=python_path, child_path=child_path)
-        environment = _frozen_environment(launch)
-        if expected_qualification_context == "production":
-            # The active macOS producer requires HOME for its persistent
-            # admission root. Credentials remain absent from the child.
-            environment.update(_coordination_environment())
-        permission_window = _a0_material_permission_window(root) if expected_qualification_context == "production" else nullcontext()
+            if expected_qualification_context == "production" else nullcontext()
+        )
         with permission_window:
+            # The claim is inside the protected window, after descriptors are
+            # reopened and metadata identity has been rechecked. Before this
+            # point failure leaves no claim or material namespace.
+            _reserve_claim(claim_path, claim_payload)
+            claim_created = True
+            pre_run_path = _write_vertical_pre_run(
+                root, authorization_path, pair, launch, claim_path,
+                _sha256_bytes(authorization_raw),
+            )
             guard_invoked = True
             result = process_executor.run(
                 argv, cwd=root, env=environment, timeout_seconds=_SUPERVISION_TIMEOUT_SECONDS,
@@ -782,14 +913,20 @@ def _launch_validated_vertical_v2(
                     "artifact_class": "a0x-private-postflight-probe-failure", "error_type": type(post_error).__name__,
                     "state": "UNVERIFIED", "retry_permitted": False,
                 }), "postflight probe failure")
-        _write_vertical_terminal(
-            root, authorization_path, pair, launch, result, "recovery_required",
-            _sha256_bytes(authorization_raw), error, pre_run_path=pre_run_path,
-            terminal_schema_raw_sha256=terminal_schema_binding.sha256,
-        )
+        if claim_created:
+            outer_classification = (
+                _classify_vertical_outer_exit(result, None)
+                if result is not None else "cleanup_or_internal"
+            )
+            if outer_classification == "completed":
+                outer_classification = "cleanup_or_internal"
+            _write_vertical_terminal(
+                root, authorization_path, pair, launch, result, outer_classification,
+                _sha256_bytes(authorization_raw), error, pre_run_path=pre_run_path,
+                terminal_schema_raw_sha256=terminal_schema_binding.sha256,
+            )
         raise A0XCcpExecutorError("vertical Gate C could not produce a terminal result") from error
     _validate_process_result(result)
-    classification = _classify_outer_exit(result)
     child_terminal = (
         _parse_vertical_child_terminal(
             result.stdout_prefix,
@@ -800,9 +937,19 @@ def _launch_validated_vertical_v2(
             expected_qualification_context=expected_qualification_context,
             terminal_schema=terminal_schema_binding.document,
         )
-        if classification == "completed" and result.stdout_bytes == len(result.stdout_prefix)
+        if result.stdout_bytes == len(result.stdout_prefix)
         else None
     )
+    if child_terminal is None and result.stdout_bytes == len(result.stdout_prefix):
+        child_terminal = _parse_vertical_child_failure_terminal(
+            result.stdout_prefix,
+            expected_source=expected_source,
+            expected_pair=pair.as_mapping(),
+            expected_authorization_id=authorization["authorization_id"],
+            expected_attempt_id=authorization["attempt_id"],
+            expected_qualification_context=expected_qualification_context,
+        )
+    classification = _classify_vertical_outer_exit(result, child_terminal)
     child_terminal_status = child_terminal.get("scientific_outcome") if child_terminal is not None else None
     package_verified, postflight_verified = False, False
     postflight_error: BaseException | None = None
@@ -816,7 +963,10 @@ def _launch_validated_vertical_v2(
             live_head, live_tree, live_clean = _checkout_state(root, postflight_scope)
             if (live_head, live_tree, live_clean) != (source_head, source_tree, True):
                 raise A0XCcpExecutorError("post-guard source state differs outside the exact output set")
-            _validate_guard_preflight(postflight_outputs, launch=launch, pair=pair, source_head=source_head, ccp_identity=ccp_identity)
+            _validate_guard_preflight(
+                postflight_outputs, launch=launch, pair=pair, source_head=source_head,
+                ccp_identity=ccp_identity, production_context=True,
+            )
             postflight_verified = True
             if child_terminal is not None:
                 _verify_vertical_parent_package(root, package_binding, launch.launch_descriptor_path, child_terminal, parent_capability=parent_capability)
@@ -856,8 +1006,308 @@ def _launch_validated_vertical_v2(
     }
 
 
+def _bound_a0_material_metadata_expectations(
+    root: Path, pair: PairBinding,
+) -> tuple[dict[str, int], tuple[str, ...], dict[str, Any]]:
+    """Derive target sizes and the other protected paths from bound public docs.
+
+    Only public declarations, freeze records and provenance manifests are read.
+    Neither target file is opened here; the subsequent admission uses lstat only.
+    """
+    if not isinstance(pair, PairBinding) or pair.leg is not Leg.A0:
+        raise A0XCcpExecutorError("A0 material metadata binding requires the A0 pair")
+    from .a0x_contract import build_leg_freeze_binding
+    from .a0x_execution import load_a0_public_selection
+    from .a0x_freeze import verify_protected_tree_metadata_only
+
+    declarations: dict[str, Mapping[str, Any]] = {}
+    tree_documents: dict[str, Mapping[str, Any]] = {}
+    for leg, package, tree_relative in (
+        (Leg.A0, "experiments/a0-automated-weak-proxy", "experiments/a0x-six-model/protected-a0-tree.json"),
+        (Leg.R1, "experiments/a0r1-independent-proxy", "experiments/a0x-six-model/protected-a0r1-tree.json"),
+    ):
+        freeze = build_leg_freeze_binding(
+            root / package / "protocol.json", root / package / "implementation.json",
+            root / "experiments/a0x-six-model/freeze" / f"{leg.value}-freeze.json",
+        )
+        if leg is Leg.A0 and freeze.leg_freeze_sha256 != pair.leg_freeze_sha256:
+            raise A0XCcpExecutorError("A0 material size source differs from the bound pair freeze")
+        tree_raw = _unique_repository_file(root, tree_relative, f"{leg.value} protected-tree declaration").read_bytes()
+        tree = _strict_object(tree_raw, f"{leg.value} protected-tree declaration")
+        if tree.get("protected_tree_sha256") != freeze.protected_tree_sha256:
+            raise A0XCcpExecutorError(f"{leg.value} protected-tree declaration differs from its freeze")
+        try:
+            verify_protected_tree_metadata_only(root, tree)
+        except Exception as error:
+            raise A0XCcpExecutorError(f"{leg.value} protected-tree metadata declaration is invalid") from error
+        entries = tree.get("entries")
+        if not isinstance(entries, list):
+            raise A0XCcpExecutorError(f"{leg.value} protected-tree entries are invalid")
+        if any(not isinstance(entry, Mapping) for entry in entries):
+            raise A0XCcpExecutorError(f"{leg.value} protected-tree entry is malformed")
+        declarations[leg.value] = {
+            entry.get("path"): entry for entry in entries
+            if entry.get("entry_kind") == "sealed_target"
+        }
+        tree_documents[leg.value] = tree
+
+    selection_relative = "experiments/a0x-six-model/a0-selection-manifest.json"
+    selection_raw = _unique_repository_file(root, selection_relative, "A0 public selection").read_bytes()
+    selection = _strict_object(selection_raw, "A0 public selection")
+    try:
+        capability = load_a0_public_selection(
+            repository_root=root,
+            leg_freeze=build_leg_freeze_binding(
+                root / "experiments/a0-automated-weak-proxy/protocol.json",
+                root / "experiments/a0-automated-weak-proxy/implementation.json",
+                root / "experiments/a0x-six-model/freeze/a0-freeze.json",
+            ),
+        )
+    except Exception as error:
+        raise A0XCcpExecutorError("A0 selection is not bound to its public freeze") from error
+    if capability.source_path != selection_relative or capability.source_sha256 != _sha256_bytes(selection_raw):
+        raise A0XCcpExecutorError("A0 selection capability differs from the fixed public source")
+    manifest_relative = "data/a0/manifest.json"
+    manifest_sha256 = selection.get("source_corpus_manifest_sha256")
+    if not isinstance(manifest_sha256, str) or not _SHA256.fullmatch(manifest_sha256):
+        raise A0XCcpExecutorError("A0 public corpus manifest digest is invalid")
+    manifest_raw = _unique_repository_file(root, manifest_relative, "A0 public corpus manifest").read_bytes()
+    if _sha256_bytes(manifest_raw) != manifest_sha256:
+        raise A0XCcpExecutorError("A0 public corpus manifest differs from its selection binding")
+    manifest = _strict_object(manifest_raw, "A0 public corpus manifest")
+    sizes, a0_source_record = _a0_target_size_bindings(
+        protected_tree=tree_documents["a0"], selection=selection,
+        manifest=manifest, manifest_sha256=manifest_sha256,
+    )
+
+    profile_raw = _unique_repository_file(root, _N3_SENSITIVE_PATHS, "protected-path profile").read_bytes()
+    if _sha256_bytes(profile_raw) != _N3_SENSITIVE_PATHS_SHA256:
+        raise A0XCcpExecutorError("protected-path profile differs from its fixed public commitment")
+    profile = _strict_object(profile_raw, "protected-path profile")
+    dispositions = _mapping(profile, "instance_dispositions", "protected-path profile")
+    sensitive = dispositions.get("excluded_sensitive_role_unverified")
+    if not isinstance(sensitive, list) or len(sensitive) != 14 or any(not isinstance(path, str) for path in sensitive):
+        raise A0XCcpExecutorError("protected sensitive-path inventory is not the exact fixed set")
+    sensitive_paths = tuple(_relative_runtime_path(path) for path in sensitive)
+    if len(set(sensitive_paths)) != 14:
+        raise A0XCcpExecutorError("protected sensitive-path inventory contains duplicates")
+    if set(declarations["r1"]) != {_R1_TARGET_PATHS[1]}:
+        raise A0XCcpExecutorError("R1 protected-tree target declarations differ")
+    other_paths = tuple(sorted((*_R1_TARGET_PATHS, *sensitive_paths)))
+    if len(other_paths) != 16 or len(set(other_paths)) != 16 or set(other_paths).intersection(_A0_TARGET_PATHS):
+        raise A0XCcpExecutorError("other protected-path set conflicts with the two A0 targets")
+    source_record = {
+        **a0_source_record,
+        "other_protected_path_count": len(other_paths),
+    }
+    return sizes, other_paths, source_record
+
+
+def _a0_target_size_bindings(
+    *, protected_tree: Mapping[str, Any], selection: Mapping[str, Any],
+    manifest: Mapping[str, Any], manifest_sha256: str,
+) -> tuple[dict[str, int], dict[str, Any]]:
+    """Bind A0 byte sizes to fixed, hash-linked public declarations."""
+    if not isinstance(protected_tree, Mapping) or not isinstance(selection, Mapping) or not isinstance(manifest, Mapping):
+        raise A0XCcpExecutorError("A0 public target-size documents are invalid")
+    if not isinstance(manifest_sha256, str) or not _SHA256.fullmatch(manifest_sha256):
+        raise A0XCcpExecutorError("A0 public manifest digest is invalid")
+    entries = protected_tree.get("entries")
+    protected_tree_sha256 = protected_tree.get("protected_tree_sha256")
+    if not isinstance(entries, list) or any(not isinstance(entry, Mapping) for entry in entries):
+        raise A0XCcpExecutorError("A0 protected-tree entries are invalid")
+    if not isinstance(protected_tree_sha256, str) or not _SHA256.fullmatch(protected_tree_sha256):
+        raise A0XCcpExecutorError("A0 protected-tree digest is invalid")
+    if any(entry.get("path") == _A0_TARGET_PATHS[0] for entry in entries):
+        raise A0XCcpExecutorError("A0 calibration size has a conflicting protected-tree declaration")
+    sealed_entries = [entry for entry in entries if entry.get("path") == _A0_TARGET_PATHS[1]]
+    if (
+        len(sealed_entries) != 1
+        or sealed_entries[0].get("entry_kind") != "sealed_target"
+    ):
+        raise A0XCcpExecutorError("A0 sealed-target declaration is duplicated or missing")
+    sealed = sealed_entries[0]
+    sealed_size = sealed.get("bytes")
+    sealed_sha256 = sealed.get("sha256")
+    if type(sealed_size) is not int or sealed_size < 0:
+        raise A0XCcpExecutorError("A0 sealed-target declared size is not a strict integer")
+    if not isinstance(sealed_sha256, str) or not _SHA256.fullmatch(sealed_sha256):
+        raise A0XCcpExecutorError("A0 sealed-target declared digest is invalid")
+    if (
+        selection.get("source_corpus_manifest_path") != "data/a0/manifest.json"
+        or selection.get("source_corpus_manifest_sha256") != manifest_sha256
+    ):
+        raise A0XCcpExecutorError("A0 calibration size source is not bound to the fixed manifest")
+    files = _mapping(manifest, "files", "A0 public corpus manifest")
+    calibration = _mapping(files, "calibration_targets_jsonl", "A0 public corpus manifest")
+    if calibration.get("path") != "procedural-targets/calibration-targets.jsonl":
+        raise A0XCcpExecutorError("A0 calibration declaration is not the fixed target role")
+    calibration_size = calibration.get("size")
+    calibration_sha256 = calibration.get("sha256")
+    if type(calibration_size) is not int or calibration_size < 0:
+        raise A0XCcpExecutorError("A0 calibration declared size is not a strict integer")
+    if not isinstance(calibration_sha256, str) or not _SHA256.fullmatch(calibration_sha256):
+        raise A0XCcpExecutorError("A0 calibration declared digest is invalid")
+    sizes = {_A0_TARGET_PATHS[0]: calibration_size, _A0_TARGET_PATHS[1]: sealed_size}
+    source_record = {
+        "calibration": {
+            "path": "data/a0/manifest.json",
+            "target_path": _A0_TARGET_PATHS[0],
+            "sha256": manifest_sha256,
+            "target_sha256": calibration_sha256,
+            "declaration": "files.calibration_targets_jsonl.size",
+        },
+        "sealed": {
+            "path": "experiments/a0x-six-model/protected-a0-tree.json",
+            "target_path": _A0_TARGET_PATHS[1],
+            "protected_tree_sha256": protected_tree_sha256,
+            "target_sha256": sealed_sha256,
+            "declaration": "entries[data/a0/sealed-targets/targets.jsonl].bytes",
+        },
+    }
+    return sizes, source_record
+
+
+def _check_acl_absent(path: Path) -> None:
+    """Reject an extended ACL without opening a protected target's contents."""
+    try:
+        library = ctypes.CDLL(None, use_errno=True)
+        get_acl = library.acl_get_link_np
+        free_acl = library.acl_free
+    except (AttributeError, OSError) as error:
+        raise A0XCcpExecutorError("native extended-ACL metadata API is unavailable") from error
+    get_acl.argtypes = (ctypes.c_char_p, ctypes.c_int)
+    get_acl.restype = ctypes.c_void_p
+    free_acl.argtypes = (ctypes.c_void_p,)
+    free_acl.restype = ctypes.c_int
+    ctypes.set_errno(0)
+    acl = get_acl(os.fsencode(path), 0x100)  # macOS ACL_TYPE_EXTENDED
+    if acl:
+        free_acl(acl)
+        raise A0XCcpExecutorError("protected target has an extended ACL; operator review required")
+    if ctypes.get_errno() != errno.ENOENT:
+        raise A0XCcpExecutorError("extended-ACL metadata query failed")
+
+
+def _read_target_flags(info: os.stat_result) -> int:
+    try:
+        flags = info.st_flags
+    except AttributeError as error:
+        raise A0XCcpExecutorError("A0 target file-flag metadata API is unavailable") from error
+    if type(flags) is not int:
+        raise A0XCcpExecutorError("A0 target file-flag metadata is malformed")
+    return flags
+
+
+def _admit_a0_material_metadata(
+    root: str | Path, *, expected_sizes: Mapping[str, int],
+    other_protected_paths: Sequence[str] = (),
+) -> tuple[dict[str, Any], ...]:
+    """Admit 18 protected inodes by metadata only; never open target contents."""
+    repository = Path(root).absolute()
+    try:
+        root_info = repository.lstat()
+    except OSError as error:
+        raise A0XCcpExecutorError("A0 metadata workspace root is unavailable") from error
+    if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode) or not os.access(repository, os.X_OK):
+        raise A0XCcpExecutorError("A0 metadata workspace root is not a traversable directory")
+    if not isinstance(expected_sizes, Mapping) or set(expected_sizes) != set(_A0_TARGET_PATHS):
+        raise A0XCcpExecutorError("A0 expected-size map does not name exactly the two fixed targets")
+    if any(type(expected_sizes[path]) is not int or expected_sizes[path] < 0 for path in _A0_TARGET_PATHS):
+        raise A0XCcpExecutorError("A0 expected target sizes must be strict nonnegative integers")
+    other = tuple(_relative_runtime_path(path) for path in other_protected_paths)
+    if other and (len(other) != 16 or len(set(other)) != 16 or set(other).intersection(_A0_TARGET_PATHS)):
+        raise A0XCcpExecutorError("other protected-path set is not exactly 16 independent names")
+    rows: list[dict[str, Any]] = []
+    immutable_flags = (
+        getattr(stat, "UF_IMMUTABLE", 0x00000002)
+        | getattr(stat, "SF_IMMUTABLE", 0x00020000)
+        | getattr(stat, "SF_DATALESS", 0x40000000)
+    )
+    for relative in (*_A0_TARGET_PATHS, *other):
+        safe = _relative_runtime_path(relative)
+        path = repository / safe
+        cursor = repository
+        try:
+            for component in PurePosixPath(safe).parts[:-1]:
+                cursor = cursor / component
+                parent = cursor.lstat()
+                if (stat.S_ISLNK(parent.st_mode) or not stat.S_ISDIR(parent.st_mode)
+                    or not os.access(cursor, os.X_OK)):
+                    raise A0XCcpExecutorError("protected path ancestor is linked or not traversable")
+            info = path.lstat()
+        except A0XCcpExecutorError:
+            raise
+        except OSError as error:
+            raise A0XCcpExecutorError("protected path metadata is unavailable") from error
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0:
+            raise A0XCcpExecutorError("protected path is not an independent mode-000 regular file")
+        if relative in _A0_TARGET_PATHS:
+            if info.st_uid != os.geteuid() or info.st_size != expected_sizes[relative]:
+                raise A0XCcpExecutorError("A0 target owner or declared size differs")
+            flags = _read_target_flags(info)
+            if flags & immutable_flags:
+                raise A0XCcpExecutorError("A0 target has unsupported immutable or dataless flags")
+            _check_acl_absent(path)
+        rows.append({
+            "path": relative,
+            "device": info.st_dev,
+            "inode": info.st_ino,
+            "size": info.st_size,
+            "mode": stat.S_IMODE(info.st_mode),
+            "nlink": info.st_nlink,
+            **({"uid": info.st_uid, "flags": flags} if relative in _A0_TARGET_PATHS else {}),
+        })
+    return tuple(rows)
+
+
+def _require_vertical_outputs_absent(
+    root: str | Path, *, pair: PairBinding, source_head: str, source_tree: str,
+    authorization_path: str | Path,
+) -> None:
+    """Refuse occupied, linked, or dangling Gate-C destination namespaces."""
+    repository = Path(root).resolve(strict=True)
+    _revision(source_head, "vertical output source HEAD")
+    _revision(source_tree, "vertical output source tree")
+    if not isinstance(pair, PairBinding) or pair.leg is not Leg.A0:
+        raise A0XCcpExecutorError("vertical output admission requires the A0 pair")
+    result_relative = _relative_runtime_path(pair.output_path)
+    if not result_relative.startswith("results/a0x/"):
+        raise A0XCcpExecutorError("vertical result namespace is not the fixed A0X root")
+    external_relative = (
+        f"results/a0x-external-assets/{source_head}/{source_tree}/a0/"
+        f"{pair.model_key}/{pair.run_id}"
+    )
+    try:
+        authorization_relative = Path(authorization_path).absolute().relative_to(repository).as_posix()
+    except (TypeError, ValueError) as error:
+        raise A0XCcpExecutorError("vertical authorization path is outside the workspace") from error
+    authorization_relative = _relative_runtime_path(authorization_relative)
+    material_relative = (Path(authorization_relative).parent / "material").as_posix()
+    for relative in (result_relative, external_relative, material_relative):
+        candidate = repository
+        parts = PurePosixPath(relative).parts
+        for index, component in enumerate(parts):
+            candidate = candidate / component
+            if not os.path.lexists(candidate):
+                break
+            try:
+                metadata = candidate.lstat()
+            except OSError as error:
+                raise A0XCcpExecutorError("vertical output namespace metadata is unavailable") from error
+            if stat.S_ISLNK(metadata.st_mode):
+                raise A0XCcpExecutorError("vertical output namespace contains a symlink")
+            if index < len(parts) - 1 and not stat.S_ISDIR(metadata.st_mode):
+                raise A0XCcpExecutorError("vertical output namespace ancestor is not a directory")
+        if os.path.lexists(repository / relative):
+            raise A0XCcpExecutorError("vertical Gate-C output namespace is already occupied")
+
+
 @contextmanager
-def _a0_material_permission_window(root: Path):
+def _a0_material_permission_window(
+    root: Path, *, expected_sizes: Mapping[str, int] | None = None,
+    other_protected_paths: Sequence[str] = (),
+):
     """Metadata-only macOS descriptors restore two A0 targets for one guard.
 
     The operator must already have authorized this exact Gate C invocation.
@@ -866,14 +1316,44 @@ def _a0_material_permission_window(root: Path):
     metadata admission precedes chmod; the resulting inode is pinned before
     any content access. This detects drift, not hostile concurrent replacement.
     """
+    if threading.current_thread() is not threading.main_thread():
+        raise A0XCcpExecutorError("protected permission window requires the main thread for signal handling")
     event_only = getattr(os, "O_EVTONLY", None)
     if event_only is None:
         raise A0XCcpExecutorError("protected permission window requires the qualified macOS metadata API")
-    relatives = ("data/a0/procedural-targets/calibration-targets.jsonl", "data/a0/sealed-targets/targets.jsonl")
-    files: list[tuple[str, int, str, tuple[int, int, int], int | None]] = []
+    repository = Path(root).resolve(strict=True)
+    if expected_sizes is not None:
+        _admit_a0_material_metadata(
+            repository, expected_sizes=expected_sizes,
+            other_protected_paths=other_protected_paths,
+        )
+    relatives = _A0_TARGET_PATHS
+    files: list[dict[str, Any]] = []
+    previous_handlers: dict[int, Any] = {}
+    installed_signals: list[int] = []
+    pending_error: BaseException | None = None
+    cleanup_failed = False
+    signals = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+    signal_received = False
+    cleaning_up = False
+
+    def interrupt(signum: int, _frame: Any) -> None:
+        nonlocal signal_received
+        if signal_received or cleaning_up:
+            return
+        signal_received = True
+        raise _GateCSignalInterrupt(signum)
+
+    def ignore(_signum: int, _frame: Any) -> None:
+        return None
+
     try:
+        for signum in signals:
+            previous_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, interrupt)
+            installed_signals.append(signum)
         for relative in relatives:
-            directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            directory = os.open(repository, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
                 parts = PurePosixPath(relative).parts
                 for part in parts[:-1]:
@@ -887,41 +1367,85 @@ def _a0_material_permission_window(root: Path):
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0:
                 os.close(directory)
                 raise A0XCcpExecutorError("protected target is not an independent mode-000 regular file")
-            files.append((relative, directory, parts[-1], (info.st_dev, info.st_ino, info.st_size), None))
-        for index, (relative, directory, name, identity, _fd) in enumerate(files):
+            files.append({
+                "relative": relative, "directory": directory, "name": parts[-1],
+                "identity": (info.st_dev, info.st_ino, info.st_size), "fd": None,
+            })
+        for row in files:
+            relative, directory, name = row["relative"], row["directory"], row["name"]
+            identity = row["identity"]
             info = os.stat(name, dir_fd=directory, follow_symlinks=False)
             if (info.st_dev, info.st_ino, info.st_size) != identity or info.st_nlink != 1:
                 raise A0XCcpExecutorError("protected target identity changed before permission restoration")
             os.chmod(name, 0o600, dir_fd=directory, follow_symlinks=False)
             fd = os.open(name, event_only | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
-            files[index] = (relative, directory, name, identity, fd)
+            row["fd"] = fd
             held = os.fstat(fd)
             if (held.st_dev, held.st_ino, held.st_size) != identity or held.st_nlink != 1:
                 raise A0XCcpExecutorError("protected target identity changed during permission restoration")
         yield
+    except BaseException as error:
+        pending_error = error
     finally:
-        failure = False
-        for relative, directory, name, identity, fd in files:
+        cleaning_up = True
+        for signum in installed_signals:
+            try:
+                signal.signal(signum, ignore)
+            except BaseException:
+                cleanup_failed = True
+        for row in files:
+            directory, name, identity, fd = row["directory"], row["name"], row["identity"], row["fd"]
+            named_matches = False
             try:
                 named = os.stat(name, dir_fd=directory, follow_symlinks=False)
-                if (named.st_dev, named.st_ino, named.st_size) != identity or named.st_nlink != 1:
-                    failure = True
-                if fd is not None:
+                named_matches = (named.st_dev, named.st_ino, named.st_size) == identity and named.st_nlink == 1
+                if not named_matches:
+                    cleanup_failed = True
+            except BaseException:
+                cleanup_failed = True
+            if fd is not None:
+                try:
                     held = os.fstat(fd)
-                    if (held.st_dev, held.st_ino, held.st_size) == identity:
+                    if (held.st_dev, held.st_ino, held.st_size) == identity and held.st_nlink == 1:
                         os.fchmod(fd, 0)
                     else:
-                        failure = True
-                elif not failure:
+                        cleanup_failed = True
+                except BaseException:
+                    cleanup_failed = True
+                    if named_matches:
+                        try:
+                            os.chmod(name, 0, dir_fd=directory, follow_symlinks=False)
+                        except BaseException:
+                            pass
+            elif named_matches:
+                try:
                     os.chmod(name, 0, dir_fd=directory, follow_symlinks=False)
-            except OSError:
-                failure = True
-            finally:
-                if fd is not None:
+                except BaseException:
+                    cleanup_failed = True
+            else:
+                cleanup_failed = True
+        for row in files:
+            fd, directory = row["fd"], row["directory"]
+            if fd is not None:
+                try:
                     os.close(fd)
+                except BaseException:
+                    cleanup_failed = True
+            try:
                 os.close(directory)
-        if failure:
-            raise A0XCcpExecutorError("protected permission cleanup has uncertain ownership")
+            except BaseException:
+                cleanup_failed = True
+        for signum in reversed(installed_signals):
+            try:
+                signal.signal(signum, previous_handlers[signum])
+            except BaseException:
+                cleanup_failed = True
+    if cleanup_failed:
+        raise A0XCcpExecutorError("protected permission cleanup has uncertain ownership") from pending_error
+    if pending_error is not None:
+        if isinstance(pending_error, (OSError, ValueError)) and not isinstance(pending_error, A0XCcpExecutorError):
+            raise A0XCcpExecutorError("protected permission window could not be established") from pending_error
+        raise pending_error
 
 
 def _verify_vertical_parent_package(root: Path, binding: VerticalPackageBinding, descriptor_path: str, child_terminal: Mapping[str, Any], *, parent_capability: Any) -> None:
@@ -1250,6 +1774,49 @@ def _write_vertical_pre_run(
     }
     _exclusive_write(path, _canonical_json(payload), "vertical Gate C pre-run observation")
     return path.relative_to(root).as_posix()
+
+
+def _write_vertical_preflight_report(root: Path, payload: Mapping[str, Any]) -> str:
+    """Write one private, uniquely named, non-consuming Gate-C preflight report."""
+    base = _repository_file_for_write(root, ".a0x-runtime/gate-c-preflight")
+    try:
+        base.mkdir(mode=0o700, parents=True, exist_ok=True)
+        base_info = base.lstat()
+    except OSError as error:
+        raise A0XCcpExecutorError("vertical Gate-C preflight report directory is unavailable") from error
+    if stat.S_ISLNK(base_info.st_mode) or not stat.S_ISDIR(base_info.st_mode):
+        raise A0XCcpExecutorError("vertical Gate-C preflight report path is not a directory")
+    for _ in range(8):
+        report_id = secrets.token_hex(8)
+        directory = base / report_id
+        try:
+            directory.mkdir(mode=0o700)
+        except FileExistsError:
+            continue
+        except OSError as error:
+            raise A0XCcpExecutorError("vertical Gate-C preflight report directory could not be created") from error
+        try:
+            info = directory.lstat()
+        except OSError as error:
+            raise A0XCcpExecutorError("vertical Gate-C preflight report directory metadata is unavailable") from error
+        if (
+            stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700
+        ):
+            raise A0XCcpExecutorError("vertical Gate-C preflight report directory is not private")
+        path = directory / "preflight-report.json"
+        _exclusive_write(path, _canonical_json(payload), "vertical Gate-C preflight report")
+        try:
+            report_info = path.lstat()
+        except OSError as error:
+            raise A0XCcpExecutorError("vertical Gate-C preflight report metadata is unavailable") from error
+        if (
+            stat.S_ISLNK(report_info.st_mode) or not stat.S_ISREG(report_info.st_mode)
+            or report_info.st_uid != os.geteuid() or stat.S_IMODE(report_info.st_mode) & 0o077
+        ):
+            raise A0XCcpExecutorError("vertical Gate-C preflight report is not private")
+        return path.relative_to(root).as_posix()
+    raise A0XCcpExecutorError("vertical Gate-C preflight report identifier space collided")
 
 
 def _launch_validated_dossier(
@@ -1720,8 +2287,11 @@ _GUARD_PREFLIGHT_ROLES = (
 def _validate_guard_preflight(
     outputs: Sequence[GuardPreflightOutput], *, launch: A0XGuardLaunch,
     pair: PairBinding, source_head: str, ccp_identity: Mapping[str, Any],
+    production_context: bool = False,
 ) -> dict[str, Any]:
     """Normalize exactly six configuration-free, read-only guard probes."""
+    if production_context and ccp_identity.get("sha256") != _ACTIVE_CCP_SHA256:
+        raise A0XCcpExecutorError("production guard preflight requires the exact active CCP hash")
     if not isinstance(outputs, Sequence) or len(outputs) != len(_GUARD_PREFLIGHT_ROLES):
         raise A0XCcpExecutorError("guard preflight output set is incomplete")
     rows: list[dict[str, Any]] = []
@@ -1745,11 +2315,12 @@ def _validate_guard_preflight(
     if resource.get("decision") != "admit":
         raise A0XCcpExecutorError("guard preflight resource decision is not Admit")
     admission = _strict_object(by_role["admission_status"], "guard admission status")
-    slot = admission.get("slot")
-    if admission.get("active") is not False or admission.get("queue_count") != 0 or not isinstance(slot, Mapping) or slot.get("state") != "free":
-        raise A0XCcpExecutorError("guard preflight admission is not inactive with a free slot")
     if ccp_identity.get("sha256") == _ACTIVE_CCP_SHA256:
         _validate_active_guard_status(resource, admission)
+    else:
+        slot = admission.get("slot")
+        if admission.get("active") is not False or admission.get("queue_count") != 0 or not isinstance(slot, Mapping) or slot.get("state") != "free":
+            raise A0XCcpExecutorError("guard preflight admission is not inactive with a free slot")
     source = _strict_object(by_role["git_source_state"], "guard Git source state")
     if source != {"head": source_head, "clean": True}:
         raise A0XCcpExecutorError("guard preflight source HEAD is dirty or differs from authorization")
@@ -1782,6 +2353,14 @@ def _validate_guard_preflight(
     return observation
 
 
+def _private_guard_resource_telemetry(outputs: Sequence[GuardPreflightOutput]) -> dict[str, Any]:
+    """Retain validated resource values only in the private preflight report."""
+    matches = [output for output in outputs if isinstance(output, GuardPreflightOutput) and output.role == "resource_status"]
+    if len(matches) != 1 or matches[0].exit_code != 0 or not isinstance(matches[0].raw, bytes):
+        raise A0XCcpExecutorError("private guard resource telemetry is unavailable")
+    return _resource_status_object(matches[0].raw)
+
+
 def _validate_active_guard_status(resource: Mapping[str, Any], admission: Mapping[str, Any]) -> None:
     """Validate the active macos-v5 contract without treating static swap as a veto."""
     constants = {"schema_version": "1.0", "policy_version": "macos-v5", "platform": "macos",
@@ -1799,12 +2378,40 @@ def _validate_active_guard_status(resource: Mapping[str, Any], admission: Mappin
         raise A0XCcpExecutorError("active guard resource telemetry contradicts Admit")
     if resource["total_memory_bytes"] <= 0 or resource["reclaimable_uncompressed_bytes"] > resource["total_memory_bytes"] or resource["compressor_occupied_bytes"] > resource["total_memory_bytes"] or resource["swap_used_bytes"] > resource["swap_total_bytes"]:
         raise A0XCcpExecutorError("active guard resource telemetry is contradictory")
-    if set(admission) != {"schema_version", "active", "queue_count", "ticket_ids", "slot", "queue_lock", "process_visibility_note"} or admission.get("schema_version") != "1.0" or admission.get("active") is not False or type(admission.get("queue_count")) is not int or admission["queue_count"] != 0 or admission.get("ticket_ids") != [] or not isinstance(admission.get("process_visibility_note"), str):
-        raise A0XCcpExecutorError("active guard admission evidence is incomplete or busy")
+    invalid = "active guard admission evidence is invalid or unsupported"
+    note = "No process visible in the local shell does not prove global inactivity."
+    if (set(admission) != {"schema_version", "active", "queue_count", "ticket_ids", "slot", "queue_lock", "process_visibility_note"}
+        or admission.get("schema_version") != "2.0"
+        or type(admission.get("active")) is not bool
+        or type(admission.get("queue_count")) is not int or admission["queue_count"] < 0
+        or not isinstance(admission.get("ticket_ids"), list)
+        or any(not isinstance(ticket, str) or not ticket for ticket in admission["ticket_ids"])
+        or len(admission["ticket_ids"]) != admission["queue_count"]
+        or len(set(admission["ticket_ids"])) != admission["queue_count"]
+        or admission.get("process_visibility_note") != note):
+        raise A0XCcpExecutorError(invalid)
     for key in ("slot", "queue_lock"):
         lock = admission[key]
-        if not isinstance(lock, Mapping) or set(lock) != {"kind", "state", "owner_run_id", "acquired_at_unix_seconds", "heartbeat_at_unix_seconds", "lease_state"} or lock.get("kind") != key or lock.get("state") != "free" or lock.get("lease_state") != "not_applicable" or any(lock.get(field) is not None for field in ("owner_run_id", "acquired_at_unix_seconds", "heartbeat_at_unix_seconds")):
-            raise A0XCcpExecutorError("active guard admission lock is not demonstrably free")
+        if (not isinstance(lock, Mapping)
+            or set(lock) != {"kind", "state", "owner_run_id", "acquired_at_unix_seconds", "heartbeat_at_unix_seconds", "lease_state"}
+            or lock.get("kind") != ("slot_lock" if key == "slot" else "queue_lock")
+            or lock.get("state") not in {"free", "held"}):
+            raise A0XCcpExecutorError(invalid)
+        owner_fields = ("owner_run_id", "acquired_at_unix_seconds", "heartbeat_at_unix_seconds")
+        if key == "queue_lock":
+            if lock["lease_state"] != "not_applicable" or any(lock[field] is not None for field in owner_fields):
+                raise A0XCcpExecutorError(invalid)
+        elif lock["state"] == "free":
+            if lock["lease_state"] != "absent" or any(lock[field] is not None for field in owner_fields) or admission["active"]:
+                raise A0XCcpExecutorError(invalid)
+        elif (lock["lease_state"] != "active" or admission["active"] is not True
+              or not isinstance(lock["owner_run_id"], str) or not lock["owner_run_id"]
+              or any(type(lock[field]) is not int or lock[field] < 0 for field in owner_fields[1:])
+              or lock["heartbeat_at_unix_seconds"] < lock["acquired_at_unix_seconds"]):
+            raise A0XCcpExecutorError(invalid)
+    if (admission["active"] or admission["queue_count"] or admission["slot"]["state"] != "free"
+        or admission["queue_lock"]["state"] != "free"):
+        raise A0XCcpExecutorError("active guard admission is busy")
 
 
 def _resource_status_object(raw: bytes) -> dict[str, Any]:
@@ -2001,6 +2608,37 @@ def _classify_outer_exit(result: ProcessResult) -> str:
     }.get(result.returncode, f"child_exit_{result.returncode}")
 
 
+def _classify_vertical_outer_exit(
+    result: ProcessResult, bound_child_terminal: Mapping[str, Any] | None,
+) -> str:
+    """Classify outer hard failures first and bind child 2/4 outcomes when present."""
+    if result.returncode == 70:
+        return "cleanup_or_internal"
+    if result.timed_out or result.returncode == 124:
+        return "timeout"
+    if result.returncode == 6:
+        return "resource_rejected"
+    if result.returncode == 130:
+        return "cancelled"
+    child_failure_codes = {
+        2: ("refused", "invalid_arguments"),
+        4: ("executor_failed", "queue_full"),
+    }
+    expected_failure = child_failure_codes.get(result.returncode)
+    if expected_failure is not None and bound_child_terminal is not None:
+        if bound_child_terminal.get("exit_class") == expected_failure[0]:
+            return f"child_exit_{result.returncode}"
+    return {
+        0: "completed",
+        2: "invalid_arguments",
+        4: "queue_full",
+        5: "admission_timeout_or_cancelled",
+        6: "resource_rejected",
+        70: "cleanup_or_internal",
+        130: "cancelled",
+    }.get(result.returncode, f"child_exit_{result.returncode}")
+
+
 def _terminal_observation(
     *, source_head: str, pair: PairBinding, dossier: str, launch: A0XGuardLaunch,
     result: ProcessResult | None, classification: str, recovery_required: bool,
@@ -2170,41 +2808,245 @@ class _SubprocessExecutor:
     CCP while CCP is sealing its own terminal state.  Output is continuously
     drained in fixed chunks; only a fixed-size prefix remains in memory and no
     unbounded raw stdout/stderr file is created.
+
+    Signals and process-group checks cover only this dedicated outer guard
+    session. CCP owns cleanup of its scientific child, which may use a nested
+    process group; this executor does not infer nested-child cleanup from the
+    outer session's disappearance.
     """
 
     def run(self, argv: Sequence[str], *, cwd: Path, env: Mapping[str, str], timeout_seconds: int, capture_limit_bytes: int) -> ProcessResult:
         if timeout_seconds != _SUPERVISION_TIMEOUT_SECONDS:
             raise A0XCcpExecutorError("subprocess supervision timeout must preserve CCP cleanup margin")
-        process = subprocess.Popen(
-            list(argv), cwd=str(cwd), env=dict(env), shell=False, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        stdout = _StreamingCapture(capture_limit_bytes)
-        stderr = _StreamingCapture(capture_limit_bytes)
-        stdout_thread = threading.Thread(target=stdout.drain, args=(process.stdout,), daemon=True)
-        stderr_thread = threading.Thread(target=stderr.drain, args=(process.stderr,), daemon=True)
-        stdout_thread.start()
-        stderr_thread.start()
+        if threading.current_thread() is not threading.main_thread():
+            raise A0XCcpExecutorError("guard signal supervision requires the main thread")
+
+        signals = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+        previous_handlers: dict[int, Any] = {}
+        attempted_handlers: list[int] = []
+        cancel_requested = False
+        cancel_signum: int | None = None
+        process: Any | None = None
+        stdout: _StreamingCapture | None = None
+        stderr: _StreamingCapture | None = None
+        threads: list[Any] = []
+        reader_bindings: list[tuple[Any, Any]] = []
         timed_out = False
-        try:
-            process.wait(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            process.terminate()
+        cleanup_failed = False
+        lifecycle_error: BaseException | None = None
+        cleanup_started = False
+
+        def request_cancel(signum: int, _frame: Any) -> None:
+            nonlocal cancel_requested, cancel_signum
+            if not cancel_requested:
+                cancel_requested = True
+                cancel_signum = int(signum)
+
+        def terminate_owned() -> None:
+            nonlocal cleanup_failed, cleanup_started
+            if process is None or cleanup_started:
+                return
+            cleanup_started = True
             try:
-                process.wait(timeout=CLEANUP_MARGIN_SECONDS)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-        stdout_thread.join(timeout=CLEANUP_MARGIN_SECONDS)
-        stderr_thread.join(timeout=CLEANUP_MARGIN_SECONDS)
-        if stdout_thread.is_alive() or stderr_thread.is_alive():
-            raise A0XCcpExecutorError("bounded output drain did not terminate")
+                if not _terminate_owned_process_group(
+                    process, grace_seconds=CLEANUP_MARGIN_SECONDS,
+                ):
+                    cleanup_failed = True
+            except BaseException:
+                cleanup_failed = True
+
+        def join_started_threads() -> bool:
+            nonlocal cleanup_failed
+            for thread in threads:
+                try:
+                    if thread.ident is not None:
+                        thread.join(timeout=CLEANUP_MARGIN_SECONDS)
+                except BaseException:
+                    cleanup_failed = True
+            alive = False
+            for thread in threads:
+                try:
+                    if thread.ident is not None and thread.is_alive():
+                        alive = True
+                except BaseException:
+                    cleanup_failed = True
+                    alive = True
+            return alive
+
+        try:
+            # A throwing permission-window handler is replaced before Popen.
+            # The callback only records intent; cleanup owns all process work.
+            for signum in signals:
+                previous_handlers[signum] = signal.getsignal(signum)
+                attempted_handlers.append(signum)
+                signal.signal(signum, request_cancel)
+
+            if not cancel_requested:
+                stdout = _StreamingCapture(capture_limit_bytes)
+                stderr = _StreamingCapture(capture_limit_bytes)
+            if not cancel_requested:
+                process = subprocess.Popen(
+                    list(argv), cwd=str(cwd), env=dict(env), shell=False, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+                )
+                deadline = time.monotonic() + timeout_seconds
+                stdout_thread = threading.Thread(target=stdout.drain, args=(process.stdout,), daemon=True)
+                stderr_thread = threading.Thread(target=stderr.drain, args=(process.stderr,), daemon=True)
+                threads.extend((stdout_thread, stderr_thread))
+                reader_bindings.extend(((stdout_thread, process.stdout), (stderr_thread, process.stderr)))
+                stdout_thread.start()
+                stderr_thread.start()
+
+                while not cancel_requested:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        timed_out = True
+                        break
+                    try:
+                        process.wait(timeout=min(0.1, remaining))
+                    except subprocess.TimeoutExpired:
+                        now = time.monotonic()
+                        if now >= deadline:
+                            timed_out = True
+                            break
+                        if cancel_requested:
+                            break
+                        continue
+                    if cancel_requested:
+                        break
+                    break
+        except _GateCSignalInterrupt as error:
+            cancel_requested = True
+            cancel_signum = error.signum
+        except KeyboardInterrupt:
+            cancel_requested = True
+            cancel_signum = int(signal.SIGINT)
+        except BaseException as error:
+            lifecycle_error = error
+        finally:
+            if process is not None:
+                if timed_out or cancel_requested or lifecycle_error is not None:
+                    terminate_owned()
+                else:
+                    try:
+                        group_survived = _owned_process_group_exists(process.pid)
+                    except BaseException:
+                        group_survived = True
+                        cleanup_failed = True
+                    if group_survived:
+                        cleanup_failed = True
+                        terminate_owned()
+
+                threads_alive = join_started_threads()
+                if cancel_requested and not cleanup_started:
+                    terminate_owned()
+                if threads_alive:
+                    terminate_owned()
+                    threads_alive = join_started_threads()
+                if threads_alive:
+                    cleanup_failed = True
+                started_streams: set[int] = set()
+                for thread, stream in reader_bindings:
+                    try:
+                        if thread.ident is not None:
+                            started_streams.add(id(stream))
+                    except BaseException:
+                        cleanup_failed = True
+                        started_streams.add(id(stream))
+                for stream in (process.stdout, process.stderr):
+                    if stream is not None and id(stream) not in started_streams:
+                        try:
+                            stream.close()
+                        except BaseException:
+                            cleanup_failed = True
+
+            for signum in reversed(attempted_handlers):
+                try:
+                    signal.signal(signum, previous_handlers[signum])
+                except _GateCSignalInterrupt as error:
+                    cancel_requested = True
+                    if cancel_signum is None:
+                        cancel_signum = error.signum
+                except BaseException:
+                    cleanup_failed = True
+
+        if cancel_requested and process is None:
+            raise _GateCSignalInterrupt(cancel_signum or int(signal.SIGTERM))
+        if process is None:
+            raise A0XCcpExecutorError("guard process could not be started") from lifecycle_error
+        if stdout is None or stderr is None:
+            raise A0XCcpExecutorError("guard output capture could not be initialized") from lifecycle_error
+        if cleanup_failed:
+            returncode = 70
+        elif timed_out:
+            returncode = 124
+        elif cancel_requested:
+            returncode = 130
+        elif lifecycle_error is not None:
+            raise A0XCcpExecutorError("guard process lifecycle failed") from lifecycle_error
+        else:
+            try:
+                returncode = int(process.returncode)
+            except (TypeError, ValueError) as error:
+                raise A0XCcpExecutorError("guard process exit status is unavailable") from error
         return ProcessResult(
-            returncode=124 if timed_out else int(process.returncode), timed_out=timed_out,
+            returncode=returncode, timed_out=timed_out,
             stdout_sha256=stdout.sha256, stdout_bytes=stdout.length, stdout_prefix=stdout.prefix,
             stderr_sha256=stderr.sha256, stderr_bytes=stderr.length, stderr_prefix=stderr.prefix,
         )
+
+
+def _owned_process_group_exists(process_group_id: int) -> bool:
+    if type(process_group_id) is not int or process_group_id <= 0 or not hasattr(os, "killpg"):
+        raise A0XCcpExecutorError("owned guard process-group identity is unavailable")
+    try:
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return False
+    except OSError as error:
+        raise A0XCcpExecutorError("owned guard process-group status is unavailable") from error
+    return True
+
+
+def _signal_owned_process_group(process_group_id: int, signum: int) -> None:
+    if type(process_group_id) is not int or process_group_id <= 0 or not hasattr(os, "killpg"):
+        raise A0XCcpExecutorError("owned guard process-group identity is unavailable")
+    try:
+        os.killpg(process_group_id, signum)
+    except ProcessLookupError:
+        return
+    except OSError as error:
+        raise A0XCcpExecutorError("owned guard process-group signal failed") from error
+
+
+def _terminate_owned_process_group(process: Any, *, grace_seconds: float) -> bool:
+    """TERM dedicated outer session; return False if forced KILL was needed."""
+    process_group_id = getattr(process, "pid", None)
+    _signal_owned_process_group(process_group_id, signal.SIGTERM)
+    if not _wait_for_owned_process_group_exit(process, grace_seconds=grace_seconds):
+        _signal_owned_process_group(process_group_id, signal.SIGKILL)
+        if not _wait_for_owned_process_group_exit(process, grace_seconds=grace_seconds):
+            raise A0XCcpExecutorError("owned guard process group did not terminate after SIGKILL")
+        return False
+    return True
+
+
+def _wait_for_owned_process_group_exit(process: Any, *, grace_seconds: float) -> bool:
+    process_group_id = getattr(process, "pid", None)
+    deadline = time.monotonic() + max(0.0, grace_seconds)
+    while True:
+        try:
+            process.poll()  # Reap the direct child without signaling any other process.
+            if not _owned_process_group_exists(process_group_id):
+                return True
+        except A0XCcpExecutorError:
+            raise
+        except OSError as error:
+            raise A0XCcpExecutorError("owned guard process status is unavailable") from error
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.025, remaining))
 
 
 class _StreamingCapture:
@@ -2317,6 +3159,59 @@ def _parse_vertical_child_terminal(
         or not _valid_vertical_terminal_package_reference(
             value.get("terminal_package"), expected_pair,
         )
+    ):
+        return None
+    return value
+
+
+def _parse_vertical_child_failure_terminal(
+    raw: bytes,
+    *,
+    expected_source: Mapping[str, str],
+    expected_pair: Mapping[str, Any],
+    expected_authorization_id: str,
+    expected_attempt_id: str,
+    expected_qualification_context: Literal["production", "synthetic-target-free"],
+) -> dict[str, Any] | None:
+    """Bind the child's failure-only envelope without treating it as completion.
+
+    The frozen completion schema intentionally accepts only ``completed``.
+    This separate closed-shape parser recognizes only fully bound
+    ``refused`` and ``executor_failed`` failure envelopes. The current
+    pre-graph ``refused`` emission is unbound and remains rejected. These
+    envelopes classify matching nonzero child exits only; they cannot qualify
+    a package or override a hard outer result.
+    """
+    if not isinstance(raw, bytes) or not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw:
+        return None
+    body = raw[:-1]
+    if not body or b"\n" in body:
+        return None
+    try:
+        value = strict_json_object(body)
+        if _canonical_json(value) != body:
+            return None
+        expected_fields = {
+            "artifact_class", "terminal_profile", "exit_class", "qualified_source",
+            "pair_binding", "authorization_id", "attempt_id", "qualification_context",
+            "reached_frontier", "scientific_outcome", "terminal_package",
+        }
+        if set(value) != expected_fields or value.get("exit_class") not in {"refused", "executor_failed"}:
+            return None
+        pair = PairBinding.from_mapping(value["pair_binding"])
+    except (A0XCcpExecutorError, A0XContractError, KeyError, TypeError, ValueError):
+        return None
+    if (
+        value.get("artifact_class") != "a0x-vertical-material-child-terminal"
+        or value.get("terminal_profile") != "a0x-vertical-child-terminal-v1"
+        or value.get("qualified_source") != dict(expected_source)
+        or pair.as_mapping() != dict(expected_pair)
+        or value.get("authorization_id") != expected_authorization_id
+        or value.get("attempt_id") != expected_attempt_id
+        or value.get("qualification_context") != expected_qualification_context
+        or value.get("reached_frontier") != "validated_graph"
+        or value.get("scientific_outcome") is not None
+        or value.get("terminal_package") is not None
     ):
         return None
     return value

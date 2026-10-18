@@ -34,6 +34,13 @@ def _sha(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+_ACTIVE_PRODUCER_FIXTURES = Path(__file__).resolve().parent / "fixtures/a0x/ccp-active-producer"
+
+
+def _active_producer_fixture(name: str) -> bytes:
+    return (_ACTIVE_PRODUCER_FIXTURES / name).read_bytes()
+
+
 class _FakeProcess:
     def __init__(self, result: ProcessResult) -> None:
         self.result = result
@@ -55,18 +62,12 @@ class _FakeGuardPreflight:
         self.calls.append((ccp_path, repository_root))
         if self.outputs is not None:
             return self.outputs
-        resource = {"schema_version": "1.0", "policy_version": "macos-v5", "platform": "macos", "capability": "supported_enforced",
-            "decision": "admit", "available_percent": 30.0, "reclaimable_uncompressed_bytes": 5 * 1024**3,
-            "compressor_occupied_bytes": 0, "total_memory_bytes": 16 * 1024**3, "swap_used_bytes": 0,
-            "swap_total_bytes": 0, "consecutive_soft_samples": 0}
-        lock = {"kind": "slot", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None,
-                "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"}
-        admission = {"schema_version": "1.0", "active": False, "queue_count": 0, "ticket_ids": [], "slot": lock,
-                     "queue_lock": {**lock, "kind": "queue_lock"}, "process_visibility_note": "synthetic"}
+        captured_version = _active_producer_fixture("version.txt")
+        version = captured_version if self.version == captured_version.decode("ascii").strip() else self.version.encode("ascii")
         return (
-            GuardPreflightOutput("ccp_version", 0, self.version.encode()),
-            GuardPreflightOutput("resource_status", 0, json.dumps(resource, separators=(",", ":")).encode()),
-            GuardPreflightOutput("admission_status", 0, json.dumps(admission, separators=(",", ":")).encode()),
+            GuardPreflightOutput("ccp_version", 0, version),
+            GuardPreflightOutput("resource_status", 0, _active_producer_fixture("resource-status-admit.json")),
+            GuardPreflightOutput("admission_status", 0, _active_producer_fixture("admission-status-free.json")),
             GuardPreflightOutput("git_source_state", 0, json.dumps({"head": self.source_head, "clean": True}, separators=(",", ":")).encode()),
             GuardPreflightOutput("docker_context", 0, b"orbstack\n"),
             GuardPreflightOutput("docker_active_count", 0, b""),
@@ -90,15 +91,17 @@ class A0XCcpExecutorTests(unittest.TestCase):
         from latent_triz import a0x_ccp_executor as executor
         validator = getattr(executor, "_validate_active_guard_status", None)
         self.assertTrue(callable(validator), "active producer status validator is absent")
-        resource = {"schema_version": "1.0", "policy_version": "macos-v5", "platform": "macos",
-            "capability": "supported_enforced", "decision": "admit", "available_percent": 30.0,
-            "reclaimable_uncompressed_bytes": 5 * 1024**3, "compressor_occupied_bytes": 0,
-            "total_memory_bytes": 16 * 1024**3, "swap_used_bytes": 8 * 1024**3,
-            "swap_total_bytes": 12 * 1024**3, "consecutive_soft_samples": 0}
-        lock = {"kind": "slot", "state": "free", "owner_run_id": None, "acquired_at_unix_seconds": None,
-                "heartbeat_at_unix_seconds": None, "lease_state": "not_applicable"}
-        admission = {"schema_version": "1.0", "active": False, "queue_count": 0, "ticket_ids": [],
-                     "slot": lock, "queue_lock": {**lock, "kind": "queue_lock"}, "process_visibility_note": "synthetic"}
+        resource = json.loads(_active_producer_fixture("resource-status-admit.json"))
+        resource.update({
+            "available_percent": 30.0,
+            "reclaimable_uncompressed_bytes": 5 * 1024**3,
+            "compressor_occupied_bytes": 0,
+            "total_memory_bytes": 16 * 1024**3,
+            "swap_used_bytes": 8 * 1024**3,
+            "swap_total_bytes": 12 * 1024**3,
+            "consecutive_soft_samples": 0,
+        })
+        admission = json.loads(_active_producer_fixture("admission-status-free.json"))
         validator(resource, admission)
         for changed in ({**resource, "policy_version": "macos-v4"}, {"decision": "admit"},
                         {**resource, "available_percent": 19}, {**resource, "reclaimable_uncompressed_bytes": 2 * 1024**3}):
@@ -462,8 +465,9 @@ class A0XCcpExecutorTests(unittest.TestCase):
         from latent_triz.a0x_ccp_executor import SubprocessGuardPreflightProducer
 
         responses = iter((
-            b"commit-ci-preflight 0.1.0\n", b"## agent/test\n", ("a" * 40 + "\n").encode(), b'{"decision":"admit"}',
-            b'{"active":false,"queue_count":0,"slot":{"state":"free"}}',
+            _active_producer_fixture("version.txt"), b"## agent/test\n", ("a" * 40 + "\n").encode(),
+            _active_producer_fixture("resource-status-admit.json"),
+            _active_producer_fixture("admission-status-free.json"),
             b"orbstack\n", b"",
         ))
         calls: list[tuple[str, ...]] = []

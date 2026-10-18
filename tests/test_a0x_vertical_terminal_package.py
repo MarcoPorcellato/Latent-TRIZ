@@ -208,6 +208,175 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
         with self.assertRaises(A0XVerticalTerminalPackageError):
             terminal_package._validate_terminal_result(result,expected)
 
+    def _production_material_fixture(self):
+        """Real production verifier, public declarations, synthetic receipts only.
+
+        Only the expensive source/runtime graph-admission loader is doubled.
+        Capability membership, selection receiver, material verification,
+        package construction and terminal verification remain real. This
+        disposable fixture is not evidence of model execution or target truth.
+        """
+        import copy
+        from latent_triz import a0x_vertical_production_adapter as adapter
+        from latent_triz.a0x_contract import (
+            APPROVAL_DOSSIER_PROFILE, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE,
+            PairBinding, canonical_commitment,
+        )
+        from latent_triz.a0x_execution import (
+            LegFreezeBinding, OneShotTargetReader, _load_a0_public_selection,
+        )
+        from tests.test_a0x_vertical_material import A0XVerticalMaterialTests
+
+        engineering, result = self._engineering_fixture()
+        original = self._last_fixture_context
+        source = Path(__file__).resolve().parents[1]
+        public_paths = (
+            "experiments/a0x-six-model/a0-selection-manifest.json",
+            "experiments/a0x-six-model/protected-a0-tree.json",
+            "experiments/a0x-six-model/freeze/a0-freeze.json",
+            "experiments/a0x-six-model/approval-dossiers/a0/smollm2_360m.json",
+            "data/a0/manifest.json",
+            "experiments/a0x-six-model/a0/protocol.json",
+        )
+        for relative in public_paths:
+            destination = self.root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes((source / relative).read_bytes())
+
+        freeze_raw = (self.root / public_paths[2]).read_bytes()
+        freeze_value = json.loads(freeze_raw)
+        pair = original.public_identity()["pair_binding"]
+        pair["leg_freeze_sha256"] = hashlib.sha256(freeze_raw).hexdigest()
+        selection = _load_a0_public_selection(
+            self.root, LegFreezeBinding(
+                leg=PairBinding.from_mapping(pair).leg,
+                leg_freeze_sha256=pair["leg_freeze_sha256"],
+                selection_corpus_sha256=freeze_value["identity"]["selection_corpus_sha256"],
+                protocol_id=freeze_value["identity"]["protocol_id"],
+                protocol_sha256=freeze_value["protocol_sha256"],
+                implementation_sha256=freeze_value["implementation_sha256"],
+                protected_tree_sha256=freeze_value["identity"]["protected_tree_sha256"],
+                source_base_commit=freeze_value["identity"]["source_base_commit"],
+            ),
+        )
+        # Exercise the actual receiver against synthetic rows in the temporary
+        # root. Its selection hash is not calculated by the test expectation.
+        sentinel = self.root / "synthetic-receiver-input.jsonl"
+        sentinel_raw = b"".join((json.dumps({"case_id": name}) + "\n").encode()
+                                for name in selection.expected_case_ids)
+        sentinel.write_bytes(sentinel_raw)
+        receiver = OneShotTargetReader(
+            path=sentinel, expected_sha256=hashlib.sha256(sentinel_raw).hexdigest(),
+            selection=selection, activation_receipt_sha256="a" * 64,
+            dense_sha256="b" * 64, index_sha256="c" * 64,
+            authorization_chain=json.loads((self.root / ".a0x-runtime/engineering/material/target-read-receipt.json").read_bytes())["authorization_chain"],
+            pair_binding=pair, receipt_path=self.root / "synthetic-receiver-receipt.json",
+        )
+        _rows, receiver_receipt = receiver.read_jsonl_once()
+
+        helper = A0XVerticalMaterialTests()
+        try:
+            other_root, binding, prepared, head, tree = helper._prepared_v2_graph()
+            authorization = helper._v4_authorization(other_root, binding, prepared, head, tree,
+                                                     qualification_context="production")
+        finally:
+            helper.doCleanups()
+        authorization["pair_binding"] = pair
+        dossier = json.loads((self.root / public_paths[3]).read_bytes())
+        chain = {
+            "dossier_commitment": canonical_commitment(dossier, APPROVAL_DOSSIER_PROFILE).as_mapping(),
+            "authorization_commitment": canonical_commitment(authorization, VERTICAL_EXECUTION_AUTHORIZATION_PROFILE).as_mapping(),
+        }
+        material_base = self.root / ".a0x-runtime/gate-c/v2" / original.source_head / original.source_tree / "a0" / pair["model_key"] / pair["run_id"] / "material"
+        material_base.mkdir(parents=True)
+        retained = {}
+        for role, name in terminal_package._MATERIAL_EVIDENCE_MEMBERS.items():
+            value = json.loads((self.root / ".a0x-runtime/engineering/material" / name).read_bytes())
+            if "pair_binding" in value:
+                value["pair_binding"] = pair
+            if "authorization_chain" in value:
+                value["authorization_chain"] = chain
+            retained[role] = value
+        retained["target"]["selection_corpus_sha256"] = receiver_receipt.selection_corpus_sha256
+        declared = json.loads((self.root / public_paths[1]).read_bytes())
+        retained["target"]["observed_sha256"] = next(item["sha256"] for item in declared["entries"]
+                                                       if item["entry_kind"] == "sealed_target")
+        retained["statistic"]["authorization_chain"] = chain
+        retained["analysis_seal"]["statistical_result"] = retained["statistic"]
+        selected = json.loads((self.root / public_paths[0]).read_bytes())
+        corpus = json.loads((self.root / "data/a0/manifest.json").read_bytes())
+        protocol = json.loads((self.root / "experiments/a0x-six-model/a0/protocol.json").read_bytes())
+        # Simulated observations use the public input commitments, never the
+        # protected inputs. This receipt remains test-only synthetic evidence.
+        retained["calibration"]["input_hashes"] = {
+            "protocol": protocol["source_protocol_raw_sha256"],
+            "cases": selected["source_cases_sha256"],
+            "targets": corpus["files"]["calibration_targets_jsonl"]["sha256"],
+        }
+        mechanical = retained["calibration"]["mechanical_evidence_contract"]
+        mechanical.update(python_version="3.11.16", unicode_version="14.0.0")
+        retained["calibration"]["mechanical_evidence_sha256"] = hashlib.sha256(
+            terminal_package._canonical_json(mechanical)).hexdigest()
+        for role in ("calibration", "activation", "target", "statistic", "analysis_seal"):
+            if role == "target":
+                retained[role]["activation_receipt_sha256"] = hashlib.sha256((material_base / terminal_package._MATERIAL_EVIDENCE_MEMBERS["activation"]).read_bytes()).hexdigest()
+            if role == "analysis_seal":
+                retained[role]["target_read_receipt_sha256"] = hashlib.sha256((material_base / terminal_package._MATERIAL_EVIDENCE_MEMBERS["target"]).read_bytes()).hexdigest()
+            destination = material_base / terminal_package._MATERIAL_EVIDENCE_MEMBERS[role]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(terminal_package._canonical_json(retained[role]) + b"\n")
+
+        def rebind(document):
+            value = copy.deepcopy(terminal_package._plain_json(document))
+            value["pair_binding"] = pair
+            return value
+        trust = {path: identity for path, identity in original.trust_file_identities.items()
+                 if not path.startswith(".a0x-runtime/engineering/material/")}
+        for relative in public_paths:
+            raw = (self.root / relative).read_bytes(); info = (self.root / relative).stat()
+            trust[relative] = {"device": info.st_dev, "inode": info.st_ino,
+                               "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+        context = replace(original, pair_binding=terminal_package._freeze_json(pair), qualification_context="production",
+                          gate_c_authorization=terminal_package._freeze_json(authorization),
+                          descriptor=terminal_package._freeze_json(rebind(original.descriptor)),
+                          readiness=terminal_package._freeze_json({**rebind(original.readiness), "python": {"version": "3.11.16"}}),
+                          gate_a_evidence=terminal_package._freeze_json(rebind(original.gate_a_evidence)),
+                          execution_inlet=terminal_package._freeze_json(rebind(original.execution_inlet)),
+                          trust_file_identities=terminal_package._freeze_json(trust))
+        capability = adapter._ValidatedProductionCapability(
+            self.root, "synthetic-admitted-descriptor.json", context,
+            terminal_package._freeze_json({"approval-dossier.json": dossier, "protocol.json": protocol}), adapter._PRODUCTION_CAPABILITY,
+        )
+        # Graph acquisition is an external prerequisite of this verifier test;
+        # every downstream production validation runs without replacement.
+        admission = patch.object(adapter, "load_vertical_production_capability", return_value=capability)
+        admission.start(); self.addCleanup(admission.stop)
+        material_context = terminal_package.capture_material_evidence(self.root, context)
+        expected = VerticalTerminalExpectation.from_production_capability(
+            capability, material_context=material_context,
+            external_assets={item.role: self.root / item.path for item in engineering.external_assets},
+        )
+        result.update(expected.identity())
+        result["result_payload"] = {"statistical_result_sha256": hashlib.sha256(
+            (material_base / terminal_package._MATERIAL_EVIDENCE_MEMBERS["statistic"]).read_bytes()).hexdigest()}
+        return expected, result
+
+    def test_production_selection_receipt_uses_frozen_selection_hash_not_corpus_hash(self):
+        expected, result = self._production_material_fixture()
+        try:
+            terminal_package._verify_material_evidence(self.root, expected, result)
+        except A0XVerticalTerminalPackageError as error:
+            self.fail(f"valid receiver selection binding was refused: {error}")
+        destination = self.root / expected.pair_binding["output_path"]
+        reference = build_vertical_terminal_package(repository_root=self.root, destination=destination,
+                                                    expected=expected, terminal_result=result)
+        verified = verify_vertical_terminal_package(repository_root=self.root, package_root=destination,
+            expected=expected, expected_manifest_sha256=reference.manifest_sha256,
+            expected_root_receipt_sha256=reference.root_receipt_sha256)
+        self.assertEqual("production", verified.qualification_context)
+        self.assertEqual("null", verified.scientific_outcome)
+        self.assertFalse(verified.publication_eligible)
+
     def test_private_execution_evidence_rejects_self_consistently_rehashed_wrong_count(self):
         expected,result=self._engineering_fixture()
         terminal_package._verify_material_evidence(self.root,expected,result)
