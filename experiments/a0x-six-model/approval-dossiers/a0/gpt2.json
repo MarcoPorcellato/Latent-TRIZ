@@ -6,7 +6,7 @@
   "empirical": true,
   "evidence_eligible": false,
   "expert_validated": false,
-  "implementation_source_head": "641905b4dfea34d8fda8b9f481159fa214e37146",
+  "implementation_source_head": "a7c4ee0cce33b105e5a5526371131923634126d8",
   "material_contract_path": "experiments/a0x-six-model/material-execution-contract.json",
   "material_contract_raw_sha256": "6063c3e351609a0f4d787e2d50eb7d0c0a4f28226597cc14003c5d4802de6143",
   "pair_binding": {
@@ -29,7 +29,7 @@
       "view_site_count": 10
     },
     "leg": "a0",
-    "leg_freeze_sha256": "85800dfb7eb44201489fc342d140140ed4b5ee3dea940b980d0a577e21cc8c05",
+    "leg_freeze_sha256": "a9edc01084ef056b03701e847a1a7637094dc68b8410b7fa100c913bd1a4d49d",
     "model_id": "openai-community/gpt2",
     "model_key": "gpt2",
     "output_path": "results/a0x/a0/gpt2/a0x-a0-gpt2-607a30d7-attempt-01",

@@ -28,9 +28,9 @@
       "sha256": "76800cbdcf5db80b4f025c254de8936b4ceef8842702807ae426f03c0363d079"
     },
     {
-      "bytes": 38256,
+      "bytes": 38323,
       "path": "Makefile",
-      "sha256": "629d78dc2d4b64535840a962b7c004b1aba2f629d6078498264ca83d9d81d74c"
+      "sha256": "a40cb9718397306a3a2549cd067a98964dc4e8004b2f8079d52f6f6f71097edb"
     },
     {
       "bytes": 5164,
@@ -343,9 +343,9 @@
       "sha256": "4d3d764a2224c3777aeb3ea5875aa03d151fa15742af93d1cee6058b92b9a49b"
     },
     {
-      "bytes": 4584,
+      "bytes": 4982,
       "path": "scripts/a0x_vertical_material.py",
-      "sha256": "14d8357f9c99beba3389c84ce5cf364273e11813068744c5fd79b402c36455d9"
+      "sha256": "042ad14d18060e91ec2fb037798dfdf806d6b2999de3b57499c7d6f60e51fcbe"
     },
     {
       "bytes": 43585,
@@ -403,9 +403,9 @@
       "sha256": "6e862c4b0d88a1450c86551d1309726e55fd16f7ef4f073b30146125ca566158"
     },
     {
-      "bytes": 128305,
+      "bytes": 171684,
       "path": "src/latent_triz/a0x_ccp_executor.py",
-      "sha256": "edeb2f8eaa44299ec8db51793c10ef34139cfa3c4ac2ed456154a01079a2bf1a"
+      "sha256": "f45d81ab60e2e8025e23db262bca7e72bfc7914346ca6a8f4c63fc80fcf1e149"
     },
     {
       "bytes": 7989,
@@ -423,9 +423,9 @@
       "sha256": "16d137cb84ac7148f55edd8ad5ab5ccbfbec3a3156324bb5f6954067af0b8d13"
     },
     {
-      "bytes": 60638,
+      "bytes": 61134,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "115386e5d0e7641c2e8482769f4a132af819321c42dddfcd7fe8614bf48f6dd1"
+      "sha256": "86fa925c41742ebeb75ca01f0e1a9024516b4b213787957af5d9024613360f70"
     },
     {
       "bytes": 50136,
@@ -538,9 +538,9 @@
       "sha256": "4f4089341cafb702fcac351c9b65d7e1a77ac40c7b3157083808e11c2a369632"
     },
     {
-      "bytes": 89150,
+      "bytes": 89283,
       "path": "src/latent_triz/a0x_vertical_terminal_package.py",
-      "sha256": "6b9be18f049d16fabe09fadae1562141653c909a70dc0623afa3229297598a75"
+      "sha256": "79c247770d69c7d6efdffb5ba68f37fe219f22c25d132a3d9d9a8639c82e06f9"
     },
     {
       "bytes": 6571,
@@ -556,6 +556,36 @@
       "bytes": 49721,
       "path": "tests/a0x_test_support.py",
       "sha256": "60c723a141f939a0896925b93fbd76db59a77ae432b79122c117c2fd5eec96dc"
+    },
+    {
+      "bytes": 3894,
+      "path": "tests/fixtures/a0x/ccp-active-producer/PROVENANCE.json",
+      "sha256": "d910480be865302077caecbfc58580606070422bbfd8cd41aafc57063c21ccb1"
+    },
+    {
+      "bytes": 489,
+      "path": "tests/fixtures/a0x/ccp-active-producer/admission-status-free.json",
+      "sha256": "6ff8e62fff2e0d38a7e4a65cc0e73ec2c0bd26bbcdbd35ec5a4ca8f0c64944e8"
+    },
+    {
+      "bytes": 596,
+      "path": "tests/fixtures/a0x/ccp-active-producer/admission-status-released.json",
+      "sha256": "22af077eb0af8344b3e434928cf3e36d32cfc6dc355263df36267ff696cc1873"
+    },
+    {
+      "bytes": 2208,
+      "path": "tests/fixtures/a0x/ccp-active-producer/guard-exec-help.txt",
+      "sha256": "9614d4a0d8ef0f3baf75d50df83b0c0d00a7ac92e6613f8596aa43155e63f5cd"
+    },
+    {
+      "bytes": 355,
+      "path": "tests/fixtures/a0x/ccp-active-producer/resource-status-admit.json",
+      "sha256": "d3c709d341e6e9a5ec0b582b56614a878855881b8ba2e0f7eff91116079008d0"
+    },
+    {
+      "bytes": 26,
+      "path": "tests/fixtures/a0x/ccp-active-producer/version.txt",
+      "sha256": "26f9e06d2bafbd7a1ee16e9b7e8b8ffe7397cbec17ecfb2771e1f97708904b0b"
     },
     {
       "bytes": 5758,
@@ -603,6 +633,11 @@
       "sha256": "a119c1a71350ae5034cba34c5d1bc1047a409488570c5d1e59513860bb9d5083"
     },
     {
+      "bytes": 8602,
+      "path": "tests/test_a0x_active_ccp_contract.py",
+      "sha256": "8a6be06b41ca579b3ccc170ceecb59672643ed0f4695bb509778c120366c705e"
+    },
+    {
       "bytes": 6278,
       "path": "tests/test_a0x_apfs.py",
       "sha256": "d86698fe26985ad79263a89d3297371525776e68a40ca58748a557c56717cb2e"
@@ -618,9 +653,9 @@
       "sha256": "2900faa43273d10616e6093bc99d17a6b420ab632b0922886976f75b563ae113"
     },
     {
-      "bytes": 51228,
+      "bytes": 50538,
       "path": "tests/test_a0x_ccp_executor.py",
-      "sha256": "9cf0cd6a00b9fcc7e3134c316d3aa2c317f6f12a18c381b15240de52574251d4"
+      "sha256": "5f10d5d7b5d9a128840fbadc142959b31fc2a774933f91a7aef953aed2b18cbf"
     },
     {
       "bytes": 26479,
@@ -651,6 +686,11 @@
       "bytes": 36391,
       "path": "tests/test_a0x_gate_b_builder.py",
       "sha256": "8dede33c6b9cf589472f796780e878961a36fd37b63eb1c99724e4405a0c5ca9"
+    },
+    {
+      "bytes": 43456,
+      "path": "tests/test_a0x_gate_c_preflight.py",
+      "sha256": "3dc04f458e24103df75979109228257f12201078b9bb043676ad0efb693be78c"
     },
     {
       "bytes": 50668,
@@ -763,9 +803,9 @@
       "sha256": "8d815a8e8bf20408f2e3c0cc785ff34e1ed510e8bdd0cbf81e61f86163038187"
     },
     {
-      "bytes": 59083,
+      "bytes": 59390,
       "path": "tests/test_a0x_vertical_material.py",
-      "sha256": "33af58f8a56abd70cf216b5a5950c30f95ec61713bd5555846dbf06652c410a3"
+      "sha256": "7de96949623a8ff173e83c34922396a394daf251bf4f116fcd841731fabc7c40"
     },
     {
       "bytes": 3414,
@@ -775,7 +815,7 @@
     {
       "bytes": 102488,
       "path": "tests/test_a0x_vertical_p0_bootstrap.py",
-      "sha256": "218997b9066b8cd4db30591f23edac8eb43ff4b05575eae8eecde8bdaef2dc0f"
+      "sha256": "e215ce66417c46f3f83265eec8cc9b7f3dc4b33cc50a370ecd4106d7a29b494f"
     },
     {
       "bytes": 8877,
@@ -803,9 +843,9 @@
       "sha256": "b0aaaadd149f72eb6eeb8ea924f045ab5656987e802a7cd6e44bd64fd05a5a38"
     },
     {
-      "bytes": 45317,
+      "bytes": 56320,
       "path": "tests/test_a0x_vertical_terminal_package.py",
-      "sha256": "afd69ebacadf5af1d8bd88263ded6caa8bc4c1ae0a937d1b8dba06acd5033340"
+      "sha256": "55da7205c196f6bc70cd9021136f3bc5108b82e92f385175b1180115a2a5d49c"
     },
     {
       "bytes": 5990,
@@ -923,6 +963,12 @@
     "src/latent_triz/a0x_wheelhouse.py",
     "src/latent_triz/validator.py",
     "tests/a0x_test_support.py",
+    "tests/fixtures/a0x/ccp-active-producer/PROVENANCE.json",
+    "tests/fixtures/a0x/ccp-active-producer/admission-status-free.json",
+    "tests/fixtures/a0x/ccp-active-producer/admission-status-released.json",
+    "tests/fixtures/a0x/ccp-active-producer/guard-exec-help.txt",
+    "tests/fixtures/a0x/ccp-active-producer/resource-status-admit.json",
+    "tests/fixtures/a0x/ccp-active-producer/version.txt",
     "tests/fixtures/a0x/ccp-matrix-v2-legacy-plan-27adf8d.json",
     "tests/fixtures/a0x/hosted-gate-a/positive/gate-b-authorization.json",
     "tests/fixtures/a0x/hosted-gate-a/positive/gh-2.97.0-verification-result.json",
@@ -932,6 +978,7 @@
     "tests/test_a0_prospective_d1_d7_synthetic.py",
     "tests/test_a0x_a0_analysis.py",
     "tests/test_a0x_activations.py",
+    "tests/test_a0x_active_ccp_contract.py",
     "tests/test_a0x_apfs.py",
     "tests/test_a0x_architecture.py",
     "tests/test_a0x_capture_hosted_gate_a.py",
@@ -942,6 +989,7 @@
     "tests/test_a0x_freeze.py",
     "tests/test_a0x_frozen_package.py",
     "tests/test_a0x_gate_b_builder.py",
+    "tests/test_a0x_gate_c_preflight.py",
     "tests/test_a0x_hosted_capture.py",
     "tests/test_a0x_hosted_gate_a.py",
     "tests/test_a0x_hosted_gate_a_workflow.py",
