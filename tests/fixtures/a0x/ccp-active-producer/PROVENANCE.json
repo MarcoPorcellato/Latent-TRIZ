@@ -1,0 +1,168 @@
+{
+  "binary_sha256": "45127a90f1adace54547ccb997d2a1914fe421e8062b51a9ddd09fd9d5538bc2",
+  "fixtures": [
+    {
+      "argv": [
+        "{CCP}",
+        "--version"
+      ],
+      "bytes": 26,
+      "exit_code": 0,
+      "kind": "captured-pinned-producer",
+      "path": "version.txt",
+      "sha256": "26f9e06d2bafbd7a1ee16e9b7e8b8ffe7397cbec17ecfb2771e1f97708904b0b"
+    },
+    {
+      "argv": [
+        "{CCP}",
+        "admission",
+        "status",
+        "--json"
+      ],
+      "bytes": 489,
+      "exit_code": 0,
+      "kind": "captured-pinned-producer",
+      "path": "admission-status-free.json",
+      "sha256": "6ff8e62fff2e0d38a7e4a65cc0e73ec2c0bd26bbcdbd35ec5a4ca8f0c64944e8"
+    },
+    {
+      "argv": [
+        "{CCP}",
+        "resource",
+        "status",
+        "--json"
+      ],
+      "bytes": 355,
+      "exit_code": 0,
+      "kind": "captured-pinned-producer",
+      "path": "resource-status-admit.json",
+      "sha256": "d3c709d341e6e9a5ec0b582b56614a878855881b8ba2e0f7eff91116079008d0"
+    },
+    {
+      "argv": [
+        "{CCP}",
+        "guard",
+        "exec",
+        "--help"
+      ],
+      "bytes": 2208,
+      "exit_code": 0,
+      "kind": "captured-pinned-producer",
+      "path": "guard-exec-help.txt",
+      "sha256": "9614d4a0d8ef0f3baf75d50df83b0c0d00a7ac92e6613f8596aa43155e63f5cd"
+    }
+  ],
+  "historical_handwritten_hybrid_statuses_are_not_active_producer_evidence": true,
+  "profile": "a0x-ccp-active-producer-fixtures-v1",
+  "source_commit": "1015a0b42962dbf18334fd6dfc0d9148551d4984",
+  "source_derived_admission_states": [
+    {
+      "bytes": 596,
+      "expected_validator_result": "admit",
+      "kind": "source-derived-not-captured",
+      "name": "released-postflight",
+      "path": "admission-status-released.json",
+      "sha256": "22af077eb0af8344b3e434928cf3e36d32cfc6dc355263df36267ff696cc1873"
+    },
+    {
+      "expected_validator_result": "busy",
+      "kind": "source-derived-mutation",
+      "name": "held",
+      "shape": {
+        "active": true,
+        "queue_count": 0,
+        "slot": {
+          "lease_state": "active",
+          "owner_run_id": "synthetic-opaque-owner",
+          "state": "held"
+        }
+      }
+    },
+    {
+      "expected_validator_result": "busy",
+      "kind": "source-derived-mutation",
+      "name": "queued",
+      "shape": {
+        "active": false,
+        "queue_count": 1,
+        "ticket_ids": [
+          "synthetic-opaque-ticket"
+        ],
+        "slot": {
+          "lease_state": "absent",
+          "state": "free"
+        }
+      }
+    },
+    {
+      "expected_validator_result": "invalid-or-unsupported",
+      "kind": "source-derived-mutation",
+      "name": "expired-held-lease",
+      "shape": {
+        "active": true,
+        "queue_count": 0,
+        "slot": {
+          "lease_state": "expired",
+          "owner_run_id": "synthetic-opaque-owner",
+          "state": "held"
+        }
+      }
+    }
+  ],
+  "source_references": [
+    {
+      "blob_sha256": "02767d8858de5e23ca7e811d13dec428e452cdb27e44646576058384f92e2f72",
+      "lines": [
+        [
+          30,
+          31
+        ],
+        [
+          91,
+          110
+        ],
+        [
+          323,
+          356
+        ],
+        [
+          823,
+          875
+        ],
+        [
+          1031,
+          1089
+        ],
+        [
+          1184,
+          1204
+        ],
+        [
+          1366,
+          1371
+        ],
+        [
+          1968,
+          1978
+        ],
+        [
+          2046,
+          2054
+        ]
+      ],
+      "path": "src/admission.rs"
+    },
+    {
+      "blob_sha256": "586a52b25a6de4baf6355c93a021c808fe7311935ea4b7068f74eec3c5c26157",
+      "lines": [
+        [
+          87,
+          130
+        ]
+      ],
+      "path": "docs/COORDINATION_RUNBOOK.md"
+    }
+  ],
+  "source_tree": "2ebad04d6dc718c7aaa2534d304cde7797460a97",
+  "version": "commit-ci-preflight 0.1.0"
+}

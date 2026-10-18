@@ -213,16 +213,20 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
         self_terminal = self._synthetic_vertical_terminal(authorization)
 
+        events = []
+
         class CountingSynthetic(_SyntheticExecutableIdentityVerifier):
             def __init__(self):
                 self.calls = []
 
             def verify(self, **kwargs):
                 self.calls.append(kwargs["role"])
+                events.append(("verify", kwargs["role"]))
                 return super().verify(**kwargs)
 
         class Inert:
             def run(self, *args, **kwargs):
+                events.append(("guard",))
                 terminal = self_terminal
                 return ProcessResult(0, hashlib.sha256(terminal).hexdigest(), len(terminal), "0" * 64, 0, stdout_prefix=terminal)
 
@@ -237,9 +241,11 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             executable_identity_verifier=verifier,
         )
         self.assertEqual(
-            ["child", "ccp", "python"] * 4,
+            ["child", "ccp", "python"] * 3,
             verifier.calls,
         )
+        role_checks = [("verify", role) for role in ("child", "ccp", "python")]
+        self.assertEqual(role_checks * 2 + [("guard",)] + role_checks, events)
 
     def test_v2_gate_c_refuses_mixed_identity_context_before_guard(self) -> None:
         """A later non-synthetic identity cannot reuse a synthetic private run."""
@@ -595,8 +601,8 @@ class A0XVerticalMaterialTests(unittest.TestCase):
             )
         self.assertEqual(0, inert.calls)
 
-    def test_v2_gate_c_post_claim_source_drift_seals_recovery_before_guard(self) -> None:
-        """A claim is consumed when the final source boundary drifts."""
+    def test_v2_gate_c_final_source_drift_refuses_before_claim_or_guard(self) -> None:
+        """The final source boundary now precedes the permission window and claim."""
         from latent_triz.a0x_ccp_executor import _launch_validated_vertical_v2, vertical_execution_authorization_path
         from tests.test_a0x_ccp_executor import _FakeGuardPreflight
 
@@ -605,8 +611,9 @@ class A0XVerticalMaterialTests(unittest.TestCase):
         path = root / vertical_execution_authorization_path(binding)
         path.parent.mkdir(parents=True)
         path.write_bytes(json.dumps(authorization, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-        states = iter(((head, tree, True), (head, tree, True), (head, "f" * 40, True)))
-        executor = mock.Mock(side_effect=AssertionError("guard reached"))
+        states = iter(((head, tree, True), (head, "f" * 40, True)))
+        executor = mock.Mock()
+        executor.run.side_effect = AssertionError("guard reached")
 
         with self.assertRaises(A0XCcpExecutorError):
             _launch_validated_vertical_v2(
@@ -618,11 +625,11 @@ class A0XVerticalMaterialTests(unittest.TestCase):
                 ),
                 executable_identity_verifier=_SyntheticExecutableIdentityVerifier(),
             )
-        executor.assert_not_called()
-        self.assertTrue(path.with_name("attempt-claim.json").is_file())
-        terminal = json.loads((path.parent / "observations" / "terminal-observation.json").read_text())
-        self.assertTrue(terminal["recovery_required"])
-        self.assertEqual("recovery_required", terminal["outer_exit_classification"])
+        executor.run.assert_not_called()
+        self.assertFalse(path.with_name("attempt-claim.json").exists())
+        self.assertFalse((path.parent / "material").exists())
+        self.assertFalse((path.parent / "observations" / "pre-run-observation.json").exists())
+        self.assertFalse((path.parent / "observations" / "terminal-observation.json").exists())
 
     def test_v2_gate_c_refuses_a_terminal_prefix_with_unobserved_extra_output(self) -> None:
         """A captured prefix is not an exact terminal record when output was truncated."""

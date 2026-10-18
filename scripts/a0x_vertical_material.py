@@ -17,6 +17,7 @@ from latent_triz.a0x_ccp_executor import (
     A0XCcpExecutorError,
     launch_vertical_runtime_package,
     launch_vertical_slice_dossier,
+    preflight_vertical_runtime_package,
 )
 from latent_triz.a0x_runtime_bundle import vertical_package_binding_from_commitment
 
@@ -71,13 +72,15 @@ def main(argv: list[str] | None = None) -> int:
     historical.add_argument("--leg", required=True)
     historical.add_argument("--model-key", required=True)
     vertical = commands.add_parser("vertical-v2")
-    vertical.add_argument("--vertical-commitment", required=True)
-    vertical.add_argument("--vertical-commitment-raw-sha256", required=True)
-    vertical.add_argument("--execution-authorization", required=True)
-    vertical.add_argument("--execution-authorization-raw-sha256", required=True)
+    preflight = commands.add_parser("vertical-v2-preflight")
+    for command in (vertical, preflight):
+        command.add_argument("--vertical-commitment", required=True)
+        command.add_argument("--vertical-commitment-raw-sha256", required=True)
+        command.add_argument("--execution-authorization", required=True)
+        command.add_argument("--execution-authorization-raw-sha256", required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == "vertical-v2":
+        if args.command in {"vertical-v2", "vertical-v2-preflight"}:
             _external_raw_sha256(
                 args.vertical_commitment,
                 expected=args.vertical_commitment_raw_sha256,
@@ -89,7 +92,12 @@ def main(argv: list[str] | None = None) -> int:
                 label="vertical execution authorization",
             )
             binding = vertical_package_binding_from_commitment(ROOT, args.vertical_commitment)
-            result = launch_vertical_runtime_package(
+            launcher = (
+                preflight_vertical_runtime_package
+                if args.command == "vertical-v2-preflight"
+                else launch_vertical_runtime_package
+            )
+            result = launcher(
                 repository_root=ROOT, package_binding=binding,
                 execution_authorization_path=args.execution_authorization,
             )
@@ -104,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     except A0XCcpExecutorError as error:
         print(f"a0x-vertical-material: {error}", file=sys.stderr)
         return 2
-    print(result.get("terminal_observation_path", result["status"]))
+    print(result.get("preflight_report_path", result.get("terminal_observation_path", result["status"])))
     return 0
 
 

@@ -1,0 +1,36 @@
+Run one explicit argv without invoking a shell
+
+Usage: commit-ci-preflight guard exec [OPTIONS] -- <ARGV>...
+
+Arguments:
+  <ARGV>...  Program and arguments. The `--` separator is required
+
+Options:
+      --admission-timeout-seconds <ADMISSION_TIMEOUT_SECONDS>
+          Maximum time to wait for the admission slot in seconds, capped at 24 hours [default: 21600]
+      --timeout-seconds <TIMEOUT_SECONDS>
+          Maximum child runtime in seconds, capped at 24 hours [default: 21600]
+      --resource-profile <RESOURCE_PROFILE>
+          Stable, non-sensitive workload class used only by local resource history [default: guard-exec]
+      --resource-workload-family <RESOURCE_WORKLOAD_FAMILY>
+          Stable, non-sensitive pipeline/cohort identifier used only by local resource history [default: generic-v1]
+      --resource-executor <RESOURCE_EXECUTOR>
+          Execution substrate; direct `docker --context orbstack` argv is detected automatically [possible values: native, orbstack, docker, vm, unknown]
+      --resource-cache-state <RESOURCE_CACHE_STATE>
+          Cache classification supplied by the caller; it never affects admission [default: unknown] [possible values: cold, warm, mixed, unknown]
+      --resource-execution-mode <RESOURCE_EXECUTION_MODE>
+          Native or emulated target execution supplied by the caller [default: unknown] [possible values: native, emulated, unknown]
+      --resource-target-platform <RESOURCE_TARGET_PLATFORM>
+          Bounded non-sensitive target label such as `linux-amd64`
+      --resource-cpu-limit-millis <RESOURCE_CPU_LIMIT_MILLIS>
+          Requested CPU ceiling in millicores, when the runner has one
+      --resource-memory-limit-bytes <RESOURCE_MEMORY_LIMIT_BYTES>
+          Requested memory ceiling in bytes, when the runner has one
+      --no-resource-history
+          Disable local observation history without changing admission or watchdog behavior
+      --managed-cache-root <MANAGED_CACHE_ROOT>
+          Managed cache root paired with one or more completed cache sources
+      --managed-cache-source <MANAGED_CACHE_SOURCE>
+          Completed managed-cache source to pin for the guarded child; repeatable
+  -h, --help
+          Print help

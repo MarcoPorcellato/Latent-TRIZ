@@ -862,8 +862,10 @@ def _verify_material_evidence(repository_root: Path, expected: VerticalTerminalE
         tree_raw,_info=_read_independent(repository_root,"experiments/a0x-six-model/protected-a0-tree.json")
         entries=json.loads(tree_raw)["entries"]
         sealed=[item for item in entries if item.get("entry_kind")=="sealed_target"]
-        if len(sealed)!=1 or target.get("observed_sha256")!=sealed[0]["sha256"] or target.get("selection_corpus_sha256")!=selected["source_corpus_manifest_sha256"]:
-            raise A0XVerticalTerminalPackageError("one-shot receipt differs from independent target or corpus declarations")
+        # The receiver and frozen leg bind the raw selection manifest. Its
+        # source-corpus provenance is a separate hash, checked independently.
+        if len(sealed)!=1 or target.get("observed_sha256")!=sealed[0]["sha256"] or target.get("selection_corpus_sha256")!=_sha(selected_raw):
+            raise A0XVerticalTerminalPackageError("one-shot receipt differs from independent target or selection declarations")
     outcome=result["scientific_outcome"]
     if statistic.get("status")!=outcome or seal.get("status")!=outcome:
         raise A0XVerticalTerminalPackageError("observed statistic or seal outcome differs")

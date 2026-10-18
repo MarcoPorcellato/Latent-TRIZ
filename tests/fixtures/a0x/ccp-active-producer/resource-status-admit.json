@@ -1,0 +1,1 @@
+{"schema_version":"1.0","policy_version":"macos-v5","platform":"macos","capability":"supported_enforced","decision":"admit","available_percent":32,"reclaimable_uncompressed_bytes":6250545152,"compressor_occupied_bytes":16266117120,"total_memory_bytes":38654705664,"swap_used_bytes":27768326717,"swap_total_bytes":28991029248,"consecutive_soft_samples":0}
