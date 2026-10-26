@@ -33,6 +33,33 @@ def _jsonl(rows: list[dict[str, object]]) -> bytes:
 
 
 class A0XExecutionTests(A0XTempTestCase):
+    def test_public_selection_refuses_legacy_calibration_and_malformed_families(self):
+        from latent_triz.a0x_execution import load_a0_public_selection
+
+        for defect in ("calibration", "legacy", "mixed_family", "duplicate_id", "family_count"):
+            with self.subTest(defect=defect):
+                manifest = artifact("a0x-selection-manifest.schema.json")
+                if defect == "calibration":
+                    for row in manifest["cases"]:
+                        row["split"] = "calibration"
+                elif defect == "legacy":
+                    manifest["selection_rule"].pop("policy_version", None)
+                    manifest["selection_rule"].pop("source_split", None)
+                elif defect == "mixed_family":
+                    manifest["cases"][1]["domain"] = "energy"
+                elif defect == "duplicate_id":
+                    manifest["cases"][1]["case_id"] = manifest["cases"][0]["case_id"]
+                else:
+                    manifest["cases"][2]["problem_family_id"] = manifest["cases"][0]["problem_family_id"]
+                source = self.temp_path / defect / "experiments/a0x-six-model/a0-selection-manifest.json"
+                source.parent.mkdir(parents=True)
+                source.write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertRaises(A0XExecutionError):
+                    load_a0_public_selection(
+                        repository_root=self.temp_path / defect,
+                        leg_freeze=self._freeze(Leg.A0, sha256_file(source)),
+                    )
+
     def _schema(self, name: str) -> dict[str, object]:
         root = Path(__file__).resolve().parents[1]
         return json.loads((root / "schemas" / name).read_text(encoding="utf-8"))
@@ -70,8 +97,8 @@ class A0XExecutionTests(A0XTempTestCase):
         root = self.temp_path / f"synthetic-repository-{leg.value}-{hash(case_ids)}"
         if leg is Leg.A0:
             manifest = artifact("a0x-selection-manifest.schema.json")
-            template = manifest["cases"][0]
-            manifest["cases"] = [{**template, "case_id": case_id} for case_id in case_ids]
+            manifest["cases"] = [{**row, "case_id": case_id}
+                                 for row, case_id in zip(manifest["cases"], case_ids)]
             manifest["selected_case_count"] = len(case_ids)
             source = root / "experiments/a0x-six-model/a0-selection-manifest.json"
             source.parent.mkdir(parents=True, exist_ok=True)

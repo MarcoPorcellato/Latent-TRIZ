@@ -374,6 +374,40 @@ def _material_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
+def _material_failure_terminal(context: VerticalProductionContext, attempt_state: Any, stage: str) -> dict[str, Any]:
+    """Describe verified progress, independently of successful failure sealing.
+
+    The lifecycle enters ACTIVATION only after model construction and ANALYSIS
+    only after reader-owned boundary evidence. A failing callback is not proof
+    that its own milestone succeeded. No exception text enters this projection.
+    """
+    from .a0x_execution import AttemptState
+    if attempt_state is AttemptState.PREFLIGHT:
+        frontier = "model_identity" if stage in {"tokenizer_construction", "model_construction"} else "validated_graph"
+    elif attempt_state is AttemptState.ACTIVATION:
+        frontier = "model_loaded"
+    elif attempt_state is AttemptState.ANALYSIS:
+        frontier = "analysis"
+    else:
+        raise A0XVerticalProductionAdapterError("failure has no verified pre-terminal state")
+    if stage == "static_preflight":
+        diagnostic = "PREFLIGHT_FAILED"
+    elif stage in {"model_identity", "tokenizer_construction", "model_construction"}:
+        diagnostic = "MODEL_INCOMPATIBLE"
+    elif stage in {"reader_construction", "target_read"}:
+        diagnostic = "TARGET_READ_FAILED"
+    elif stage in {"frozen_analysis", "terminal_seal"}:
+        diagnostic = "ANALYSIS_FAILED"
+    else:
+        diagnostic = "OUTER_EXECUTION_FAILED"
+    return {
+        "artifact_class": "a0x-vertical-terminal-result", "terminal_profile": "a0x-vertical-terminal-result-v1",
+        **context.public_identity(), "reached_frontier": frontier, "scientific_outcome": "failed",
+        "evidence_eligible": False, "expert_validated": False, "claim_ids": [],
+        "result_payload": {"diagnostic_code": diagnostic},
+    }
+
+
 def _run_a0_material_stages(context: VerticalProductionContext, inputs: _MaterialInputs, *, production_capability: Any = None) -> dict[str, Any]:
     """Shared real calibration/loader/extraction/analysis/sealing/package path."""
     from .a0x_contract import Leg
@@ -481,14 +515,12 @@ def _run_a0_material_stages(context: VerticalProductionContext, inputs: _Materia
             "evidence_eligible": False, "expert_validated": False, "claim_ids": [], "result_payload": payload}
     def failure(attempt_state, stage, error, _pair):
         write("material-failure.json", {"stage": stage, "error_type": type(error).__name__, "error": str(error)[:300], "sealed_from_state": attempt_state.value})
-        return {"artifact_class": "a0x-vertical-terminal-result", "terminal_profile": "a0x-vertical-terminal-result-v1",
-            **context.public_identity(), "reached_frontier": "validated_graph", "scientific_outcome": "failed",
-            "evidence_eligible": False, "expert_validated": False, "claim_ids": [], "result_payload": {"diagnostic_code": "MODEL_INCOMPATIBLE" if stage == "model_construction" else "PREFLIGHT_FAILED"}}
+        return _material_failure_terminal(context, attempt_state, stage)
     def package(terminal, _check):
         assets = None
         material_context = context
         artifacts = state.get("activation")
-        if terminal["reached_frontier"] == "sealed" and artifacts is not None:
+        if terminal["scientific_outcome"] in {"positive", "null", "non_interpretable"} and artifacts is not None:
             base = inputs.repository_root / "results/a0x-external-assets" / context.source_head / context.source_tree / "a0" / pair.model_key / pair.run_id
             assets = {"dense": base / "dense-output.bin", "index": base / "representation-index.json"}
             for role, source in (("dense", artifacts.dense_path), ("index", artifacts.index_path)):

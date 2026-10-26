@@ -634,6 +634,8 @@ def artifact(name: str) -> dict[str, object]:
             "source_cases_sha256": sha(3),
             "source_corpus_manifest_sha256": sha(4),
             "selection_rule": {
+                "policy_version": "a0x-a0-sealed-cohort-v1",
+                "source_split": "sealed",
                 "cases_per_family": 2,
                 "families_per_domain": 4,
                 "family_order": "lexicographic",
@@ -642,8 +644,8 @@ def artifact(name: str) -> dict[str, object]:
             "cases": [{
                 "case_id": f"case-{index}",
                 "case_content_sha256": sha(index + 10),
-                "domain": ("agriculture", "energy", "manufacturing", "medicine", "software", "transport")[index % 6],
-                "problem_family_id": f"family-{index // 2}",
+                "domain": ("agriculture", "energy", "manufacturing", "medicine", "software", "transport")[index // 8],
+                "problem_family_id": f"family-{index // 2:02d}",
                 "split": "sealed",
             } for index in range(48)],
             "target_content_reads": 0,

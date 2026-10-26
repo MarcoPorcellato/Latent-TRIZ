@@ -431,7 +431,7 @@ def build_a0_selection_manifest(
     corpus_manifest_path: str | Path,
     selection_path: str = SELECTION_PATH,
 ) -> dict[str, Any]:
-    """Select exactly four lexicographic public problem families per domain."""
+    """Select four sealed families per domain from public metadata only."""
 
     cases_file = Path(cases_path)
     manifest_file = Path(corpus_manifest_path)
@@ -443,16 +443,26 @@ def build_a0_selection_manifest(
 
     selected: list[dict[str, str]] = []
     by_domain: dict[str, dict[str, list[Mapping[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    case_ids: set[str] = set()
+    family_identities: dict[str, tuple[str, str]] = {}
     for record in records:
         domain, family = _public_case_identity(record)
         if domain not in FROZEN_DOMAINS:
             raise A0XFreezeError(f"case uses an unfrozen domain: {domain}")
-        by_domain[domain][family].append(record)
+        case_id, split = str(record["case_id"]), str(record["split"])
+        if case_id in case_ids:
+            raise A0XFreezeError("public selection contains duplicate case IDs")
+        case_ids.add(case_id)
+        identity = (domain, split)
+        if family_identities.setdefault(family, identity) != identity:
+            raise A0XFreezeError("public family has ambiguous domain or split membership")
+        if split == "sealed":
+            by_domain[domain][family].append(record)
 
     for domain in FROZEN_DOMAINS:
         families = sorted(by_domain[domain])
         if len(families) < 4:
-            raise A0XFreezeError(f"domain {domain} does not provide four families")
+            raise A0XFreezeError(f"domain {domain} does not provide four sealed families")
         for family in families[:4]:
             paired = sorted(by_domain[domain][family], key=lambda row: str(row["case_id"]))
             if len(paired) != 2:
@@ -484,6 +494,8 @@ def build_a0_selection_manifest(
         "source_corpus_manifest_path": _repository_relative(manifest_file),
         **source_binding,
         "selection_rule": {
+            "policy_version": "a0x-a0-sealed-cohort-v1",
+            "source_split": "sealed",
             "cases_per_family": 2,
             "families_per_domain": 4,
             "family_order": "lexicographic",

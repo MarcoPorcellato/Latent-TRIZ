@@ -238,7 +238,8 @@ class ProductionDispatcherCoverageTests(unittest.TestCase):
             "selected_case_count": 48, "source_cases_path": "fixture/cases.jsonl",
             "source_corpus_manifest_path": "data/a0/manifest.json",
             "source_cases_sha256": sha(cases_raw), "source_corpus_manifest_sha256": sha(manifest_raw),
-            "selection_rule": {"cases_per_family": 2, "families_per_domain": 4,
+            "selection_rule": {"policy_version": "a0x-a0-sealed-cohort-v1", "source_split": "sealed",
+                               "cases_per_family": 2, "families_per_domain": 4,
                                "family_order": "lexicographic", "domain_order": "frozen"},
             "cases": [{key: row[key] for key in ("case_id", "problem_family_id", "domain", "split")} |
                       {"case_content_sha256": sha(canonical(row))} for row in cases], "target_content_reads": 0,
@@ -295,16 +296,11 @@ class ProductionDispatcherCoverageTests(unittest.TestCase):
             _freeze_json({"approval-dossier.json": dossier, "protocol.json": protocol}), adapter._PRODUCTION_CAPABILITY)
         return capability
 
-    def test_real_production_dispatcher_seals_and_verifies_synthetic_material_once(self):
-        import json
+    def _execute_synthetic_dispatch(self, capability, model):
         import sys
         from types import SimpleNamespace
         from unittest.mock import patch
         from latent_triz import a0x_vertical_production_adapter as adapter
-        from tests.test_a0x_activations import synthetic_hidden_adapter
-
-        capability = self._fixture()
-        model = synthetic_hidden_adapter(layers=33, width=8)
         card = SimpleNamespace(runtime_root="fixture/snapshot")
         # This models an already-admitted Python 3.11 process without loading
         # torch or any tokenizer/weights. Recipe algorithms still run on ASCII
@@ -318,10 +314,18 @@ class ProductionDispatcherCoverageTests(unittest.TestCase):
              patch("latent_triz.a0x_model_adapter.A0XHiddenStateAdapter.load", return_value=model) as load, \
              patch.dict(sys.modules, {"torch": SimpleNamespace(set_num_threads=lambda value: self.assertEqual(1, value))}):
             result = adapter.run_vertical_production(capability)
+        load.assert_called_once()
+        return result
+
+    def test_real_production_dispatcher_seals_and_verifies_synthetic_material_once(self):
+        import json
+        from tests.test_a0x_activations import synthetic_hidden_adapter
+        capability = self._fixture()
+        model = synthetic_hidden_adapter(layers=33, width=8)
+        result = self._execute_synthetic_dispatch(capability, model)
         self.assertEqual("completed", result["lifecycle_status"], result)
         self.assertTrue(result["package_verified"])
         self.assertFalse(result["publication_eligible"])
-        load.assert_called_once()
         self.assertGreater(model.forwards, 0)
         base = capability.repository_root / ".a0x-runtime/gate-c/v2" / capability.context.source_head / capability.context.source_tree / "a0" / "smollm2_360m" / capability.context.pair_binding["run_id"] / "material"
         target = json.loads((base / "target-read-receipt.json").read_bytes())
@@ -330,6 +334,109 @@ class ProductionDispatcherCoverageTests(unittest.TestCase):
         self.assertEqual("PASS", result["calibration_status"])
         self.assertIsNone(model.model)
         self.assertIsNone(model.tokenizer)
+
+    def test_target_read_failure_survives_real_producer_wire_and_parent_package_verification(self):
+        import copy
+        import hashlib
+        import io
+        import json
+        from pathlib import Path
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from latent_triz import a0x_ccp_executor as executor
+        from latent_triz import a0x_vertical_production_adapter as adapter
+        from latent_triz.a0x_contract import PairBinding
+        from scripts.a0x_vertical_material_child import _emit_terminal, _lifecycle_can_complete
+        from tests.test_a0x_activations import synthetic_hidden_adapter
+
+        capability = self._fixture()
+        root, context = capability.repository_root, capability.context
+        # Deliberately corrupt only a disposable synthetic target. The real
+        # receiver must retain its one-read hash-mismatch evidence.
+        (root / "data/a0/sealed-targets/targets.jsonl").write_bytes(b"synthetic mismatch\n")
+        model = synthetic_hidden_adapter(layers=33, width=8)
+        result = self._execute_synthetic_dispatch(capability, model)
+        self.assertEqual("sealed_failure", result["lifecycle_status"], result)
+        self.assertTrue(result["package_verified"])
+        self.assertEqual(1, result["target_content_reads"])
+        self.assertEqual("hash_mismatch", result["target_read_evidence"]["status"])
+        terminal = result["terminal_outcome"]
+        self.assertEqual("analysis", terminal["reached_frontier"])
+        self.assertEqual("failed", terminal["scientific_outcome"])
+        self.assertEqual({"diagnostic_code": "TARGET_READ_FAILED"}, terminal["result_payload"])
+        self.assertTrue(_lifecycle_can_complete(result))
+        self.assertIsNone(model.model)
+        self.assertFalse((root / "results/a0x-external-assets" / context.source_head / context.source_tree
+                          / "a0" / "smollm2_360m" / context.pair_binding["run_id"]).exists())
+        package = Path(result["package_path"])
+        reference = {
+            "package_relative_path": package.relative_to(root).as_posix(),
+            "manifest_raw_sha256": hashlib.sha256((package / "publication-manifest.json").read_bytes()).hexdigest(),
+            "root_receipt_raw_sha256": hashlib.sha256((package / "root-receipt.json").read_bytes()).hexdigest(),
+        }
+        stream = io.StringIO()
+        _emit_terminal(stream, "completed", graph={"descriptor": context.descriptor,
+                       "gate_c_authorization": context.gate_c_authorization},
+                       qualification_context="production", reached_frontier=terminal["reached_frontier"],
+                       scientific_outcome=terminal["scientific_outcome"], terminal_package=reference)
+        wire = stream.getvalue().encode()
+        # Use the same public wire schema and pair parser to expose a fixture
+        # defect separately from an actual parent completion rejection.
+        executor._validate_vertical_raw_schema(json.loads(wire), "a0x-vertical-child-terminal-v1.schema.json", "synthetic child wire")
+        PairBinding.from_mapping(json.loads(wire)["pair_binding"])
+        observed = json.loads(wire)
+        self.assertEqual(executor._canonical_json(observed) + b"\n", wire)
+        self.assertEqual(dict(context.descriptor["qualified_source"]), observed["qualified_source"])
+        self.assertEqual(PairBinding.from_mapping(context.pair_binding).as_mapping(), observed["pair_binding"])
+        self.assertEqual(context.authorization_id, observed["authorization_id"])
+        self.assertEqual(context.attempt_id, observed["attempt_id"])
+        self.assertTrue(executor._valid_vertical_terminal_package_reference(reference, observed["pair_binding"]))
+        parsed = executor._parse_vertical_child_terminal(
+            wire, expected_source=dict(context.descriptor["qualified_source"]),
+            expected_pair=PairBinding.from_mapping(context.pair_binding).as_mapping(), expected_authorization_id=context.authorization_id,
+            expected_attempt_id=context.attempt_id, expected_qualification_context="production",
+        )
+        self.assertIsNotNone(parsed)
+        binding = SimpleNamespace(qualified_source_head=context.source_head,
+                                  qualified_source_tree=context.source_tree,
+                                  pair_binding=PairBinding.from_mapping(dict(context.pair_binding)))
+        with patch.object(adapter, "load_vertical_production_capability", return_value=capability):
+            executor._verify_vertical_parent_package(root, binding, capability.descriptor_path, parsed,
+                                                     parent_capability=capability)
+            for defect in ("digest", "outcome", "missing"):
+                altered = copy.deepcopy(parsed)
+                if defect == "digest":
+                    altered["terminal_package"]["manifest_raw_sha256"] = "0" * 64
+                elif defect == "outcome":
+                    altered["scientific_outcome"] = "null"
+                else:
+                    altered["terminal_package"] = None
+                with self.subTest(defect=defect), self.assertRaises(executor.A0XCcpExecutorError):
+                    executor._verify_vertical_parent_package(root, binding, capability.descriptor_path,
+                                                             altered, parent_capability=capability)
+        self.assertFalse(result["publication_eligible"])
+
+    def test_failure_frontier_is_verified_progress_not_failed_stage(self):
+        from latent_triz import a0x_vertical_production_adapter as adapter
+        from latent_triz.a0x_execution import AttemptState
+        helper = getattr(adapter, "_material_failure_terminal", None)
+        self.assertTrue(callable(helper), "production failure projection is not independently testable")
+        context = bind_validated_vertical_graph(_graph(qualification_context="production"), qualification_context="production")
+        for state, stage, frontier, diagnostic in (
+            (AttemptState.PREFLIGHT, "static_preflight", "validated_graph", "PREFLIGHT_FAILED"),
+            (AttemptState.PREFLIGHT, "model_identity", "validated_graph", "MODEL_INCOMPATIBLE"),
+            (AttemptState.PREFLIGHT, "model_construction", "model_identity", "MODEL_INCOMPATIBLE"),
+            (AttemptState.ACTIVATION, "activation", "model_loaded", "OUTER_EXECUTION_FAILED"),
+            (AttemptState.ACTIVATION, "target_read", "model_loaded", "TARGET_READ_FAILED"),
+            (AttemptState.ANALYSIS, "target_read", "analysis", "TARGET_READ_FAILED"),
+            (AttemptState.ANALYSIS, "frozen_analysis", "analysis", "ANALYSIS_FAILED"),
+            (AttemptState.ANALYSIS, "terminal_seal", "analysis", "ANALYSIS_FAILED"),
+        ):
+            with self.subTest(state=state, stage=stage):
+                result = helper(context, state, stage)
+                self.assertEqual(frontier, result["reached_frontier"])
+                self.assertEqual("failed", result["scientific_outcome"])
+                self.assertEqual({"diagnostic_code": diagnostic}, result["result_payload"])
 
 
 if __name__ == "__main__":

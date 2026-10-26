@@ -27,8 +27,10 @@
     "selection_rule": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cases_per_family", "families_per_domain", "family_order", "domain_order"],
+      "required": ["policy_version", "source_split", "cases_per_family", "families_per_domain", "family_order", "domain_order"],
       "properties": {
+        "policy_version": {"const": "a0x-a0-sealed-cohort-v1"},
+        "source_split": {"const": "sealed"},
         "cases_per_family": {"const": 2},
         "families_per_domain": {"const": 4},
         "family_order": {"const": "lexicographic"},
@@ -44,7 +46,7 @@
         "case_content_sha256": {"$ref": "#/$defs/sha"},
         "domain": {"enum": ["agriculture", "energy", "manufacturing", "medicine", "software", "transport"]},
         "problem_family_id": {"type": "string", "minLength": 1},
-        "split": {"type": "string", "minLength": 1}
+        "split": {"const": "sealed"}
       }
     }
   }

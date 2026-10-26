@@ -1419,7 +1419,7 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
                     for case_index in range(2):
                         data_cases.append({
                             "case_id": f"{family}-{case_index}", "case_content_sha256": hashlib.sha256(f"{family}-{case_index}".encode()).hexdigest(),
-                            "domain": domain, "problem_family_id": family, "split": f"synthetic-{case_index}",
+                            "domain": domain, "problem_family_id": family, "split": "sealed",
                         })
             cases_relative = "data/a0/cases.jsonl"
             cases_raw = "\n".join(json.dumps(case, sort_keys=True) for case in data_cases) + "\n"
@@ -1439,7 +1439,8 @@ class A0XVerticalP0BootstrapTests(unittest.TestCase):
                 "selection_path": "experiments/a0x-six-model/a0-selection-manifest.json", "selected_case_count": 48,
                 "source_cases_path": cases_relative, "source_corpus_manifest_path": manifest_relative,
                 **selection_binding,
-                "selection_rule": {"cases_per_family": 2, "families_per_domain": 4, "family_order": "lexicographic", "domain_order": "frozen"},
+                "selection_rule": {"policy_version": "a0x-a0-sealed-cohort-v1", "source_split": "sealed",
+                                   "cases_per_family": 2, "families_per_domain": 4, "family_order": "lexicographic", "domain_order": "frozen"},
                 "cases": data_cases, "target_content_reads": 0,
             }
             write_json("experiments/a0x-six-model/a0-selection-manifest.json", selection)

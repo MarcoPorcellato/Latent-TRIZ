@@ -42,6 +42,45 @@ synthetic experimental profile is not accepted by production entry points.
 
 ## Purpose
 
+### Prospective sealed-cohort correction — 2026-10-26
+
+The prospective A0 / SmolLM2-360M candidate requires selection policy
+`a0x-a0-sealed-cohort-v1` and explicit `selection_rule.source_split: "sealed"`.
+Its public-only selector takes the first four lexicographic sealed families in
+each frozen domain, with two cases per family: 24 families and 48 cases. It
+rejects duplicate IDs, ambiguous family/domain/split membership and insufficient
+sealed families; calibration and engineering inputs are never fallbacks. The
+public loader rejects legacy/calibration selections before permission changes,
+claim reservation, model loading or target access.
+
+This is an explicitly approved prospective cohort correction, not merely a
+packaging change and not a repair of the consumed 2026-10-18 attempt. It does
+not alter the corpus, target labels, statistical predicate, permutation
+schedule, model pins or R1 scientific design. The old selection, source-bound
+artifacts, material outputs and consumed claim retain their original evidence
+status and must not be reused to qualify the changed source.
+
+Before reconciliation, preserve the exact parent and the superseded current
+binding bytes. The canonical historical-protection manifest distinguishes its
+seven immutable historical files from `generated_current_exclusions`: current
+inventories, protocol wrappers, freezes, dossiers and the no-model receipt may
+be refreshed only under the separate reconciliation authorization. Neither
+this reconciliation nor its synthetic checks grant Hosted Gate A, capture,
+P0, Gate B/C, another attempt or publication authority. Historical v1 packages,
+scientific results, immutable ledgers and consumed material evidence remain
+unchanged. The earlier invariant against silently changing a campaign remains
+in force; this named prospective exception does not authorize other pair or
+method changes.
+
+A successfully sealed engineering failure may complete the execution lifecycle
+only after independent package verification and successful cleanup. Its
+scientific outcome remains failed or incompatible; it is not a statistical
+null. Failure frontiers describe verified lifecycle progress, and a target-read
+failure is distinguished from preflight failure. Positive, null and
+non-interpretable scientific outcomes still require the sealed frontier and
+their full material evidence. This candidate is not material-qualified by the
+target-free correction alone.
+
 ### Prospective first-result engineering route — 2026-10-12
 
 The current A0-only dispatcher uses the versioned production D1–D7 mechanical

@@ -243,6 +243,18 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes((source / relative).read_bytes())
 
+        # The prospective candidate rejects the historical calibration cohort.
+        # Build an independent sealed declaration only in this disposable root;
+        # never regenerate or modify the repository's historical manifests.
+        from tests.a0x_test_support import artifact
+        prospective = artifact("a0x-selection-manifest.schema.json")
+        prospective["source_corpus_manifest_sha256"] = hashlib.sha256(
+            (self.root / "data/a0/manifest.json").read_bytes()).hexdigest()
+        selection_raw = terminal_package._canonical_json(prospective)
+        (self.root / public_paths[0]).write_bytes(selection_raw)
+        freeze_value = json.loads((self.root / public_paths[2]).read_bytes())
+        freeze_value["identity"]["selection_corpus_sha256"] = hashlib.sha256(selection_raw).hexdigest()
+        (self.root / public_paths[2]).write_bytes(terminal_package._canonical_json(freeze_value))
         freeze_raw = (self.root / public_paths[2]).read_bytes()
         freeze_value = json.loads(freeze_raw)
         pair = original.public_identity()["pair_binding"]
@@ -329,6 +341,9 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
         def rebind(document):
             value = copy.deepcopy(terminal_package._plain_json(document))
             value["pair_binding"] = pair
+            for key in ("authorization_id", "attempt_id"):
+                if key in value:
+                    value[key] = authorization[key]
             return value
         trust = {path: identity for path, identity in original.trust_file_identities.items()
                  if not path.startswith(".a0x-runtime/engineering/material/")}
@@ -337,6 +352,7 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
             trust[relative] = {"device": info.st_dev, "inode": info.st_ino,
                                "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
         context = replace(original, pair_binding=terminal_package._freeze_json(pair), qualification_context="production",
+                          authorization_id=authorization["authorization_id"], attempt_id=authorization["attempt_id"],
                           gate_c_authorization=terminal_package._freeze_json(authorization),
                           descriptor=terminal_package._freeze_json(rebind(original.descriptor)),
                           readiness=terminal_package._freeze_json({**rebind(original.readiness), "python": {"version": "3.11.16"}}),
@@ -360,6 +376,36 @@ class A0XVerticalTerminalPackageTests(unittest.TestCase):
         result["result_payload"] = {"statistical_result_sha256": hashlib.sha256(
             (material_base / terminal_package._MATERIAL_EVIDENCE_MEMBERS["statistic"]).read_bytes()).hexdigest()}
         return expected, result
+
+    def test_sealed_failure_parent_verification_never_requests_scientific_assets(self):
+        from types import SimpleNamespace
+        from latent_triz import a0x_ccp_executor as executor
+        from latent_triz.a0x_contract import PairBinding
+        expected, _success = self._production_material_fixture()
+        capability = expected._production_capability
+        context = capability.context
+        failure_expected = VerticalTerminalExpectation.from_production_capability(capability)
+        terminal = {
+            "artifact_class": "a0x-vertical-terminal-result", "terminal_profile": "a0x-vertical-terminal-result-v1",
+            **failure_expected.identity(), "reached_frontier": "sealed", "scientific_outcome": "failed",
+            "evidence_eligible": False, "expert_validated": False, "claim_ids": [],
+            "result_payload": {"diagnostic_code": "ANALYSIS_FAILED"},
+        }
+        destination = self.root / context.pair_binding["output_path"]
+        reference = build_vertical_terminal_package(repository_root=self.root, destination=destination,
+                                                    expected=failure_expected, terminal_result=terminal)
+        child = {
+            "reached_frontier": "sealed", "scientific_outcome": "failed",
+            "terminal_package": {"package_relative_path": context.pair_binding["output_path"],
+                                 "manifest_raw_sha256": reference.manifest_sha256,
+                                 "root_receipt_raw_sha256": reference.root_receipt_sha256},
+        }
+        binding = SimpleNamespace(qualified_source_head=context.source_head, qualified_source_tree=context.source_tree,
+                                  pair_binding=PairBinding.from_mapping(context.pair_binding))
+        with patch.object(terminal_package, "capture_material_evidence", side_effect=AssertionError("failure cannot request scientific assets")):
+            executor._verify_vertical_parent_package(self.root, binding, capability.descriptor_path, child,
+                                                     parent_capability=capability)
+        self.assertEqual((), failure_expected.external_assets)
 
     def test_production_selection_receipt_uses_frozen_selection_hash_not_corpus_hash(self):
         expected, result = self._production_material_fixture()

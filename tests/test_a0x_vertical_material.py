@@ -59,15 +59,61 @@ def _load_cli_module():
 
 
 class A0XVerticalMaterialTests(unittest.TestCase):
+    def test_completed_failure_wire_requires_package_and_cannot_claim_scientific_success(self):
+        from latent_triz.a0x_ccp_executor import _parse_vertical_child_terminal
+        from scripts.a0x_vertical_material_child import _emit_terminal
+        pair = pair_binding()
+        source = {"head": "a" * 40, "tree": "b" * 40, "ref": "refs/heads/main"}
+        graph = {"descriptor": {"pair_binding": pair, "qualified_source": source},
+                 "gate_c_authorization": {"authorization_id": "synthetic-auth", "attempt_id": "synthetic-attempt"}}
+        reference = {"package_relative_path": pair["output_path"],
+                     "manifest_raw_sha256": "c" * 64, "root_receipt_raw_sha256": "d" * 64}
+        for outcome in ("failed", "incompatible"):
+            for frontier in ("validated_graph", "model_identity", "model_loaded", "analysis", "sealed"):
+                stream = io.StringIO()
+                _emit_terminal(stream, "completed", graph=graph, qualification_context="production",
+                               reached_frontier=frontier, scientific_outcome=outcome, terminal_package=reference)
+                raw = stream.getvalue().encode()
+                kwargs = dict(expected_source=source, expected_pair=pair, expected_authorization_id="synthetic-auth",
+                              expected_attempt_id="synthetic-attempt", expected_qualification_context="production")
+                with self.subTest(outcome=outcome, frontier=frontier):
+                    parsed = _parse_vertical_child_terminal(raw, **kwargs)
+                    self.assertIsNotNone(parsed)
+                    for field, replacement in (("terminal_package", None), ("exit_class", "executor_failed"),
+                                               ("qualification_context", "synthetic-target-free")):
+                        mutated = {**parsed, field: replacement}
+                        self.assertIsNone(_parse_vertical_child_terminal(
+                            (json.dumps(mutated, sort_keys=True, separators=(",", ":")) + "\n").encode(), **kwargs))
+                    if frontier != "sealed":
+                        for scientific in ("positive", "null", "non_interpretable"):
+                            mutated = {**parsed, "scientific_outcome": scientific}
+                            self.assertIsNone(_parse_vertical_child_terminal(
+                                (json.dumps(mutated, sort_keys=True, separators=(",", ":")) + "\n").encode(), **kwargs))
+
     def test_child_never_reports_completion_after_cleanup_failure(self) -> None:
         from scripts.a0x_vertical_material_child import _lifecycle_can_complete
         for status in ("completed", "sealed_failure"):
-            result = {"package_verified": True, "lifecycle_status": status, "post_terminal_failure": None}
+            result = {"package_verified": True, "lifecycle_status": status, "post_terminal_failure": None,
+                      "terminal_outcome": {"scientific_outcome": "failed" if status == "sealed_failure" else "null",
+                                           "reached_frontier": "analysis" if status == "sealed_failure" else "sealed"}}
             self.assertTrue(_lifecycle_can_complete(result))
             with self.subTest(status=status):
                 self.assertFalse(_lifecycle_can_complete({**result, "post_terminal_failure": {"stage": "release"}}))
                 self.assertFalse(_lifecycle_can_complete({key: value for key, value in result.items() if key != "post_terminal_failure"}))
         self.assertFalse(_lifecycle_can_complete({"package_verified": True, "lifecycle_status": "post_terminal_failure", "post_terminal_failure": None}))
+
+    def test_child_completion_rejects_contradictory_lifecycle_outcome_frontier_tuple(self):
+        from scripts.a0x_vertical_material_child import _lifecycle_can_complete
+        for lifecycle, outcome, frontier in (
+            ("sealed_failure", "positive", "sealed"), ("sealed_failure", "null", "sealed"),
+            ("completed", "null", "model_loaded"), ("completed", None, "validated_graph"),
+            ("completed", "failed", "analysis"), ("sealed_failure", "failed", "before_graph"),
+        ):
+            with self.subTest(lifecycle=lifecycle, outcome=outcome, frontier=frontier):
+                self.assertFalse(_lifecycle_can_complete({
+                    "package_verified": True, "lifecycle_status": lifecycle, "post_terminal_failure": None,
+                    "terminal_outcome": {"scientific_outcome": outcome, "reached_frontier": frontier},
+                }))
 
     def test_v2_launcher_is_a_distinct_typed_entrypoint(self) -> None:
         """Future Gate C must not select the historical v1/batch launcher."""

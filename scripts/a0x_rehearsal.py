@@ -79,7 +79,7 @@ def synthetic_inputs() -> tuple[list[dict], list[dict]]:
             identity = f"engineering-case-{family:02d}-{variant}"
             public = {
                 "case_id": identity, "problem_family_id": f"engineering-family-{family:02d}",
-                "domain": domain, "split": "engineering", "solution_variant_id": str(variant),
+                "domain": domain, "split": "sealed", "solution_variant_id": str(variant),
                 "problem": f"An independent synthetic device {family} must deliver a stable flow.",
                 "constraints": ["Keep the fixture bounded"], "initial_state": "A synthetic flow is uneven.",
                 "desired_improvement": "Make delivery steady", "worsening_consequence": "Avoid added waste",
@@ -196,7 +196,8 @@ def run_rehearsal(*, repository_root: Path, snapshot_root: Path, output_root: Pa
         "selected_case_count": 48, "source_cases_path": "fixture/cases.jsonl",
         "source_corpus_manifest_path": "fixture/manifest.json", "source_cases_sha256": sha(cases_raw),
         "source_corpus_manifest_sha256": sha(manifest_raw),
-        "selection_rule": {"cases_per_family": 2, "families_per_domain": 4,
+        "selection_rule": {"policy_version": "a0x-a0-sealed-cohort-v1", "source_split": "sealed",
+                           "cases_per_family": 2, "families_per_domain": 4,
                            "family_order": "lexicographic", "domain_order": "frozen"},
         "cases": [{key: row[key] for key in ("case_id", "problem_family_id", "domain", "split")} |
                   {"case_content_sha256": sha(canonical(row))} for row in cases], "target_content_reads": 0,

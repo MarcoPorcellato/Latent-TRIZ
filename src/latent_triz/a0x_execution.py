@@ -486,13 +486,43 @@ def _load_a0_public_selection(
     _validate_artifact("a0x-selection-manifest.schema.json", value)
     if value.get("artifact_class") != "a0x-selection-manifest" or value.get("target_content_reads") != 0:
         raise A0XExecutionError("public A0 selection source is not target-free")
+    case_ids = _selection_case_ids(value)
+    _validate_a0_sealed_cohort(value)
     return _selection_capability(
         leg_freeze=leg_freeze,
         source_path=_A0_SELECTION_PATH,
         source_sha256=source_sha256,
-        case_ids=_selection_case_ids(value),
+        case_ids=case_ids,
         require_file_exact=False,
     )
+
+
+def _validate_a0_sealed_cohort(value: Mapping[str, Any]) -> None:
+    """Admit the prospective split before granting any target capability."""
+    if value.get("selection_rule") != {
+        "policy_version": "a0x-a0-sealed-cohort-v1", "source_split": "sealed",
+        "cases_per_family": 2, "families_per_domain": 4,
+        "family_order": "lexicographic", "domain_order": "frozen",
+    }:
+        raise A0XExecutionError("public A0 selection has no supported sealed cohort policy")
+    domains = ("agriculture", "energy", "manufacturing", "medicine", "software", "transport")
+    families: dict[str, tuple[str, list[str]]] = {}
+    ordered = []
+    for row in value["cases"]:
+        domain, family, case_id = row["domain"], row["problem_family_id"], row["case_id"]
+        if row["split"] != "sealed" or domain not in domains:
+            raise A0XExecutionError("public A0 selection is not exclusively sealed")
+        family_domain, members = families.setdefault(family, (domain, []))
+        if family_domain != domain:
+            raise A0XExecutionError("public A0 selection family spans domains")
+        members.append(case_id)
+        ordered.append((domains.index(domain), family))
+    if (
+        len(families) != 24 or any(len(members) != 2 for _, members in families.values())
+        or any(sum(domain == item[0] for item in families.values()) != 4 for domain in domains)
+        or ordered != sorted(ordered)
+    ):
+        raise A0XExecutionError("public A0 sealed cohort must be ordered 24 families / 48 cases")
 
 
 def _load_r1_public_selection(
