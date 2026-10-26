@@ -77,7 +77,7 @@ class _ActiveA0MetadataFixture:
                         "case_content_sha256": "2" * 64,
                         "domain": domain,
                         "problem_family_id": family,
-                        "split": "synthetic",
+                        "split": "sealed",
                     })
         selection = {
             "artifact_class": "a0x-selection-manifest",
@@ -94,6 +94,8 @@ class _ActiveA0MetadataFixture:
             "source_cases_sha256": "4" * 64,
             "source_corpus_manifest_sha256": hashlib.sha256(self.manifest_raw).hexdigest(),
             "selection_rule": {
+                "policy_version": "a0x-a0-sealed-cohort-v1",
+                "source_split": "sealed",
                 "cases_per_family": 2,
                 "families_per_domain": 4,
                 "family_order": "lexicographic",
@@ -357,7 +359,7 @@ class ActiveA0MetadataBindingTests(unittest.TestCase):
 class ProductionPipelineCoverageTests(unittest.TestCase):
     """Production admission, with only process/identity/git effects doubled."""
 
-    def _production_fixture(self):
+    def _production_fixture(self, *, selection_split="sealed"):
         if sys.platform != "darwin" or getattr(self, "_portable_metadata", False):
             # Linux hosted CI has no Darwin ACL/flags/O_EVTONLY APIs. These
             # external metadata observations are simulated only on disposable
@@ -376,7 +378,18 @@ class ProductionPipelineCoverageTests(unittest.TestCase):
         fixture = A0XVerticalRuntimeBundleTests()
         fixture.setUp()
         self.addCleanup(fixture.tearDown)
-        root, binding = fixture.root, fixture._binding()
+        fixture.root = fixture.root.resolve()
+        root = fixture.root
+        # A new prospective P0 must not inherit the repository's consumed,
+        # calibration-only historical cohort. All changes stay in this fixture.
+        from tests.a0x_test_support import artifact
+        prospective = artifact("a0x-selection-manifest.schema.json")
+        public_manifest = Path(__file__).resolve().parents[1] / "data/a0/manifest.json"
+        prospective["source_corpus_manifest_sha256"] = hashlib.sha256(public_manifest.read_bytes()).hexdigest()
+        for row in prospective["cases"]:
+            row["split"] = selection_split
+        _write_synthetic_json(root, "experiments/a0x-six-model/a0-selection-manifest.json", prospective)
+        binding = fixture._binding()
         prepared, request, _verifier = fixture._prepare_synthetic(binding)
         paths = prepared["vertical_outputs"]
         compact = executor._canonical_json
@@ -557,6 +570,8 @@ class ProductionPipelineCoverageTests(unittest.TestCase):
             rebind(value)
             if role == "target":
                 value["activation_receipt_sha256"] = hashlib.sha256((base / package._MATERIAL_EVIDENCE_MEMBERS["activation"]).read_bytes()).hexdigest()
+                value["selection_corpus_sha256"] = hashlib.sha256(
+                    (root / "experiments/a0x-six-model/a0-selection-manifest.json").read_bytes()).hexdigest()
             if role == "analysis_seal":
                 value["target_read_receipt_sha256"] = hashlib.sha256((base / package._MATERIAL_EVIDENCE_MEMBERS["target"]).read_bytes()).hexdigest()
                 value["statistical_result"] = json.loads((base / package._MATERIAL_EVIDENCE_MEMBERS["statistic"]).read_bytes())
@@ -617,6 +632,38 @@ class ProductionPipelineCoverageTests(unittest.TestCase):
         self.assertFalse(report["guard_invoked"])
         self.assertEqual([], list(root.rglob("attempt-claim.json")))
         self.assertFalse((root / binding.pair_binding.output_path).exists())
+
+    def test_rehashed_calibration_cohort_refuses_before_window_claim_or_guard(self):
+        from tests.test_a0x_ccp_executor import _FakeGuardPreflight
+        root, binding, _authorization = self._production_fixture(selection_split="calibration")
+
+        class Identity:
+            def verify(self, *, role, path, expected_sha256, expected_version=None):
+                return executor._ExecutableIdentityEvidence(role, path, expected_sha256, expected_version, synthetic=False)
+
+        class Preflight:
+            def produce(self, **_kwargs):
+                return _FakeGuardPreflight().produce(ccp_path=root / "bin/commit-ci-preflight", repository_root=root)
+
+        with (
+            mock.patch.object(executor, "_reserve_claim", side_effect=AssertionError("claim forbidden")) as claim,
+            mock.patch.object(executor, "_a0_material_permission_window", side_effect=AssertionError("window forbidden")) as window,
+            mock.patch.object(executor, "_admit_a0_material_metadata", side_effect=AssertionError("target metadata forbidden")) as metadata,
+        ):
+            process = mock.Mock(run=mock.Mock(side_effect=AssertionError("guard forbidden")))
+            with self.assertRaisesRegex(executor.A0XCcpExecutorError, "A0 selection"):
+                executor._launch_validated_vertical_v2(
+                    repository_root=root, package_binding=binding,
+                    execution_authorization_path=executor.vertical_execution_authorization_path(binding),
+                    source_state_probe=lambda: (binding.qualified_source_head, binding.qualified_source_tree, True),
+                    process_executor=process, guard_preflight_producer=Preflight(),
+                    executable_identity_verifier=Identity(), expected_qualification_context="production",
+                    preflight_only=True,
+                )
+        claim.assert_not_called()
+        window.assert_not_called()
+        metadata.assert_not_called()
+        process.run.assert_not_called()
 
     def test_production_parent_verifies_real_package_and_completes_without_recovery(self):
         """Catch a late parent admission/package failure after a successful child."""

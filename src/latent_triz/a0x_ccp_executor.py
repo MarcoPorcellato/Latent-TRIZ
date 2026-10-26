@@ -1492,7 +1492,7 @@ def _verify_vertical_parent_package(root: Path, binding: VerticalPackageBinding,
     if terminal.get("scientific_outcome") != child_terminal.get("scientific_outcome") or terminal.get("reached_frontier") != child_terminal.get("reached_frontier"):
         raise A0XCcpExecutorError("child outcome differs from independently read package")
     assets = None
-    if child_terminal.get("reached_frontier") == "sealed":
+    if child_terminal.get("scientific_outcome") in {"positive", "null", "non_interpretable"}:
         pair = binding.pair_binding
         context = capture_material_evidence(root, context)
         base = root / "results/a0x-external-assets" / context.source_head / context.source_tree / "a0" / pair.model_key / pair.run_id
@@ -3174,8 +3174,10 @@ def _parse_vertical_child_terminal(
             return None
     elif (
         expected_qualification_context != "production"
-        or value.get("reached_frontier") != "sealed"
         or value.get("scientific_outcome") not in {"positive", "null", "non_interpretable", "incompatible", "failed"}
+        or value.get("reached_frontier") not in {"validated_graph", "model_identity", "model_loaded", "analysis", "sealed"}
+        or (value.get("scientific_outcome") in {"positive", "null", "non_interpretable"}
+            and value.get("reached_frontier") != "sealed")
         or not isinstance(value.get("terminal_package"), Mapping)
         or not _valid_vertical_terminal_package_reference(
             value.get("terminal_package"), expected_pair,

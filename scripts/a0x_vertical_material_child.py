@@ -581,8 +581,22 @@ def _admit_vertical_process_environment(environment: Mapping[str, str]) -> dict[
 
 
 def _lifecycle_can_complete(result: Mapping[str, Any]) -> bool:
-    return (result.get("package_verified") is True and result.get("lifecycle_status") in {"completed", "sealed_failure"}
-        and "post_terminal_failure" in result and result["post_terminal_failure"] is None)
+    if (
+        result.get("package_verified") is not True
+        or "post_terminal_failure" not in result or result["post_terminal_failure"] is not None
+        or not isinstance(result.get("terminal_outcome"), Mapping)
+    ):
+        return False
+    terminal = result["terminal_outcome"]
+    outcome, frontier = terminal.get("scientific_outcome"), terminal.get("reached_frontier")
+    if result.get("lifecycle_status") == "sealed_failure":
+        return outcome in {"failed", "incompatible"} and frontier in {
+            "validated_graph", "model_identity", "model_loaded", "analysis", "sealed",
+        }
+    return (
+        result.get("lifecycle_status") == "completed" and frontier == "sealed"
+        and outcome in {"positive", "null", "non_interpretable", "failed", "incompatible"}
+    )
 
 
 def _read_referenced_output(

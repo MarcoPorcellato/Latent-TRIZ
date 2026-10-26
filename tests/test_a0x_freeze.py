@@ -150,6 +150,57 @@ class A0XFreezeTests(unittest.TestCase):
             corpus_manifest_path=self.FIXTURES / "public-manifest-mini.json",
         )
 
+    def _prospective_public_rows(self):
+        rows = []
+        for domain in a0x_freeze.FROZEN_DOMAINS:
+            for split, prefix in (("calibration", "00"), ("sealed", "10")):
+                for number in range(5):
+                    family = f"{domain}_{prefix}_{number}"
+                    for variant in ("a", "b"):
+                        rows.append({
+                            "case_id": f"{family}_{variant}", "domain": domain,
+                            "problem_family_id": family, "split": split,
+                            "case_content_sha256": "1" * 64,
+                        })
+        return rows
+
+    def _select_prospective_rows(self, rows):
+        public = self.root / "public-cases.jsonl"
+        public.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return build_a0_selection_manifest(
+            cases_path=public, corpus_manifest_path=self.FIXTURES / "public-manifest-mini.json",
+        )
+
+    def test_prospective_selection_filters_sealed_before_lexicographic_families(self):
+        selection = self._select_prospective_rows(self._prospective_public_rows())
+        self.assertEqual("a0x-a0-sealed-cohort-v1", selection["selection_rule"].get("policy_version"))
+        self.assertEqual("sealed", selection["selection_rule"].get("source_split"))
+        self.assertEqual(48, len(selection["cases"]))
+        self.assertEqual({"sealed"}, {row["split"] for row in selection["cases"]})
+        self.assertEqual(
+            [f"{domain}_10_{number}_{variant}" for domain in a0x_freeze.FROZEN_DOMAINS
+             for number in range(4) for variant in ("a", "b")],
+            [row["case_id"] for row in selection["cases"]],
+        )
+
+    def test_prospective_selection_refuses_insufficient_sealed_families(self):
+        rows = [row for row in self._prospective_public_rows()
+                if not (row["domain"] == "agriculture" and row["split"] == "sealed"
+                        and row["problem_family_id"].endswith(("3", "4")))]
+        with self.assertRaisesRegex(A0XFreezeError, "four.*sealed|sealed.*four"):
+            self._select_prospective_rows(rows)
+
+    def test_prospective_selection_refuses_mixed_family_splits_and_duplicate_ids(self):
+        for defect in ("mixed", "duplicate"):
+            with self.subTest(defect=defect):
+                rows = self._prospective_public_rows()
+                if defect == "mixed":
+                    rows[1]["split"] = "sealed"
+                else:
+                    rows[-1]["case_id"] = rows[0]["case_id"]
+                with self.assertRaisesRegex(A0XFreezeError, "split|duplicate"):
+                    self._select_prospective_rows(rows)
+
     def test_frozen_dossier_pairs_use_canonical_output_derivation(self) -> None:
         dossiers = sorted((self.ROOT / "experiments/a0x-six-model/approval-dossiers").glob("*/*.json"))
         self.assertEqual(12, len(dossiers))

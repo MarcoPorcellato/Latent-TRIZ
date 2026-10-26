@@ -8,7 +8,7 @@
     "leg": "a0",
     "protected_tree_sha256": "8257ef795760bffe37ff343db2c48ab024039dae18a02b235de909346fa096c4",
     "protocol_id": "a0x-a0-six-model-v1",
-    "selection_corpus_sha256": "cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295",
+    "selection_corpus_sha256": "4f924f563329e0a974e0af974d3c3af0c88f3522d7fd11d0157332e391248c31",
     "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
   },
   "implementation_files": [
@@ -268,9 +268,9 @@
       "sha256": "b613e529c767f31cee61abf9c5684f718280e80166bfa76c0ce96b47898a3235"
     },
     {
-      "bytes": 6952,
+      "bytes": 7022,
       "path": "schemas/a0x-vertical-terminal-result-v1.schema.json",
-      "sha256": "8b710baeec30c66b86da0afe522ef82882290a71a3d2cfca145d00b874bf929a"
+      "sha256": "500bf573cf41c35ec5e4888a079db04cc559233aa182c78d9acd541cdc72ce41"
     },
     {
       "bytes": 6446,
@@ -333,9 +333,9 @@
       "sha256": "bb50b3fda4dafea55d279ff5d793d1e23307ff0830a63f4463f18f1226c4e15d"
     },
     {
-      "bytes": 16153,
+      "bytes": 16246,
       "path": "scripts/a0x_rehearsal.py",
-      "sha256": "6a3bf8c10f9169b49a27a5fe14f90a86947a62d81362f38677285e85f6bfb235"
+      "sha256": "a43d1a6e7227b78c44abc9253ecced2cb382ffad7a531c6ba2c857978e69c3f4"
     },
     {
       "bytes": 3348,
@@ -348,9 +348,9 @@
       "sha256": "042ad14d18060e91ec2fb037798dfdf806d6b2999de3b57499c7d6f60e51fcbe"
     },
     {
-      "bytes": 43585,
+      "bytes": 44175,
       "path": "scripts/a0x_vertical_material_child.py",
-      "sha256": "e31a72d6d7b5a8e7f2959a5f1bc780814b28a6132ba4076ad6346eb4dee988f1"
+      "sha256": "78b8d30975c9998d4ecf86d9a8b533bb97c718847b1c52cf8c64c120f1bd4450"
     },
     {
       "bytes": 3541,
@@ -403,9 +403,9 @@
       "sha256": "6e862c4b0d88a1450c86551d1309726e55fd16f7ef4f073b30146125ca566158"
     },
     {
-      "bytes": 172285,
+      "bytes": 172539,
       "path": "src/latent_triz/a0x_ccp_executor.py",
-      "sha256": "c1cdecf73451b177a46f9ddb6ee10ff0dc7c232726dbc4ebebdf88ace3baf992"
+      "sha256": "3154357bffc0810214c91763c30667e1037c1581afd7dbd5ce062e9ca40a9045"
     },
     {
       "bytes": 7989,
@@ -418,14 +418,14 @@
       "sha256": "2007df030988ce72ede18468685394c834118efee75b83fdccfef8616da96f0b"
     },
     {
-      "bytes": 34580,
+      "bytes": 36178,
       "path": "src/latent_triz/a0x_execution.py",
-      "sha256": "16d137cb84ac7148f55edd8ad5ab5ccbfbec3a3156324bb5f6954067af0b8d13"
+      "sha256": "e6922967eea5d691feff227739b8a01cbdcf92e4950857d3a4c775e312f8df3b"
     },
     {
-      "bytes": 61134,
+      "bytes": 61762,
       "path": "src/latent_triz/a0x_freeze.py",
-      "sha256": "86fa925c41742ebeb75ca01f0e1a9024516b4b213787957af5d9024613360f70"
+      "sha256": "c342ef8e35184511302dc8536cde2506d4bdcc7a71fe2823f051873007f69a54"
     },
     {
       "bytes": 50136,
@@ -528,9 +528,9 @@
       "sha256": "1ef8149e7daae1fd5499c73e2f16cf2b4422c3f179471e7bb69d3d716bfe4ada"
     },
     {
-      "bytes": 33088,
+      "bytes": 34513,
       "path": "src/latent_triz/a0x_vertical_production_adapter.py",
-      "sha256": "522bcbac53b8e69950f42f2acc3eca6b5138f33f469ca4ef0389d8e6c2f8ee5f"
+      "sha256": "76042900bf63dec4167459a6847a1003390af31fd2c6052de19bbeb26c1eb0c5"
     },
     {
       "bytes": 72960,
@@ -538,9 +538,9 @@
       "sha256": "4f4089341cafb702fcac351c9b65d7e1a77ac40c7b3157083808e11c2a369632"
     },
     {
-      "bytes": 89283,
+      "bytes": 89538,
       "path": "src/latent_triz/a0x_vertical_terminal_package.py",
-      "sha256": "79c247770d69c7d6efdffb5ba68f37fe219f22c25d132a3d9d9a8639c82e06f9"
+      "sha256": "28d976f18dcec3a007d216a6029ffa234fb63917a802beff55c53159eceaf19b"
     },
     {
       "bytes": 6571,
@@ -553,9 +553,9 @@
       "sha256": "7d3bec9bbfb4960f70f3b18395d7e75cc928e032a25fbec3897c88e48ebeff91"
     },
     {
-      "bytes": 49721,
+      "bytes": 49829,
       "path": "tests/a0x_test_support.py",
-      "sha256": "60c723a141f939a0896925b93fbd76db59a77ae432b79122c117c2fd5eec96dc"
+      "sha256": "97aae9e4c5274d7f52f6348963c98ce8da083de6deb86e1bc44a0ba6d71e3fc5"
     },
     {
       "bytes": 3894,
@@ -668,14 +668,14 @@
       "sha256": "7fd9eace4a3871337ad98114ed54e692be3398132a813302bc2efec9ecc5f43d"
     },
     {
-      "bytes": 32955,
+      "bytes": 34551,
       "path": "tests/test_a0x_execution.py",
-      "sha256": "03283b28c73db1a946ffeb98ac9854a9c18b014ef0ae3733075131651ecbd344"
+      "sha256": "6b4df23aaa5cec77f6018c9e2b0e8b24e3a0f17e4954b6e6acff023ea7dd916d"
     },
     {
-      "bytes": 35667,
+      "bytes": 38353,
       "path": "tests/test_a0x_freeze.py",
-      "sha256": "dc2e21406b48ffb9c55f61fce85f8489f7798671dd22a563c4f4fffc23a105b1"
+      "sha256": "046d5a45c161ee362ce80166313318b0f21667a5bbc7cf4508ff8c2aa8305127"
     },
     {
       "bytes": 38103,
@@ -688,9 +688,9 @@
       "sha256": "8dede33c6b9cf589472f796780e878961a36fd37b63eb1c99724e4405a0c5ca9"
     },
     {
-      "bytes": 80524,
+      "bytes": 83557,
       "path": "tests/test_a0x_gate_c_preflight.py",
-      "sha256": "3f6ed99fdd4a3a5738e4553ae2684b3b72f1f8f7f3ccf468fd0dba2abfc49f78"
+      "sha256": "2d400d34e07069baec8a96266afa6f5401657e30dff6cdeac786b509254bad09"
     },
     {
       "bytes": 50668,
@@ -803,9 +803,9 @@
       "sha256": "8d815a8e8bf20408f2e3c0cc785ff34e1ed510e8bdd0cbf81e61f86163038187"
     },
     {
-      "bytes": 59390,
+      "bytes": 62994,
       "path": "tests/test_a0x_vertical_material.py",
-      "sha256": "7de96949623a8ff173e83c34922396a394daf251bf4f116fcd841731fabc7c40"
+      "sha256": "72eccc630dc4064ce97a3e3b3c13b9471b96f2d14018d4c95936b4137238e527"
     },
     {
       "bytes": 3414,
@@ -813,14 +813,14 @@
       "sha256": "44486157ef65465409a5ddf6692d5bc9614efdb23d7b4b8dbe17d0c72d037851"
     },
     {
-      "bytes": 102488,
+      "bytes": 102577,
       "path": "tests/test_a0x_vertical_p0_bootstrap.py",
-      "sha256": "e215ce66417c46f3f83265eec8cc9b7f3dc4b33cc50a370ecd4106d7a29b494f"
+      "sha256": "b5cf32270e3804a0da9ad80537eaae94e2cf9c6e067e1d67ffb01c29d56fb04f"
     },
     {
-      "bytes": 18322,
+      "bytes": 25720,
       "path": "tests/test_a0x_vertical_production_adapter.py",
-      "sha256": "6a76e3107b84cedd162483d2853c75c2dbb9076f28e5f1dedea65b8edbd643a0"
+      "sha256": "e434c16f3068ebf6f927a166d51ffd65f64de99873f1ea59217c636f519948bc"
     },
     {
       "bytes": 31124,
@@ -843,9 +843,9 @@
       "sha256": "b0aaaadd149f72eb6eeb8ea924f045ab5656987e802a7cd6e44bd64fd05a5a38"
     },
     {
-      "bytes": 56320,
+      "bytes": 59671,
       "path": "tests/test_a0x_vertical_terminal_package.py",
-      "sha256": "55da7205c196f6bc70cd9021136f3bc5108b82e92f385175b1180115a2a5d49c"
+      "sha256": "3ee4d5c645b235d32b1341c040570badf20cd1939b4697b597c852d104f8ed55"
     },
     {
       "bytes": 5990,

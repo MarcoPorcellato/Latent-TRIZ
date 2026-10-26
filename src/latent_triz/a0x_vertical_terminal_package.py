@@ -716,13 +716,15 @@ def _validate_terminal_result(value: Mapping[str, Any], expected: VerticalTermin
             raise ValueError("pair binding differs")
     except (KeyError, TypeError, ValueError, A0XContractError) as error:
         raise A0XVerticalTerminalPackageError("terminal pair binding is invalid") from error
-    if result["reached_frontier"] not in {"validated_graph", "sealed"}:
+    if result["reached_frontier"] not in {"validated_graph", "model_identity", "model_loaded", "analysis", "sealed"}:
         raise A0XVerticalTerminalPackageError("terminal frontier is unsupported")
     if expected.qualification_context == "synthetic-target-free" and result["reached_frontier"] != "validated_graph":
         raise A0XVerticalTerminalPackageError("synthetic terminal cannot claim material frontier")
     if result["reached_frontier"] == "sealed" and expected.qualification_context not in {"production", "engineering_rehearsal"}:
         raise A0XVerticalTerminalPackageError("only production context can claim sealed frontier")
     outcome = result["scientific_outcome"]
+    if expected.qualification_context in {"production", "engineering_rehearsal"} and outcome is None:
+        raise A0XVerticalTerminalPackageError("material package must retain an explicit terminal outcome")
     if outcome in {"positive", "null", "non_interpretable"}:
         if result["reached_frontier"] != "sealed":
             raise A0XVerticalTerminalPackageError("scientific outcomes require the sealed analysis frontier")

@@ -235,6 +235,9 @@
     "reached_frontier": {
       "enum": [
         "validated_graph",
+        "model_identity",
+        "model_loaded",
+        "analysis",
         "sealed"
       ]
     },
