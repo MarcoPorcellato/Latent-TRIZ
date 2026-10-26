@@ -20,7 +20,7 @@
     "leg": "a0",
     "protected_tree_sha256": "8257ef795760bffe37ff343db2c48ab024039dae18a02b235de909346fa096c4",
     "protocol_id": "a0x-a0-six-model-v1",
-    "selection_corpus_sha256": "cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295",
+    "selection_corpus_sha256": "4f924f563329e0a974e0af974d3c3af0c88f3522d7fd11d0157332e391248c31",
     "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
   },
   "inherited_rules": {

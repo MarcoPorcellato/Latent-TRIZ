@@ -9,10 +9,10 @@
     "leg": "a0",
     "protected_tree_sha256": "8257ef795760bffe37ff343db2c48ab024039dae18a02b235de909346fa096c4",
     "protocol_id": "a0x-a0-six-model-v1",
-    "selection_corpus_sha256": "cf762fdb8e19c5d047910f1f65b353df06f31096cea27adf504ae8e0bccbf295",
+    "selection_corpus_sha256": "4f924f563329e0a974e0af974d3c3af0c88f3522d7fd11d0157332e391248c31",
     "source_base_commit": "188eb65b5e249923baddadeba52659f07fcd1609"
   },
-  "implementation_sha256": "cb5d7ff8c028918c8459b09b77e23d1c3a4a951223793a2e15123b44462ae767",
-  "protocol_sha256": "370de9fa95caa42bb7d5a1e1169d6bba100d0cde2ef220f2f8a4cebd3de90211",
+  "implementation_sha256": "34430573d8298c568a7b9aa69f91509b3507f542cd53980685e38ed204a35250",
+  "protocol_sha256": "9af46579b605e7d800b36dcf9d3249d45b8c79170ffa0b7a5a909c654614c16d",
   "scientific_status": "exploratory"
 }
