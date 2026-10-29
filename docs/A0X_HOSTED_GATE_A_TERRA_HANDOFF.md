@@ -17,7 +17,7 @@ operator review before Task 12.
 
 ## Verified starting state
 
-- Isolated clone: `/private/tmp/latent-triz-pr109-postmerge-bc9b7ad-2`
+- Isolated clone: `$ISOLATED_TEMP_ROOT/latent-triz-reviewed-clone`
 - Branch: `agent/a0x-hosted-gate-a-design`
 - Last implementation commit before this handoff:
   `f79d7c717a46630a2617bad64f9727c1bf4df7d1`

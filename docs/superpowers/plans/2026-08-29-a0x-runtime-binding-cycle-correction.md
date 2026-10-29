@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in the isolated clone `/private/tmp/latent-triz-a0x-a0-smollm360-attempt-3c3b0ae`; preserve the primary worktree and historical evidence byte-identically.
+- Work only in the isolated clone `$ISOLATED_TEMP_ROOT/latent-triz-runtime-binding-review`; preserve the primary worktree and historical evidence byte-identically.
 - Start every shell command with `rtk`.
 - Use TDD: observe every new regression test fail for the intended reason before changing production code.
 - Descriptor profile v2 must be private and path-derived; public `a0x-execution-authorization-json-v2` remains unchanged.

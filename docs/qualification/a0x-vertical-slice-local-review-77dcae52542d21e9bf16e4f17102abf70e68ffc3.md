@@ -28,7 +28,7 @@ possible replacement and return
 
 ## Exact reviewed state
 
-- Worktree: `/Users/marco1/.codex/worktrees/latent-triz-a0x-hosted-capture-20260901`
+- Worktree: `$REPO_ROOT`
 - Branch: `agent/a0x-hosted-gate-a-capture-wrapper`
 - Reviewed implementation HEAD: `77dcae52542d21e9bf16e4f17102abf70e68ffc3`
 - Reviewed implementation tree: `79d9fd9c868cf367fdec28bbad8c0ac0d7f8b598`
@@ -378,8 +378,10 @@ globals_for_script = {
     "__cached__": None,
 }
 exec(compile(raw, path, "exec", dont_inherit=True, optimize=0), globals_for_script, globals_for_script)
-' /Users/marco1/.codex/worktrees/latent-triz-a0x-hosted-capture-20260901/scripts/a0x_vertical_p0_bootstrap.py fde8ca234ed9287f478bcfe2ea90aaa58822d6677e146cc74a6e886d1e3073a0 --repository-root /Users/marco1/.codex/worktrees/latent-triz-a0x-hosted-capture-20260901 --expected-head EXACT_FINAL_40_HEX_HEAD --expected-tree EXACT_FINAL_40_HEX_TREE --expected-python /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 --expected-python-sha256 3a1f077a333905eaac57197c9f2060ed95e05208daf83da4827d92e0474574d8 --expected-ledger-sha256 37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa --expected-bootstrap-sha256 fde8ca234ed9287f478bcfe2ea90aaa58822d6677e146cc74a6e886d1e3073a0 --expected-preexec-sha256 a0cc17b6d256ff03abfcd58e158d31ab0bffc1db497a2c400ed04bb16fc7483b
+' $REPO_ROOT/scripts/a0x_vertical_p0_bootstrap.py fde8ca234ed9287f478bcfe2ea90aaa58822d6677e146cc74a6e886d1e3073a0 --repository-root $REPO_ROOT --expected-head EXACT_FINAL_40_HEX_HEAD --expected-tree EXACT_FINAL_40_HEX_TREE --expected-python /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 --expected-python-sha256 3a1f077a333905eaac57197c9f2060ed95e05208daf83da4827d92e0474574d8 --expected-ledger-sha256 37301ed7234e91d2b13336505444864fddd85a789d7bf3db7a8ab713889acbfa --expected-bootstrap-sha256 fde8ca234ed9287f478bcfe2ea90aaa58822d6677e146cc74a6e886d1e3073a0 --expected-preexec-sha256 a0cc17b6d256ff03abfcd58e158d31ab0bffc1db497a2c400ed04bb16fc7483b
 ```
+
+Historical transcript: the absolute worktree location is redacted for portability; `$REPO_ROOT` denotes the reviewed repository root.
 
 Authorization must bind the final clean HEAD/tree, this exact inline launcher
 source and command, inline-source SHA-256

@@ -8,6 +8,14 @@ last_verified: 2026-08-30
 
 # Stable merge policy and Commit CI Preflight
 
+> Historical reference: this document was last verified on 2026-08-30. The
+> retained local producer identity, coordination instructions, and resource
+> policy below are historical snapshots as of that date. They do not identify
+> or authorize the currently installed producer. Before any future CCP action,
+> consult the controlling operator contract and verify the exact executable
+> path and complete SHA-256 required there. This reference makes no current
+> producer qualification claim.
+
 The protected branch uses one stable required context, `merge-policy/gate`.
 A base-branch `pull_request_target` workflow defines separate, least-privilege
 jobs. The trusted classifier reads its policy from the base commit. Candidate
@@ -61,7 +69,7 @@ Preflight executable. Verify
 that complete hash immediately before every `plan`, `doctor`, `dry-run`,
 `run`, or `verify`; the version string alone is not a producer identity.
 
-### Current coordination workflow
+### Historical coordination workflow (as of 2026-08-30)
 
 Immediately before reserving heavy work, collect a fresh snapshot in this
 order:
@@ -140,7 +148,7 @@ because checkout can restore or overwrite an older tracked receipt. If the
 preserved receipt or its hash is unavailable, stop and run a newly admitted CCP
 qualification rather than publishing an unverified or stale receipt.
 
-### Installed macOS v4 resource admission
+### Historical installed macOS v4 resource admission (as of 2026-08-30)
 
 The locally installed CCP binary includes the `macos-v4` compound-pressure
 policy introduced at exact upstream commit
